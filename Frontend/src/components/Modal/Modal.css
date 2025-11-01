@@ -1,0 +1,73 @@
+/* Fondo transparente que cubre toda la pantalla */
+.overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 1000; /* encima de todo */
+  pointer-events: none; /* para que no bloquee otros elementos si quieres */
+}
+
+/* Caja del modal en esquina superior derecha */
+.modal {
+  position: fixed;
+  top: 20px;        /* separación del borde superior */
+  right: 20px;      /* separación del borde derecho */
+  background: #fff;
+  padding: 16px 50px 16px 16px;
+  border-radius: 12px;
+  max-width: 40%;
+  width: 90%;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
+  pointer-events: auto; /* permite click dentro del modal */
+
+  /* Animación */
+  animation: slideFadeIn 0.3s ease-out;
+}
+
+/* Clases para animación de salida */
+.modal.exit {
+  animation: slideFadeOut 0.3s ease-in forwards;
+}
+
+/* Botón de cerrar */
+.close-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 4px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.close-button:hover {
+  color: #ef4444;
+}
+
+/* Animación de entrada: deslizamiento desde arriba con fade */
+@keyframes slideFadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Animación de salida opcional */
+@keyframes slideFadeOut {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+}
+
