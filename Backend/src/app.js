@@ -5,6 +5,9 @@ import cors from 'cors';
 
 import authRoutes from './routes/auth.routes.js';
 import userRoutes from './routes/user.routes.js';
+import chatRoutes from './routes/chat.routes.js';
+import webhookRoutes from './routes/webhook.routes.js';
+import streamRoutes from './routes/stream.routes.js';
 
 const app = express();
 
@@ -32,5 +35,8 @@ app.use(cookieParser());
 
 app.use("/api", authRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api", chatRoutes);
+app.use("/api", webhookRoutes);
+app.use("/api", streamRoutes);
 
 export default app; 

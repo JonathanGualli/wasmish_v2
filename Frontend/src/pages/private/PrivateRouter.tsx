@@ -5,6 +5,7 @@ import { DashboardPage } from "./DashboardPage/DashboardPage";
 import { PrivateLayout } from "../../components/Layout/PrivateLayout";
 import { QuickStart } from "./QuickStart/QuickStart";
 import { SettingsPage } from "./Settings/SettingsPage";
+import { ChatPage } from "./Chats/ChatPage";
 
 export const PrivateRouter = () => {
     return (
@@ -14,6 +15,7 @@ export const PrivateRouter = () => {
                 <Route path={AppRoutes.private.dashboard} element={<DashboardPage />} />
                 <Route path={AppRoutes.private.quickStart} element={<QuickStart />} />
                 <Route path={AppRoutes.private.settings} element={<SettingsPage />} />
+                <Route path={AppRoutes.private.chats} element={<ChatPage />} />
             </RoutesWithNotFound>
         </PrivateLayout>
         
