@@ -2,8 +2,7 @@ import { WHATSAPP_VERIFY_TOKEN } from '../config.js';
 import User from "../models/user.model.js";
 import Message from "../models/message.model.js";
 import Conversation from "../models/conversation.model.js";
-import { parse } from 'zod';
-
+import { sendUser } from './stream.controller.js';
 
 export const verifyWebhook = (req, res) => { 
     const mode = req.query['hub.mode'];
@@ -74,12 +73,25 @@ export const handleWebhook = async (req, res) => {
                     conversation.unreadCount = (conversation.unreadCount || 0) + 1;
                     await conversation.save();
                 
+                    sendUser(
+                        String(user._id),
+                        'message_created', {
+                            id: String(messageCreated._id),
+                            conversationId: String(conversation._id),
+                            sender: 'them',
+                            text, 
+                            timestamp: timestamp.toISOString(),
+                            status: 'delivered',
+                        }
+                    );
+
                     // Log the created message
                     console.log("Inbound message processed:", {
                         id: String(messageCreated._id),
                         conversationId: String(messageCreated.conversationId),
                         sender: messageCreated.sender,
                         text: messageCreated.text,
+                        unreadCount: conversation.unreadCount,
                         timestamp: messageCreated.timestamp.toISOString(),
                         status: messageCreated.status,
                         waMessageId: messageCreated.waMessageId,
@@ -110,6 +122,16 @@ export const handleWebhook = async (req, res) => {
                     }
 
                     await message.save();
+
+                    sendUser(
+                        String(user._id),
+                        'message_status', {
+                            waMessageId, 
+                            status: message.status,
+                            deliveredAt: message.deliveredAt ? message.deliveredAt.toISOString() : null,
+                            readAt: message.readAt ? message.readAt.toISOString() : null,
+                        }
+                    );
 
                     // Log the status update
                     console.log("Message status updated:", {

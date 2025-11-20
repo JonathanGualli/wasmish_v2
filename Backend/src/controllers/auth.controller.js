@@ -133,6 +133,7 @@ export const verifyToken = async (req, res) => {
             rol: userFound.rol,
             status: userFound.status,
             tokenWhatsapp: decryptToken,
+            phoneNumberId: userFound.phoneNumberId ?? "",
         })
     });
 }

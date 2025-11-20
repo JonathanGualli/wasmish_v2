@@ -4,4 +4,5 @@ export interface User {
     name: string;
     tokenWhatsapp?: string;
     role: 'user' | 'admin';
+    phoneNumberId?: string;
 }

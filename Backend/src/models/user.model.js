@@ -34,6 +34,11 @@ const userSchema = new mongoose.Schema({
         trim: true,
         required: false,
         default: null,
+    },
+    phoneNumberId: {
+        type: String, 
+        trim: true,
+        default: null,
     }
 }, { 
     timestamps: true,

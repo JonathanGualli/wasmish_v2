@@ -4,8 +4,6 @@ import { useAuthContext } from "../context/auth.context";
 export const PrivateGuard = () => {
   const { user, isLoading } = useAuthContext();
 
-  
-
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-screen">

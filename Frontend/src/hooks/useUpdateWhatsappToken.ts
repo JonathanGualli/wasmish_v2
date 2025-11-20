@@ -3,6 +3,6 @@ import { updateWhatsAppTokenService } from "../services/api.service"
 
 export const useUpdateWhatsappToken = () => {
     return useMutation({
-        mutationFn: ({ tokenWhatsapp }: { tokenWhatsapp: string }) => updateWhatsAppTokenService(tokenWhatsapp),
+        mutationFn: ({ tokenWhatsapp, phoneNumberId }: { tokenWhatsapp: string, phoneNumberId: string }) => updateWhatsAppTokenService(tokenWhatsapp, phoneNumberId),
     })
 }

@@ -3,7 +3,7 @@ import { encrypt } from "../utils/crypto.js";
 
 
 export const updateUserTokenWhatsapp = async (req, res) => {
-    const { tokenWhatsapp } = req.body;
+    const { tokenWhatsapp, phoneNumberId } = req.body;
     const userId = req.user.id;
 
     console.log("User ID:", userId);
@@ -15,6 +15,7 @@ export const updateUserTokenWhatsapp = async (req, res) => {
 
         // Encript the token before saving
         userFound.tokenWhatsapp = encrypt(tokenWhatsapp);
+        userFound.phoneNumberId = phoneNumberId;
 
         await userFound.save();
 
