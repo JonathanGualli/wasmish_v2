@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 interface Props {
     collapsed: boolean,
     toggle: () => void,
+    isMobile: boolean,
 }
 
 interface handleButtonProps {
@@ -15,7 +16,7 @@ interface handleButtonProps {
     path: string,
 }
 
-export const Sidebar = ({ collapsed, toggle }: Props) => {
+export const Sidebar = ({ collapsed, toggle, isMobile }: Props) => {
 
     const navigate = useNavigate();
     const location = useLocation();
@@ -42,7 +43,11 @@ export const Sidebar = ({ collapsed, toggle }: Props) => {
 
     return (
         <div
-            className={`bg-white border-r shadow h-screen transition-all ${collapsed ? "w-15" : "w-58"}`}>
+            className={`bg-white border-r shadow h-screen transition-all ${collapsed ? "w-15" : "w-58"}
+                    ${isMobile ? "fixed top-0 left-0 z-50 h-full" : "relative"}
+                    ${isMobile && collapsed ? "-translate-x-full" : "translate-x-0"}
+                    duration-300
+            `}>
 
             <div className="flex items-center justify-between p-4">
                 {!collapsed && <span className="font-bold">Logo</span>}

@@ -5,6 +5,8 @@ const API_URL = 'http://localhost:4000/api';
 
 interface SSEHandlers {
     onMessageCreated?: (event: MessageEvent) => void;
+    onMessageStatus?: (event: MessageEvent) => void;
+    onConversationUpdated?: (event: MessageEvent) => void;
     onError?: (err: ErrorEvent) => void;
 }
 
@@ -47,7 +49,7 @@ export const getConversationsService = async () => {
 // Servicio para obtener los mensajes de una conversación
 export const getConversationsMessagesService = async (conversationId: string, context: QueryFunctionContext) => {
     const pageParam = context.pageParam as string || undefined;
-    let query = '?limit=30';
+    let query = '?limit=50';
     if (pageParam !== undefined) query += '&before=' + pageParam;
     console.log('pageParam', pageParam);
     const res = await axios.get(`${API_URL}/chats/${conversationId}/messages${query}`, { withCredentials: true });
@@ -58,8 +60,8 @@ export const getConversationsMessagesService = async (conversationId: string, co
 }
 
 // Servicio para enviar un mensaje en una conversación
-export const sendMessageService = async (conversationId: string, text: string) => {
-    const { data } = await axios.post(`${API_URL}/chats/${conversationId}/messages`, { text }, { withCredentials: true });
+export const sendMessageService = async (conversationId: string, text: string, temporalId?: string) => {
+    const { data } = await axios.post(`${API_URL}/chats/${conversationId}/messages`, { text, temporalId }, { withCredentials: true });
     return data;
 }
 
@@ -77,6 +79,12 @@ export const createSSEConnection = (
 
     if (handlers.onMessageCreated) {
         source.addEventListener("message_created", handlers.onMessageCreated);
+    }
+    if (handlers.onMessageStatus) {
+        source.addEventListener("message_status", handlers.onMessageStatus);
+    }
+    if (handlers.onConversationUpdated) {
+        source.addEventListener("conversation_updated", handlers.onConversationUpdated);
     }
 
     source.onmessage = (event) => {

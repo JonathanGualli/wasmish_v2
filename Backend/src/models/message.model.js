@@ -41,7 +41,23 @@ const messageSchema = new mongoose.Schema({
     readAt: {
         type: Date,
         default: null,
-    }
+    }, 
+    failedAt: {
+        type: Date,
+        default: null,
+    },
+    errorCode: {
+        type: String,
+        default: null,
+    },
+    errorDetail: {
+        type: String,
+        default: null,
+    },
+    temporalId: {
+        type: String,
+        default: null,
+    },
 }, { 
     timestamps: true,
 });

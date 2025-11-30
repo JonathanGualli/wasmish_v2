@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useState } from "react";
 import { useConversations } from "../../hooks/useConversations";
 
 interface Props {
@@ -9,9 +9,7 @@ export const ChatconversationList = ({ onSelect }: Props) => {
 
     const { data: conversations, isLoading, isError } = useConversations();
 
-    useEffect(() => {
-        console.log("Conversations:", conversations);
-    }, [conversations]);
+    const [selectedId, setSelectedId] = useState<string | null>(null);
 
     if (isLoading) return <div className="flex items-center justify-center h-full text-gray-500">Cargando conversaciones...</div>
 
@@ -26,11 +24,17 @@ export const ChatconversationList = ({ onSelect }: Props) => {
     }
 
     return (
-        <div className="bg-gray-100 h-full w-full flex flex-col border-1">
+        <div className="bg-gray-100 h-full w-full flex flex-col border">
             {conversations?.map((chat) => (
                 <div key={chat.id}
-                    onClick={() => onSelect(chat.id)}
-                    className="p-4 border-b border-gray-300 hover:bg-gray-200 cursor-pointer transition-colors duration-150">
+                    onClick={() => {
+                        setSelectedId(chat.id); 
+                        onSelect(chat.id);
+                    }}
+                    className={`p-4 border-b border-gray-300  
+                              ${selectedId !== chat.id ? 'hover:bg-gray-200' : '' } cursor-pointer transition-colors duration-150
+                              ${selectedId === chat.id ? 'bg-blue-200' : ''}`}>
+
                     <div className="flex justify-between items-center">
                         <h1 className="font-semibold text-black">
                             {chat.title || chat.phone}

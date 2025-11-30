@@ -35,6 +35,24 @@ export const useConversations = () => {
           console.error("Error parsing SSE event data:", error);
         }
       },
+
+      onConversationUpdated: (event) => {
+        console.log("SSE Event received for conversation update:", event.data);
+        try {
+          const updatedConversation = JSON.parse(event.data);
+          queryClient.setQueryData<Conversation[]>(["conversations"], (old = []) =>
+            old.map((c) =>
+              c.id === updatedConversation.id
+                ? { ...c, unreadCount: updatedConversation.unreadCount }
+                : c
+            )
+          );
+
+        } catch (error) {
+          console.error("Error parsing SSE event data:", error);
+        }
+      },
+
       onError: (err) => {
         console.error("SSE connection error:", err);
       }

@@ -9,7 +9,7 @@ export const sendMessageController = async (req, res) => {
     try {
         const userId = req.user.id;
         const { id } = req.params;
-        const { text } = req.body;
+        const { text, temporalId } = req.body;
 
         const conversation = await Conversation.findById(id);
         if (!conversation) return res.status(404).json([{message: "Conversation not found"}]);
@@ -33,6 +33,7 @@ export const sendMessageController = async (req, res) => {
             waMessageId,
             text,
             timestamp: new Date(),
+            temporalId,
         });
 
         conversation.lastMessage = text;
@@ -48,6 +49,7 @@ export const sendMessageController = async (req, res) => {
                 text, 
                 timestamp: msg.timestamp.toISOString(),
                 status: 'delivered',
+                temporalId,
             }
         );
 
@@ -92,6 +94,9 @@ export const listMessages = async (req, res) => {
 
     try {
 
+        const user = await User.findById(userId);
+        if (!user) return res.status(404).json([{message: "User not found"}]);
+
         const conversation = await Conversation.findOne({ _id: conversationId, userId });
         if (!conversation) return res.status(404).json([{ message: "Conversation not found" }]);
         console.log("limit:", limit);
@@ -122,13 +127,24 @@ export const listMessages = async (req, res) => {
                 status: msg.status || 'sent',
                 deliveredAt: msg.deliveredAt ? msg.deliveredAt.toISOString() : null,
                 readAt: msg.readAt ? msg.readAt.toISOString() : null,
+                failedAt: msg.failedAt ? msg.failedAt.toISOString() : null,
+                errorCode: msg.errorCode,
+                errorDetail: msg.errorDetail,
                 waMessageId: msg.waMessageId || null,
             }));
-        
+
         await Conversation.updateOne(
             { _id: conversation._id, userId},
             { $set: { unreadCount: 0 } }
         );
+
+        sendUser(
+            String(user._id),
+            'conversation_updated', {
+                id: String(conversation._id),
+                unreadCount: 0,
+            }
+        )
 
         return res.json({ items, nextCursor });
 

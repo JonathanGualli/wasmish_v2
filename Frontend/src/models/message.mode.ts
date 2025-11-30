@@ -10,5 +10,9 @@ export interface Message {
   status: MessageStatus;
   deliveredAt?: string; // ISO
   readAt?: string; // ISO
+  failedAt?: string; // ISO
   waMessageId?: string;
+  errorCode?: string;
+  errorDetail?: string;
+  temporalId?: string; // en caso de mensajes optimistas
 }

@@ -39,7 +39,7 @@ export const CustomButton: React.FC<ButtonProps> = ({
                         <span className="loader"></span>
                     </div>
                 ) : (
-                    <span className='truncate text-center block overflow-hidden'>
+                    <span className='truncate text-center justify-center flex overflow-hidden'>
                         {children}
                     </span>
                 )}

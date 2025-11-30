@@ -22,7 +22,6 @@ export const useConversationMessages = (conversationId: string) => {
         console.log("SSE Event received from messages:", event.data);
         try {
           const newMessage = JSON.parse(event.data);
-          console.log("Parsed new message:", event);
 
           if (newMessage.conversationId === conversationId) {
             queryClient.setQueryData<InfiniteData<{ items: Message[], nextCursor: string | undefined }>>(
@@ -35,10 +34,20 @@ export const useConversationMessages = (conversationId: string) => {
                   }
                 }
 
+                if (newMessage.temporalId) {
+                  const messageExists = oldData.pages.some(page => page.items.some(msg => msg.temporalId === newMessage.temporalId));
+
+                  if (messageExists) {
+                    console.log("Message with temporalId already exists, skipping addition:", newMessage.temporalId);
+                    return oldData;
+                  }
+                }
+
+
                 const newPages = [...oldData.pages];
                 newPages[0] = {
                   ...newPages[0],
-                  items: [...newPages[0].items, newMessage],
+                  items: [newMessage, ...newPages[0].items],
                 };
 
                 return { ...oldData, pages: newPages }
@@ -49,6 +58,33 @@ export const useConversationMessages = (conversationId: string) => {
           console.error("Error parsing SSE event data:", error);
         }
       },
+
+      onMessageStatus: (event) => {
+        console.log("SSE Status Event received from messages:", event.data);
+        try {
+          const updatedMessage = JSON.parse(event.data);
+
+          if (updatedMessage.conversationId === conversationId) {
+            queryClient.setQueryData<InfiniteData<{ items: Message[], nextCursor: string | undefined }>>(
+              ["conversation", conversationId],
+              (oldData) => {
+                if (!oldData) return oldData;
+
+                const newPages = oldData.pages.map(page => {
+                  const newItems = page.items.map(msg => {
+                    return msg.id === updatedMessage.id ? { ...msg, ...updatedMessage } : msg
+                  });
+                  return { ...page, items: newItems };
+                });
+
+                return { ...oldData, pages: newPages };
+              });
+          }
+        } catch (error) {
+          console.error("Error parsing SSE event data:", error);
+        }
+      },
+
       onError: (err) => {
         console.error("SSE connection error:", err);
       }

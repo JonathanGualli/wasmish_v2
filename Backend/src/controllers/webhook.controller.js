@@ -101,6 +101,7 @@ export const handleWebhook = async (req, res) => {
                 // Delivery/read status updates
                 const statuses = value?.statuses ?? [];
                 for(const statusData of statuses) {
+
                     const waMessageId = statusData.id;
                     const status = statusData.status; // 'send' | 'delivered' | 'read' | 'failed'
                     const timestamp = statusData.timestamp ? new Date(parseInt(statusData.timestamp) * 1000) : new Date();
@@ -117,6 +118,16 @@ export const handleWebhook = async (req, res) => {
                         message.status = 'read';
                         message.readAt = timestamp;
                     } else if(status === 'failed') {
+
+                        //Capturar errores
+                        const errors = statusData?.errors ?? [];
+                        if(errors.length > 0) {
+                            for(const error of errors){
+                                if (message.errorCode) continue;
+                                message.errorCode = error?.code;
+                                message.errorDetail = error?.error_data?.details;
+                            }
+                        } 
                         message.status = 'failed';
                         message.failedAt = timestamp;
                     }
@@ -126,10 +137,16 @@ export const handleWebhook = async (req, res) => {
                     sendUser(
                         String(user._id),
                         'message_status', {
+                            id: String(message._id),
+                            conversationId: String(message.conversationId),
                             waMessageId, 
                             status: message.status,
                             deliveredAt: message.deliveredAt ? message.deliveredAt.toISOString() : null,
                             readAt: message.readAt ? message.readAt.toISOString() : null,
+                            failedAt: message.failedAt ? message.failedAt.toISOString() : null,
+                            errorCode: message.errorCode,
+                            errorDetail: message.errorDetail,
+
                         }
                     );
 
@@ -138,6 +155,7 @@ export const handleWebhook = async (req, res) => {
                         id: String(message._id),
                         waMessageId: message.waMessageId,
                         newStatus: message.status,
+                        errors: statusData.errors,
                     });
                 }
             }
