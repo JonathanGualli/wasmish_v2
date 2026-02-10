@@ -17,7 +17,7 @@ export const ChatconversationList = ({ onSelect }: Props) => {
 
     if(!conversations || conversations.length === 0) {
         return (
-            <div className="flex items-center justify-center h-full text-gray-500">
+            <div className="flex items-center justify-center h-full text-gray-500 bg-white">
                 No hay conversaciones disponibles.
             </div>
         );
