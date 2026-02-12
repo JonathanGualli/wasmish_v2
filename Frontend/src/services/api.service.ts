@@ -1,7 +1,7 @@
 import type { QueryFunctionContext } from '@tanstack/react-query';
 import axios from 'axios';
 
-//const API_URL = 'http://localhost:4000/api';
+// const API_URL = 'http://localhost:3001/api';
 const API_URL = 'https://wasmish-api.solventyc.com/api'; 
 
 interface SSEHandlers {

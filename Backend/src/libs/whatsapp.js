@@ -41,3 +41,27 @@ export const sendTextMessage = async ({ token, phoneNumberId, to, text }) => {
         }
     );
 }
+
+export const sendTemplateMessage = async ({ token, phoneNumberId, to, templateName, language = "es", components }) => {
+    return whatsappApi.post(
+        `/${phoneNumberId}/messages`,
+        {
+            messaging_product: "whatsapp",
+            recipient_type: "individual",
+            to,
+            type: "template",
+            template: {
+                name: templateName,
+                language: {
+                    code: languageA
+                },
+                components: components || [] 
+            }
+        },
+        {
+            headers: {
+                Authorization: `Bearer ${token}`
+            }
+        }
+    );
+}

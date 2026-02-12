@@ -5,6 +5,8 @@ import { useAuthContext } from '../../../context/auth.context';
 import { Link, useNavigate } from 'react-router-dom';
 import { AppRoutes } from '../../../models/routes.models';
 import { useModalContext } from '../../../components/Modal/context/UseModalContext';
+import bannerWasmish from '../../../assets/banner_wasmish.png';
+
 
 export const LoginPage = () => {
 
@@ -56,11 +58,11 @@ export const LoginPage = () => {
 
 
     return (
-         <div className='w-screen h-screen bg-gradient-to-r from-purple-200 to-cyan-100 flex justify-center items-center'>
+         <div className='w-screen h-screen bg-linear-to-r from-purple-200 to-cyan-100 flex justify-center items-center'>
             <div className='flex flex-row max-w-11/12 max-h-11/12 w-6xl rounded-2xl overflow-hidden'>
                 
                 <div className='basis-3/5'>
-                    <img src="https://images7.alphacoders.com/747/thumb-1920-747498.jpg" className='object-cover w-full h-full'/>
+                    <img src={bannerWasmish} className='object-cover w-full h-full'/>
                 </div>
                 
                 <div className='bg-white basis-2/5 p-10 flex justify-center flex-col'>
