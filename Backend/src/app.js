@@ -11,6 +11,9 @@ import streamRoutes from './routes/stream.routes.js';
 
 const app = express();
 
+// momentanio mientas se sube 
+app.set('trust proxy', 1);
+
 app.use(cors({
     origin: 'http://localhost:5173',
     credentials: true,

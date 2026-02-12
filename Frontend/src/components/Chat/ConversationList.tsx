@@ -11,9 +11,9 @@ export const ChatconversationList = ({ onSelect }: Props) => {
 
     const [selectedId, setSelectedId] = useState<string | null>(null);
 
-    if (isLoading) return <div className="flex items-center justify-center h-full text-gray-500">Cargando conversaciones...</div>
+    if (isLoading) return <div className="flex items-center justify-center h-full text-gray-500 bg-white">Cargando conversaciones...</div>
 
-    if (isError) return <div className="flex items-center justify-center h-full text-red-500">¡Error al cargar las conversaciones!</div>
+    if (isError) return <div className="flex items-center justify-center h-full text-red-500 bg-white">¡Error al cargar las conversaciones!</div>
 
     if(!conversations || conversations.length === 0) {
         return (
