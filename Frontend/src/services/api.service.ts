@@ -60,8 +60,18 @@ export const getConversationsMessagesService = async (conversationId: string, co
 }
 
 // Servicio para enviar un mensaje en una conversación
-export const sendMessageService = async (conversationId: string, text: string, temporalId?: string) => {
-    const { data } = await axios.post(`${API_URL}/chats/${conversationId}/messages`, { text, temporalId }, { withCredentials: true });
+export const sendMessageService = async (
+    text: string, 
+    conversationId?: string, 
+    temporalId?: string, 
+    contactName?: string, 
+    destinationNumber?: string) => {
+
+    let url = `${API_URL}/chats/messages`;;
+    if(conversationId){
+        url = `${API_URL}/chats/${conversationId}/messages`;
+    } 
+    const { data } = await axios.post(url, { text, temporalId, contactName, destinationNumber }, { withCredentials: true });
     return data;
 }
 

@@ -5,7 +5,7 @@ import { decrypt }  from "../utils/crypto.js";
 import { sendTextMessage } from "../libs/whatsapp.js";
 import { sendUser } from './stream.controller.js';
 
-export const sendMessageController = async (req, res) => {
+export const sendMessageControllerOld = async (req, res) => {
     try {
         const userId = req.user.id;
         const { id } = req.params;
@@ -67,6 +67,117 @@ export const sendMessageController = async (req, res) => {
         res.status(500).json([{ message: error.message }]);
     }
 }
+
+// Enviar mensajes simplificado
+export const processMessageSending = async ({
+    user,
+    conversation, 
+    text, 
+    temporalId, 
+    destinationNumber,
+    contactName}) => {    
+
+    const token = decrypt (user.tokenWhatsapp);
+    const phoneNumberId = conversation?.phoneNumberId || user.phoneNumberId;
+
+    if(!phoneNumberId) throw new Error("Phone number ID is required");
+
+    // Enviar mensaje a Whatsapp 
+    const apiRes = await sendTextMessage({
+        token, 
+        phoneNumberId, 
+        to: conversation?.contactPhone || destinationNumber,
+        text
+    });
+
+    const waMessageId = apiRes?.data?.messages?.[0]?.id || null;
+
+    // Si no hay conversación (es un mensaje nuevo), lo creamos
+    let targetConversation = conversation; 
+    if(!targetConversation) {
+        targetConversation = await Conversation.create({
+            userId: user._id,
+            contactPhone: destinationNumber,
+            phoneNumberId,
+            lastMessage: text,
+            lastMessageAt: new Date(),
+            unreadCount: 1,
+            contactName: contactName || null,
+        })
+    } else { 
+        targetConversation.lastMessage = text;
+        targetConversation.updatedAt = new Date();
+        await targetConversation.save();
+    }
+
+    // Crear el mensaje en DB
+    const msg = await Message.create({
+        conversationId: targetConversation._id,
+        direction: 'outbound',
+        sender: 'me',
+        waMessageId,
+        text,
+        timestamp: new Date(),
+        temporalId,
+    });
+
+    // Notificar via socket
+    sendUser(String(user._id), 'message_created', {
+        id: String(msg._id),
+        conversationId: String(targetConversation._id),
+        sender: 'me',
+        text, 
+        timestamp: msg.timestamp.toISOString(),
+        status: 'delivered',
+        temporalId,
+    }); 
+
+    return {msg, waMessageId}
+};
+
+export const sendMessageController = async (req, res) => {
+    try {
+        const { id } = req.params; // Puede ser undefined si es un chat nuevo
+        const { text, temporalId, destinationNumber, contactName } = req.body;
+
+        const user = await User.findById(req.user.id);
+        if (!user) return res.status(404).json([{ message: "User not found" }]);
+
+        let conversation = null;
+
+        // Si hay ID, buscamos la conversación
+        if (id) {
+            conversation = await Conversation.findById(id);
+            if (!conversation) return res.status(404).json([{ message: "Conversation not found" }]);
+        } 
+        // Si no hay ID, pero hay número, intentamos buscar si ya existe una con ese número
+        else if (destinationNumber) {
+            conversation = await Conversation.findOne({ 
+                userId: user._id, 
+                contactPhone: destinationNumber 
+            });
+        } 
+        else {
+            return res.status(400).json([{ message: "Conversation ID or Destination Number is required" }]);
+        }
+
+        // Llamamos al servicio (que ahora sabe qué hacer si conversation es null)
+        const { msg, waMessageId } = await processMessageSending({ 
+            user, 
+            conversation, 
+            text, 
+            temporalId, 
+            destinationNumber ,
+            contactName,
+        });
+
+        return res.status(201).json({ ...msg._doc, waMessageId, status: 'sent' });
+
+    } catch (error) {
+        res.status(500).json([{ message: error.message }]);
+    }
+};
+
 
 export const listConversations = async (req, res) => {
     const userId = req.user.id;
