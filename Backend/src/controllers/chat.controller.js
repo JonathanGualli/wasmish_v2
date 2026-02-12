@@ -2,7 +2,7 @@ import User from "../models/user.model.js";
 import Conversation from "../models/conversation.model.js";
 import Message from "../models/message.model.js";
 import { decrypt }  from "../utils/crypto.js";
-import { sendTextMessage } from "../libs/whatsapp.js";
+import { sendTextMessage, sendTemplateMessage } from "../libs/whatsapp.js";
 import { sendUser } from './stream.controller.js';
 
 export const sendMessageControllerOld = async (req, res) => {
@@ -267,7 +267,7 @@ export const listMessages = async (req, res) => {
 export const sendTemplateController = async (req, res) => {
     try {
         const { 
-            userId,
+            email,
             destinationNumber, 
             templateName, 
             language = 'es', 
@@ -275,7 +275,7 @@ export const sendTemplateController = async (req, res) => {
             contactName 
         } = req.body;
 
-        const user = await User.findById(userId);
+        const user = await User.findOne({email});
         if (!user) return res.status(404).json([{ message: "User not found" }]);
 
         const token = decrypt(user.tokenWhatsapp);

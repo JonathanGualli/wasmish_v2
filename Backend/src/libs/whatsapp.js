@@ -53,7 +53,7 @@ export const sendTemplateMessage = async ({ token, phoneNumberId, to, templateNa
             template: {
                 name: templateName,
                 language: {
-                    code: languageA
+                    code: language
                 },
                 components: components || [] 
             }
