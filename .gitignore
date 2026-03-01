@@ -1,0 +1,31 @@
+# --- General ---
+.DS_Store
+.vscode/
+.idea/
+*.log
+node_modules/
+
+# --- Backend (Node.js) ---
+Backend/node_modules/
+Backend/dist/
+Backend/.env
+Backend/npm-debug.log*
+Backend/node_modules/*
+**/node_modules/
+
+# --- Frontend (React + Vite) ---
+Frontend/node_modules/
+Frontend/dist/
+Frontend/.env
+Frontend/.env.local
+Frontend/.env.development.local
+Frontend/.env.test.local
+Frontend/.env.production.local
+
+# --- Herramientas de empaquetado/Linter ---
+.eslintcache
+*.tsbuildinfo
+
+# --- Otros ---
+# Si usas el archivo .pem para el túnel SSH en la carpeta del proyecto
+*.pem
