@@ -36,8 +36,8 @@ export const verifyService = async () => {
 }
 
 // Servicio para actualizar el token de whatsapp
-export const updateWhatsAppTokenService = async (tokenWhatsapp: string, phoneNumberId: string) => {
-    const { data } = await axios.put(`${API_URL}/users/update-user-token-whatsapp`, { tokenWhatsapp, phoneNumberId }, { withCredentials: true });
+export const updateWhatsAppTokenService = async (tokenWhatsapp: string, phoneNumberId: string, waBusinessId: string) => {
+    const { data } = await axios.put(`${API_URL}/users/update-user-token-whatsapp`, { tokenWhatsapp, phoneNumberId, waBusinessId }, { withCredentials: true });
     return data;
 }
 
@@ -114,3 +114,21 @@ export const createSSEConnection = (
         }
     };
 };
+
+// Servicio para syncronizar plantillasc
+export const syncTemplatesService = async () => {
+    const { data } = await axios.get(`${API_URL}/templates/sync`, { withCredentials: true });
+    return data;
+}
+
+// Servicio para obtener las plantillas
+export const getTemplatesService = async () => {
+    const { data } = await axios.get(`${API_URL}/templates`, { withCredentials: true });
+    return data;
+}
+
+// Servicio para generar pikey
+export const generatePikeyService = async (nameApiKey: string) => {
+    const { data } = await axios.post(`${API_URL}/api-key/generate`, { nameApiKey }, { withCredentials: true });
+    return data;
+}

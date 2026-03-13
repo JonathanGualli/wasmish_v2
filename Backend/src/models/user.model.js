@@ -39,7 +39,12 @@ const userSchema = new mongoose.Schema({
         type: String, 
         trim: true,
         default: null,
-    }
+    },
+    waBusinessId: {
+        type: String, 
+        trim: true,
+        default: null,
+    },
 }, { 
     timestamps: true,
 });

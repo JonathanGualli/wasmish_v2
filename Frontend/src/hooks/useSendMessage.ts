@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+/* import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { sendMessage } from "../services/api.service";
 
 export const useSendMessage = () => {
@@ -12,3 +12,4 @@ export const useSendMessage = () => {
     },
   });
 };
+ */

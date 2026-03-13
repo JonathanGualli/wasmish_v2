@@ -65,3 +65,14 @@ export const sendTemplateMessage = async ({ token, phoneNumberId, to, templateNa
         }
     );
 }
+
+export const getTemplates = async ({token, waBusinessId}) => {
+    return whatsappApi.get(
+        `/${waBusinessId}/message_templates`,
+        {
+            headers: {
+                Authorization: `Bearer ${token}`
+            }
+        }
+    );
+}

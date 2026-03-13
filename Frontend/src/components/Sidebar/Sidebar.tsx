@@ -1,4 +1,4 @@
-import { Home, Menu, Rocket, Settings, MessageSquare } from "lucide-react";
+import { Home, Menu, Rocket, Settings, MessageSquare, LayoutTemplate } from "lucide-react";
 import { SidebarItem } from "./SidebarItem";
 import { useLocation, useNavigate } from "react-router-dom";
 import { AppRoutes } from "../../models/routes.models";
@@ -26,6 +26,7 @@ export const Sidebar = ({ collapsed, toggle, isMobile }: Props) => {
         { icon: <Rocket />, text: "Inicio Rápido", value: "quickStart", path: `${AppRoutes.private.root}/${AppRoutes.private.quickStart}` },
         { icon: <Home />, text: "Dashboard", value: "dashboard", path: `${AppRoutes.private.root}/${AppRoutes.private.dashboard}` },
         { icon: <MessageSquare />, text: "Chats", value: "chats", path: `${AppRoutes.private.root}/${AppRoutes.private.chats}` },
+        { icon: <LayoutTemplate />, text: "Plantillas", value: "templates", path: `${AppRoutes.private.root}/${AppRoutes.private.templates}` },
         { icon: <Settings />, text: "Ajustes", value: "settings", path: `${AppRoutes.private.root}/${AppRoutes.private.settings}` },
     ], []);
 

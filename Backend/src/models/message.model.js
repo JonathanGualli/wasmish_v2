@@ -6,7 +6,6 @@ const messageSchema = new mongoose.Schema({
         ref: 'Conversation', 
         required: true, 
         index: true, 
-        index: true,
     },
     direction: {
         type: String,

@@ -85,6 +85,8 @@ export const login = async (req, res) => {
             email: userFound.email,
             rol: userFound.rol,
             tokenWhatsapp: decryptToken,
+            phoneNumberId: userFound.phoneNumberId ?? "",
+            waBusinessId: userFound.waBusinessId ?? "",
             status: userFound.status,
             createdAt: userFound.createdAt,
             updatedAt: userFound.updatedAt,
@@ -142,6 +144,7 @@ export const verifyToken = async (req, res) => {
             status: userFound.status,
             tokenWhatsapp: decryptToken,
             phoneNumberId: userFound.phoneNumberId ?? "",
+            waBusinessId: userFound.waBusinessId ?? ""
         })
     });
 }

@@ -5,6 +5,7 @@ import { useUpdateWhatsappToken } from "../../../hooks/useUpdateWhatsappToken";
 import {  useAuthContext } from "../../../context/auth.context";
 import type { AxiosError } from "axios";
 import { useModalContext } from "../../../components/Modal/context/UseModalContext";
+import { useApiKey } from "../../../hooks/useApiKey";
 
 
 interface ErrorItem {
@@ -15,14 +16,17 @@ export const SettingsPage = () => {
     
     const [token, setToken ] = useState('');
     const [phoneNumberId, setPhoneNumberId ] = useState('');
+    const [waBusinessId, setWaBusinessId] = useState('');
 
     const updateTokenWhatsappMutation = useUpdateWhatsappToken(); 
     const { user } = useAuthContext();
     const { setState, setContent } = useModalContext();
 
+    const generateApiKey = useApiKey();
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        updateTokenWhatsappMutation.mutate({ tokenWhatsapp: token, phoneNumberId: phoneNumberId }, {
+        updateTokenWhatsappMutation.mutate({ tokenWhatsapp: token, phoneNumberId: phoneNumberId, waBusinessId: waBusinessId}, {
             onSuccess: () => {
                 setContent(
                     <div className="text-green-500">
@@ -32,6 +36,7 @@ export const SettingsPage = () => {
                 setState(true);
                 user!.tokenWhatsapp = token;
                 user!.phoneNumberId = phoneNumberId;
+                user!.waBusinessId = waBusinessId;
             }, onError: (error: Error) => {
                 setContent( 
                     <div className="text-red-500">
@@ -45,39 +50,71 @@ export const SettingsPage = () => {
     }
 
     useEffect(() => {
-        console.log(user);
+        // console.log(user);
         if(user?.tokenWhatsapp) {
             setToken(user.tokenWhatsapp);
         }
         if(user?.phoneNumberId) {
             setPhoneNumberId(user.phoneNumberId);
         }
+        if(user?.waBusinessId){
+            setWaBusinessId(user.waBusinessId);
+        }
     }, [user]);
 
-    return <div className="p-6 rounded-xl shadow bg-white">
-        <h2 className="text-xl font-semibold mb-4">Configuración de WhatsApp</h2>
-        <form onSubmit={handleSubmit} className="flex flex-row items-end gap-4">
-            <CustomInput 
-                label="Token de acceso a Whatapp"
-                type="text"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-            />
-            <CustomInput 
-                label="ID de teléfono de WhatsApp"
-                type="text"
-                value={phoneNumberId}
-                onChange={(e) => setPhoneNumberId(e.target.value)}
-            />
-            <div className="flex flex-col justify-end h-10 w-40">
-                <CustomButton 
-                type="submit"
-                color="var(--color-green-500)"
-                isLoading={updateTokenWhatsappMutation.isPending}
-                >
-                    Guardar 
-                </CustomButton>
-            </div>           
-        </form>
-    </div>;
+    return (
+        <>
+        <div className="m-6 p-6 rounded-xl shadow bg-white">
+            <h2 className="text-xl font-semibold mb-4">Configuración de WhatsApp</h2>
+            <form onSubmit={handleSubmit} className="flex flex-col items-end gap-4">
+                <div className="w-full">
+                    <CustomInput 
+                        label="Token de acceso a Whatapp"
+                        type="text"
+                        value={token}
+                        onChange={(e) => setToken(e.target.value)}
+                    />
+                </div>
+                <div className="flex flex-row gap-4 w-full">
+                    <CustomInput 
+                        label="ID de teléfono de WhatsApp"
+                        type="text"
+                        value={phoneNumberId}
+                        onChange={(e) => setPhoneNumberId(e.target.value)}
+                    />
+                    <CustomInput 
+                        label="ID Watsapp Business"
+                        type="text"
+                        value={waBusinessId}
+                        onChange={(e) => setWaBusinessId(e.target.value)}
+                    />
+                </div>
+                <div className="flex flex-col justify-center h-10 w-40">
+                    <CustomButton 
+                    type="submit"
+                    color="var(--color-green-500)"
+                    isLoading={updateTokenWhatsappMutation.isPending}
+                    >
+                        Guardar 
+                    </CustomButton>
+                </div>           
+            </form>
+        </div>
+        <div className="m-6 p-6 rounded-xl shadow bg-white">
+            <h2 className="text-xl font-semibold mb-4">Configuración Api Keys</h2>
+            <form onSubmit={handleSubmit} className="flex flex-col items-end gap-4">
+                <div className="flex flex-col justify-center h-10 w-40">
+                    <CustomButton 
+                    type="button"
+                    onClick={generateApiKey.mutate}
+                    color="var(--color-green-500)"
+                    isLoading={updateTokenWhatsappMutation.isPending}
+                    >
+                        Generar 
+                    </CustomButton>
+                </div>   
+            </form>
+        </div>
+        </>
+    );
 }
