@@ -29,3 +29,10 @@ Frontend/.env.production.local
 # --- Otros ---
 # Si usas el archivo .pem para el túnel SSH en la carpeta del proyecto
 *.pem
+
+# --- Claude Code (personal/local) ---
+.claude/settings.local.json
+.claude/memory/
+
+# --- Graphify (artefactos generados) ---
+graphify-out/

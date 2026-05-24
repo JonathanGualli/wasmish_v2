@@ -14,7 +14,7 @@ export default function NotFoundPage() {
           La página que buscas no existe o ha sido movida.
         </p>
         <Link to={AppRoutes.login}>
-          <CustomButton color="blue">Volver al Inicio</CustomButton>
+          <CustomButton>Volver al Inicio</CustomButton>
         </Link>
          
       </div>

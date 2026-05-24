@@ -90,12 +90,11 @@ export const SettingsPage = () => {
                     />
                 </div>
                 <div className="flex flex-col justify-center h-10 w-40">
-                    <CustomButton 
+                    <CustomButton
                     type="submit"
-                    color="var(--color-green-500)"
                     isLoading={updateTokenWhatsappMutation.isPending}
                     >
-                        Guardar 
+                        Guardar
                     </CustomButton>
                 </div>           
             </form>
@@ -104,13 +103,12 @@ export const SettingsPage = () => {
             <h2 className="text-xl font-semibold mb-4">Configuración Api Keys</h2>
             <form onSubmit={handleSubmit} className="flex flex-col items-end gap-4">
                 <div className="flex flex-col justify-center h-10 w-40">
-                    <CustomButton 
+                    <CustomButton
                     type="button"
                     onClick={generateApiKey.mutate}
-                    color="var(--color-green-500)"
                     isLoading={updateTokenWhatsappMutation.isPending}
                     >
-                        Generar 
+                        Generar
                     </CustomButton>
                 </div>   
             </form>
