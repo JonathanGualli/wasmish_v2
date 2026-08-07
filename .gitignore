@@ -36,3 +36,9 @@ Frontend/.env.production.local
 
 # --- Graphify (artefactos generados) ---
 graphify-out/
+
+# --- Deploy (secretos y código copiado al server) ---
+deploy/config/*.env
+!deploy/config/*.env.example
+deploy/.env
+deploy/app/

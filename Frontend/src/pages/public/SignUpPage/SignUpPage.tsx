@@ -6,17 +6,12 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuthContext } from '../../../context/auth.context';
 import { useModalContext } from '../../../components/Modal/context/UseModalContext';
 import { useSignUp } from '../../../hooks/useSignUp';
+import { Logo } from '../../../components/Logo/Logo';
 import type { AxiosError } from 'axios';
 
 interface ErrorItem {
   message: string;
 }
-
-const WasmishMark = () => (
-  <div className="w-10 h-10 bg-brand-accent rounded-xl flex items-center justify-center flex-shrink-0">
-    <span className="text-black font-bold text-lg leading-none">W</span>
-  </div>
-);
 
 export const SignUpPage = () => {
   const [name, setName] = useState('');
@@ -70,7 +65,7 @@ export const SignUpPage = () => {
         {/* Panel izquierdo — formulario */}
         <div className="bg-brand-surface basis-2/5 p-10 flex flex-col justify-center">
           <div className="flex items-center gap-2.5 mb-8">
-            <WasmishMark />
+            <Logo className="w-10 h-10" />
             <span className="text-brand-text font-bold text-lg">Wasmish</span>
           </div>
 
@@ -119,24 +114,42 @@ export const SignUpPage = () => {
 
             <p className="text-brand-subtle text-sm text-center">
               ¿Ya tienes cuenta?{' '}
-              <Link to={AppRoutes.login} className="text-brand-accent font-medium hover:underline">
+              <Link to={AppRoutes.login} className="text-brand-accent-strong font-medium hover:underline">
                 Inicia sesión
               </Link>
             </p>
           </form>
         </div>
 
-        {/* Panel derecho — imagen */}
-        <div className="basis-3/5 relative overflow-hidden hidden md:block">
-          <img
-            src="https://images7.alphacoders.com/747/thumb-1920-747498.jpg"
-            className="object-cover w-full h-full"
-            alt="Wasmish banner"
+        {/* Panel derecho — hero */}
+        <div className="basis-3/5 relative overflow-hidden hidden md:flex flex-col">
+          {/* Base clara con un toque de verde menta */}
+          <div className="absolute inset-0 bg-gradient-to-br from-brand-surface via-brand-bg to-[#dff2e7]" />
+
+          {/* Dot-grid pattern */}
+          <div
+            className="absolute inset-0"
+            style={{
+              backgroundImage: 'radial-gradient(circle, #c3ccd8 1px, transparent 1px)',
+              backgroundSize: '24px 24px',
+            }}
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-brand-bg/70 via-transparent to-brand-bg/60" />
-          <div className="absolute top-10 left-10">
-            <p className="text-brand-text/80 text-sm max-w-xs leading-relaxed font-medium">
-              Gestiona todas tus conversaciones de WhatsApp Business desde un panel unificado.
+
+          {/* Glow radial verde */}
+          <div
+            className="absolute inset-0"
+            style={{
+              background: 'radial-gradient(ellipse 75% 55% at 50% 42%, rgba(37,211,102,0.14) 0%, transparent 70%)',
+            }}
+          />
+
+          {/* Contenido anclado abajo */}
+          <div className="relative z-10 mt-auto p-10 pb-12">
+            <h2 className="text-brand-text font-bold text-2xl leading-snug mb-3 max-w-[280px]">
+              Todas tus conversaciones,<br />en un solo lugar.
+            </h2>
+            <p className="text-brand-muted text-sm max-w-xs leading-relaxed">
+              Gestiona todos tus chats de WhatsApp Business desde un panel unificado.
             </p>
           </div>
         </div>

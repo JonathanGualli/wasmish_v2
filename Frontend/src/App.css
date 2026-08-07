@@ -1,21 +1,22 @@
 @import "tailwindcss";
 
 @theme {
-  /* Backgrounds */
-  --color-brand-bg:      #141413;
-  --color-brand-surface: #1c1c1b;
-  --color-brand-raised:  #262625;
+  /* Backgrounds — LIGHT (cool/slate, 2026-08-05) */
+  --color-brand-bg:      #eaeef3;
+  --color-brand-surface: #ffffff;
+  --color-brand-raised:  #f2f5f9;
 
   /* Borders */
-  --color-brand-border:  #2e2d2b;
+  --color-brand-border:  #d8dee6;
 
   /* Text */
-  --color-brand-text:    #f5f4f0;
-  --color-brand-muted:   #b0aea5;
-  --color-brand-subtle:  #6b6a66;
+  --color-brand-text:    #1b2029;
+  --color-brand-muted:   #5b6472;
+  --color-brand-subtle:  #9099a6;
 
   /* Accents */
-  --color-brand-accent:  #25d366;
+  --color-brand-accent:  #25d366;   /* verde WhatsApp — para FONDOS (botones, badges) */
+  --color-brand-accent-strong: #15a34a; /* verde oscuro — para TEXTO verde sobre claro */
   --color-brand-indigo:  #6366f1;
   --color-brand-danger:  #ef4444;
 

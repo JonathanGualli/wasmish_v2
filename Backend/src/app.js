@@ -10,6 +10,7 @@ import webhookRoutes from './routes/webhook.routes.js';
 import streamRoutes from './routes/stream.routes.js';
 import templateRoutes from './routes/template.routes.js';
 import apiKeyRoutes from './routes/api.key.routes.js';
+import whatsappRoutes from './routes/whatsapp.routes.js';
 
 const app = express();
 
@@ -17,7 +18,7 @@ const app = express();
 app.set('trust proxy', 1);
 
 app.use(cors({
-    origin: 'http://localhost:5173',
+    origin: process.env.FRONTEND_ORIGIN || 'http://localhost:5173',
     credentials: true,
 }));
 
@@ -44,5 +45,6 @@ app.use("/api", webhookRoutes);
 app.use("/api", streamRoutes);
 app.use("/api", templateRoutes);
 app.use("/api", apiKeyRoutes);
+app.use("/api", whatsappRoutes);
 
 export default app; 

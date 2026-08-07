@@ -21,3 +21,5 @@ export const decrypt = (hash) => {
     decrypted += decipher.final('utf8');
     return decrypted;
 }
+
+export const hashApiKey = (key) => crypto.createHash('sha256').update(key).digest('hex');

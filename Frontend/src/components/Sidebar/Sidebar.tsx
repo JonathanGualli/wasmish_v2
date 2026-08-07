@@ -1,8 +1,10 @@
-import { Home, Menu, Rocket, Settings, MessageSquare, LayoutTemplate, X } from 'lucide-react';
+import { Menu, Rocket, Settings, MessageSquare, LayoutTemplate, BookOpen, X } from 'lucide-react';
 import { SidebarItem } from './SidebarItem';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AppRoutes } from '../../models/routes.models';
 import { useEffect, useMemo, useState } from 'react';
+import { Logo } from '../Logo/Logo';
+import { APP_VERSION } from '../../config/version';
 
 interface Props {
   collapsed: boolean;
@@ -15,12 +17,6 @@ interface HandleButtonProps {
   path: string;
 }
 
-const WasmishMark = () => (
-  <div className="w-7 h-7 bg-brand-accent rounded-lg flex items-center justify-center flex-shrink-0">
-    <span className="text-black font-bold text-sm leading-none">W</span>
-  </div>
-);
-
 export const Sidebar = ({ collapsed, toggle, isMobile }: Props) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -28,9 +24,9 @@ export const Sidebar = ({ collapsed, toggle, isMobile }: Props) => {
 
   const navItems = useMemo(() => [
     { icon: <Rocket size={18} />,         text: 'Inicio Rápido', value: 'quickStart', path: `${AppRoutes.private.root}/${AppRoutes.private.quickStart}` },
-    { icon: <Home size={18} />,           text: 'Dashboard',     value: 'dashboard',  path: `${AppRoutes.private.root}/${AppRoutes.private.dashboard}` },
     { icon: <MessageSquare size={18} />,  text: 'Chats',         value: 'chats',      path: `${AppRoutes.private.root}/${AppRoutes.private.chats}` },
     { icon: <LayoutTemplate size={18} />, text: 'Plantillas',    value: 'templates',  path: `${AppRoutes.private.root}/${AppRoutes.private.templates}` },
+    { icon: <BookOpen size={18} />,       text: 'Documentación', value: 'docs',       path: `${AppRoutes.private.root}/${AppRoutes.private.docs}` },
   ], []);
 
   const bottomItems = useMemo(() => [
@@ -63,12 +59,12 @@ export const Sidebar = ({ collapsed, toggle, isMobile }: Props) => {
       <div className="flex items-center justify-between px-3 py-4 border-b border-brand-border h-14 shrink-0">
         {collapsed ? (
           <button onClick={toggle} className="mx-auto cursor-pointer" title="Expandir menú">
-            <WasmishMark />
+            <Logo className="w-7 h-7" />
           </button>
         ) : (
           <>
             <div className="flex items-center gap-2.5 min-w-0">
-              <WasmishMark />
+              <Logo className="w-7 h-7" />
               <span className="font-semibold text-brand-text text-sm tracking-wide truncate">Wasmish</span>
             </div>
             <button
@@ -97,7 +93,7 @@ export const Sidebar = ({ collapsed, toggle, isMobile }: Props) => {
       </nav>
 
       {/* Nav inferior — ajustes separados */}
-      <div className="px-2 pt-2 pb-3 border-t border-brand-border shrink-0 flex flex-col gap-0.5">
+      <div className="px-2 pt-2 pb-2 border-t border-brand-border shrink-0 flex flex-col gap-0.5">
         {bottomItems.map(({ icon, text, value, path }) => (
           <SidebarItem
             key={value}
@@ -108,6 +104,23 @@ export const Sidebar = ({ collapsed, toggle, isMobile }: Props) => {
             isSelected={valueSelected === value}
           />
         ))}
+
+        {/* Versión de la app */}
+        {collapsed ? (
+          <span
+            className="mx-auto mt-1 text-[9px] font-medium text-brand-subtle tabular-nums"
+            title={`Wasmish v${APP_VERSION}`}
+          >
+            v{APP_VERSION}
+          </span>
+        ) : (
+          <div className="flex items-center gap-1.5 px-3 pt-1.5 pb-0.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-brand-accent flex-shrink-0" />
+            <span className="text-[11px] text-brand-subtle tracking-wide">
+              Wasmish <span className="text-brand-muted font-medium tabular-nums">v{APP_VERSION}</span>
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

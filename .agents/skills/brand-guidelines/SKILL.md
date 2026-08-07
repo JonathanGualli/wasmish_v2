@@ -23,18 +23,22 @@ Todos los tokens están definidos en `Frontend/src/App.css` vía `@theme {}`.
 Usar **siempre** los tokens; nunca usar colores Tailwind genéricos (gray-800, blue-500, etc.).
 
 ```css
-/* Fondos — de más oscuro a más claro */
---color-brand-bg:      #141413   /* App background, sidebar, header */
---color-brand-surface: #1c1c1b   /* Cards, panels, layout areas */
---color-brand-raised:  #262625   /* Inputs, tooltips, elevated surfaces */
+/* Fondos — LIGHT (cool/slate, 2026-08-05) */
+--color-brand-bg:      #eaeef3   /* App background, sidebar, header */
+--color-brand-surface: #ffffff   /* Cards, panels, layout areas */
+--color-brand-raised:  #f2f5f9   /* Inputs, tooltips, elevated surfaces */
 
 /* Bordes */
---color-brand-border:  #2e2d2b   /* Divisores, bordes de card, inputs */
+--color-brand-border:  #d8dee6   /* Divisores, bordes de card, inputs */
 
 /* Texto */
---color-brand-text:    #f5f4f0   /* Texto principal */
---color-brand-muted:   #b0aea5   /* Texto secundario, labels, iconos inactivos */
---color-brand-subtle:  #6b6a66   /* Placeholders, disabled, hints */
+--color-brand-text:    #1b2029   /* Texto principal */
+--color-brand-muted:   #5b6472   /* Texto secundario, labels, iconos inactivos */
+--color-brand-subtle:  #9099a6   /* Placeholders, disabled, hints */
+
+/* NOTA: en light, el verde brillante #25d366 NO se lee como texto sobre blanco.
+   Usar --color-brand-accent (text-brand-accent) SOLO para FONDOS (botones/badges).
+   Para TEXTO verde usar --color-brand-accent-strong (#15a34a) → text-brand-accent-strong. */
 
 /* Accents */
 --color-brand-accent:  #25d366   /* Primary CTA — WhatsApp green */

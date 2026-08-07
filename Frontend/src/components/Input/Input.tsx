@@ -14,6 +14,7 @@ interface InputProps {
   maxLines?: number;
   sendOnEnter?: boolean;
   onEnter?: () => void;
+  autoFocus?: boolean;
 }
 
 const baseInputClasses = `
@@ -33,6 +34,7 @@ export const CustomInput: React.FC<InputProps> = ({
   maxLines = 1,
   sendOnEnter = false,
   onEnter,
+  autoFocus = false,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -71,6 +73,7 @@ export const CustomInput: React.FC<InputProps> = ({
           value={value}
           onChange={onChange}
           onKeyDown={handleKeyDown}
+          autoFocus={autoFocus}
           className={baseInputClasses}
         />
       ) : (
@@ -80,6 +83,7 @@ export const CustomInput: React.FC<InputProps> = ({
           value={value}
           onChange={onChange as (e: React.ChangeEvent<HTMLTextAreaElement>) => void}
           onKeyDown={handleKeyDown}
+          autoFocus={autoFocus}
           rows={1}
           className={`${baseInputClasses} resize-none`}
           style={{ lineHeight: '22px' }}

@@ -7,9 +7,9 @@ import { AppRoutes } from '../../models/routes.models';
 
 const PAGE_TITLES: Record<string, string> = {
   [AppRoutes.private.quickStart]: 'Inicio Rápido',
-  [AppRoutes.private.dashboard]:  'Dashboard',
   [AppRoutes.private.chats]:      'Chats',
   [AppRoutes.private.templates]:  'Plantillas',
+  [AppRoutes.private.docs]:       'Documentación',
   [AppRoutes.private.settings]:   'Ajustes',
 };
 

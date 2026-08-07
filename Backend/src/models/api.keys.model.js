@@ -7,15 +7,17 @@ const apiKeysSchema = new mongoose.Schema({
         required: true,
         index: true,
     },
-    key: {
+    keyHash: {
         type: String,
         required: true,
         unique: true,
     },
+    keyPreview: {
+      type: String, // ej. "wm_ab1…9f3x" — para mostrar en la UI sin exponer la key 
+    },
     name: {
         type: String,
         required: true,
-        unique: true,
     },
     status: {
         type: String,
@@ -23,6 +25,12 @@ const apiKeysSchema = new mongoose.Schema({
         enum: ['active', 'inactive'],
         required: true,
     },
+    lastUsedAt: {
+        type: Date,
+        default: null, // Asi savemos si la key se esta usando
+    },
 }, { timestamps: true } );
+
+apiKeysSchema.index({ userId: 1, name: 1 }, { unique: true }); // Un usuario no puede tener dos keys con el mismo nombre
 
 export default mongoose.model('ApiKey', apiKeysSchema);

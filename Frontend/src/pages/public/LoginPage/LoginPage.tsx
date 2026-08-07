@@ -6,21 +6,15 @@ import { useAuthContext } from '../../../context/auth.context';
 import { Link, useNavigate } from 'react-router-dom';
 import { AppRoutes } from '../../../models/routes.models';
 import { useModalContext } from '../../../components/Modal/context/UseModalContext';
+import { Logo } from '../../../components/Logo/Logo';
 
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-const WasmishMark = ({ large = false }: { large?: boolean }) => (
-  <div className={`bg-brand-accent flex items-center justify-center flex-shrink-0
-    ${large ? 'w-10 h-10 rounded-xl' : 'w-7 h-7 rounded-lg'}`}>
-    <span className={`text-black font-bold leading-none ${large ? 'text-lg' : 'text-sm'}`}>W</span>
-  </div>
-);
-
 const FeatureChip = ({ icon, label }: { icon: React.ReactNode; label: string }) => (
   <div className="flex items-center gap-1.5 bg-brand-raised/50 border border-brand-border/40
     rounded-full px-3 py-1 backdrop-blur-sm">
-    <span className="text-brand-accent">{icon}</span>
+    <span className="text-brand-accent-strong">{icon}</span>
     <span className="text-brand-muted text-xs">{label}</span>
   </div>
 );
@@ -33,7 +27,7 @@ const ConversationPreview = () => (
       <div className="flex items-center gap-2.5">
         <div className="w-8 h-8 rounded-full bg-brand-accent/15 border border-brand-accent/25
           flex items-center justify-center flex-shrink-0">
-          <span className="text-brand-accent text-xs font-semibold">MC</span>
+          <span className="text-brand-accent-strong text-xs font-semibold">MC</span>
         </div>
         <div>
           <p className="text-brand-text text-xs font-medium leading-tight">María C.</p>
@@ -132,14 +126,14 @@ export const LoginPage = () => {
 
         {/* ── Panel izquierdo — hero ── */}
         <div className="lg:basis-3/5 relative overflow-hidden hidden lg:flex flex-col">
-          {/* Base oscura */}
-          <div className="absolute inset-0 bg-brand-bg" />
+          {/* Base clara con un toque de verde menta */}
+          <div className="absolute inset-0 bg-gradient-to-br from-brand-surface via-brand-bg to-[#dff2e7]" />
 
           {/* Dot-grid pattern */}
           <div
             className="absolute inset-0"
             style={{
-              backgroundImage: 'radial-gradient(circle, #2e2d2b 1px, transparent 1px)',
+              backgroundImage: 'radial-gradient(circle, #c3ccd8 1px, transparent 1px)',
               backgroundSize: '24px 24px',
             }}
           />
@@ -148,22 +142,19 @@ export const LoginPage = () => {
           <div
             className="absolute inset-0"
             style={{
-              background: 'radial-gradient(ellipse 75% 55% at 50% 42%, rgba(37,211,102,0.07) 0%, transparent 70%)',
+              background: 'radial-gradient(ellipse 75% 55% at 50% 42%, rgba(37,211,102,0.14) 0%, transparent 70%)',
             }}
           />
 
-          {/* Degradado inferior para legibilidad del contenido */}
-          <div className="absolute inset-0 bg-gradient-to-t from-brand-bg/80 via-transparent to-transparent" />
-
           {/* Logotipo flotante — top-left */}
           <div className="absolute top-8 left-8 flex items-center gap-2.5 z-10">
-            <WasmishMark />
-            <span className="text-brand-text/90 font-semibold text-sm tracking-wide">Wasmish</span>
+            <Logo className="w-7 h-7" />
+            <span className="text-brand-text font-semibold text-sm tracking-wide">Wasmish</span>
           </div>
 
           {/* Contenido anclado abajo */}
           <div className="relative z-10 mt-auto p-8 pb-10">
-            <h2 className="text-white font-bold text-2xl leading-snug mb-4 max-w-[240px]">
+            <h2 className="text-brand-text font-bold text-2xl leading-snug mb-4 max-w-[240px]">
               Tu WhatsApp Business,<br />bajo control.
             </h2>
 
@@ -185,7 +176,7 @@ export const LoginPage = () => {
 
           {/* Logo mobile */}
           <div className="flex items-center gap-2.5 mb-6 lg:hidden">
-            <WasmishMark large />
+            <Logo className="w-10 h-10" />
             <span className="text-brand-text font-bold text-lg">Wasmish</span>
           </div>
 
@@ -224,7 +215,7 @@ export const LoginPage = () => {
                 />
                 <span className="text-brand-subtle text-xs">Recordar dispositivo</span>
               </label>
-              <span className="text-xs text-brand-accent cursor-pointer hover:underline">
+              <span className="text-xs text-brand-accent-strong cursor-pointer hover:underline">
                 ¿Olvidaste tu contraseña?
               </span>
             </div>
@@ -245,7 +236,7 @@ export const LoginPage = () => {
 
             <p className="text-brand-subtle text-sm text-center">
               ¿No tienes cuenta?{' '}
-              <Link to={AppRoutes.register} className="text-brand-accent font-medium hover:underline">
+              <Link to={AppRoutes.register} className="text-brand-accent-strong font-medium hover:underline">
                 Regístrate ahora
               </Link>
             </p>

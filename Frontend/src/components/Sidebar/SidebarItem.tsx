@@ -18,7 +18,7 @@ export const SidebarItem = ({ icon, text, collapsed, onTap, isSelected }: Props)
       border-l-2
       ${collapsed ? 'justify-center py-2.5 px-0' : 'gap-3 px-3 py-2.5'}
       ${isSelected
-        ? 'bg-brand-accent/10 text-brand-accent font-medium border-l-brand-accent'
+        ? 'bg-brand-accent/10 text-brand-accent-strong font-medium border-l-brand-accent'
         : 'text-brand-muted hover:bg-brand-raised hover:text-brand-text border-l-transparent'
       }
     `}

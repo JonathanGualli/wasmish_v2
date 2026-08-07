@@ -1,7 +1,7 @@
 import type { QueryFunctionContext } from '@tanstack/react-query';
 import axios from 'axios';
 
-const API_URL = 'http://localhost:3001/api';
+const API_URL = '/api'; // configuracion puesta en vite.config.ts
 // const API_URL = 'https://wasmish-api.solventyc.com/api';
 
 interface SSEHandlers {
@@ -127,8 +127,26 @@ export const getTemplatesService = async () => {
     return data;
 }
 
-// Servicio para generar pikey
+// Servicio para generar una API key
 export const generatePikeyService = async (nameApiKey: string) => {
     const { data } = await axios.post(`${API_URL}/api-key/generate`, { nameApiKey }, { withCredentials: true });
     return data;
 }
+
+// Servicio para listar las API keys del usuario
+export const getApiKeysService = async () => {
+    const { data } = await axios.get(`${API_URL}/api-key`, { withCredentials: true });
+    return data;
+}
+
+// Servicio para revocar (eliminar) una API key
+export const revokeApiKeyService = async (id: string) => {
+    const { data } = await axios.delete(`${API_URL}/api-key/${id}`, { withCredentials: true });
+    return data;
+}
+
+// Servicio para conectar WhatsApp vía Embedded Signup
+export const connectWhatsappService = async (code: string, phoneNumberId: string, waBusinessId: string) => {
+    const { data } = await axios.post(`${API_URL}/whatsapp/connect`, { code, phoneNumberId, waBusinessId }, { withCredentials: true });
+    return data;
+};

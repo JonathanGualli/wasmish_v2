@@ -9,4 +9,15 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  server: {
+    // Permitir que nfrok sirva la app 
+    allowedHosts: ['subzonary-rosalba-untoned.ngrok-free.dev'],
+    // Reenviar las llamadas /api al backend local
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      }
+    }
+  }
 })

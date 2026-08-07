@@ -69,7 +69,7 @@ export const sendMessageControllerOld = async (req, res) => {
 }
 
 // Enviar mensajes simplificado
-export const processMessageSending = async ({
+/* export const processMessageSending = async ({
     user,
     conversation, 
     text, 
@@ -134,6 +134,90 @@ export const processMessageSending = async ({
 
     return {msg, waMessageId}
 };
+ */
+
+// Enviar mensajes simplificado
+export const processMessageSending = async ({
+    user,
+    conversation,
+    text,
+    temporalId,
+    destinationNumber,
+    contactName }) => {
+
+    const token = decrypt(user.tokenWhatsapp);
+    const phoneNumberId = conversation?.phoneNumberId || user.phoneNumberId;
+
+    if (!phoneNumberId) throw new Error("Phone number ID is required");
+
+    // Intentamos enviar a Meta. Si falla, NO abortamos: marcamos el mensaje como fallido.
+    let waMessageId = null;
+    let status = 'sent';
+    let errorCode = null;
+    let errorDetail = null;
+
+    try {
+        const apiRes = await sendTextMessage({
+            token,
+            phoneNumberId,
+            to: conversation?.contactPhone || destinationNumber,
+            text
+        });
+        waMessageId = apiRes?.data?.messages?.[0]?.id || null;
+    } catch (error) {
+        status = 'failed';
+        errorCode = error.waErrorCode ? String(error.waErrorCode) : null;
+        errorDetail = error.waErrorDetail || error.message;
+    }
+
+    // Si no hay conversación (mensaje nuevo), la creamos; si existe, la actualizamos
+    let targetConversation = conversation;
+    if (!targetConversation) {
+        targetConversation = await Conversation.create({
+            userId: user._id,
+            contactPhone: destinationNumber,
+            phoneNumberId,
+            lastMessage: text,
+            lastMessageAt: new Date(),
+            unreadCount: 0,
+            contactName: contactName || null,
+        });
+    } else {
+        targetConversation.lastMessage = text;
+        targetConversation.updatedAt = new Date();
+        await targetConversation.save();
+    }
+
+    // Creamos el mensaje con su estado REAL (sent o failed)
+    const msg = await Message.create({
+        conversationId: targetConversation._id,
+        direction: 'outbound',
+        sender: 'me',
+        waMessageId,
+        text,
+        timestamp: new Date(),
+        temporalId,
+        status,
+        errorCode,
+        errorDetail,
+        failedAt: status === 'failed' ? new Date() : null,
+    });
+
+    // Notificamos via SSE con el estado real
+    sendUser(String(user._id), 'message_created', {
+        id: String(msg._id),
+        conversationId: String(targetConversation._id),
+        sender: 'me',
+        text,
+        timestamp: msg.timestamp.toISOString(),
+        status,
+        errorCode,
+        errorDetail,
+        temporalId,
+    });
+
+    return { msg, waMessageId, status, errorCode, errorDetail };
+};
 
 export const sendMessageController = async (req, res) => {
     try {
@@ -162,7 +246,7 @@ export const sendMessageController = async (req, res) => {
         }
 
         // Llamamos al servicio (que ahora sabe qué hacer si conversation es null)
-        const { msg, waMessageId } = await processMessageSending({ 
+/*         const { msg, waMessageId } = await processMessageSending({ 
             user, 
             conversation, 
             text, 
@@ -171,9 +255,45 @@ export const sendMessageController = async (req, res) => {
             contactName,
         });
 
-        return res.status(201).json({ ...msg._doc, waMessageId, status: 'sent' });
+        // return res.status(201).json({ ...msg._doc, waMessageId, status: 'sent' });
+        return res.status(201).json({
+            id: String(msg._id),
+            conversationId: String(msg.conversationId),
+            sender: msg.sender,
+            text: msg.text,
+            timestamp: msg.timestamp.toISOString(),
+            status: 'sent',
+            waMessageId,
+            temporalId: msg.temporalId,
+        });
+ */
+
+        // Llamamos al servicio (que ahora persiste incluso si el envío falla)
+        const { msg, status, waMessageId, errorCode, errorDetail } = await processMessageSending({
+            user,
+            conversation,
+            text,
+            temporalId,
+            destinationNumber,
+            contactName,
+        });
+
+        return res.status(201).json({
+            id: String(msg._id),
+            conversationId: String(msg.conversationId),
+            sender: msg.sender,
+            text: msg.text,
+            timestamp: msg.timestamp.toISOString(),
+            status,
+            waMessageId,
+            errorCode,
+            errorDetail,
+            temporalId: msg.temporalId,
+        });
+
 
     } catch (error) {
+        console.error("Error enviando mensaje:", error.response?.data || error.message || error);
         res.status(500).json([{ message: error.message }]);
     }
 };

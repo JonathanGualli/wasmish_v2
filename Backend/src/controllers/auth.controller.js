@@ -5,6 +5,8 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { decrypt } from '../utils/crypto.js';
 
+const isProd = process.env.NODE_ENV === 'production';
+
 
 export const register = async (req, res) => {
         
@@ -30,8 +32,8 @@ export const register = async (req, res) => {
 
         res.cookie('token', token, {
             httpOnly: true,
-            secure: true,      // OBLIGATORIO: Porque la web es HTTPS
-            sameSite: 'none',  // OBLIGATORIO: Porque localhost != solventyc.com
+            secure: isProd,      // OBLIGATORIO: Porque la web es HTTPS
+            sameSite: isProd ? 'none' : 'lax',  // OBLIGATORIO: Porque localhost != solventyc.com
         });
 
         res.json({
@@ -66,11 +68,9 @@ export const login = async (req, res) => {
 
         res.cookie('token', token, {
             httpOnly: true,
-            secure: true,      // OBLIGATORIO: Porque la web es HTTPS
-            sameSite: 'none',  // OBLIGATORIO: Porque localhost != solventyc.com
+            secure: isProd,                     // OBLIGATORIO EN PROD: Porque la web es HTTPS
+            sameSite: isProd ? 'none' : 'lax',  // OBLIGATORIO EN PROD: Porque localhost != solventyc.com , lax funciona en http 
         });
-
-
 
         // Desencriptar el token de Whatsapp antes de enviarlo
         const encryptToken = userFound.tokenWhatsapp;

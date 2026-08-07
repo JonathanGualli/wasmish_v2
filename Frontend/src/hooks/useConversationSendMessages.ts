@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { sendMessageService } from "../services/api.service";
 import type { Message } from "../models/message.mode.ts";
+import { AxiosError } from "axios";
 
 export const useConversationSendMessages = () => {
     const queryClient = useQueryClient();
@@ -54,11 +55,38 @@ export const useConversationSendMessages = () => {
             return { previousMessages, temporalId: optimisticMessage.id };
         },
 
-        onError: (_err, variables, context) => {
+/*         onError: (_err, variables, context) => {
             if (context?.previousMessages) {
                 queryClient.setQueryData(["conversation", variables.conversationId], context.previousMessages);
             }
         },
+ */
+        onError: (error, variables, context) => {
+            const temporalId = context?.temporalId;
+            if (!temporalId) return;
+
+            const errorDetail =
+                (error as AxiosError<{ message: string }[]>).response?.data?.[0]?.message
+                || error.message
+                || "No se pudo enviar (error de conexión)";
+
+            queryClient.setQueryData<InfiniteData<{ items: Message[], nextCursor: string | undefined }>>(
+                ["conversation", variables.conversationId],
+                (oldData) => {
+                    if (!oldData) return oldData;
+                    const newPages = oldData.pages.map((page) => ({
+                        ...page,
+                        items: page.items.map((msg) =>
+                            msg.id === temporalId
+                                ? { ...msg, status: "failed" as const, errorDetail }
+                                : msg
+                        ),
+                    }));
+                    return { ...oldData, pages: newPages };
+                }
+            );
+        },
+
 
         onSuccess: (dataServerResponse, variables, context) => {
             if (context?.temporalId) {

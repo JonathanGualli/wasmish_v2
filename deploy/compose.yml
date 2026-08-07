@@ -1,0 +1,67 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# prod-wasmish-main  →  wasmish.solventyc.com   (CRM WhatsApp — Node + React)
+# Patrón copiado de prod-dashboard-solventyc:
+#   · web (nginx) sirve el SPA Y hace de reverse-proxy de /api → api  (1 solo router Traefik)
+#   · api (Node) NO se expone a Traefik; solo lo ve la web por la red interna
+#   · Mongo NO se despliega aquí: se usa el compartido prod-mongo-main-db-ct
+#     (la api se une a prod-mongo-main-internal-net para alcanzarlo por nombre)
+# Layout esperado en el server (/opt/docker-projects/prod-wasmish-main/):
+#   compose.yml · .env (build args VITE_*) · config/api.env · app/{Backend,Frontend}
+# Secretos en ./config/api.env (env_file, NUNCA en git ni en la imagen).
+# ─────────────────────────────────────────────────────────────────────────────
+name: prod-wasmish-main
+
+networks:
+  internal-net:
+    name: prod-wasmish-main-internal-net
+    external: false
+  proxy-net:
+    name: prod-traefik-proxy-net
+    external: true
+  mongo-net:
+    name: prod-mongo-main-internal-net       # red del Mongo compartido (ya existe)
+    external: true
+
+services:
+  wasmish-api:
+    build:
+      context: ./app/Backend
+      dockerfile: Dockerfile
+    image: prod-wasmish-main-api:local
+    container_name: prod-wasmish-main-api-ct
+    hostname: prod-wasmish-main-api
+    restart: unless-stopped
+    security_opt: [no-new-privileges]
+    env_file:
+      - ./config/api.env                      # secretos reales (MONGO_URI, TOKEN_SECRET, META_*)
+    networks: [internal-net, mongo-net]       # internal-net: la ve la web · mongo-net: alcanza el Mongo
+
+  wasmish-web:
+    build:
+      context: ./app/Frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_META_APP_ID: ${VITE_META_APP_ID}
+        VITE_META_CONFIG_ID: ${VITE_META_CONFIG_ID}
+        VITE_META_GRAPH_VERSION: ${VITE_META_GRAPH_VERSION}
+    image: prod-wasmish-main-web:local
+    container_name: prod-wasmish-main-web-ct
+    hostname: prod-wasmish-main-web
+    restart: unless-stopped
+    security_opt: [no-new-privileges]
+    depends_on: [wasmish-api]
+    networks: [internal-net, proxy-net]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=prod-traefik-proxy-net"
+      # http → redirige a https
+      - "traefik.http.routers.prod-wasmish-main-http.entrypoints=web"
+      - "traefik.http.routers.prod-wasmish-main-http.rule=Host(`wasmish.solventyc.com`)"
+      - "traefik.http.routers.prod-wasmish-main-http.middlewares=prod-wasmish-main-redir"
+      - "traefik.http.middlewares.prod-wasmish-main-redir.redirectscheme.scheme=https"
+      # https + cert Let's Encrypt (httpChallenge, resolver "letsencrypt")
+      - "traefik.http.routers.prod-wasmish-main-secure.entrypoints=websecure"
+      - "traefik.http.routers.prod-wasmish-main-secure.rule=Host(`wasmish.solventyc.com`)"
+      - "traefik.http.routers.prod-wasmish-main-secure.tls=true"
+      - "traefik.http.routers.prod-wasmish-main-secure.tls.certresolver=letsencrypt"
+      - "traefik.http.services.prod-wasmish-main.loadbalancer.server.port=80"
