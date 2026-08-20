@@ -5,4 +5,4 @@ export const WHATSAPP_VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
 export const META_APP_ID = process.env.META_APP_ID;
 export const META_APP_SECRET = process.env.META_APP_SECRET;
 export const META_CONFIG_ID = process.env.META_CONFIG_ID;
-export const META_GRAPH_VERSION = process.env.META_GRAPH_VERSION || 'v20.0';
+export const META_GRAPH_VERSION = process.env.META_GRAPH_VERSION || 'v26.0';
