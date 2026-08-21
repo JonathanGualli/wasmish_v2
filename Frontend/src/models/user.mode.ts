@@ -1,8 +1,9 @@
+export type UserRole = 'admin' | 'agent' | 'superadmin';
 export interface User {
     id: string;
     email: string;
     name: string;
-    role: 'user' | 'admin';
+    rol: UserRole;
     tokenWhatsapp?: string;
     phoneNumberId?: string;
     waBusinessId?: string;

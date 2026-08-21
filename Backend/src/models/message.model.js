@@ -53,6 +53,17 @@ const messageSchema = new mongoose.Schema({
         type: String,
         default: null,
     },
+    // Trazabilidad de plantillas: qué plantilla y con qué datos se envió. 
+    // No se muestran en la ui - el texto ya viene renederizado en text
+    // pero permiten auditar y re-renderizar de forma fiable si hiciera falta
+    templateName: {
+        type: String, 
+        default: null,
+    },
+    templateParams: {
+        type: [mongoose.Schema.Types.Mixed],
+        default: undefined,
+    },
     temporalId: {
         type: String,
         default: null,

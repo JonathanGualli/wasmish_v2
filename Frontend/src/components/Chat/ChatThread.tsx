@@ -8,7 +8,8 @@ import { useModalContext } from "../Modal/context/UseModalContext.ts";
 import type { AxiosError } from "axios";
 import { useInView } from "react-intersection-observer";
 import { Check, CheckCheck, SendHorizonal, CircleAlert} from "lucide-react";
-
+import { useTemplates } from "../../hooks/useTemplates.ts";
+import { renderLegacyTemplateText } from "../../utils/legacyTemplate.ts";
 
 interface Props {
     conversationId: string | null;
@@ -34,6 +35,7 @@ export const ChatThread = ({ conversationId }: Props) => {
     const { setState, setContent } = useModalContext();
     const formRef = useRef<HTMLFormElement | null>(null);
     const { ref, inView } = useInView();
+    const { templates } = useTemplates();
 
     // Enfoca el campo de mensaje cada vez que se abre/cambia de conversación
     useEffect(() => {
@@ -101,7 +103,7 @@ export const ChatThread = ({ conversationId }: Props) => {
                 ? "bg-brand-accent/20 text-brand-text"
                 : "bg-brand-raised text-brand-text"}`}>
 
-                    <div className="leading-snug whitespace-pre-line">{msg.text}</div>
+                    <div className="leading-snug whitespace-pre-line">{renderLegacyTemplateText(msg.text, templates)}</div>
 
                     <div className="flex flex-row gap-1 items-end">
 

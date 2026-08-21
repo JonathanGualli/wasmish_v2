@@ -1,4 +1,6 @@
 import { useConversations } from "../../hooks/useConversations";
+import { useTemplates } from "../../hooks/useTemplates";
+import { renderLegacyTemplateText } from "../../utils/legacyTemplate";
 
 interface Props {
     onSelect: (id: string) => void;
@@ -8,6 +10,7 @@ interface Props {
 export const ChatconversationList = ({ onSelect, selectedId }: Props) => {
 
     const { data: conversations, isLoading, isError } = useConversations();
+    const { templates } = useTemplates();
 
     if (isLoading) return <div className="flex items-center justify-center h-full text-brand-muted bg-brand-surface">Cargando conversaciones...</div>
 
@@ -32,9 +35,17 @@ export const ChatconversationList = ({ onSelect, selectedId }: Props) => {
                               ${selectedId === chat.id ? 'bg-brand-accent/10' : 'hover:bg-brand-raised'}`}>
 
                     <div className="flex justify-between items-center gap-2">
-                        <h1 className={`font-semibold truncate ${selectedId === chat.id ? 'text-brand-accent-strong' : 'text-brand-text'}`}>
-                            {chat.title || chat.phone}
-                        </h1>
+                        <div>
+                            <h1 className={`font-semibold truncate ${selectedId === chat.id ? 'text-brand-accent-strong' : 'text-brand-text'}`}>
+                                {chat.title || chat.phone}
+                            </h1>
+                            {/* El titulo ya ES el teléfono cuando el contacto no tiene nombre */}
+                            {chat.title && chat.title !== chat.phone && ( 
+                                <span className="text-xs text-brand-subtle tabular-nums flex-shrink-0">
+                                    +{chat.phone}
+                                </span>
+                            )}
+                        </div>
                         <span className="text-xs text-brand-subtle flex-shrink-0">
                             {new Date(chat.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
@@ -42,7 +53,7 @@ export const ChatconversationList = ({ onSelect, selectedId }: Props) => {
 
                     <div className="flex justify-between items-center gap-2 mt-0.5">
                         <h3 className="text-brand-muted text-sm truncate">
-                            {chat.lastMessage || "Sin mensajes aún"}
+                            {renderLegacyTemplateText(chat.lastMessage, templates) || "Sin mensajes aún"}
                         </h3>
 
                         {chat.unreadCount > 0 && (

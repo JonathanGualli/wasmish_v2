@@ -11,6 +11,7 @@ import streamRoutes from './routes/stream.routes.js';
 import templateRoutes from './routes/template.routes.js';
 import apiKeyRoutes from './routes/api.key.routes.js';
 import whatsappRoutes from './routes/whatsapp.routes.js';
+import adminRoutes from './routes/admin.routes.js';
 
 const app = express();
 
@@ -46,5 +47,6 @@ app.use("/api", streamRoutes);
 app.use("/api", templateRoutes);
 app.use("/api", apiKeyRoutes);
 app.use("/api", whatsappRoutes);
+app.use("/api", adminRoutes);
 
 export default app; 

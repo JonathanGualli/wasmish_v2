@@ -150,3 +150,15 @@ export const connectWhatsappService = async (code: string, phoneNumberId: string
     const { data } = await axios.post(`${API_URL}/whatsapp/connect`, { code, phoneNumberId, waBusinessId }, { withCredentials: true });
     return data;
 };
+
+// Servicio para obtener metricas globales de la plataforma (superadmin)
+export const getAdminStatsService = async () => {
+    const { data } = await axios.get(`${API_URL}/admin/stats`, { withCredentials: true });
+    return data;
+}
+
+// Servicio para lsitar clientes con sus agregados (superadmin)
+export const getAdminClientsService = async (page: number, limit: number) => {
+    const { data } = await axios.get(`${API_URL}/admin/clients?page=${page}&limit=${limit}`, { withCredentials: true });
+    return data;
+}

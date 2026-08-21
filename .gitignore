@@ -42,3 +42,5 @@ deploy/config/*.env
 !deploy/config/*.env.example
 deploy/.env
 deploy/app/
+# Mockups de brainstorming (visual companion)
+.superpowers/

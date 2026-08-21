@@ -8,6 +8,7 @@ export const AppRoutes = {
         settings: 'settings',
         chats: 'chats',
         templates: 'templates',
-        docs: 'docs'
+        docs: 'docs',
+        admin: 'admin',
     }
 }

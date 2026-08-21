@@ -1,5 +1,6 @@
-import { Menu, Rocket, Settings, MessageSquare, LayoutTemplate, BookOpen, X } from 'lucide-react';
+import { Menu, Rocket, Settings, MessageSquare, LayoutTemplate, BookOpen, X, ShieldCheck } from 'lucide-react';
 import { SidebarItem } from './SidebarItem';
+import { useAuthContext } from '../../context/auth.context';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AppRoutes } from '../../models/routes.models';
 import { useEffect, useMemo, useState } from 'react';
@@ -22,12 +23,25 @@ export const Sidebar = ({ collapsed, toggle, isMobile }: Props) => {
   const location = useLocation();
   const [valueSelected, setValueSelected] = useState('');
 
-  const navItems = useMemo(() => [
-    { icon: <Rocket size={18} />,         text: 'Inicio Rápido', value: 'quickStart', path: `${AppRoutes.private.root}/${AppRoutes.private.quickStart}` },
-    { icon: <MessageSquare size={18} />,  text: 'Chats',         value: 'chats',      path: `${AppRoutes.private.root}/${AppRoutes.private.chats}` },
-    { icon: <LayoutTemplate size={18} />, text: 'Plantillas',    value: 'templates',  path: `${AppRoutes.private.root}/${AppRoutes.private.templates}` },
-    { icon: <BookOpen size={18} />,       text: 'Documentación', value: 'docs',       path: `${AppRoutes.private.root}/${AppRoutes.private.docs}` },
-  ], []);
+  const { user } = useAuthContext(); 
+
+  const navItems = useMemo(() => {
+    const items = [
+      { icon: <Rocket size={18} />,         text: 'Inicio Rápido', value: 'quickStart', path: `${AppRoutes.private.root}/${AppRoutes.private.quickStart}` },
+      { icon: <MessageSquare size={18} />,  text: 'Chats',         value: 'chats',      path: `${AppRoutes.private.root}/${AppRoutes.private.chats}` },
+      { icon: <LayoutTemplate size={18} />, text: 'Plantillas',    value: 'templates',  path: `${AppRoutes.private.root}/${AppRoutes.private.templates}` },
+      { icon: <BookOpen size={18} />,       text: 'Documentación', value: 'docs',       path: `${AppRoutes.private.root}/${AppRoutes.private.docs}` },
+    ];
+
+    // Solo el operador del SaaS ve el back-office. Ocultarlo es cosmético:
+    // quien lo bloquea de verdad es requireSuperadmin en el backend.
+    if (user?.rol === 'superadmin') {
+      items.push({ icon: <ShieldCheck size={18} />, text: 'Administración', value: 'admin', path: `${AppRoutes.private.root}/${AppRoutes.private.admin}` });
+    }
+
+    return items;
+  }, [user?.rol]);
+
 
   const bottomItems = useMemo(() => [
     { icon: <Settings size={18} />, text: 'Ajustes', value: 'settings', path: `${AppRoutes.private.root}/${AppRoutes.private.settings}` },
