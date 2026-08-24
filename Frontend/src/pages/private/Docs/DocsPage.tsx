@@ -11,6 +11,7 @@ const ENDPOINT = `${API_BASE}/v1/templates/send`;
 const SECTIONS = [
     { id: 'introduccion', label: 'Introducción' },
     { id: 'enviar-plantillas', label: 'API · Envío de plantillas' },
+    { id: 'botones', label: 'Botones con parámetros' },
 ];
 
 const scrollTo = (id: string) =>
@@ -83,6 +84,22 @@ console.log(data); // { success: true, waMessageId, conversationId }`;
   { "name": "first_name", "value": "Juan" },
   { "name": "order_id",   "value": "1234" }
 ]`;
+
+    const buttonsExample = `"buttons": [
+  { "subType": "url", "index": 0, "parameters": ["123456"] }
+]`;
+
+    const otpCurl = `curl -X POST ${ENDPOINT} \\
+  -H "Authorization: Bearer wm_tu_api_key" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "destinationNumber": "593987654321",
+    "templateName": "otp_login",
+    "parameters": ["123456"],
+    "buttons": [
+      { "subType": "url", "index": 0, "parameters": ["123456"] }
+    ]
+  }'`;
 
     const okResponse = `{
   "success": true,
@@ -189,7 +206,7 @@ console.log(data); // { success: true, waMessageId, conversationId }`;
 
                         {/* Parámetros */}
                         <h3 className="font-semibold text-brand-text text-base mb-2 mt-8">3. Parámetros del body</h3>
-                        <p className="text-brand-muted text-sm mb-3">Formato <code className="font-mono text-[13px] text-brand-text bg-brand-raised px-1.5 py-0.5 rounded">application/json</code>. Los campos con <span className="text-brand-danger">*</span> son obligatorios.</p>
+                        <p className="text-brand-muted text-sm mb-3">Formato <code className="font-mono text-[13px] text-brand-text bg-brand-raised px-1.5 py-0.5 rounded">application/json</code>. Los campos con <span className="text-brand-danger">*</span> son obligatorios. Los opcionales puedes omitirlos o enviarlos como <code className="font-mono text-xs text-brand-text">null</code>.</p>
                         <div className="overflow-x-auto rounded-xl border border-brand-border">
                             <table className="w-full">
                                 <thead>
@@ -207,14 +224,18 @@ console.log(data); // { success: true, waMessageId, conversationId }`;
                                         Nombre exacto de la plantilla aprobada en Meta.
                                     </Param>
                                     <Param name="language" type="string">
-                                        Código de idioma de la plantilla. Por defecto <code className="font-mono text-xs text-brand-text">es</code>. Ej: <code className="font-mono text-xs text-brand-text">en_US</code>.
+                                        Código de idioma. Si lo omites se usa el idioma con el que la plantilla está registrada en Meta. Ej: <code className="font-mono text-xs text-brand-text">es</code>, <code className="font-mono text-xs text-brand-text">en_US</code>.
                                     </Param>
                                     <Param name="parameters" type="array">
                                         Valores para las variables de la plantilla. Posicionales <code className="font-mono text-xs text-brand-text">{`["Juan","1234"]`}</code> o nombrados <code className="font-mono text-xs text-brand-text">{`[{name,value}]`}</code> (ver abajo).
                                     </Param>
+                                    <Param name="buttons" type="array">
+                                        Parámetros para los botones de la plantilla. Necesario si la plantilla tiene botones dinámicos (ver <button type="button" onClick={() => scrollTo('botones')} className="text-brand-accent-strong hover:underline cursor-pointer">Botones con parámetros</button>).
+                                    </Param>
                                     <Param name="contactName" type="string">
                                         Nombre para mostrar del contacto en la conversación de Wasmish.
                                     </Param>
+
                                 </tbody>
                             </table>
                         </div>
@@ -231,15 +252,67 @@ console.log(data); // { success: true, waMessageId, conversationId }`;
                         </p>
                         <CodeBlock lang="json" code={namedParams} />
 
+                        {/* Botones */}
+                        <div id="botones" className="scroll-mt-4">
+                            <h3 className="font-semibold text-brand-text text-base mb-2 mt-8">5. Botones con parámetros</h3>
+                            <p className="text-brand-muted text-sm leading-relaxed mb-3">
+                                Si tu plantilla tiene botones <span className="text-brand-text font-medium">dinámicos</span> — una URL con variable,
+                                una respuesta rápida con payload, un código de copia, o una plantilla de
+                                autenticación con <span className="text-brand-text font-medium">one-tap / zero-tap</span> — Meta exige que envíes
+                                sus valores además de los del cuerpo. Para eso está <code className="font-mono text-[13px] text-brand-text bg-brand-raised px-1.5 py-0.5 rounded">buttons</code>.
+                            </p>
+                            <CodeBlock lang="json" code={buttonsExample} />
+
+                            <div className="overflow-x-auto rounded-xl border border-brand-border mt-4">
+                                <table className="w-full">
+                                    <thead>
+                                        <tr className="border-b border-brand-border bg-brand-raised/60 text-left">
+                                            <th className="py-2.5 px-4 text-[11px] font-medium uppercase tracking-wide text-brand-subtle">Campo</th>
+                                            <th className="py-2.5 pr-4 text-[11px] font-medium uppercase tracking-wide text-brand-subtle">Tipo</th>
+                                            <th className="py-2.5 pr-4 text-[11px] font-medium uppercase tracking-wide text-brand-subtle">Descripción</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <Param name="subType" type="string" required>
+                                            <code className="font-mono text-xs text-brand-text">url</code> para URL dinámica y plantillas de autenticación,{' '}
+                                            <code className="font-mono text-xs text-brand-text">quick_reply</code> para respuesta rápida con payload,{' '}
+                                            <code className="font-mono text-xs text-brand-text">copy_code</code> para código de copia.
+                                        </Param>
+                                        <Param name="index" type="number">
+                                            Posición del botón en la plantilla, empezando en <code className="font-mono text-xs text-brand-text">0</code>. Si lo omites se asume el orden del arreglo.
+                                        </Param>
+                                        <Param name="parameters" type="array" required>
+                                            Valores del botón, como texto plano. Wasmish les da el formato que Meta espera según el <code className="font-mono text-xs text-brand-text">subType</code>.
+                                        </Param>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <p className="text-brand-muted text-sm leading-relaxed mb-3 mt-5">
+                                Ejemplo típico: una plantilla de <span className="text-brand-text font-medium">código de verificación</span>. El
+                                código va dos veces — una en el cuerpo del mensaje y otra en el botón:
+                            </p>
+                            <CodeBlock lang="bash" code={otpCurl} />
+
+                            <div className="rounded-xl border border-brand-border bg-brand-raised/50 p-4 mt-4 flex gap-3">
+                                <AlertTriangle size={16} className="text-brand-danger flex-shrink-0 mt-0.5" />
+                                <p className="text-sm text-brand-muted leading-relaxed">
+                                    Si la plantilla tiene un botón dinámico y no envías <code className="font-mono text-xs text-brand-text">buttons</code>,
+                                    Meta rechaza el mensaje con el error{' '}
+                                    <code className="font-mono text-xs text-brand-text">131008 — Button at index 0 of type Url requires a parameter</code>.
+                                </p>
+                            </div>
+                        </div>
+
                         {/* Ejemplo cURL */}
-                        <h3 className="font-semibold text-brand-text text-base mb-2 mt-8">5. Ejemplo de petición</h3>
+                        <h3 className="font-semibold text-brand-text text-base mb-2 mt-8">6. Ejemplo de petición</h3>
                         <p className="text-brand-muted text-sm mb-3">cURL:</p>
                         <CodeBlock lang="bash" code={curl} />
                         <p className="text-brand-muted text-sm mb-3 mt-4">JavaScript (fetch):</p>
                         <CodeBlock lang="javascript" code={jsFetch} />
 
                         {/* Respuesta */}
-                        <h3 className="font-semibold text-brand-text text-base mb-2 mt-8">6. Respuesta exitosa</h3>
+                        <h3 className="font-semibold text-brand-text text-base mb-2 mt-8">7. Respuesta exitosa</h3>
                         <p className="text-brand-muted text-sm mb-3">
                             <code className="font-mono text-[13px] text-brand-accent-strong">200 OK</code> — el mensaje se envió a WhatsApp:
                         </p>
@@ -258,11 +331,12 @@ console.log(data); // { success: true, waMessageId, conversationId }`;
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <ErrorRow code="400">Body inválido (falta <code className="font-mono text-xs">destinationNumber</code> o <code className="font-mono text-xs">templateName</code>), o tu WhatsApp no está conectado.</ErrorRow>
+                                    <ErrorRow code="400">Body inválido. La respuesta es un arreglo de <code className="font-mono text-xs">{`{ field, message }`}</code> indicando qué campo falló. También aparece si un botón tiene un <code className="font-mono text-xs">subType</code> no soportado o va sin <code className="font-mono text-xs">parameters</code>.</ErrorRow>
                                     <ErrorRow code="401">API key faltante o inválida. Revisa la cabecera <code className="font-mono text-xs">Authorization</code>.</ErrorRow>
                                     <ErrorRow code="403">API key inactiva (revocada). Genera una nueva.</ErrorRow>
-                                    <ErrorRow code="404">Usuario asociado a la key no encontrado.</ErrorRow>
-                                    <ErrorRow code="502">WhatsApp/Meta rechazó el envío. La respuesta incluye <code className="font-mono text-xs">errorCode</code> y <code className="font-mono text-xs">errorDetail</code> (plantilla no aprobada, idioma incorrecto, número inválido, etc.).</ErrorRow>
+                                    <ErrorRow code="404">La plantilla no existe en tu cuenta de WhatsApp o todavía no está aprobada. También puede ser que el usuario asociado a la key no exista.</ErrorRow>
+                                    <ErrorRow code="409">Tu cuenta no tiene WhatsApp conectado. Conéctala desde Ajustes antes de enviar.</ErrorRow>
+                                    <ErrorRow code="502">WhatsApp/Meta rechazó el envío. La respuesta incluye <code className="font-mono text-xs">errorCode</code> y <code className="font-mono text-xs">errorDetail</code> (número inválido, plantilla en pausa, parámetros que no cuadran, etc.).</ErrorRow>
                                     <ErrorRow code="500">Error interno del servidor.</ErrorRow>
                                 </tbody>
                             </table>
