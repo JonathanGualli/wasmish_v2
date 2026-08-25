@@ -21,9 +21,9 @@ export const adminClientColumns: ColumnDef<AdminClient>[] = [
         header: 'Cliente',
         accessorKey: 'name',
         cell: ({ row }) => (
-            <div className="flex flex-col">
-                <span className="font-medium text-brand-text">{row.original.name}</span>
-                <span className="text-xs text-brand-subtle">{row.original.email}</span>
+            <div className="flex flex-col min-w-0">
+                <span className="font-semibold text-brand-text truncate">{row.original.name}</span>
+                <span className="text-[13px] text-brand-muted truncate">{row.original.email}</span>
             </div>
         ),
     },
@@ -32,14 +32,18 @@ export const adminClientColumns: ColumnDef<AdminClient>[] = [
         accessorKey: 'whatsappConnected',
         cell: ({ row }) => (
             row.original.whatsappConnected ? (
-                <div className="flex flex-col gap-1">
-                    <span className="w-fit rounded-full bg-brand-accent/10 px-2 py-0.5 text-xs font-medium text-brand-accent-strong">
+                <div className="flex flex-col gap-1.5">
+                    <span className="w-fit rounded-full bg-brand-accent-soft px-2.5 py-1
+                        text-[11px] font-bold uppercase tracking-[0.05em] text-brand-accent-strong">
                         Conectado
                     </span>
-                    <span className="text-xs text-brand-subtle tabular-nums">WABA {row.original.waBusinessId}</span>
+                    <span className="font-mono text-[12px] text-brand-subtle tabular-nums">
+                        WABA {row.original.waBusinessId}
+                    </span>
                 </div>
             ) : (
-                <span className="w-fit rounded-full bg-brand-raised px-2 py-0.5 text-xs font-medium text-brand-muted">
+                <span className="w-fit rounded-full bg-brand-raised px-2.5 py-1
+                    text-[11px] font-bold uppercase tracking-[0.05em] text-brand-muted">
                     Sin conectar
                 </span>
             )
@@ -48,18 +52,18 @@ export const adminClientColumns: ColumnDef<AdminClient>[] = [
     {
         header: 'Convs',
         accessorKey: 'conversations',
-        cell: ({ row }) => <span className="tabular-nums">{row.original.conversations}</span>,
+        cell: ({ row }) => <span className="font-mono text-[13px] tabular-nums">{row.original.conversations}</span>,
     },
     {
         header: 'Mensajes',
         accessorKey: 'messages',
-        cell: ({ row }) => <span className="tabular-nums">{row.original.messages.toLocaleString('es-EC')}</span>,
+        cell: ({ row }) => <span className="font-mono text-[13px] tabular-nums">{row.original.messages.toLocaleString('es-EC')}</span>,
     },
     {
         header: 'Fallidos',
         accessorKey: 'failed',
         cell: ({ row }) => (
-            <span className={`tabular-nums ${row.original.failed > 0 ? 'font-medium text-brand-danger' : 'text-brand-muted'}`}>
+            <span className={`font-mono text-[13px] tabular-nums ${row.original.failed > 0 ? 'font-bold text-brand-danger' : 'text-brand-subtle'}`}>
                 {row.original.failed}
             </span>
         ),
@@ -67,11 +71,11 @@ export const adminClientColumns: ColumnDef<AdminClient>[] = [
     {
         header: 'Últ. actividad',
         accessorKey: 'lastActivityAt',
-        cell: ({ row }) => <span className="text-brand-muted">{formatRelative(row.original.lastActivityAt)}</span>,
+        cell: ({ row }) => <span className="text-brand-muted whitespace-nowrap">{formatRelative(row.original.lastActivityAt)}</span>,
     },
     {
         header: 'Alta',
         accessorKey: 'createdAt',
-        cell: ({ row }) => <span className="text-brand-muted">{formatDate(row.original.createdAt)}</span>,
+        cell: ({ row }) => <span className="text-brand-muted whitespace-nowrap">{formatDate(row.original.createdAt)}</span>,
     },
 ];

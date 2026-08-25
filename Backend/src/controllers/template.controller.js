@@ -36,6 +36,8 @@ export const syncTemplatesForUser = async (user) => {
     const bulkOperations = templates.map(tpl => {
         // Solo guardamos el BODY: es el componente que se renderiza en el chat.
         const bodyComponent = tpl.components?.find(c => c.type === 'BODY');
+        const buttonsComponent = tpl.components?.find(c => c.type === 'BUTTONS');
+
         const text = bodyComponent ? bodyComponent.text : '';
 
         return {
@@ -49,6 +51,8 @@ export const syncTemplatesForUser = async (user) => {
                         status: tpl.status,
                         language: tpl.language,
                         bodyText: text,
+                        buttons: buttonsComponent?.buttons ?? [],
+                        parameterFormat: tpl.parameter_format,
                     }
                 },
                 upsert: true,
@@ -95,25 +99,65 @@ const BUTTON_PARAM_BUILDERS = {
     copy_code:   (value) => ({ type: 'coupon_code', coupon_code: String(value) }),
 };
 
+// Qué sub_type le corresponde a cada tipo de botón de la definición de la
+// plantilla. Es la fuente de verdad: el mismo botón «Copiar código» es OTP en
+// una plantilla de autenticación y COPY_CODE en una de cupón, y Meta espera un
+// formato distinto en cada caso — por fuera se ven idénticos.
+const SUBTYPE_BY_BUTTON_TYPE = {
+    OTP:         'url',
+    URL:         'url',
+    COPY_CODE:   'copy_code',
+    QUICK_REPLY: 'quick_reply',
+};
+
+// Con la definición sincronizada deducimos el sub_type; si la plantilla nunca se
+// sincronizó, caemos al subType que mande el cliente (comportamiento anterior).
+const resolveSubType = (definition, button, index) => {
+    if (!definition) return String(button.subType ?? '').toLowerCase();
+
+    // URL fija = sin variable = no admite parámetros. Meta responde 132018;
+    // atajarlo aquí ahorra la llamada y da un mensaje que se entiende.
+    if (definition.type === 'URL' && !definition.url?.includes('{{')) {
+        const error = new Error(
+            `El botón "${definition.text}" (índice ${index}) tiene una URL fija y no admite parámetros.`
+        );
+        error.statusCode = 400;
+        throw error;
+    }
+
+    return SUBTYPE_BY_BUTTON_TYPE[definition.type];
+};
+
 // Traduce los botones del body de la request a componentes de Meta.
 // El index es posicional si no lo mandan, y va como string porque así lo pide Meta.
-export const buildButtonComponents = (buttons = []) => {
+export const buildButtonComponents = (buttons = [], templateButtons = []) => {
     return buttons.map((button, position) => {
-        const subType = String(button.subType).toLowerCase();
-        const buildParam = BUTTON_PARAM_BUILDERS[subType];
+        const index = button.index ?? position;
+        const values = button.parameters ?? [];
 
-        if (!buildParam) {
+        if (values.length === 0) {
+            const error = new Error(`El botón en el índice ${index} no tiene parámetros`);
+            error.statusCode = 400;
+            throw error;
+        }
+
+        // Si conocemos la plantilla, un índice fuera de rango es un error del
+        // cliente: Meta lo ignora en silencio y el mensaje sale sin el dato.
+        if (templateButtons.length > 0 && !templateButtons[index]) {
             const error = new Error(
-                `Tipo de botón no soportado: "${button.subType}". Válidos: ${Object.keys(BUTTON_PARAM_BUILDERS).join(', ')}`
+                `La plantilla no tiene un botón en el índice ${index} (tiene ${templateButtons.length}).`
             );
             error.statusCode = 400;
             throw error;
         }
 
-        const values = button.parameters ?? [];
-        if (values.length === 0) {
+        const subType = resolveSubType(templateButtons[index], button, index);
+        const buildParam = BUTTON_PARAM_BUILDERS[subType];
+
+        if (!buildParam) {
             const error = new Error(
-                `El botón en el índice ${button.index ?? position} no tiene parámetros`
+                `No se pudo determinar el tipo del botón en el índice ${index}. ` +
+                `Sincroniza la plantilla o envía "subType" (${Object.keys(BUTTON_PARAM_BUILDERS).join(', ')}).`
             );
             error.statusCode = 400;
             throw error;
@@ -122,11 +166,12 @@ export const buildButtonComponents = (buttons = []) => {
         return {
             type: 'button',
             sub_type: subType,
-            index: String(button.index ?? position),
+            index: String(index),
             parameters: values.map(buildParam),
         };
     });
 };
+
 
 // ---------------------------------------------------------------------------
 // Controllers
@@ -145,7 +190,16 @@ export const syncTemplatesController = async (req, res) => {
             totalSincronizadas: total,
         });
     } catch (error) {
-        return res.status(error.statusCode || 500).json([{ message: error.message }]);
+        // Sin este log, un 500 aquí es opaco: el motivo real (token de WhatsApp
+        // caducado, WABA sin permisos) solo lo sabe Meta.
+        console.error('Sync de plantillas falló:', error.message);
+
+        // Que Meta rechace la llamada no es un fallo del servidor.
+        const status = error.statusCode || (error.waErrorCode ? 502 : 500);
+        return res.status(status).json([{
+            message: error.message,
+            errorCode: error.waErrorCode ?? null,
+        }]);
     }
 }
 
@@ -229,7 +283,7 @@ export const sendTemplateController = async (req, res) => {
         }
 
         // Lanza 400 si el botón es inválido — antes de gastar la llamada a Meta.
-        components.push(...buildButtonComponents(buttons));
+        components.push(...buildButtonComponents(buttons, template?.buttons ?? []));
 
         // 4. Enviar a Meta (capturamos el fallo para persistirlo como 'failed')
         let waMessageId = null, status = 'sent', errorCode = null, errorDetail = null;
@@ -282,6 +336,16 @@ export const sendTemplateController = async (req, res) => {
         return res.status(200).json({ success: true, waMessageId, conversationId: String(conversation._id) });
 
     } catch (error) {
-        return res.status(error.statusCode || 500).json([{ message: error.message }]);
+        const status = error.statusCode || (error.waErrorCode ? 502 : 500);
+
+        // Los 4xx son errores de quien llama y ya viajan con su mensaje; en una
+        // API pública loguearlos todos sería ruido. Solo dejamos rastro de lo
+        // que es fallo nuestro o de Meta.
+        if (status >= 500) console.error('Envío de plantilla falló:', error.message);
+
+        return res.status(status).json([{
+            message: error.message,
+            errorCode: error.waErrorCode ?? null,
+        }]);
     }
 };

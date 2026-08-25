@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #ffffff; font-family: Inter, system-ui, sans-serif; color: #0e1116; -webkit-font-smoothing: antialiased; }
+  a { color: #12523f; }
+  a:hover { color: #0b3b2e; }
+  .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+</style>
+</helmet>
+
+<section style="max-width: 1240px; margin: 0 auto; padding: 72px 40px 120px;">
+  <div style="max-width: 660px;">
+    <div class="mono" style="font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #6b7684;">Turno 1 · Logotipo</div>
+    <h1 style="margin: 14px 0 0; font-size: 46px; line-height: 1.05; letter-spacing: -0.035em; font-weight: 800;">Seis marcas sobre la paleta 3b</h1>
+    <p style="margin: 14px 0 0; font-size: 17px; line-height: 1.6; color: #4b5361; text-wrap: pretty;">Todas en verde profundo #0B3B2E y menta #6FE3AE. Cada una se muestra a tamaño grande, en la barra oscura y a 24px — el tamaño real donde una marca se rompe. Dime el id y la desarrollo a fondo.</p>
+  </div>
+
+  <div style="margin-top: 44px; display: grid; grid-template-columns: repeat(2, minmax(420px, 1fr)); gap: 24px;">
+
+    <div id="1a" style="border: 1px solid #e4e7eb; border-radius: 14px; overflow: hidden;">
+      <div style="display: flex; align-items: center; gap: 12px; padding: 16px 22px; border-bottom: 1px solid #e4e7eb;">
+        <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: #ffffff; background: #0b3b2e; border-radius: 4px; padding: 5px 8px;">1a</span>
+        <span style="font-size: 17px; font-weight: 700; letter-spacing: -0.02em;">W continua</span>
+        <span style="font-size: 13px; color: #6b7684; margin-left: auto;">La actual, afinada</span>
+      </div>
+      <div style="padding: 44px 40px; display: flex; align-items: center; gap: 22px;">
+        <svg width="112" height="112" viewBox="0 0 1024 1024"><rect width="1024" height="1024" rx="240" fill="#0B3B2E"></rect><path d="M 268 340 L 404 684 L 512 494 L 620 684 L 756 340" fill="none" stroke="#6FE3AE" stroke-width="92" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        <span style="font-size: 44px; font-weight: 800; letter-spacing: -0.045em;">wasmish</span>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid #e4e7eb;">
+        <div style="background: #0b3b2e; padding: 22px; display: flex; align-items: center; justify-content: center;"><svg width="44" height="44" viewBox="0 0 1024 1024"><rect width="1024" height="1024" rx="240" fill="#6FE3AE"></rect><path d="M 268 340 L 404 684 L 512 494 L 620 684 L 756 340" fill="none" stroke="#06251C" stroke-width="104" stroke-linecap="round" stroke-linejoin="round"></path></svg></div>
+        <div style="background: #f4f6f8; padding: 22px; display: flex; align-items: center; justify-content: center; gap: 16px; border-left: 1px solid #e4e7eb;"><svg width="24" height="24" viewBox="0 0 1024 1024"><rect width="1024" height="1024" rx="240" fill="#0B3B2E"></rect><path d="M 268 340 L 404 684 L 512 494 L 620 684 L 756 340" fill="none" stroke="#6FE3AE" stroke-width="118" stroke-linecap="round" stroke-linejoin="round"></path></svg><svg width="16" height="16" viewBox="0 0 1024 1024"><rect width="1024" height="1024" rx="240" fill="#0B3B2E"></rect><path d="M 268 340 L 404 684 L 512 494 L 620 684 L 756 340" fill="none" stroke="#6FE3AE" stroke-width="130" stroke-linecap="round" stroke-linejoin="round"></path></svg></div>
+      </div>
+      <div style="border-top: 1px solid #e4e7eb; padding: 16px 22px; font-size: 13px; line-height: 1.6; color: #6b7684;">Literal y sin coartada. Aguanta bien a 16px, pero es la más genérica: cualquier marca con W puede llegar aquí.</div>
+    </div>
+
+    <div id="1b" style="border: 1px solid #e4e7eb; border-radius: 14px; overflow: hidden;">
+      <div style="display: flex; align-items: center; gap: 12px; padding: 16px 22px; border-bottom: 1px solid #e4e7eb;">
+        <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: #ffffff; background: #0b3b2e; border-radius: 4px; padding: 5px 8px;">1b</span>
+        <span style="font-size: 17px; font-weight: 700; letter-spacing: -0.02em;">W en burbuja</span>
+        <span style="font-size: 13px; color: #6b7684; margin-left: auto;">Categoría explícita</span>
+      </div>
+      <div style="padding: 44px 40px; display: flex; align-items: center; gap: 22px;">
+        <svg width="112" height="112" viewBox="0 0 1024 1024"><path d="M192 96 H832 a128 128 0 0 1 128 128 V656 a128 128 0 0 1 -128 128 H448 L224 944 V784 H192 a128 128 0 0 1 -128 -128 V224 a128 128 0 0 1 128 -128 Z" fill="#0B3B2E"></path><path d="M 284 300 L 396 594 L 512 434 L 628 594 L 740 300" fill="none" stroke="#6FE3AE" stroke-width="86" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        <span style="font-size: 44px; font-weight: 800; letter-spacing: -0.045em;">wasmish</span>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid #e4e7eb;">
+        <div style="background: #0b3b2e; padding: 22px; display: flex; align-items: center; justify-content: center;"><svg width="44" height="44" viewBox="0 0 1024 1024"><path d="M192 96 H832 a128 128 0 0 1 128 128 V656 a128 128 0 0 1 -128 128 H448 L224 944 V784 H192 a128 128 0 0 1 -128 -128 V224 a128 128 0 0 1 128 -128 Z" fill="#6FE3AE"></path><path d="M 284 300 L 396 594 L 512 434 L 628 594 L 740 300" fill="none" stroke="#06251C" stroke-width="96" stroke-linecap="round" stroke-linejoin="round"></path></svg></div>
+        <div style="background: #f4f6f8; padding: 22px; display: flex; align-items: center; justify-content: center; gap: 16px; border-left: 1px solid #e4e7eb;"><svg width="24" height="24" viewBox="0 0 1024 1024"><path d="M192 96 H832 a128 128 0 0 1 128 128 V656 a128 128 0 0 1 -128 128 H448 L224 944 V784 H192 a128 128 0 0 1 -128 -128 V224 a128 128 0 0 1 128 -128 Z" fill="#0B3B2E"></path><path d="M 284 300 L 396 594 L 512 434 L 628 594 L 740 300" fill="none" stroke="#6FE3AE" stroke-width="112" stroke-linecap="round" stroke-linejoin="round"></path></svg><svg width="16" height="16" viewBox="0 0 1024 1024"><path d="M192 96 H832 a128 128 0 0 1 128 128 V656 a128 128 0 0 1 -128 128 H448 L224 944 V784 H192 a128 128 0 0 1 -128 -128 V224 a128 128 0 0 1 128 -128 Z" fill="#0B3B2E"></path><path d="M 284 300 L 396 594 L 512 434 L 628 594 L 740 300" fill="none" stroke="#6FE3AE" stroke-width="126" stroke-linecap="round" stroke-linejoin="round"></path></svg></div>
+      </div>
+      <div style="border-top: 1px solid #e4e7eb; padding: 16px 22px; font-size: 13px; line-height: 1.6; color: #6b7684;">Se entiende sin leer nada: mensajería. El coste es que la burbuja es el símbolo más usado de la categoría — te lee rápido, no te distingue.</div>
+    </div>
+
+    <div id="1c" style="border: 1px solid #e4e7eb; border-radius: 14px; overflow: hidden;">
+      <div style="display: flex; align-items: center; gap: 12px; padding: 16px 22px; border-bottom: 1px solid #e4e7eb;">
+        <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: #ffffff; background: #0b3b2e; border-radius: 4px; padding: 5px 8px;">1c</span>
+        <span style="font-size: 17px; font-weight: 700; letter-spacing: -0.02em;">Intercambio</span>
+        <span style="font-size: 13px; color: #6b7684; margin-left: auto;">Dos voces, una W</span>
+      </div>
+      <div style="padding: 44px 40px; display: flex; align-items: center; gap: 22px;">
+        <svg width="112" height="112" viewBox="0 0 1024 1024"><rect width="1024" height="1024" rx="240" fill="#0B3B2E"></rect><path d="M 236 300 L 404 590 L 572 300" fill="none" stroke="#ffffff" stroke-width="88" stroke-linecap="round" stroke-linejoin="round"></path><path d="M 452 724 L 620 434 L 788 724" fill="none" stroke="#6FE3AE" stroke-width="88" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        <span style="font-size: 44px; font-weight: 800; letter-spacing: -0.045em;">wasmish</span>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid #e4e7eb;">
+        <div style="background: #0b3b2e; padding: 22px; display: flex; align-items: center; justify-content: center;"><svg width="44" height="44" viewBox="0 0 1024 1024"><rect width="1024" height="1024" rx="240" fill="#6FE3AE"></rect><path d="M 236 300 L 404 590 L 572 300" fill="none" stroke="#ffffff" stroke-width="96" stroke-linecap="round" stroke-linejoin="round"></path><path d="M 452 724 L 620 434 L 788 724" fill="none" stroke="#06251C" stroke-width="96" stroke-linecap="round" stroke-linejoin="round"></path></svg></div>
+        <div style="background: #f4f6f8; padding: 22px; display: flex; align-items: center; justify-content: center; gap: 16px; border-left: 1px solid #e4e7eb;"><svg width="24" height="24" viewBox="0 0 1024 1024"><rect width="1024" height="1024" rx="240" fill="#0B3B2E"></rect><path d="M 236 300 L 404 590 L 572 300" fill="none" stroke="#ffffff" stroke-width="112" stroke-linecap="round" stroke-linejoin="round"></path><path d="M 452 724 L 620 434 L 788 724" fill="none" stroke="#6FE3AE" stroke-width="112" stroke-linecap="round" stroke-linejoin="round"></path></svg><svg width="16" height="16" viewBox="0 0 1024 1024"><rect width="1024" height="1024" rx="240" fill="#0B3B2E"></rect><path d="M 236 300 L 404 590 L 572 300" fill="none" stroke="#ffffff" stroke-width="128" stroke-linecap="round" stroke-linejoin="round"></path><path d="M 452 724 L 620 434 L 788 724" fill="none" stroke="#6FE3AE" stroke-width="128" stroke-linecap="round" stroke-linejoin="round"></path></svg></div>
+      </div>
+      <div style="border-top: 1px solid #e4e7eb; padding: 16px 22px; font-size: 13px; line-height: 1.6; color: #6b7684;">Dos chevrons desfasados: uno baja, otro sube. Juntos siguen leyéndose como W y dicen «ida y vuelta». La bicromía dentro del símbolo es la más memorable del set.</div>
+    </div>
+
+    <div id="1d" style="border: 1px solid #e4e7eb; border-radius: 14px; overflow: hidden;">
+      <div style="display: flex; align-items: center; gap: 12px; padding: 16px 22px; border-bottom: 1px solid #e4e7eb;">
+        <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: #ffffff; background: #0b3b2e; border-radius: 4px; padding: 5px 8px;">1d</span>
+        <span style="font-size: 17px; font-weight: 700; letter-spacing: -0.02em;">Sello</span>
+        <span style="font-size: 13px; color: #6b7684; margin-left: auto;">Círculo, W en negativo</span>
+      </div>
+      <div style="padding: 44px 40px; display: flex; align-items: center; gap: 22px;">
+        <svg width="112" height="112" viewBox="0 0 1024 1024"><mask id="wm-d"><rect width="1024" height="1024" fill="#000"></rect><circle cx="512" cy="512" r="512" fill="#fff"></circle><path d="M 268 356 L 400 672 L 512 500 L 624 672 L 756 356" fill="none" stroke="#000" stroke-width="94" stroke-linecap="round" stroke-linejoin="round"></path></mask><rect width="1024" height="1024" fill="#0B3B2E" mask="url(#wm-d)"></rect></svg>
+        <span style="font-size: 44px; font-weight: 800; letter-spacing: -0.045em;">wasmish</span>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid #e4e7eb;">
+        <div style="background: #0b3b2e; padding: 22px; display: flex; align-items: center; justify-content: center;"><svg width="44" height="44" viewBox="0 0 1024 1024"><mask id="wm-d2"><rect width="1024" height="1024" fill="#000"></rect><circle cx="512" cy="512" r="512" fill="#fff"></circle><path d="M 268 356 L 400 672 L 512 500 L 624 672 L 756 356" fill="none" stroke="#000" stroke-width="104" stroke-linecap="round" stroke-linejoin="round"></path></mask><rect width="1024" height="1024" fill="#6FE3AE" mask="url(#wm-d2)"></rect></svg></div>
+        <div style="background: #f4f6f8; padding: 22px; display: flex; align-items: center; justify-content: center; gap: 16px; border-left: 1px solid #e4e7eb;"><svg width="24" height="24" viewBox="0 0 1024 1024"><mask id="wm-d3"><rect width="1024" height="1024" fill="#000"></rect><circle cx="512" cy="512" r="512" fill="#fff"></circle><path d="M 268 356 L 400 672 L 512 500 L 624 672 L 756 356" fill="none" stroke="#000" stroke-width="120" stroke-linecap="round" stroke-linejoin="round"></path></mask><rect width="1024" height="1024" fill="#0B3B2E" mask="url(#wm-d3)"></rect></svg><svg width="16" height="16" viewBox="0 0 1024 1024"><mask id="wm-d4"><rect width="1024" height="1024" fill="#000"></rect><circle cx="512" cy="512" r="512" fill="#fff"></circle><path d="M 268 356 L 400 672 L 512 500 L 624 672 L 756 356" fill="none" stroke="#000" stroke-width="134" stroke-linecap="round" stroke-linejoin="round"></path></mask><rect width="1024" height="1024" fill="#0B3B2E" mask="url(#wm-d4)"></rect></svg></div>
+      </div>
+      <div style="border-top: 1px solid #e4e7eb; padding: 16px 22px; font-size: 13px; line-height: 1.6; color: #6b7684;">El círculo es la única forma del set que no compite con los avatares cuadrados de la app. Cuesta a 16px: el negativo se cierra.</div>
+    </div>
+
+    <div id="1e" style="border: 1px solid #e4e7eb; border-radius: 14px; overflow: hidden;">
+      <div style="display: flex; align-items: center; gap: 12px; padding: 16px 22px; border-bottom: 1px solid #e4e7eb;">
+        <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: #ffffff; background: #0b3b2e; border-radius: 4px; padding: 5px 8px;">1e</span>
+        <span style="font-size: 17px; font-weight: 700; letter-spacing: -0.02em;">Pulso</span>
+        <span style="font-size: 13px; color: #6b7684; margin-left: auto;">W abierta con punto vivo</span>
+      </div>
+      <div style="padding: 44px 40px; display: flex; align-items: center; gap: 22px;">
+        <svg width="112" height="112" viewBox="0 0 1024 1024"><rect width="1024" height="1024" rx="240" fill="#0B3B2E"></rect><path d="M 262 336 L 398 680" fill="none" stroke="#ffffff" stroke-width="90" stroke-linecap="round"></path><path d="M 626 680 L 762 336" fill="none" stroke="#ffffff" stroke-width="90" stroke-linecap="round"></path><path d="M 398 680 L 512 508 L 626 680" fill="none" stroke="#6FE3AE" stroke-width="90" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        <span style="font-size: 44px; font-weight: 800; letter-spacing: -0.045em;">wasmish</span>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid #e4e7eb;">
+        <div style="background: #0b3b2e; padding: 22px; display: flex; align-items: center; justify-content: center;"><svg width="44" height="44" viewBox="0 0 1024 1024"><rect width="1024" height="1024" rx="240" fill="#ffffff"></rect><path d="M 262 336 L 398 680" fill="none" stroke="#0B3B2E" stroke-width="98" stroke-linecap="round"></path><path d="M 626 680 L 762 336" fill="none" stroke="#0B3B2E" stroke-width="98" stroke-linecap="round"></path><path d="M 398 680 L 512 508 L 626 680" fill="none" stroke="#2AA675" stroke-width="98" stroke-linecap="round" stroke-linejoin="round"></path></svg></div>
+        <div style="background: #f4f6f8; padding: 22px; display: flex; align-items: center; justify-content: center; gap: 16px; border-left: 1px solid #e4e7eb;"><svg width="24" height="24" viewBox="0 0 1024 1024"><rect width="1024" height="1024" rx="240" fill="#0B3B2E"></rect><path d="M 262 336 L 398 680" fill="none" stroke="#ffffff" stroke-width="116" stroke-linecap="round"></path><path d="M 626 680 L 762 336" fill="none" stroke="#ffffff" stroke-width="116" stroke-linecap="round"></path><path d="M 398 680 L 512 508 L 626 680" fill="none" stroke="#6FE3AE" stroke-width="116" stroke-linecap="round" stroke-linejoin="round"></path></svg><svg width="16" height="16" viewBox="0 0 1024 1024"><rect width="1024" height="1024" rx="240" fill="#0B3B2E"></rect><path d="M 262 336 L 398 680" fill="none" stroke="#ffffff" stroke-width="132" stroke-linecap="round"></path><path d="M 626 680 L 762 336" fill="none" stroke="#ffffff" stroke-width="132" stroke-linecap="round"></path><path d="M 398 680 L 512 508 L 626 680" fill="none" stroke="#6FE3AE" stroke-width="132" stroke-linecap="round" stroke-linejoin="round"></path></svg></div>
+      </div>
+      <div style="border-top: 1px solid #e4e7eb; padding: 16px 22px; font-size: 13px; line-height: 1.6; color: #6b7684;">La misma W, partida en tres trazos: el pico central en menta es lo único que se colorea. Da un sitio natural al acento y funciona como indicador de actividad.</div>
+    </div>
+
+    <div id="1f" style="border: 1px solid #e4e7eb; border-radius: 14px; overflow: hidden;">
+      <div style="display: flex; align-items: center; gap: 12px; padding: 16px 22px; border-bottom: 1px solid #e4e7eb;">
+        <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: #ffffff; background: #0b3b2e; border-radius: 4px; padding: 5px 8px;">1f</span>
+        <span style="font-size: 17px; font-weight: 700; letter-spacing: -0.02em;">Solo palabra</span>
+        <span style="font-size: 13px; color: #6b7684; margin-left: auto;">Sin símbolo, con punto de estado</span>
+      </div>
+      <div style="padding: 52px 40px 48px; display: flex; align-items: center;">
+        <span style="font-size: 52px; font-weight: 800; letter-spacing: -0.05em; color: #0b3b2e;">wasmish</span><span style="width: 15px; height: 15px; border-radius: 4px; background: #6fe3ae; margin-left: 8px; align-self: flex-end; margin-bottom: 9px;"></span>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid #e4e7eb;">
+        <div style="background: #0b3b2e; padding: 22px; display: flex; align-items: center; justify-content: center;"><span style="font-size: 26px; font-weight: 800; letter-spacing: -0.05em; color: #ffffff;">wasmish</span><span style="width: 8px; height: 8px; border-radius: 2px; background: #6fe3ae; margin-left: 5px; align-self: flex-end; margin-bottom: 6px;"></span></div>
+        <div style="background: #f4f6f8; padding: 22px; display: flex; align-items: center; justify-content: center; gap: 16px; border-left: 1px solid #e4e7eb;"><svg width="24" height="24" viewBox="0 0 1024 1024"><rect width="1024" height="1024" rx="240" fill="#0B3B2E"></rect><text x="512" y="700" text-anchor="middle" font-family="Inter, sans-serif" font-size="720" font-weight="800" fill="#6FE3AE" letter-spacing="-40">w</text></svg><svg width="16" height="16" viewBox="0 0 1024 1024"><rect width="1024" height="1024" rx="240" fill="#0B3B2E"></rect><text x="512" y="700" text-anchor="middle" font-family="Inter, sans-serif" font-size="720" font-weight="800" fill="#6FE3AE" letter-spacing="-40">w</text></svg></div>
+      </div>
+      <div style="border-top: 1px solid #e4e7eb; padding: 16px 22px; font-size: 13px; line-height: 1.6; color: #6b7684;">Sin símbolo que mantener: la palabra es la marca y el punto menta hace de acento. Para app icon hace falta reducirla a la «w» — funciona, pero es la opción más plana.</div>
+    </div>
+
+  </div>
+
+  <div style="margin-top: 40px; border: 1px solid #e4e7eb; border-radius: 14px; padding: 26px 28px;">
+    <div style="font-size: 15px; font-weight: 700;">Prueba de barra: cómo se ven a 34px en la navegación</div>
+    <div style="margin-top: 18px; display: flex; gap: 14px; flex-wrap: wrap;">
+      <div style="width: 76px; background: #0b3b2e; border-radius: 10px; padding: 16px 0; display: grid; justify-items: center; gap: 6px;"><svg width="34" height="34" viewBox="0 0 1024 1024"><rect width="1024" height="1024" rx="240" fill="#6FE3AE"></rect><path d="M 268 340 L 404 684 L 512 494 L 620 684 L 756 340" fill="none" stroke="#06251C" stroke-width="104" stroke-linecap="round" stroke-linejoin="round"></path></svg><span class="mono" style="font-size: 10px; color: #7fa596;">1a</span></div>
+      <div style="width: 76px; background: #0b3b2e; border-radius: 10px; padding: 16px 0; display: grid; justify-items: center; gap: 6px;"><svg width="34" height="34" viewBox="0 0 1024 1024"><path d="M192 96 H832 a128 128 0 0 1 128 128 V656 a128 128 0 0 1 -128 128 H448 L224 944 V784 H192 a128 128 0 0 1 -128 -128 V224 a128 128 0 0 1 128 -128 Z" fill="#6FE3AE"></path><path d="M 284 300 L 396 594 L 512 434 L 628 594 L 740 300" fill="none" stroke="#06251C" stroke-width="96" stroke-linecap="round" stroke-linejoin="round"></path></svg><span class="mono" style="font-size: 10px; color: #7fa596;">1b</span></div>
+      <div style="width: 76px; background: #0b3b2e; border-radius: 10px; padding: 16px 0; display: grid; justify-items: center; gap: 6px;"><svg width="34" height="34" viewBox="0 0 1024 1024"><rect width="1024" height="1024" rx="240" fill="#6FE3AE"></rect><path d="M 236 300 L 404 590 L 572 300" fill="none" stroke="#ffffff" stroke-width="96" stroke-linecap="round" stroke-linejoin="round"></path><path d="M 452 724 L 620 434 L 788 724" fill="none" stroke="#06251C" stroke-width="96" stroke-linecap="round" stroke-linejoin="round"></path></svg><span class="mono" style="font-size: 10px; color: #7fa596;">1c</span></div>
+      <div style="width: 76px; background: #0b3b2e; border-radius: 10px; padding: 16px 0; display: grid; justify-items: center; gap: 6px;"><svg width="34" height="34" viewBox="0 0 1024 1024"><mask id="wm-bar"><rect width="1024" height="1024" fill="#000"></rect><circle cx="512" cy="512" r="512" fill="#fff"></circle><path d="M 268 356 L 400 672 L 512 500 L 624 672 L 756 356" fill="none" stroke="#000" stroke-width="110" stroke-linecap="round" stroke-linejoin="round"></path></mask><rect width="1024" height="1024" fill="#6FE3AE" mask="url(#wm-bar)"></rect></svg><span class="mono" style="font-size: 10px; color: #7fa596;">1d</span></div>
+      <div style="width: 76px; background: #0b3b2e; border-radius: 10px; padding: 16px 0; display: grid; justify-items: center; gap: 6px;"><svg width="34" height="34" viewBox="0 0 1024 1024"><rect width="1024" height="1024" rx="240" fill="#ffffff"></rect><path d="M 262 336 L 398 680" fill="none" stroke="#0B3B2E" stroke-width="106" stroke-linecap="round"></path><path d="M 626 680 L 762 336" fill="none" stroke="#0B3B2E" stroke-width="106" stroke-linecap="round"></path><path d="M 398 680 L 512 508 L 626 680" fill="none" stroke="#2AA675" stroke-width="106" stroke-linecap="round" stroke-linejoin="round"></path></svg><span class="mono" style="font-size: 10px; color: #7fa596;">1e</span></div>
+      <div style="width: 76px; background: #0b3b2e; border-radius: 10px; padding: 16px 0; display: grid; justify-items: center; gap: 6px;"><svg width="34" height="34" viewBox="0 0 1024 1024"><rect width="1024" height="1024" rx="240" fill="#6FE3AE"></rect><text x="512" y="712" text-anchor="middle" font-family="Inter, sans-serif" font-size="740" font-weight="800" fill="#06251C" letter-spacing="-40">w</text></svg><span class="mono" style="font-size: 10px; color: #7fa596;">1f</span></div>
+    </div>
+    <div style="margin-top: 18px; font-size: 14px; line-height: 1.6; color: #4b5361; max-width: 680px;">Mi recomendación: <a href="#1c">1c</a> si quieres algo que nadie confunda con otra app de chat, <a href="#1e">1e</a> si prefieres conservar tu W actual y solo darle un punto de marca. <a href="#1b">1b</a> es la apuesta segura pero la menos tuya.</div>
+  </div>
+</section>
+</x-dc>
+</body>
+</html>

@@ -1,5 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { getTemplatesService, syncTemplatesService } from "../services/api.service";
+import type { AxiosError } from "axios";
+
+interface ErrorItem { message: string }
+
+// El backend responde los errores como [{ message }]. Lo aplanamos aquí para que
+// la página no tenga que conocer la forma de la respuesta.
+const parseError = (error: unknown, fallback: string) => {
+    const items = (error as AxiosError<ErrorItem[]>)?.response?.data;
+    return Array.isArray(items) && items.length > 0
+        ? items.map(i => i.message).join(' ')
+        : fallback;
+};
 
 export const useTemplates = () => {
     const queryClient = useQueryClient();
@@ -17,11 +29,6 @@ export const useTemplates = () => {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['templates'] });
         },
-        onError: (error: Error) => {
-            // const message = (error as AxiosError<ErrorItem[]>)?.response?.data?.map(err => err.message) || ['An error ocurred during login'];
-            // queryClient.setQueryData(['error'], message);    
-            console.log(error);
-        }
     });
 
     return {
@@ -29,7 +36,9 @@ export const useTemplates = () => {
         isLoading: query.isLoading,
         isSyncing: syncMutation.isPending,
         sync: syncMutation.mutate,
-        error: query.error || syncMutation.error,
+        syncError: syncMutation.error
+        ? parseError(syncMutation.error, 'No se pudieron sincronizar las plantillas.')
+        : null,
     }
 
 }

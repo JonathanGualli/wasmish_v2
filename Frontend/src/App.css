@@ -1,26 +1,87 @@
 @import "tailwindcss";
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   Wasmish — Manual de marca v1.0 · dirección 3b «Barra oscura»
+   Verde tinta sobre blanco puro y grises fríos.
+   El verde es ESTRUCTURA (barras, no fondos). La menta se gana: un acento vivo
+   por pantalla. Cero cremas, cero beiges, cero grises cálidos.
+   Fuente: Frontend/dist/brand/wasmishbrand/Manual de marca Wasmish.dc.html
+   ───────────────────────────────────────────────────────────────────────────── */
+
 @theme {
-  /* Backgrounds — LIGHT (cool/slate, 2026-08-05) */
-  --color-brand-bg:      #eaeef3;
-  --color-brand-surface: #ffffff;
-  --color-brand-raised:  #f2f5f9;
+  /* ── Superficies — gris frío ───────────────────────────────────────────── */
+  --color-brand-surface: #ffffff;   /* Lienzo de contenido, cards, burbuja ajena */
+  --color-brand-bg:      #f4f6f8;   /* Gris frío 50 — fondo de app, header, hover de fila */
+  --color-brand-raised:  #eef1f4;   /* Gris frío 100 — inputs en reposo, chips neutros */
 
-  /* Borders */
-  --color-brand-border:  #d8dee6;
+  /* ── Bordes ────────────────────────────────────────────────────────────── */
+  --color-brand-border:        #e4e7eb;  /* Gris frío 200 — divisores por defecto */
+  --color-brand-border-strong: #c4cbd4;  /* Gris frío 300 — inputs, botón outline */
 
-  /* Text */
-  --color-brand-text:    #1b2029;
-  --color-brand-muted:   #5b6472;
-  --color-brand-subtle:  #9099a6;
+  /* ── Texto ─────────────────────────────────────────────────────────────── */
+  --color-brand-text:   #0e1116;   /* Titulares y texto principal */
+  --color-brand-strong: #2e3540;   /* Cuerpo largo, labels de campo */
+  --color-brand-muted:  #6b7684;   /* Secundario, previews, etiquetas */
+  --color-brand-subtle: #97a1ad;   /* Placeholders, timestamps, disabled */
 
-  /* Accents */
-  --color-brand-accent:  #25d366;   /* verde WhatsApp — para FONDOS (botones, badges) */
-  --color-brand-accent-strong: #15a34a; /* verde oscuro — para TEXTO verde sobre claro */
-  --color-brand-indigo:  #6366f1;
-  --color-brand-danger:  #ef4444;
+  /* ── Verde profundo — la estructura ────────────────────────────────────── */
+  --color-brand-deep:        #0b3b2e;  /* Sidebar, burbuja propia, botón sólido */
+  --color-brand-deep-hover:  #12523f;  /* Hover dentro de la barra oscura */
+  --color-brand-deep-active: #17503f;  /* Ítem activo dentro de la barra oscura */
+  --color-brand-ink:         #06251c;  /* Verde 900 — texto sobre menta, tooltips */
+  --color-brand-on-deep:     #cfe3da;  /* Texto en reposo sobre verde profundo */
+  --color-brand-on-deep-muted: #7fa596; /* Texto terciario sobre verde profundo */
+  --color-brand-on-deep-subtle: #5d8474; /* Etiquetas de grupo sobre verde profundo */
 
+  /* ── Menta — el acento vivo (máximo uno sólido por pantalla) ───────────── */
+  --color-brand-accent:        #6fe3ae;  /* Acción principal, activo, badge no leído */
+  --color-brand-accent-hover:  #45c892;
+  --color-brand-accent-active: #2aa675;
+  --color-brand-accent-strong: #12523f;  /* Verde para TEXTO sobre fondo claro */
+  --color-brand-accent-soft:   #d6f8e7;  /* Verde 100 — tints, avatares, badges */
+
+  /* ── Estados ───────────────────────────────────────────────────────────── */
+  --color-brand-success: #1c8560;   /* «Leído», aprobada */
+  --color-brand-warning: #b4540a;   /* Nota interna, pendiente */
+  --color-brand-danger:  #c0392b;   /* Error de formulario, cerrar sesión, fallido */
+
+  /* Tintes de estado — los fondos tenues del manual, no opacidades inventadas */
+  --color-brand-warning-soft: #fdf7f0;  /* Fondo de nota interna / pendiente */
+  --color-brand-danger-soft:  #fdf6f5;  /* Fondo de error / uso incorrecto */
+  --color-brand-danger-border: #f0d5d2;
+  --color-brand-info:    #2563a8;   /* Informativo del sistema */
+
+  /* ── Rampa verde ───────────────────────────────────────────────────────── */
+  --color-brand-green-50:  #effcf5;
+  --color-brand-green-100: #d6f8e7;
+  --color-brand-green-200: #a8f0ce;
+  --color-brand-green-300: #6fe3ae;
+  --color-brand-green-400: #45c892;
+  --color-brand-green-500: #2aa675;
+  --color-brand-green-600: #1c8560;
+  --color-brand-green-700: #12654a;
+  --color-brand-green-800: #0b3b2e;
+  --color-brand-green-900: #06251c;
+
+  /* ── Rampa gris frío ───────────────────────────────────────────────────── */
+  --color-brand-gray-0:   #ffffff;
+  --color-brand-gray-50:  #f4f6f8;
+  --color-brand-gray-100: #eef1f4;
+  --color-brand-gray-200: #e4e7eb;
+  --color-brand-gray-300: #c4cbd4;
+  --color-brand-gray-400: #97a1ad;
+  --color-brand-gray-500: #6b7684;
+  --color-brand-gray-600: #4b5361;
+  --color-brand-gray-700: #2e3540;
+  --color-brand-gray-900: #0e1116;
+
+  /* ── Tipografía ────────────────────────────────────────────────────────── */
   --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* ── Radios ────────────────────────────────────────────────────────────── */
+  --radius-brand-field: 8px;   /* Botones e inputs */
+  --radius-brand-card:  12px;  /* Cards y paneles */
 }
 
 @layer base {
@@ -33,15 +94,26 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
+  /* Teléfonos, IDs, códigos y timestamps — lo que el usuario copia o compara */
+  code, kbd, samp, pre {
+    font-family: var(--font-mono);
+  }
+
   * {
     scrollbar-width: thin;
-    scrollbar-color: var(--color-brand-border) transparent;
+    scrollbar-color: var(--color-brand-border-strong) transparent;
   }
 
   *::-webkit-scrollbar { width: 5px; height: 5px; }
   *::-webkit-scrollbar-track { background: transparent; }
   *::-webkit-scrollbar-thumb {
-    background-color: var(--color-brand-border);
+    background-color: var(--color-brand-border-strong);
     border-radius: 3px;
+  }
+
+  /* Foco visible de marca — menta sobre claro, coherente en toda la app */
+  :focus-visible {
+    outline: 2px solid var(--color-brand-accent-active);
+    outline-offset: 2px;
   }
 }

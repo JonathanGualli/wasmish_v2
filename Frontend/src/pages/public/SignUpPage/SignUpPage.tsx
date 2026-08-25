@@ -1,17 +1,34 @@
 import React, { useEffect, useState } from 'react';
-import { CustomInput } from '../../../components/Input/Input';
-import { CustomButton } from '../../../components/Button/Button';
-import { AppRoutes } from '../../../models/routes.models';
 import { Link, useNavigate } from 'react-router-dom';
+import { ChevronLeft, Check } from 'lucide-react';
+import { CustomButton } from '../../../components/Button/Button';
+import { AuthField, AuthPasswordField } from '../../../components/Auth/AuthField';
+import { AuthShell, AuthHero } from '../../../components/Auth/AuthShell';
 import { useAuthContext } from '../../../context/auth.context';
+import { AppRoutes } from '../../../models/routes.models';
 import { useModalContext } from '../../../components/Modal/context/UseModalContext';
 import { useSignUp } from '../../../hooks/useSignUp';
-import { Logo } from '../../../components/Logo/Logo';
 import type { AxiosError } from 'axios';
 
 interface ErrorItem {
   message: string;
 }
+
+const PROMISES = [
+  '14 días de prueba, sin tarjeta',
+  'Conecta tu número cuando quieras',
+  'Invita a tu equipo sin coste extra',
+];
+
+const legal = (
+  <p className="text-xs leading-[1.55] text-brand-subtle">
+    {/* No hay página de términos todavía: va como texto, no como enlace roto. */}
+    Al crear la cuenta aceptas los <span className="font-semibold text-brand-strong">términos</span> y la{' '}
+    <a href="/privacidad.html" className="font-semibold text-brand-accent-strong hover:underline">
+      política de privacidad
+    </a>.
+  </p>
+);
 
 export const SignUpPage = () => {
   const [name, setName] = useState('');
@@ -59,102 +76,85 @@ export const SignUpPage = () => {
   }, [signUpMutation, setContent, setState]);
 
   return (
-    <div className="w-screen h-screen bg-brand-bg flex justify-center items-center p-4">
-      <div className="flex flex-row max-w-5xl w-full rounded-2xl overflow-hidden border border-brand-border shadow-2xl">
-
-        {/* Panel izquierdo — formulario */}
-        <div className="bg-brand-surface basis-2/5 p-10 flex flex-col justify-center">
-          <div className="flex items-center gap-2.5 mb-8">
-            <Logo className="w-10 h-10" />
-            <span className="text-brand-text font-bold text-lg">Wasmish</span>
-          </div>
-
-          <h1 className="font-bold text-xl text-brand-text mb-1">Crea tu cuenta</h1>
-          <p className="text-brand-muted text-sm mb-8">Empieza a centralizar tus chats de WhatsApp</p>
-
-          <form onSubmit={handleSignUp} className="flex flex-col gap-4">
-            <CustomInput
-              label="Nombre completo"
-              required
-              type="text"
-              placeholder="Jonathan Gualli"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-
-            <CustomInput
-              label="Correo electrónico"
-              required
-              type="email"
-              placeholder="email@ejemplo.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-
-            <CustomInput
-              label="Contraseña"
-              required
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-
-            <div className="h-10 mt-1">
-              <CustomButton type="submit" isLoading={isLoading}>
-                {isLoading ? 'Cargando...' : 'Crear cuenta'}
-              </CustomButton>
-            </div>
-
-            <div className="flex items-center gap-3 my-1">
-              <hr className="flex-1 border-brand-border" />
-              <span className="text-brand-subtle text-xs">o</span>
-              <hr className="flex-1 border-brand-border" />
-            </div>
-
-            <p className="text-brand-subtle text-sm text-center">
+    <AuthShell
+      hero={
+        <AuthHero
+          title={<>Empieza en<br />dos minutos.</>}
+          footer={
+            <>
               ¿Ya tienes cuenta?{' '}
-              <Link to={AppRoutes.login} className="text-brand-accent-strong font-medium hover:underline">
-                Inicia sesión
+              <Link to={AppRoutes.login} className="font-semibold text-brand-accent hover:underline">
+                Entrar
               </Link>
-            </p>
-          </form>
-        </div>
+            </>
+          }
+        >
+          <ul className="grid gap-3 mt-[22px]">
+            {PROMISES.map((item) => (
+              <li key={item} className="flex gap-2.5 items-start text-sm leading-[1.5] text-brand-green-100">
+                <Check size={18} strokeWidth={2.4} className="text-brand-accent flex-none mt-[1px]" />
+                {item}
+              </li>
+            ))}
+          </ul>
+        </AuthHero>
+      }
+    >
+      {/* Cabecera de vuelta — solo en móvil, donde no hay hero con enlace a Entrar */}
+      <Link
+        to={AppRoutes.login}
+        className="flex items-center gap-3.5 mb-6 lg:hidden text-[15px] font-semibold text-brand-gray-600"
+      >
+        <span className="w-10 h-10 rounded-[10px] border border-brand-border flex items-center justify-center flex-none">
+          <ChevronLeft size={19} strokeWidth={2.2} className="text-brand-strong" />
+        </span>
+        Entrar
+      </Link>
 
-        {/* Panel derecho — hero */}
-        <div className="basis-3/5 relative overflow-hidden hidden md:flex flex-col">
-          {/* Base clara con un toque de verde menta */}
-          <div className="absolute inset-0 bg-gradient-to-br from-brand-surface via-brand-bg to-[#dff2e7]" />
+      <h1 className="font-bold text-[30px] leading-none tracking-[-0.03em] text-brand-text text-pretty">
+        Crear cuenta
+      </h1>
+      <p className="text-brand-muted text-[15px] mt-2">
+        Tres datos y estás dentro.
+      </p>
 
-          {/* Dot-grid pattern */}
-          <div
-            className="absolute inset-0"
-            style={{
-              backgroundImage: 'radial-gradient(circle, #c3ccd8 1px, transparent 1px)',
-              backgroundSize: '24px 24px',
-            }}
-          />
+      <form onSubmit={handleSignUp} className="grid gap-[18px] mt-7 lg:mt-7">
+        <AuthField
+          label="Nombre completo"
+          type="text"
+          placeholder="Ana Pérez Molina"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          required
+          autoComplete="name"
+        />
 
-          {/* Glow radial verde */}
-          <div
-            className="absolute inset-0"
-            style={{
-              background: 'radial-gradient(ellipse 75% 55% at 50% 42%, rgba(37,211,102,0.14) 0%, transparent 70%)',
-            }}
-          />
+        <AuthField
+          label="Correo"
+          type="email"
+          placeholder="tu@empresa.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          autoComplete="email"
+        />
 
-          {/* Contenido anclado abajo */}
-          <div className="relative z-10 mt-auto p-10 pb-12">
-            <h2 className="text-brand-text font-bold text-2xl leading-snug mb-3 max-w-[280px]">
-              Todas tus conversaciones,<br />en un solo lugar.
-            </h2>
-            <p className="text-brand-muted text-sm max-w-xs leading-relaxed">
-              Gestiona todos tus chats de WhatsApp Business desde un panel unificado.
-            </p>
-          </div>
-        </div>
+        <AuthPasswordField
+          label="Contraseña"
+          placeholder="Mínimo 8 caracteres"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+          autoComplete="new-password"
+          showStrength
+        />
 
-      </div>
-    </div>
+        <CustomButton type="submit" size="lg" isLoading={isLoading}>
+          {isLoading ? 'Creando cuenta…' : 'Crear cuenta'}
+        </CustomButton>
+
+        {legal}
+      </form>
+    </AuthShell>
   );
 };

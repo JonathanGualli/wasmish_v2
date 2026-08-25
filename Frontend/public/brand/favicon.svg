@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 1024 1024">
+  <!-- Favicon 32px — trazo +25% (120) para que aguante el tamaño mínimo. -->
+  <rect width="1024" height="1024" rx="240" fill="#0B3B2E"/>
+  <path d="M 236 300 L 404 590 L 572 300" fill="none" stroke="#ffffff" stroke-width="120" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 452 724 L 620 434 L 788 724" fill="none" stroke="#6FE3AE" stroke-width="120" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -5,7 +5,7 @@ import { z } from "zod";
 const templateButtonSchema = z.object({
     subType: z.enum(['url', 'quick_reply', 'copy_code'], {
         message: 'subType debe ser url, quick_reply o copy_code',
-    }),
+    }).optional(),
     index: z.coerce.number().int().min(0).max(9).optional(),
     parameters: z.array(z.any()).optional(),
 });

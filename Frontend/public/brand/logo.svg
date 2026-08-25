@@ -1,6 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <rect width="1024" height="1024" rx="225" fill="#25d366"/>
-  <path d="M 270 348 L 402 676 L 512 486 L 622 676 L 754 348"
-        fill="none" stroke="#0a0a0a" stroke-width="96"
-        stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Wasmish — dos chevrons desfasados: W e intercambio (ida y vuelta, dos voces).
+       Manual de marca v1.0 · trazo 8,6% del lado; el inferior se desplaza +21% en X e Y. -->
+  <rect width="1024" height="1024" rx="240" fill="#0B3B2E"/>
+  <path d="M 236 300 L 404 590 L 572 300" fill="none" stroke="#ffffff" stroke-width="96" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 452 724 L 620 434 L 788 724" fill="none" stroke="#6FE3AE" stroke-width="96" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

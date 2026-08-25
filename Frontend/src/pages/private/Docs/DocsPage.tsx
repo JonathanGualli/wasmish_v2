@@ -1,7 +1,9 @@
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BookOpen, KeyRound, Send, AlertTriangle, Info, ArrowRight } from 'lucide-react';
 import { AppRoutes } from '../../../models/routes.models';
 import { CodeBlock } from './CodeBlock';
+import { Code, Callout, StepHeading, RefTable } from './DocsUI';
 
 // Base real del API según el entorno donde corre la app.
 const API_BASE = `${window.location.origin}/api`;
@@ -9,18 +11,51 @@ const ENDPOINT = `${API_BASE}/v1/templates/send`;
 
 // ─── Índice lateral ─────────────────────────────────────────────────────────
 const SECTIONS = [
-    { id: 'introduccion', label: 'Introducción' },
-    { id: 'enviar-plantillas', label: 'API · Envío de plantillas' },
-    { id: 'botones', label: 'Botones con parámetros' },
+    { id: 'introduccion',  label: 'Introducción' },
+    { id: 'autenticacion', label: 'Autenticación' },
+    { id: 'endpoint',      label: 'Endpoint' },
+    { id: 'parametros',    label: 'Parámetros del body' },
+    { id: 'variables',     label: 'Variables' },
+    { id: 'botones',       label: 'Botones con parámetros' },
+    { id: 'ejemplos',      label: 'Ejemplos de petición' },
+    { id: 'respuesta',     label: 'Respuesta' },
+    { id: 'errores',       label: 'Errores' },
 ];
 
 const scrollTo = (id: string) =>
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
+/** Marca en el índice la sección que se está leyendo. */
+const useActiveSection = () => {
+    const [active, setActive] = useState(SECTIONS[0].id);
+
+    useEffect(() => {
+        // El margen inferior hace que una sección se active cuando su título
+        // entra en el tercio superior de la pantalla, no al asomar por abajo.
+        const observer = new IntersectionObserver(
+            (entries) => {
+                const visible = entries
+                    .filter(e => e.isIntersecting)
+                    .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+                if (visible[0]) setActive(visible[0].target.id);
+            },
+            { rootMargin: '0px 0px -70% 0px', threshold: 0 }
+        );
+
+        SECTIONS.forEach(({ id }) => {
+            const el = document.getElementById(id);
+            if (el) observer.observe(el);
+        });
+        return () => observer.disconnect();
+    }, []);
+
+    return active;
+};
+
 // ─── Sub-componentes de contenido ───────────────────────────────────────────
 const MethodBadge = ({ method }: { method: string }) => (
-    <span className="inline-flex items-center text-[11px] font-bold uppercase tracking-wide
-        bg-brand-accent/15 text-brand-accent-strong rounded px-2 py-0.5">
+    <span className="inline-flex items-center text-[11px] font-bold uppercase tracking-[0.05em]
+        bg-brand-accent-soft text-brand-accent-strong rounded px-2 py-1">
         {method}
     </span>
 );
@@ -29,28 +64,29 @@ const Param = ({ name, type, required, children }: {
     name: string; type: string; required?: boolean; children: React.ReactNode;
 }) => (
     <tr className="border-b border-brand-border last:border-0 align-top">
-        <td className="py-2.5 px-4 whitespace-nowrap">
-            <code className="font-mono text-[13px] text-brand-text">{name}</code>
+        <td className="py-3 px-4 whitespace-nowrap">
+            <code className="font-mono text-[13px] font-medium text-brand-text">{name}</code>
             {required && <span className="text-brand-danger ml-1" title="Requerido">*</span>}
         </td>
-        <td className="py-2.5 pr-4 whitespace-nowrap">
-            <span className="text-xs text-brand-subtle font-mono">{type}</span>
+        <td className="py-3 pr-4 whitespace-nowrap">
+            <span className="font-mono text-[12px] text-brand-subtle">{type}</span>
         </td>
-        <td className="py-2.5 pr-4 text-sm text-brand-muted leading-relaxed">{children}</td>
+        <td className="py-3 pr-4 text-sm leading-[1.6] text-brand-muted">{children}</td>
     </tr>
 );
 
 const ErrorRow = ({ code, children }: { code: string; children: React.ReactNode }) => (
     <tr className="border-b border-brand-border last:border-0 align-top">
-        <td className="py-2.5 px-4 whitespace-nowrap">
-            <code className="font-mono text-[13px] font-semibold text-brand-danger">{code}</code>
+        <td className="py-3 px-4 whitespace-nowrap">
+            <code className="font-mono text-[13px] font-bold text-brand-danger">{code}</code>
         </td>
-        <td className="py-2.5 pr-4 text-sm text-brand-muted leading-relaxed">{children}</td>
+        <td className="py-3 pr-4 text-sm leading-[1.6] text-brand-muted">{children}</td>
     </tr>
 );
 
 export const DocsPage = () => {
     const navigate = useNavigate();
+    const active = useActiveSection();
 
     const curl = `curl -X POST ${ENDPOINT} \\
   -H "Authorization: Bearer wm_tu_api_key" \\
@@ -111,245 +147,243 @@ console.log(data); // { success: true, waMessageId, conversationId }`;
         <div className="max-w-5xl mx-auto px-5 sm:px-8 py-8 sm:py-10">
 
             {/* Encabezado */}
-            <div className="flex items-start gap-3 mb-8">
-                <div className="w-10 h-10 rounded-lg bg-brand-accent/10 text-brand-accent-strong
-                    flex items-center justify-center flex-shrink-0">
+            <header className="flex items-start gap-3.5 mb-10">
+                <div className="w-10 h-10 rounded-[10px] bg-brand-accent-soft text-brand-accent-strong
+                    flex items-center justify-center flex-none">
                     <BookOpen size={20} />
                 </div>
                 <div>
-                    <h1 className="font-bold text-brand-text text-2xl leading-tight">Documentación</h1>
-                    <p className="text-brand-muted text-sm mt-1">
+                    <h1 className="text-[30px] font-bold tracking-[-0.03em] leading-none text-brand-text">
+                        Documentación
+                    </h1>
+                    <p className="text-[15px] text-brand-muted mt-2">
                         Guías e integraciones para sacarle el máximo a Wasmish.
                     </p>
                 </div>
-            </div>
+            </header>
 
-            <div className="flex flex-col lg:flex-row gap-8">
+            <div className="flex flex-col lg:flex-row gap-10">
 
                 {/* ── Índice lateral ── */}
-                <aside className="lg:w-56 flex-shrink-0">
-                    <nav className="lg:sticky lg:top-4 flex flex-col gap-0.5">
-                        <span className="text-[11px] font-medium uppercase tracking-wide text-brand-subtle px-3 mb-1">
+                <aside className="lg:w-56 flex-none">
+                    <nav className="lg:sticky lg:top-6 flex flex-col gap-0.5">
+                        <span className="text-[11px] font-semibold uppercase tracking-[0.1em]
+                            text-brand-muted px-3 mb-2">
                             Contenido
                         </span>
-                        {SECTIONS.map((s) => (
-                            <button
-                                key={s.id}
-                                type="button"
-                                onClick={() => scrollTo(s.id)}
-                                className="text-left text-sm text-brand-muted hover:text-brand-text
-                                    hover:bg-brand-raised rounded-md px-3 py-2 transition-colors cursor-pointer"
-                            >
-                                {s.label}
-                            </button>
-                        ))}
+                        {SECTIONS.map((s) => {
+                            const isActive = active === s.id;
+                            return (
+                                <button
+                                    key={s.id}
+                                    type="button"
+                                    onClick={() => scrollTo(s.id)}
+                                    className={`relative text-left text-sm rounded-md px-3 py-2
+                                        border-l-[3px] transition-colors cursor-pointer
+                                        ${isActive
+                                            ? 'border-l-brand-accent bg-brand-bg text-brand-accent-strong font-semibold'
+                                            : 'border-l-transparent text-brand-muted hover:bg-brand-bg hover:text-brand-text'}`}
+                                >
+                                    {s.label}
+                                </button>
+                            );
+                        })}
                     </nav>
                 </aside>
 
                 {/* ── Contenido ── */}
-                <div className="flex-1 min-w-0 space-y-12">
+                <div className="flex-1 min-w-0">
 
                     {/* Introducción */}
-                    <section id="introduccion" className="scroll-mt-4">
-                        <h2 className="font-bold text-brand-text text-lg mb-3">Introducción</h2>
-                        <p className="text-brand-muted text-sm leading-relaxed">
-                            Wasmish expone una <span className="text-brand-text font-medium">API pública</span> para
+                    <section>
+                        <h2 id="introduccion" className="scroll-mt-6 text-[22px] font-bold
+                            tracking-[-0.02em] text-brand-text mb-3">
+                            Introducción
+                        </h2>
+                        <p className="text-[15px] leading-[1.6] text-brand-strong max-w-[680px]">
+                            Wasmish expone una <span className="font-semibold text-brand-text">API pública</span> para
                             que envíes plantillas de WhatsApp desde tus propios sistemas (tu backend, un CRM, un
-                            e-commerce, etc.). Cada envío se autentica con una <span className="text-brand-text font-medium">API key</span> y
-                            queda registrado en tus conversaciones, apareciendo en vivo dentro de Wasmish.
+                            e-commerce, etc.). Cada envío se autentica con una{' '}
+                            <span className="font-semibold text-brand-text">API key</span> y queda registrado en tus
+                            conversaciones, apareciendo en vivo dentro de Wasmish.
                         </p>
                     </section>
 
                     {/* API · Envío de plantillas */}
-                    <section id="enviar-plantillas" className="scroll-mt-4">
-                        <div className="flex items-center gap-2 mb-4">
-                            <Send size={18} className="text-brand-accent-strong" />
-                            <h2 className="font-bold text-brand-text text-lg">API · Envío de plantillas</h2>
+                    <section className="mt-12">
+                        <div className="flex items-center gap-2.5 mb-5">
+                            <Send size={20} className="text-brand-accent-strong" />
+                            <h2 className="text-[22px] font-bold tracking-[-0.02em] text-brand-text">
+                                API · Envío de plantillas
+                            </h2>
                         </div>
 
-                        {/* Requisitos */}
-                        <div className="rounded-xl border border-brand-border bg-brand-raised/50 p-4 mb-6">
-                            <div className="flex items-center gap-1.5 mb-2">
-                                <Info size={14} className="text-brand-accent-strong" />
-                                <h3 className="font-semibold text-brand-text text-sm">Antes de empezar</h3>
-                            </div>
-                            <ul className="text-sm text-brand-muted leading-relaxed list-disc pl-5 space-y-1">
-                                <li>Tener tu <span className="text-brand-text">WhatsApp Business conectado</span> en Wasmish.</li>
-                                <li>Que la plantilla exista y esté <span className="text-brand-text">aprobada por Meta</span> (sincronízala desde Plantillas).</li>
-                                <li>Haber generado una <span className="text-brand-text">API key</span> en Ajustes.</li>
+                        <Callout icon={<Info size={16} />} title="Antes de empezar">
+                            <ul className="list-disc pl-5 space-y-1">
+                                <li>Tener tu <span className="text-brand-text font-medium">WhatsApp Business conectado</span> en Wasmish.</li>
+                                <li>Que la plantilla exista y esté <span className="text-brand-text font-medium">aprobada por Meta</span> (sincronízala desde Plantillas).</li>
+                                <li>Haber generado una <span className="text-brand-text font-medium">API key</span> en Ajustes.</li>
                             </ul>
-                        </div>
+                        </Callout>
 
                         {/* Autenticación */}
-                        <h3 className="font-semibold text-brand-text text-base mb-2">1. Autenticación</h3>
-                        <p className="text-brand-muted text-sm leading-relaxed mb-3">
-                            Todas las peticiones requieren tu API key en la cabecera <code className="font-mono text-[13px] text-brand-text bg-brand-raised px-1.5 py-0.5 rounded">Authorization</code> con
-                            el prefijo <code className="font-mono text-[13px] text-brand-text bg-brand-raised px-1.5 py-0.5 rounded">Bearer</code>. La key se
-                            muestra <span className="text-brand-text font-medium">una sola vez</span> al generarla — guárdala en un lugar seguro.
+                        <StepHeading n={1} id="autenticacion">Autenticación</StepHeading>
+                        <p className="text-[15px] leading-[1.6] text-brand-strong mb-4 max-w-[680px]">
+                            Todas las peticiones requieren tu API key en la cabecera <Code>Authorization</Code> con
+                            el prefijo <Code>Bearer</Code>. La key se muestra{' '}
+                            <span className="font-semibold text-brand-text">una sola vez</span> al generarla —
+                            guárdala en un lugar seguro.
                         </p>
                         <CodeBlock lang="http" code={`Authorization: Bearer wm_tu_api_key`} />
                         <button
                             type="button"
                             onClick={() => navigate(`${AppRoutes.private.root}/${AppRoutes.private.settings}`)}
-                            className="inline-flex items-center gap-1.5 mt-3 text-sm font-medium text-brand-accent-strong hover:underline cursor-pointer"
+                            className="inline-flex items-center gap-1.5 mt-4 text-sm font-semibold
+                                text-brand-accent-strong hover:underline cursor-pointer"
                         >
                             <KeyRound size={14} /> Generar una API key en Ajustes
                             <ArrowRight size={13} />
                         </button>
 
                         {/* Endpoint */}
-                        <h3 className="font-semibold text-brand-text text-base mb-2 mt-8">2. Endpoint</h3>
-                        <div className="flex flex-wrap items-center gap-2.5 mb-4 rounded-lg border border-brand-border bg-brand-raised px-4 py-3">
+                        <StepHeading n={2} id="endpoint">Endpoint</StepHeading>
+                        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-brand-border
+                            bg-brand-bg px-4 py-3.5">
                             <MethodBadge method="POST" />
                             <code className="font-mono text-[13px] text-brand-text break-all">{ENDPOINT}</code>
                         </div>
 
                         {/* Parámetros */}
-                        <h3 className="font-semibold text-brand-text text-base mb-2 mt-8">3. Parámetros del body</h3>
-                        <p className="text-brand-muted text-sm mb-3">Formato <code className="font-mono text-[13px] text-brand-text bg-brand-raised px-1.5 py-0.5 rounded">application/json</code>. Los campos con <span className="text-brand-danger">*</span> son obligatorios. Los opcionales puedes omitirlos o enviarlos como <code className="font-mono text-xs text-brand-text">null</code>.</p>
-                        <div className="overflow-x-auto rounded-xl border border-brand-border">
-                            <table className="w-full">
-                                <thead>
-                                    <tr className="border-b border-brand-border bg-brand-raised/60 text-left">
-                                        <th className="py-2.5 px-4 text-[11px] font-medium uppercase tracking-wide text-brand-subtle">Campo</th>
-                                        <th className="py-2.5 pr-4 text-[11px] font-medium uppercase tracking-wide text-brand-subtle">Tipo</th>
-                                        <th className="py-2.5 pr-4 text-[11px] font-medium uppercase tracking-wide text-brand-subtle">Descripción</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <Param name="destinationNumber" type="string" required>
-                                        Número destino con código de país, sin símbolos. Ej: <code className="font-mono text-xs text-brand-text">593987654321</code>.
-                                    </Param>
-                                    <Param name="templateName" type="string" required>
-                                        Nombre exacto de la plantilla aprobada en Meta.
-                                    </Param>
-                                    <Param name="language" type="string">
-                                        Código de idioma. Si lo omites se usa el idioma con el que la plantilla está registrada en Meta. Ej: <code className="font-mono text-xs text-brand-text">es</code>, <code className="font-mono text-xs text-brand-text">en_US</code>.
-                                    </Param>
-                                    <Param name="parameters" type="array">
-                                        Valores para las variables de la plantilla. Posicionales <code className="font-mono text-xs text-brand-text">{`["Juan","1234"]`}</code> o nombrados <code className="font-mono text-xs text-brand-text">{`[{name,value}]`}</code> (ver abajo).
-                                    </Param>
-                                    <Param name="buttons" type="array">
-                                        Parámetros para los botones de la plantilla. Necesario si la plantilla tiene botones dinámicos (ver <button type="button" onClick={() => scrollTo('botones')} className="text-brand-accent-strong hover:underline cursor-pointer">Botones con parámetros</button>).
-                                    </Param>
-                                    <Param name="contactName" type="string">
-                                        Nombre para mostrar del contacto en la conversación de Wasmish.
-                                    </Param>
-
-                                </tbody>
-                            </table>
-                        </div>
+                        <StepHeading n={3} id="parametros">Parámetros del body</StepHeading>
+                        <p className="text-[15px] leading-[1.6] text-brand-strong mb-4 max-w-[680px]">
+                            Formato <Code>application/json</Code>. Los campos con{' '}
+                            <span className="text-brand-danger font-semibold">*</span> son obligatorios. Los
+                            opcionales puedes omitirlos o enviarlos como <Code>null</Code>.
+                        </p>
+                        <RefTable head={['Campo', 'Tipo', 'Descripción']}>
+                            <Param name="destinationNumber" type="string" required>
+                                Número destino con código de país, sin símbolos. Ej: <Code>593987654321</Code>.
+                            </Param>
+                            <Param name="templateName" type="string" required>
+                                Nombre exacto de la plantilla aprobada en Meta.
+                            </Param>
+                            <Param name="language" type="string">
+                                Código de idioma. Si lo omites se usa el idioma con el que la plantilla está
+                                registrada en Meta. Ej: <Code>es</Code>, <Code>en_US</Code>.
+                            </Param>
+                            <Param name="parameters" type="array">
+                                Valores para las variables de la plantilla. Posicionales{' '}
+                                <Code>{`["Juan","1234"]`}</Code> o nombrados <Code>{`[{name,value}]`}</Code> (ver abajo).
+                            </Param>
+                            <Param name="buttons" type="array">
+                                Parámetros para los botones de la plantilla. Necesario si la plantilla tiene
+                                botones dinámicos (ver{' '}
+                                <button type="button" onClick={() => scrollTo('botones')}
+                                    className="font-semibold text-brand-accent-strong hover:underline cursor-pointer">
+                                    Botones con parámetros
+                                </button>).
+                            </Param>
+                            <Param name="contactName" type="string">
+                                Nombre para mostrar del contacto en la conversación de Wasmish.
+                            </Param>
+                        </RefTable>
 
                         {/* Tipos de parámetros */}
-                        <h3 className="font-semibold text-brand-text text-base mb-2 mt-8">4. Variables: posicionales vs nombradas</h3>
-                        <p className="text-brand-muted text-sm leading-relaxed mb-3">
-                            Si tu plantilla usa variables numeradas <code className="font-mono text-[13px] text-brand-text bg-brand-raised px-1.5 py-0.5 rounded">{`{{1}} {{2}}`}</code>, envía
-                            un arreglo <span className="text-brand-text font-medium">posicional</span> en orden:
+                        <StepHeading n={4} id="variables">Variables: posicionales vs nombradas</StepHeading>
+                        <p className="text-[15px] leading-[1.6] text-brand-strong mb-4 max-w-[680px]">
+                            Si tu plantilla usa variables numeradas <Code>{`{{1}} {{2}}`}</Code>, envía un arreglo{' '}
+                            <span className="font-semibold text-brand-text">posicional</span> en orden:
                         </p>
                         <CodeBlock lang="json" code={`"parameters": ["Juan", "1234"]`} />
-                        <p className="text-brand-muted text-sm leading-relaxed mb-3 mt-4">
-                            Si tu plantilla usa variables <span className="text-brand-text font-medium">nombradas</span> <code className="font-mono text-[13px] text-brand-text bg-brand-raised px-1.5 py-0.5 rounded">{`{{first_name}}`}</code>, envía objetos <code className="font-mono text-[13px] text-brand-text bg-brand-raised px-1.5 py-0.5 rounded">{`{ name, value }`}</code>:
+                        <p className="text-[15px] leading-[1.6] text-brand-strong mb-4 mt-5 max-w-[680px]">
+                            Si tu plantilla usa variables{' '}
+                            <span className="font-semibold text-brand-text">nombradas</span>{' '}
+                            <Code>{`{{first_name}}`}</Code>, envía objetos <Code>{`{ name, value }`}</Code>:
                         </p>
                         <CodeBlock lang="json" code={namedParams} />
 
                         {/* Botones */}
-                        <div id="botones" className="scroll-mt-4">
-                            <h3 className="font-semibold text-brand-text text-base mb-2 mt-8">5. Botones con parámetros</h3>
-                            <p className="text-brand-muted text-sm leading-relaxed mb-3">
-                                Si tu plantilla tiene botones <span className="text-brand-text font-medium">dinámicos</span> — una URL con variable,
-                                una respuesta rápida con payload, un código de copia, o una plantilla de
-                                autenticación con <span className="text-brand-text font-medium">one-tap / zero-tap</span> — Meta exige que envíes
-                                sus valores además de los del cuerpo. Para eso está <code className="font-mono text-[13px] text-brand-text bg-brand-raised px-1.5 py-0.5 rounded">buttons</code>.
-                            </p>
-                            <CodeBlock lang="json" code={buttonsExample} />
+                        <StepHeading n={5} id="botones">Botones con parámetros</StepHeading>
+                        <p className="text-[15px] leading-[1.6] text-brand-strong mb-4 max-w-[680px]">
+                            Si tu plantilla tiene botones{' '}
+                            <span className="font-semibold text-brand-text">dinámicos</span> — una URL con
+                            variable, una respuesta rápida con payload, un código de copia, o una plantilla de
+                            autenticación con{' '}
+                            <span className="font-semibold text-brand-text">one-tap / zero-tap</span> — Meta exige
+                            que envíes sus valores además de los del cuerpo. Para eso está <Code>buttons</Code>.
+                        </p>
+                        <CodeBlock lang="json" code={buttonsExample} />
 
-                            <div className="overflow-x-auto rounded-xl border border-brand-border mt-4">
-                                <table className="w-full">
-                                    <thead>
-                                        <tr className="border-b border-brand-border bg-brand-raised/60 text-left">
-                                            <th className="py-2.5 px-4 text-[11px] font-medium uppercase tracking-wide text-brand-subtle">Campo</th>
-                                            <th className="py-2.5 pr-4 text-[11px] font-medium uppercase tracking-wide text-brand-subtle">Tipo</th>
-                                            <th className="py-2.5 pr-4 text-[11px] font-medium uppercase tracking-wide text-brand-subtle">Descripción</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <Param name="subType" type="string" required>
-                                            <code className="font-mono text-xs text-brand-text">url</code> para URL dinámica y plantillas de autenticación,{' '}
-                                            <code className="font-mono text-xs text-brand-text">quick_reply</code> para respuesta rápida con payload,{' '}
-                                            <code className="font-mono text-xs text-brand-text">copy_code</code> para código de copia.
-                                        </Param>
-                                        <Param name="index" type="number">
-                                            Posición del botón en la plantilla, empezando en <code className="font-mono text-xs text-brand-text">0</code>. Si lo omites se asume el orden del arreglo.
-                                        </Param>
-                                        <Param name="parameters" type="array" required>
-                                            Valores del botón, como texto plano. Wasmish les da el formato que Meta espera según el <code className="font-mono text-xs text-brand-text">subType</code>.
-                                        </Param>
-                                    </tbody>
-                                </table>
-                            </div>
+                        <div className="mt-5">
+                            <RefTable head={['Campo', 'Tipo', 'Descripción']}>
+                                <Param name="subType" type="string" required>
+                                    <Code>url</Code> para URL dinámica y plantillas de autenticación,{' '}
+                                    <Code>quick_reply</Code> para respuesta rápida con payload,{' '}
+                                    <Code>copy_code</Code> para código de copia.
+                                </Param>
+                                <Param name="index" type="number">
+                                    Posición del botón en la plantilla, empezando en <Code>0</Code>. Si lo omites
+                                    se asume el orden del arreglo.
+                                </Param>
+                                <Param name="parameters" type="array" required>
+                                    Valores del botón, como texto plano. Wasmish les da el formato que Meta espera
+                                    según el <Code>subType</Code>.
+                                </Param>
+                            </RefTable>
+                        </div>
 
-                            <p className="text-brand-muted text-sm leading-relaxed mb-3 mt-5">
-                                Ejemplo típico: una plantilla de <span className="text-brand-text font-medium">código de verificación</span>. El
-                                código va dos veces — una en el cuerpo del mensaje y otra en el botón:
-                            </p>
-                            <CodeBlock lang="bash" code={otpCurl} />
+                        <p className="text-[15px] leading-[1.6] text-brand-strong mb-4 mt-6 max-w-[680px]">
+                            Ejemplo típico: una plantilla de{' '}
+                            <span className="font-semibold text-brand-text">código de verificación</span>. El
+                            código va dos veces — una en el cuerpo del mensaje y otra en el botón:
+                        </p>
+                        <CodeBlock lang="bash" code={otpCurl} />
 
-                            <div className="rounded-xl border border-brand-border bg-brand-raised/50 p-4 mt-4 flex gap-3">
-                                <AlertTriangle size={16} className="text-brand-danger flex-shrink-0 mt-0.5" />
-                                <p className="text-sm text-brand-muted leading-relaxed">
-                                    Si la plantilla tiene un botón dinámico y no envías <code className="font-mono text-xs text-brand-text">buttons</code>,
-                                    Meta rechaza el mensaje con el error{' '}
-                                    <code className="font-mono text-xs text-brand-text">131008 — Button at index 0 of type Url requires a parameter</code>.
-                                </p>
-                            </div>
+                        <div className="mt-5">
+                            <Callout tone="warning" icon={<AlertTriangle size={16} />}>
+                                Si la plantilla tiene un botón dinámico y no envías <Code>buttons</Code>, Meta
+                                rechaza el mensaje con el error{' '}
+                                <Code>131008 — Button at index 0 of type Url requires a parameter</Code>.
+                            </Callout>
                         </div>
 
                         {/* Ejemplo cURL */}
-                        <h3 className="font-semibold text-brand-text text-base mb-2 mt-8">6. Ejemplo de petición</h3>
-                        <p className="text-brand-muted text-sm mb-3">cURL:</p>
+                        <StepHeading n={6} id="ejemplos">Ejemplos de petición</StepHeading>
+                        <p className="text-sm font-medium text-brand-muted mb-2.5">cURL</p>
                         <CodeBlock lang="bash" code={curl} />
-                        <p className="text-brand-muted text-sm mb-3 mt-4">JavaScript (fetch):</p>
+                        <p className="text-sm font-medium text-brand-muted mb-2.5 mt-5">JavaScript (fetch)</p>
                         <CodeBlock lang="javascript" code={jsFetch} />
 
                         {/* Respuesta */}
-                        <h3 className="font-semibold text-brand-text text-base mb-2 mt-8">7. Respuesta exitosa</h3>
-                        <p className="text-brand-muted text-sm mb-3">
-                            <code className="font-mono text-[13px] text-brand-accent-strong">200 OK</code> — el mensaje se envió a WhatsApp:
+                        <StepHeading n={7} id="respuesta">Respuesta exitosa</StepHeading>
+                        <p className="text-[15px] leading-[1.6] text-brand-strong mb-4">
+                            <code className="font-mono text-[13px] font-semibold text-brand-success">200 OK</code>
+                            {' '}— el mensaje se envió a WhatsApp:
                         </p>
                         <CodeBlock lang="json" code={okResponse} />
 
                         {/* Errores */}
-                        <h3 className="font-semibold text-brand-text text-base mb-2 mt-8 flex items-center gap-1.5">
-                            <AlertTriangle size={15} className="text-brand-danger" /> Errores
+                        <h3 id="errores" className="scroll-mt-6 flex items-center gap-2 text-[17px]
+                            font-semibold text-brand-text mt-9 mb-2.5">
+                            <AlertTriangle size={16} className="text-brand-danger" /> Errores
                         </h3>
-                        <div className="overflow-x-auto rounded-xl border border-brand-border">
-                            <table className="w-full">
-                                <thead>
-                                    <tr className="border-b border-brand-border bg-brand-raised/60 text-left">
-                                        <th className="py-2.5 px-4 text-[11px] font-medium uppercase tracking-wide text-brand-subtle">Código</th>
-                                        <th className="py-2.5 pr-4 text-[11px] font-medium uppercase tracking-wide text-brand-subtle">Significado</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <ErrorRow code="400">Body inválido. La respuesta es un arreglo de <code className="font-mono text-xs">{`{ field, message }`}</code> indicando qué campo falló. También aparece si un botón tiene un <code className="font-mono text-xs">subType</code> no soportado o va sin <code className="font-mono text-xs">parameters</code>.</ErrorRow>
-                                    <ErrorRow code="401">API key faltante o inválida. Revisa la cabecera <code className="font-mono text-xs">Authorization</code>.</ErrorRow>
-                                    <ErrorRow code="403">API key inactiva (revocada). Genera una nueva.</ErrorRow>
-                                    <ErrorRow code="404">La plantilla no existe en tu cuenta de WhatsApp o todavía no está aprobada. También puede ser que el usuario asociado a la key no exista.</ErrorRow>
-                                    <ErrorRow code="409">Tu cuenta no tiene WhatsApp conectado. Conéctala desde Ajustes antes de enviar.</ErrorRow>
-                                    <ErrorRow code="502">WhatsApp/Meta rechazó el envío. La respuesta incluye <code className="font-mono text-xs">errorCode</code> y <code className="font-mono text-xs">errorDetail</code> (número inválido, plantilla en pausa, parámetros que no cuadran, etc.).</ErrorRow>
-                                    <ErrorRow code="500">Error interno del servidor.</ErrorRow>
-                                </tbody>
-                            </table>
-                        </div>
+                        <RefTable head={['Código', 'Significado']}>
+                            <ErrorRow code="400">Body inválido. La respuesta es un arreglo de <Code>{`{ field, message }`}</Code> indicando qué campo falló. También aparece si un botón tiene un <Code>subType</Code> no soportado o va sin <Code>parameters</Code>.</ErrorRow>
+                            <ErrorRow code="401">API key faltante o inválida. Revisa la cabecera <Code>Authorization</Code>.</ErrorRow>
+                            <ErrorRow code="403">API key inactiva (revocada). Genera una nueva.</ErrorRow>
+                            <ErrorRow code="404">La plantilla no existe en tu cuenta de WhatsApp o todavía no está aprobada. También puede ser que el usuario asociado a la key no exista.</ErrorRow>
+                            <ErrorRow code="409">Tu cuenta no tiene WhatsApp conectado. Conéctala desde Ajustes antes de enviar.</ErrorRow>
+                            <ErrorRow code="502">WhatsApp/Meta rechazó el envío. La respuesta incluye <Code>errorCode</Code> y <Code>errorDetail</Code> (número inválido, plantilla en pausa, parámetros que no cuadran, etc.).</ErrorRow>
+                            <ErrorRow code="500">Error interno del servidor.</ErrorRow>
+                        </RefTable>
 
                         {/* Nota final */}
-                        <div className="rounded-xl border border-brand-border bg-brand-raised/50 p-4 mt-6 flex gap-3">
-                            <Info size={16} className="text-brand-accent-strong flex-shrink-0 mt-0.5" />
-                            <p className="text-sm text-brand-muted leading-relaxed">
+                        <div className="mt-8">
+                            <Callout icon={<Info size={16} />}>
                                 Cada envío se guarda como mensaje saliente en la conversación del número destino y
                                 se emite en tiempo real a tu sesión de Wasmish. Si el envío falla, igual queda
-                                registrado con estado <code className="font-mono text-xs text-brand-text">failed</code> y el detalle del error.
-                            </p>
+                                registrado con estado <Code>failed</Code> y el detalle del error.
+                            </Callout>
                         </div>
                     </section>
                 </div>

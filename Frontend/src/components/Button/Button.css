@@ -1,10 +1,17 @@
+/* Spinner del botón. Por defecto blanco (sobre verde profundo / rojo);
+   `.loader--ink` lo pone en verde 900 para los fondos claros (menta, outline, ghost). */
 .loader {
   border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top: 2px solid white;
+  border-top: 2px solid #ffffff;
   border-radius: 50%;
   width: 18px;
   height: 18px;
   animation: spin 0.6s linear infinite;
+}
+
+.loader--ink {
+  border-color: rgba(6, 37, 28, 0.25);
+  border-top-color: #06251c;
 }
 
 @keyframes spin {

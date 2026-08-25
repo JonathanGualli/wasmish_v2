@@ -7,7 +7,11 @@ interface Props {
     lang?: string;
 }
 
-/** Bloque de código con botón de copiar, acorde al estilo de marca. */
+/**
+ * Bloque de código. Se queda en claro a propósito: el contenido siempre es
+ * blanco (principio 01 del manual). El chrome va en gris frío 100 y el cuerpo
+ * en gris frío 50, respetando la jerarquía de superficies.
+ */
 export const CodeBlock = ({ code, lang }: Props) => {
     const [copied, setCopied] = useState(false);
 
@@ -22,23 +26,27 @@ export const CodeBlock = ({ code, lang }: Props) => {
     };
 
     return (
-        <div className="relative group rounded-lg border border-brand-border bg-brand-raised overflow-hidden">
-            <div className="flex items-center justify-between px-3 py-1.5 border-b border-brand-border bg-brand-bg/50">
-                <span className="text-[11px] font-medium uppercase tracking-wide text-brand-subtle">
+        <div className="rounded-xl border border-brand-border bg-brand-bg overflow-hidden">
+            <div className="flex items-center justify-between gap-3 px-4 py-2
+                border-b border-brand-border bg-brand-raised">
+                <span className="font-mono text-[11px] font-medium uppercase tracking-[0.1em] text-brand-muted">
                     {lang ?? 'code'}
                 </span>
                 <button
                     type="button"
                     onClick={copy}
-                    className="inline-flex items-center gap-1 text-[11px] font-medium text-brand-muted
-                        hover:text-brand-text transition-colors cursor-pointer"
-                    title="Copiar"
+                    className={`inline-flex items-center gap-1.5 text-[12px] font-semibold
+                        rounded px-2 py-1 -mr-1 transition-colors cursor-pointer
+                        ${copied
+                            ? 'text-brand-success'
+                            : 'text-brand-gray-600 hover:text-brand-text hover:bg-brand-border'}`}
+                    title="Copiar al portapapeles"
                 >
-                    {copied ? <Check size={13} className="text-brand-accent-strong" /> : <Copy size={13} />}
+                    {copied ? <Check size={13} strokeWidth={2.5} /> : <Copy size={13} />}
                     {copied ? 'Copiado' : 'Copiar'}
                 </button>
             </div>
-            <pre className="overflow-x-auto p-4 text-[13px] leading-relaxed text-brand-text">
+            <pre className="overflow-x-auto p-4 text-[13px] leading-[1.65] text-brand-text">
                 <code className="font-mono whitespace-pre">{code}</code>
             </pre>
         </div>

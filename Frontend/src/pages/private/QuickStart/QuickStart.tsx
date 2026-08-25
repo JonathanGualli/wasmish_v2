@@ -1,9 +1,10 @@
 import { useNavigate } from 'react-router-dom';
 import {
     Plug, LayoutTemplate, KeyRound, MessageSquare,
-    Zap, ShieldCheck, Radio, ArrowRight, Sparkles,
+    Zap, ShieldCheck, Radio, ArrowRight,
 } from 'lucide-react';
 import { AppRoutes } from '../../../models/routes.models';
+import { CustomButton } from '../../../components/Button/Button';
 import { Logo } from '../../../components/Logo/Logo';
 
 const to = (page: string) => `${AppRoutes.private.root}/${page}`;
@@ -23,7 +24,7 @@ const STEPS: Step[] = [
         n: 1,
         icon: <Plug size={20} />,
         title: 'Conecta tu WhatsApp',
-        desc: 'Vincula tu cuenta de WhatsApp Business en segundos con “Iniciar sesión con Facebook”.',
+        desc: 'Vincula tu cuenta de WhatsApp Business en segundos con «Iniciar sesión con Facebook».',
         cta: 'Ir a Ajustes',
         path: to(AppRoutes.private.settings),
     },
@@ -77,31 +78,36 @@ const FEATURES = [
     },
 ];
 
+/** Caja de icono de tarjeta: tinte verde 100 con el verde de texto encima. */
+const IconBox = ({ children, size = 'md' }: { children: React.ReactNode; size?: 'sm' | 'md' }) => (
+    <div className={`rounded-[10px] bg-brand-accent-soft text-brand-accent-strong
+        flex items-center justify-center flex-none
+        ${size === 'sm' ? 'w-9 h-9' : 'w-10 h-10'}`}>
+        {children}
+    </div>
+);
+
 const StepCard = ({ step }: { step: Step }) => {
     const navigate = useNavigate();
     return (
         <button
             type="button"
             onClick={() => navigate(step.path)}
-            className="group text-left flex flex-col h-full bg-brand-surface border border-brand-border
-                rounded-xl p-5 transition-all cursor-pointer
-                hover:border-brand-accent/50 hover:shadow-md hover:-translate-y-0.5"
+            className="group text-left flex flex-col h-full bg-brand-surface
+                border border-brand-border rounded-xl p-5 cursor-pointer transition-colors
+                hover:border-brand-border-strong hover:bg-brand-bg"
         >
-            <div className="flex items-center justify-between mb-4">
-                <div className="w-10 h-10 rounded-lg bg-brand-accent/10 text-brand-accent-strong
-                    flex items-center justify-center flex-shrink-0">
-                    {step.icon}
-                </div>
-                <span className="text-xs font-semibold text-brand-subtle tabular-nums
-                    bg-brand-raised border border-brand-border rounded-full w-6 h-6 flex items-center justify-center">
-                    {step.n}
-                </span>
+            <IconBox>{step.icon}</IconBox>
+
+            <div className="mt-4 text-[11px] font-semibold uppercase tracking-[0.1em] text-brand-muted">
+                Paso {step.n}
             </div>
-            <h3 className="font-semibold text-brand-text text-sm mb-1.5">{step.title}</h3>
-            <p className="text-brand-muted text-xs leading-relaxed flex-1">{step.desc}</p>
-            <span className="mt-4 inline-flex items-center gap-1 text-xs font-medium text-brand-accent-strong">
+            <h3 className="text-[17px] font-semibold text-brand-text mt-1">{step.title}</h3>
+            <p className="text-sm leading-[1.6] text-brand-muted mt-1.5 flex-1">{step.desc}</p>
+
+            <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-brand-accent-strong">
                 {step.cta}
-                <ArrowRight size={13} className="transition-transform group-hover:translate-x-0.5" />
+                <ArrowRight size={14} className="transition-transform group-hover:translate-x-0.5" />
             </span>
         </button>
     );
@@ -113,62 +119,46 @@ export const QuickStart = () => {
     return (
         <div className="max-w-5xl mx-auto px-5 sm:px-8 py-8 sm:py-10">
 
-            {/* ── Hero ── */}
-            <section className="relative overflow-hidden rounded-2xl border border-brand-border bg-brand-bg mb-8">
-                {/* glow verde sutil */}
-                <div
-                    className="absolute inset-0 pointer-events-none"
-                    style={{ background: 'radial-gradient(ellipse 60% 80% at 85% 20%, rgba(37,211,102,0.12) 0%, transparent 70%)' }}
-                />
-                <div className="relative p-6 sm:p-9">
-                    <div className="flex items-center gap-2 mb-5">
-                        <span className="inline-flex items-center gap-1.5 bg-brand-accent/10 text-brand-accent-strong
-                            text-xs font-medium rounded-full px-3 py-1">
-                            <Sparkles size={12} /> Bienvenido
-                        </span>
+            {/* ── Bienvenida ──
+                Sobre gris frío, no sobre verde: el principio 01 del manual reserva
+                el verde para la estructura y deja el contenido en claro. El color
+                lo ponen el sello y una sola acción en menta. */}
+            <section className="rounded-2xl border border-brand-border bg-brand-bg
+                px-6 py-8 sm:px-10 sm:py-11 mb-10">
+                <Logo className="w-12 h-12" />
+
+                <h1 className="mt-6 font-extrabold text-brand-text tracking-[-0.035em]
+                    text-[32px] leading-[1.1] sm:text-[44px] sm:leading-[1.05] text-pretty">
+                    Tu WhatsApp Business,<br className="hidden sm:block" /> bajo control.
+                </h1>
+
+                <p className="mt-4 text-[15px] leading-[1.6] text-brand-strong max-w-[560px]">
+                    <span className="font-semibold text-brand-text">Wasmish</span> centraliza tus
+                    conversaciones de WhatsApp Business, envía plantillas y automatiza mensajes
+                    con tu propia API — todo desde un solo lugar.
+                </p>
+
+                <div className="flex flex-col sm:flex-row gap-2.5 mt-7">
+                    <div className="w-full sm:w-[220px] h-10">
+                        <CustomButton onClick={() => navigate(to(AppRoutes.private.settings))}>
+                            <Plug size={16} /> Conectar WhatsApp
+                        </CustomButton>
                     </div>
-
-                    <div className="flex items-start gap-4">
-                        <Logo className="w-12 h-12 hidden sm:block" />
-                        <div className="min-w-0">
-                            <h1 className="font-bold text-brand-text text-2xl sm:text-3xl leading-tight mb-3">
-                                Tu WhatsApp Business,<br className="hidden sm:block" /> bajo control.
-                            </h1>
-                            <p className="text-brand-muted text-sm sm:text-base leading-relaxed max-w-2xl">
-                                <span className="font-semibold text-brand-text">Wasmish</span> es la herramienta que
-                                centraliza y potencia tu WhatsApp Business: gestiona todas tus conversaciones,
-                                envía plantillas y automatiza mensajes con tu propia API — todo desde un solo lugar.
-                            </p>
-
-                            <div className="flex flex-wrap gap-2.5 mt-6">
-                                <button
-                                    type="button"
-                                    onClick={() => navigate(to(AppRoutes.private.settings))}
-                                    className="inline-flex items-center gap-1.5 bg-brand-accent text-black text-sm font-medium
-                                        rounded-md px-4 py-2.5 transition-colors hover:bg-brand-accent/85 cursor-pointer"
-                                >
-                                    <Plug size={16} /> Conectar WhatsApp
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => navigate(to(AppRoutes.private.chats))}
-                                    className="inline-flex items-center gap-1.5 bg-brand-raised text-brand-text text-sm font-medium
-                                        border border-brand-border rounded-md px-4 py-2.5 transition-colors
-                                        hover:bg-brand-surface cursor-pointer"
-                                >
-                                    <MessageSquare size={16} /> Ir a mis chats
-                                </button>
-                            </div>
-                        </div>
+                    <div className="w-full sm:w-[180px] h-10">
+                        <CustomButton variant="outline" onClick={() => navigate(to(AppRoutes.private.chats))}>
+                            <MessageSquare size={16} /> Ir a mis chats
+                        </CustomButton>
                     </div>
                 </div>
             </section>
 
             {/* ── Primeros pasos ── */}
             <section className="mb-10">
-                <div className="flex items-baseline justify-between mb-4">
-                    <h2 className="font-bold text-brand-text text-lg">Primeros pasos</h2>
-                    <span className="text-xs text-brand-subtle">Configura tu cuenta en 4 pasos</span>
+                <div className="flex items-baseline justify-between gap-4 mb-5">
+                    <h2 className="text-[22px] font-bold tracking-[-0.02em] text-brand-text">
+                        Primeros pasos
+                    </h2>
+                    <span className="text-[13px] text-brand-muted">Configura tu cuenta en 4 pasos</span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     {STEPS.map((step) => (
@@ -179,20 +169,20 @@ export const QuickStart = () => {
 
             {/* ── Capacidades ── */}
             <section className="mb-10">
-                <h2 className="font-bold text-brand-text text-lg mb-4">Todo lo que puedes hacer</h2>
+                <h2 className="text-[22px] font-bold tracking-[-0.02em] text-brand-text mb-5">
+                    Todo lo que puedes hacer
+                </h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {FEATURES.map((f) => (
                         <div
                             key={f.title}
-                            className="flex items-start gap-3.5 bg-brand-surface border border-brand-border rounded-xl p-4"
+                            className="flex items-start gap-3.5 bg-brand-surface
+                                border border-brand-border rounded-xl p-5"
                         >
-                            <div className="w-9 h-9 rounded-lg bg-brand-accent/10 text-brand-accent-strong
-                                flex items-center justify-center flex-shrink-0">
-                                {f.icon}
-                            </div>
+                            <IconBox size="sm">{f.icon}</IconBox>
                             <div className="min-w-0">
-                                <h3 className="font-semibold text-brand-text text-sm mb-0.5">{f.title}</h3>
-                                <p className="text-brand-muted text-xs leading-relaxed">{f.desc}</p>
+                                <h3 className="text-[15px] font-semibold text-brand-text">{f.title}</h3>
+                                <p className="text-sm leading-[1.6] text-brand-muted mt-0.5">{f.desc}</p>
                             </div>
                         </div>
                     ))}
@@ -200,18 +190,20 @@ export const QuickStart = () => {
             </section>
 
             {/* ── Soporte ── */}
-            <section className="rounded-xl border border-brand-border bg-brand-raised/60 p-5 flex flex-col
-                sm:flex-row sm:items-center sm:justify-between gap-3">
+            <section className="rounded-xl border border-brand-border bg-brand-bg p-5
+                flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div>
-                    <h3 className="font-semibold text-brand-text text-sm">¿Necesitas ayuda para empezar?</h3>
-                    <p className="text-brand-muted text-xs mt-0.5">
+                    <h3 className="text-[15px] font-semibold text-brand-text">
+                        ¿Necesitas ayuda para empezar?
+                    </h3>
+                    <p className="text-sm text-brand-muted mt-0.5">
                         Escríbenos y te acompañamos en la configuración.
                     </p>
                 </div>
                 <a
                     href="mailto:soporte@solventyc.com"
-                    className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-accent-strong
-                        hover:underline self-start sm:self-auto"
+                    className="inline-flex items-center gap-1.5 font-mono text-[13px] font-medium
+                        text-brand-accent-strong hover:underline self-start sm:self-auto"
                 >
                     soporte@solventyc.com
                     <ArrowRight size={14} />

@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #ffffff; font-family: Inter, system-ui, sans-serif; color: #0e1116; -webkit-font-smoothing: antialiased; }
+  a { color: #12523f; }
+  a:hover { color: #0b3b2e; }
+  .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+</style>
+</helmet>
+
+<section style="padding: 72px 48px 120px;">
+  <div style="max-width: 720px;">
+    <div class="mono" style="font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #6b7684;">Wasmish · Producto</div>
+    <h1 style="margin: 14px 0 0; font-size: 46px; line-height: 1.05; letter-spacing: -0.035em; font-weight: 800;">Sidebar y pantalla de Chats</h1>
+    <p style="margin: 14px 0 0; font-size: 17px; line-height: 1.6; color: #4b5361; text-wrap: pretty;">Barra verde profundo fija a la izquierda con las cuatro secciones — Inicio rápido, Chats, Plantillas, Documentación — y el bloque de cuenta abajo: Ajustes y Cerrar sesión. La conversación va en densidad Cómoda (B), la que fijamos en el manual.</p>
+  </div>
+
+  <div style="margin-top: 44px; display: flex; align-items: center; gap: 12px;">
+    <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #ffffff; background: #0b3b2e; border-radius: 4px; padding: 5px 9px;">Pantalla completa</span>
+    <span style="font-size: 15px; font-weight: 600; color: #4b5361;">1440 × 900</span>
+    <div style="flex: 1; height: 1px; background: #e4e7eb;"></div>
+  </div>
+
+  <div style="margin-top: 24px; width: 1440px; height: 900px; border: 1px solid #e4e7eb; border-radius: 14px; overflow: hidden; display: grid; grid-template-columns: 236px 360px 1fr;">
+
+    <div style="background: #0b3b2e; display: flex; flex-direction: column; padding: 20px 14px 16px;">
+      <div style="display: flex; align-items: center; gap: 11px; padding: 0 8px;">
+        <svg width="34" height="34" viewBox="0 0 1024 1024"><rect width="1024" height="1024" rx="240" fill="#6FE3AE"></rect><path d="M 236 300 L 404 590 L 572 300" fill="none" stroke="#ffffff" stroke-width="96" stroke-linecap="round" stroke-linejoin="round"></path><path d="M 452 724 L 620 434 L 788 724" fill="none" stroke="#06251C" stroke-width="96" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        <span style="font-size: 21px; font-weight: 800; letter-spacing: -0.045em; color: #ffffff;">wasmish</span>
+      </div>
+
+      <div style="margin-top: 28px; padding: 0 8px 10px; font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #5d8474;">Trabajo</div>
+      <div style="display: grid; gap: 3px;">
+        <div style="display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 9px; cursor: pointer; color: #cfe3da;" style-hover="background: #12523f; color: #ffffff;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9z"></path></svg>
+          <span style="font-size: 14px; font-weight: 500;">Inicio rápido</span>
+        </div>
+        <div style="position: relative; display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 9px; cursor: pointer; background: #17503f; color: #ffffff;">
+          <span style="position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px; border-radius: 0 3px 3px 0; background: #6fe3ae;"></span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6fe3ae" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+          <span style="font-size: 14px; font-weight: 600;">Chats</span>
+          <span style="margin-left: auto; min-width: 20px; height: 20px; border-radius: 10px; background: #6fe3ae; color: #06251c; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; padding: 0 6px;">12</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 9px; cursor: pointer; color: #cfe3da;" style-hover="background: #12523f; color: #ffffff;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18v7H3z"></path><path d="M3 14h9v7H3z"></path><path d="M16 14h5v7h-5z"></path></svg>
+          <span style="font-size: 14px; font-weight: 500;">Plantillas</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 9px; cursor: pointer; color: #cfe3da;" style-hover="background: #12523f; color: #ffffff;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"></path><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"></path></svg>
+          <span style="font-size: 14px; font-weight: 500;">Documentación</span>
+        </div>
+      </div>
+
+      <div style="margin-top: auto; display: grid; gap: 3px;">
+        <div style="height: 1px; background: #17503f; margin: 0 8px 12px;"></div>
+        <div style="display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 9px; cursor: pointer; color: #cfe3da;" style-hover="background: #12523f; color: #ffffff;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          <span style="font-size: 14px; font-weight: 500;">Ajustes</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 9px; cursor: pointer; color: #cfe3da;" style-hover="background: #12523f; color: #ffffff;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><path d="m16 17 5-5-5-5"></path><path d="M21 12H9"></path></svg>
+          <span style="font-size: 14px; font-weight: 500;">Cerrar sesión</span>
+        </div>
+        <div style="margin-top: 10px; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 9px; background: #06251c; cursor: pointer;" style-hover="background: #12523f;">
+          <div style="width: 30px; height: 30px; border-radius: 8px; background: #6fe3ae; color: #06251c; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: none;">AP</div>
+          <div style="min-width: 0;">
+            <div style="font-size: 13px; font-weight: 600; color: #ffffff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Ana Pérez</div>
+            <div style="font-size: 11px; color: #7fa596; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Ferretería La Estrella</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="border-right: 1px solid #e4e7eb; background: #ffffff; display: flex; flex-direction: column;">
+      <div style="padding: 20px 18px 14px; border-bottom: 1px solid #eef1f4;">
+        <div style="display: flex; align-items: baseline; gap: 8px;">
+          <span style="font-size: 20px; font-weight: 700; letter-spacing: -0.025em;">Bandeja</span>
+          <span style="font-size: 13px; color: #6b7684; margin-left: auto;">12 sin leer</span>
+          <span style="width: 32px; height: 32px; border-radius: 8px; background: #6fe3ae; display: flex; align-items: center; justify-content: center; cursor: pointer; align-self: center;" style-hover="background: #45c892;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#06251c" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"></path></svg></span>
+        </div>
+        <div style="margin-top: 12px; position: relative; display: flex; align-items: center;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#97a1ad" stroke-width="2" stroke-linecap="round" style="position: absolute; left: 11px;"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+          <input value="" placeholder="Buscar conversación o número" style="font-family: inherit; font-size: 13px; width: 100%; box-sizing: border-box; color: #0e1116; background: #f4f6f8; border: 1px solid #e4e7eb; border-radius: 8px; padding: 9px 12px 9px 34px; outline: none;" style-focus="background: #ffffff; border-color: #1c8560; box-shadow: 0 0 0 3px #d6f8e7;">
+        </div>
+        <div style="margin-top: 12px; display: flex; gap: 6px;">
+          <span style="font-size: 12px; font-weight: 600; color: #06251c; background: #6fe3ae; border-radius: 20px; padding: 6px 12px; cursor: pointer;">Todos</span>
+          <span style="font-size: 12px; font-weight: 600; color: #4b5361; background: #eef1f4; border-radius: 20px; padding: 6px 12px; cursor: pointer;" style-hover="background: #e4e7eb;">Míos</span>
+          <span style="font-size: 12px; font-weight: 600; color: #4b5361; background: #eef1f4; border-radius: 20px; padding: 6px 12px; cursor: pointer;" style-hover="background: #e4e7eb;">Sin asignar</span>
+        </div>
+      </div>
+
+      <div style="flex: 1; overflow: hidden;">
+        <div style="display: flex; gap: 12px; padding: 14px 18px; border-bottom: 1px solid #f4f6f8; background: #f4f6f8; border-left: 3px solid #0b3b2e; cursor: pointer;">
+          <div style="width: 38px; height: 38px; border-radius: 10px; background: #0b3b2e; color: #6fe3ae; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: none;">FE</div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="display: flex; gap: 8px;"><span style="font-size: 14px; font-weight: 600;">Ferretería La Estrella</span><span class="mono" style="font-size: 11px; color: #97a1ad; margin-left: auto;">14:32</span></div>
+            <div style="font-size: 13px; color: #6b7684; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">¿El pedido 4471 sale hoy?</div>
+            <div style="display: flex; gap: 6px; margin-top: 8px; align-items: center;"><span style="font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: #12523f; background: #d6f8e7; border-radius: 4px; padding: 3px 6px;">Ventas</span><span style="font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: #4b5361; background: #eef1f4; border-radius: 4px; padding: 3px 6px;">Sin asignar</span><span style="min-width: 18px; height: 18px; border-radius: 9px; background: #6fe3ae; color: #06251c; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; margin-left: auto;">3</span></div>
+          </div>
+        </div>
+        <div style="display: flex; gap: 12px; padding: 14px 18px; border-bottom: 1px solid #f4f6f8; cursor: pointer;" style-hover="background: #f4f6f8;">
+          <div style="width: 38px; height: 38px; border-radius: 10px; background: #eef1f4; color: #4b5361; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: none;">TC</div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="display: flex; gap: 8px;"><span style="font-size: 14px; font-weight: 600;">Taller Cruz</span><span class="mono" style="font-size: 11px; color: #97a1ad; margin-left: auto;">12:51</span></div>
+            <div style="font-size: 13px; color: #6b7684; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Mándame el presupuesto en PDF</div>
+            <div style="display: flex; gap: 6px; margin-top: 8px;"><span style="font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: #12523f; background: #d6f8e7; border-radius: 4px; padding: 3px 6px;">Ana P.</span></div>
+          </div>
+        </div>
+        <div style="display: flex; gap: 12px; padding: 14px 18px; border-bottom: 1px solid #f4f6f8; cursor: pointer;" style-hover="background: #f4f6f8;">
+          <div style="width: 38px; height: 38px; border-radius: 10px; background: #eef1f4; color: #4b5361; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: none;">MR</div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="display: flex; gap: 8px;"><span style="font-size: 14px; font-weight: 600;">Marisol Ruiz</span><span class="mono" style="font-size: 11px; color: #97a1ad; margin-left: auto;">11:47</span></div>
+            <div style="font-size: 13px; color: #6b7684; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Perfecto, gracias.</div>
+            <div style="display: flex; gap: 6px; margin-top: 8px;"><span style="font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: #4b5361; background: #eef1f4; border-radius: 4px; padding: 3px 6px;">Cerrada</span></div>
+          </div>
+        </div>
+        <div style="display: flex; gap: 12px; padding: 14px 18px; border-bottom: 1px solid #f4f6f8; cursor: pointer;" style-hover="background: #f4f6f8;">
+          <div style="width: 38px; height: 38px; border-radius: 10px; background: #eef1f4; color: #4b5361; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: none;">AL</div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="display: flex; gap: 8px;"><span style="font-size: 14px; font-weight: 600;">Almacén Norte</span><span class="mono" style="font-size: 11px; color: #97a1ad; margin-left: auto;">10:02</span></div>
+            <div style="font-size: 13px; color: #6b7684; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Stock actualizado, quedan 12 cajas</div>
+            <div style="display: flex; gap: 6px; margin-top: 8px;"><span style="font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: #4b5361; background: #eef1f4; border-radius: 4px; padding: 3px 6px;">Logística</span><span style="min-width: 18px; height: 18px; border-radius: 9px; background: #6fe3ae; color: #06251c; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; margin-left: auto;">2</span></div>
+          </div>
+        </div>
+        <div style="display: flex; gap: 12px; padding: 14px 18px; border-bottom: 1px solid #f4f6f8; cursor: pointer;" style-hover="background: #f4f6f8;">
+          <div style="width: 38px; height: 38px; border-radius: 10px; background: #eef1f4; color: #4b5361; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: none;">JG</div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="display: flex; gap: 8px;"><span style="font-size: 14px; font-weight: 600;">Jonathan Gualli</span><span class="mono" style="font-size: 11px; color: #97a1ad; margin-left: auto;">Ayer</span></div>
+            <div style="font-size: 13px; color: #6b7684; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Te dejé la nota interna del pedido</div>
+            <div style="display: flex; gap: 6px; margin-top: 8px;"><span style="font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: #12523f; background: #d6f8e7; border-radius: 4px; padding: 3px 6px;">Interno</span></div>
+          </div>
+        </div>
+        <div style="display: flex; gap: 12px; padding: 14px 18px; border-bottom: 1px solid #f4f6f8; cursor: pointer;" style-hover="background: #f4f6f8;">
+          <div style="width: 38px; height: 38px; border-radius: 10px; background: #eef1f4; color: #4b5361; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: none;">DC</div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="display: flex; gap: 8px;"><span style="font-size: 14px; font-weight: 600;">Distribuidora Cano</span><span class="mono" style="font-size: 11px; color: #97a1ad; margin-left: auto;">Ayer</span></div>
+            <div style="font-size: 13px; color: #6b7684; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Confirmado para el jueves</div>
+            <div style="display: flex; gap: 6px; margin-top: 8px;"><span style="font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: #4b5361; background: #eef1f4; border-radius: 4px; padding: 3px 6px;">Ventas</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="background: #f4f6f8; display: flex; flex-direction: column;">
+      <div style="background: #ffffff; border-bottom: 1px solid #e4e7eb; padding: 14px 24px; display: flex; align-items: center; gap: 12px; flex: none;">
+        <div style="width: 36px; height: 36px; border-radius: 9px; background: #d6f8e7; color: #12523f; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center;">FE</div>
+        <div>
+          <div style="font-size: 15px; font-weight: 600;">Ferretería La Estrella</div>
+          <div class="mono" style="font-size: 11px; color: #6b7684;">+34 622 41 77 30</div>
+        </div>
+        <div style="margin-left: auto; display: flex; gap: 8px; align-items: center;">
+          <span style="font-size: 13px; font-weight: 600; color: #4b5361; background: #eef1f4; border-radius: 8px; padding: 9px 14px; cursor: pointer;" style-hover="background: #e4e7eb;">Nota interna</span>
+          <span style="font-size: 13px; font-weight: 600; color: #06251c; background: #6fe3ae; border-radius: 8px; padding: 9px 14px; cursor: pointer;" style-hover="background: #45c892;">Asignarme</span>
+        </div>
+      </div>
+
+      <div style="flex: 1; padding: 22px 24px; display: grid; gap: 12px; align-content: start; overflow: hidden;">
+        <div style="justify-self: center; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #6b7684; background: #e4e7eb; border-radius: 20px; padding: 5px 13px;">Hoy</div>
+        <div style="max-width: 62%;"><div style="background: #ffffff; border: 1px solid #e4e7eb; border-radius: 12px 12px 12px 3px; padding: 10px 14px; font-size: 14px; line-height: 1.5;">Buenos días, ¿el pedido 4471 sale hoy?</div><div class="mono" style="font-size: 11px; color: #97a1ad; margin-top: 4px;">14:32</div></div>
+        <div style="justify-self: end; max-width: 62%;"><div style="background: #0b3b2e; color: #ffffff; border-radius: 12px 12px 3px 12px; padding: 10px 14px; font-size: 14px; line-height: 1.5;">Sale esta misma tarde, Ana. Te paso el número de seguimiento en cuanto salga del almacén.</div><div style="display: flex; justify-content: flex-end; gap: 5px; font-size: 11px; margin-top: 4px; color: #97a1ad;"><span class="mono">14:33</span><span style="color: #1c8560; font-weight: 600;">Leído</span></div></div>
+        <div style="max-width: 62%;"><div style="background: #ffffff; border: 1px solid #e4e7eb; border-radius: 12px 12px 12px 3px; padding: 10px 14px; font-size: 14px; line-height: 1.5;">Perfecto. ¿Puedes mandarme también la factura?</div><div class="mono" style="font-size: 11px; color: #97a1ad; margin-top: 4px;">14:35</div></div>
+        <div style="max-width: 62%; border-left: 3px solid #b4540a; background: #fdf7f0; border-radius: 0 10px 10px 0; padding: 10px 14px;"><div style="font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #b4540a;">Nota interna · Jonathan G.</div><div style="font-size: 13px; line-height: 1.5; color: #2e3540; margin-top: 4px;">Factura a nombre de la empresa, no del cliente particular.</div></div>
+      </div>
+
+      <div style="background: #ffffff; border-top: 1px solid #e4e7eb; padding: 14px 24px; flex: none;">
+        <div style="display: flex; gap: 10px; align-items: flex-end;">
+          <div style="flex: 1; background: #f4f6f8; border: 1px solid #e4e7eb; border-radius: 10px; padding: 12px 14px; font-size: 14px; color: #97a1ad;">Escribe un mensaje…</div>
+          <div style="width: 44px; height: 44px; border-radius: 10px; background: #6fe3ae; display: flex; align-items: center; justify-content: center; cursor: pointer;" style-hover="background: #45c892;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#06251c" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4z"></path></svg></div>
+        </div>
+        <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center;">
+          <span style="font-size: 12px; font-weight: 600; color: #4b5361; background: #eef1f4; border-radius: 6px; padding: 6px 10px; cursor: pointer;" style-hover="background: #e4e7eb;">Plantilla: Envío confirmado</span>
+          <span style="font-size: 12px; font-weight: 600; color: #4b5361; background: #eef1f4; border-radius: 6px; padding: 6px 10px; cursor: pointer;" style-hover="background: #e4e7eb;">Plantilla: Factura</span>
+          <span class="mono" style="font-size: 11px; color: #97a1ad; margin-left: auto;">Respondiendo como Ana P.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top: 64px; display: flex; align-items: center; gap: 12px;">
+    <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #ffffff; background: #0b3b2e; border-radius: 4px; padding: 5px 9px;">Anatomía</span>
+    <span style="font-size: 15px; font-weight: 600; color: #4b5361;">Estados y variante colapsada</span>
+    <div style="flex: 1; height: 1px; background: #e4e7eb;"></div>
+  </div>
+
+  <div style="margin-top: 24px; display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start;">
+    <div style="border: 1px solid #e4e7eb; border-radius: 12px; padding: 22px;">
+      <div style="font-size: 15px; font-weight: 600;">Estados del ítem</div>
+      <div style="margin-top: 16px; width: 236px; background: #0b3b2e; border-radius: 10px; padding: 14px; display: grid; gap: 4px;">
+        <div style="display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 9px; color: #cfe3da;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9z"></path></svg><span style="font-size: 14px; font-weight: 500;">Reposo</span></div>
+        <div style="display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 9px; background: #12523f; color: #ffffff;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9z"></path></svg><span style="font-size: 14px; font-weight: 500;">Hover</span></div>
+        <div style="position: relative; display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 9px; background: #17503f; color: #ffffff;"><span style="position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px; border-radius: 0 3px 3px 0; background: #6fe3ae;"></span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6fe3ae" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9z"></path></svg><span style="font-size: 14px; font-weight: 600;">Activo</span></div>
+        <div style="display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 9px; color: #cfe3da; outline: 2px solid #6fe3ae; outline-offset: 2px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9z"></path></svg><span style="font-size: 14px; font-weight: 500;">Foco teclado</span></div>
+      </div>
+      <div style="margin-top: 14px; font-size: 13px; line-height: 1.6; color: #6b7684; max-width: 236px;">El activo se marca con barra menta de 3px + fondo #17503F + icono menta. El hover solo cambia el fondo a #12523F.</div>
+    </div>
+
+    <div style="border: 1px solid #e4e7eb; border-radius: 12px; padding: 22px;">
+      <div style="font-size: 15px; font-weight: 600;">Colapsada · 76px</div>
+      <div style="margin-top: 16px; display: flex; gap: 20px; align-items: flex-start;">
+        <div style="width: 76px; height: 420px; background: #0b3b2e; border-radius: 10px; padding: 16px 0; display: flex; flex-direction: column; align-items: center; gap: 8px;">
+          <svg width="32" height="32" viewBox="0 0 1024 1024"><rect width="1024" height="1024" rx="240" fill="#6FE3AE"></rect><path d="M 236 300 L 404 590 L 572 300" fill="none" stroke="#ffffff" stroke-width="104" stroke-linecap="round" stroke-linejoin="round"></path><path d="M 452 724 L 620 434 L 788 724" fill="none" stroke="#06251C" stroke-width="104" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          <div style="width: 44px; height: 40px; border-radius: 9px; display: flex; align-items: center; justify-content: center; margin-top: 18px;"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#cfe3da" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9z"></path></svg></div>
+          <div style="position: relative; width: 44px; height: 40px; border-radius: 9px; background: #17503f; display: flex; align-items: center; justify-content: center;"><span style="position: absolute; left: -16px; top: 8px; bottom: 8px; width: 3px; border-radius: 0 3px 3px 0; background: #6fe3ae;"></span><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#6fe3ae" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg><span style="position: absolute; top: 2px; right: 2px; min-width: 15px; height: 15px; border-radius: 8px; background: #6fe3ae; color: #06251c; font-size: 9px; font-weight: 700; display: flex; align-items: center; justify-content: center;">12</span></div>
+          <div style="width: 44px; height: 40px; border-radius: 9px; display: flex; align-items: center; justify-content: center;"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#cfe3da" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18v7H3z"></path><path d="M3 14h9v7H3z"></path><path d="M16 14h5v7h-5z"></path></svg></div>
+          <div style="width: 44px; height: 40px; border-radius: 9px; display: flex; align-items: center; justify-content: center;"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#cfe3da" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"></path><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"></path></svg></div>
+          <div style="margin-top: auto; display: grid; justify-items: center; gap: 8px;">
+            <div style="width: 44px; height: 40px; border-radius: 9px; display: flex; align-items: center; justify-content: center;"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#cfe3da" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></div>
+            <div style="width: 30px; height: 30px; border-radius: 8px; background: #6fe3ae; color: #06251c; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center;">AP</div>
+          </div>
+        </div>
+        <div style="width: 220px; font-size: 13px; line-height: 1.65; color: #6b7684;">Por debajo de 1180px de ancho la barra colapsa a iconos. El tooltip aparece a la derecha en verde 900 con texto blanco tras 400ms. El contador de Chats se convierte en punto menta sobre el icono.</div>
+      </div>
+    </div>
+
+    <div style="border: 1px solid #e4e7eb; border-radius: 12px; padding: 22px;">
+      <div style="font-size: 15px; font-weight: 600;">Menú de cuenta</div>
+      <div style="margin-top: 16px; width: 260px; background: #ffffff; border: 1px solid #e4e7eb; border-radius: 12px; padding: 8px; box-shadow: 0 18px 40px rgba(14, 17, 22, 0.12);">
+        <div style="padding: 12px 12px 12px; display: flex; gap: 10px; align-items: center; border-bottom: 1px solid #eef1f4;">
+          <div style="width: 34px; height: 34px; border-radius: 9px; background: #0b3b2e; color: #6fe3ae; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center;">AP</div>
+          <div style="min-width: 0;"><div style="font-size: 14px; font-weight: 600;">Ana Pérez</div><div style="font-size: 12px; color: #6b7684; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">ana@ferreterialaestrella.com</div></div>
+        </div>
+        <div style="padding: 6px 0 0; display: grid; gap: 2px;">
+          <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; font-size: 14px; color: #2e3540; cursor: pointer;" style-hover="background: #f4f6f8;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#4b5361" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>Mi perfil</div>
+          <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; font-size: 14px; color: #2e3540; cursor: pointer;" style-hover="background: #f4f6f8;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#4b5361" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>Ajustes del espacio</div>
+          <div style="height: 1px; background: #eef1f4; margin: 6px 4px;"></div>
+          <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; font-size: 14px; font-weight: 600; color: #c0392b; cursor: pointer;" style-hover="background: #fdf6f5;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#c0392b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><path d="m16 17 5-5-5-5"></path><path d="M21 12H9"></path></svg>Cerrar sesión</div>
+        </div>
+      </div>
+      <div style="margin-top: 14px; font-size: 13px; line-height: 1.6; color: #6b7684; max-width: 260px;">Cerrar sesión también vive en el menú de cuenta, en rojo — es el único uso de #C0392B fuera de errores de formulario.</div>
+    </div>
+  </div>
+</section>
+</x-dc>
+</body>
+</html>

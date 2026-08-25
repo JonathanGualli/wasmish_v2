@@ -17,10 +17,13 @@ interface InputProps {
   autoFocus?: boolean;
 }
 
+// Manual de marca v1.0 · 04 Componentes — campos: alto 42px, radio 8px.
+// Reposo sobre gris frío; al enfocar pasa a blanco con anillo verde 100.
 const baseInputClasses = `
-  bg-brand-raised border border-brand-border text-brand-text
-  placeholder:text-brand-subtle rounded-md p-2.5 w-full
-  focus:outline-none focus:border-brand-accent focus:ring-1 focus:ring-brand-accent/30
+  bg-brand-bg border border-brand-border-strong text-brand-text
+  placeholder:text-brand-subtle rounded-[8px] px-[13px] py-[11px] w-full
+  focus:outline-none focus:bg-brand-surface focus:border-brand-success
+  focus:ring-[3px] focus:ring-brand-accent-soft
   transition-colors text-sm
 `.trim();
 
@@ -61,7 +64,7 @@ export const CustomInput: React.FC<InputProps> = ({
   return (
     <div className="w-full h-full flex flex-col">
       {label && (
-        <label className="flex flex-row items-center gap-1 pb-1.5 text-xs font-medium text-brand-muted tracking-wide uppercase">
+        <label className="flex flex-row items-center gap-1 pb-1.5 text-[13px] font-semibold text-brand-strong">
           {label}
           {required && <span className="text-brand-danger">*</span>}
         </label>

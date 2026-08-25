@@ -12,14 +12,17 @@
   position: fixed;
   top: 20px;
   right: 20px;
-  background: #262625;
-  border: 1px solid #2e2d2b;
-  color: #f5f4f0;
+  /* Tarjeta clara: el contenido siempre es blanco (principio 01 del manual).
+     El contenido lo inyectan las páginas con tokens de texto sobre claro. */
+  background: #ffffff;
+  border: 1px solid #e4e7eb;
+  border-left: 3px solid #6fe3ae;
+  color: #0e1116;
   padding: 16px 48px 16px 16px;
   border-radius: 12px;
   max-width: 40%;
   width: 90%;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 16px 40px rgba(6, 37, 28, 0.28);
   pointer-events: auto;
   animation: slideFadeIn 0.3s ease-out;
 }
@@ -36,12 +39,12 @@
   background: transparent;
   border: none;
   cursor: pointer;
-  color: #6b6a66;
+  color: #97a1ad;
   transition: color 0.2s;
 }
 
 .close-button:hover {
-  color: #ef4444;
+  color: #0e1116;
 }
 
 @keyframes slideFadeIn {
