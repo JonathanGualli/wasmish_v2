@@ -245,7 +245,11 @@ export const sendTemplateController = async (req, res) => {
         let template = await Template.findOne({ userId: user._id, name: templateName });
         let syncOk = true;
 
-        if (!template) {
+        // Re-sincronizamos también si el documento es anterior a que guardáramos
+        // la definición de los botones: `parameterFormat` solo existe desde
+        // entonces, así que su ausencia distingue «plantilla vieja» de
+        // «plantilla sincronizada que legítimamente no tiene botones».
+        if (!template || template.parameterFormat === undefined) {
             try {
                 await syncTemplatesForUser(user);
                 template = await Template.findOne({ userId: user._id, name: templateName });
