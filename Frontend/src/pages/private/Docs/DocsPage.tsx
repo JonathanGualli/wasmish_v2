@@ -122,7 +122,7 @@ console.log(data); // { success: true, waMessageId, conversationId }`;
 ]`;
 
     const buttonsExample = `"buttons": [
-  { "subType": "url", "index": 0, "parameters": ["123456"] }
+  { "index": 0, "parameters": ["123456"] }
 ]`;
 
     const otpCurl = `curl -X POST ${ENDPOINT} \\
@@ -133,7 +133,7 @@ console.log(data); // { success: true, waMessageId, conversationId }`;
     "templateName": "otp_login",
     "parameters": ["123456"],
     "buttons": [
-      { "subType": "url", "index": 0, "parameters": ["123456"] }
+      { "index": 0, "parameters": ["123456"] }
     ]
   }'`;
 
@@ -316,10 +316,11 @@ console.log(data); // { success: true, waMessageId, conversationId }`;
 
                         <div className="mt-5">
                             <RefTable head={['Campo', 'Tipo', 'Descripción']}>
-                                <Param name="subType" type="string" required>
-                                    <Code>url</Code> para URL dinámica y plantillas de autenticación,{' '}
-                                    <Code>quick_reply</Code> para respuesta rápida con payload,{' '}
-                                    <Code>copy_code</Code> para código de copia.
+                                <Param name="subType" type="string">
+                                    Normalmente <span className="font-semibold text-brand-text">no hace falta</span>:
+                                    Wasmish lee la definición de tu plantilla y aplica el formato correcto. Envíalo
+                                    solo como respaldo, si todavía no has sincronizado la plantilla:{' '}
+                                    <Code>url</Code>, <Code>quick_reply</Code> o <Code>copy_code</Code>.
                                 </Param>
                                 <Param name="index" type="number">
                                     Posición del botón en la plantilla, empezando en <Code>0</Code>. Si lo omites
@@ -327,9 +328,19 @@ console.log(data); // { success: true, waMessageId, conversationId }`;
                                 </Param>
                                 <Param name="parameters" type="array" required>
                                     Valores del botón, como texto plano. Wasmish les da el formato que Meta espera
-                                    según el <Code>subType</Code>.
+                                    según el tipo de botón que tenga tu plantilla.
                                 </Param>
                             </RefTable>
+                        </div>
+
+                        <div className="mt-5">
+                            <Callout tone="info" icon={<Info size={16} />}
+                                title="No tienes que adivinar el tipo de botón">
+                                Un mismo botón «Copiar código» se envía distinto según la plantilla: en una de
+                                autenticación viaja como texto y en una de cupón como <Code>coupon_code</Code>.
+                                En el teléfono se ven idénticos. Wasmish lo resuelve leyendo tu plantilla
+                                aprobada, así que basta con <Code>index</Code> y <Code>parameters</Code>.
+                            </Callout>
                         </div>
 
                         <p className="text-[15px] leading-[1.6] text-brand-strong mb-4 mt-6 max-w-[680px]">
@@ -368,7 +379,7 @@ console.log(data); // { success: true, waMessageId, conversationId }`;
                             <AlertTriangle size={16} className="text-brand-danger" /> Errores
                         </h3>
                         <RefTable head={['Código', 'Significado']}>
-                            <ErrorRow code="400">Body inválido. La respuesta es un arreglo de <Code>{`{ field, message }`}</Code> indicando qué campo falló. También aparece si un botón tiene un <Code>subType</Code> no soportado o va sin <Code>parameters</Code>.</ErrorRow>
+                            <ErrorRow code="400">Body inválido — la respuesta indica qué campo falló. También aparece cuando un botón no cuadra con la plantilla: el índice no existe, el botón tiene una URL fija y no admite parámetros, o va sin <Code>parameters</Code>. Wasmish lo detecta antes de llamar a Meta.</ErrorRow>
                             <ErrorRow code="401">API key faltante o inválida. Revisa la cabecera <Code>Authorization</Code>.</ErrorRow>
                             <ErrorRow code="403">API key inactiva (revocada). Genera una nueva.</ErrorRow>
                             <ErrorRow code="404">La plantilla no existe en tu cuenta de WhatsApp o todavía no está aprobada. También puede ser que el usuario asociado a la key no exista.</ErrorRow>
