@@ -62,7 +62,14 @@ cd Frontend && npm run lint    # eslint
 cd Frontend && npm run preview # preview production build
 ```
 
-No hay suite de tests configurada.
+**Tests** (solo Backend, `node:test` nativo — sin dependencias):
+```bash
+cd Backend && npm test         # node --test tests/
+cd Backend && npm run test:watch
+```
+Cubren **funciones puras**, sin BD ni red: `utils/crypto.js`, `utils/message.status.js` y las de plantillas de `template.controller.js` (`buildButtonComponents`, `renderTemplateBody`). Cada test que corresponde a un bug ya corregido lleva un comentario explicando la regresión que vigila — verificados reintroduciendo el bug a propósito y comprobando que fallan. El Frontend no tiene tests.
+
+Los tests fijan `process.env` **antes** de un `await import(...)` dinámico, porque `crypto.js` y el middleware de firma leen la config al importarse; con un `import` estático la variable llegaría tarde.
 
 ---
 
@@ -143,7 +150,7 @@ No se aplica a `/api/webhook` (Meta manda ráfagas) ni a `/api/stream` (conexió
 
 **Webhook entrante (`webhook.controller.js`):**
 - **Firma obligatoria.** `POST /api/webhook` pasa por `verifyWebhookSignature`: HMAC-SHA256 del **cuerpo crudo** (`req.rawBody`, guardado en el `verify` de `express.json` en `app.js`) con `META_APP_SECRET`, comparado con `X-Hub-Signature-256` usando `timingSafeEqual`. Hay que validar sobre los bytes originales: re-serializar `req.body` cambia el orden de claves y la firma nunca cuadra. **Falla cerrado** — si `META_APP_SECRET` falta, rechaza todo con 401 (y avisa por `console.error` al arrancar). Confirmar esa variable en el `.env` del servidor antes de desplegar, o los clientes dejan de recibir mensajes.
-- **Transiciones de estado monótonas.** `STATUS_RANK = { sent: 0, delivered: 1, read: 2, failed: 3 }`: un webhook solo se aplica si **sube** de rango. Meta no garantiza orden ni unicidad, así que un `delivered` que llega después de un `read` haría retroceder el estado. Si `read` llega sin `delivered` previo, se infiere `deliveredAt` con el mismo timestamp (leído implica entregado). Si el estado no avanza, se hace `continue` — tampoco se emite `message_status`.
+- **Transiciones de estado monótonas.** La lógica vive en `utils/message.status.js` (`resolveStatusTransition`, función pura y testeada; devuelve `null` si no hay que hacer nada). `STATUS_RANK = { sent: 0, delivered: 1, read: 2, failed: 3 }`: un webhook solo se aplica si **sube** de rango. Meta no garantiza orden ni unicidad, así que un `delivered` que llega después de un `read` haría retroceder el estado. Si `read` llega sin `delivered` previo, se infiere `deliveredAt` con el mismo timestamp (leído implica entregado). Si el estado no avanza, se hace `continue` — tampoco se emite `message_status`.
 
 **Índices MongoDB relevantes:**
 - `Conversation`: `{ userId: 1, contactPhone: 1 }` unique — no puede haber dos conversaciones del mismo user con el mismo teléfono

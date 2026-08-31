@@ -3,10 +3,7 @@ import User from "../models/user.model.js";
 import Message from "../models/message.model.js";
 import Conversation from "../models/conversation.model.js";
 import { sendUser } from './stream.controller.js';
-
-// Los webhooks de estado de meta pueden llegar desordenados o repetidos
-// Solo avanzamos en esta escala, nunca se retrocede
-const STATUS_RANK = { sent: 0, delivered: 1, read: 2, failed: 3};
+import { resolveStatusTransition } from '../utils/message.status.js';
 
 export const verifyWebhook = (req, res) => { 
     const mode = req.query['hub.mode'];
@@ -115,23 +112,19 @@ export const handleWebhook = async (req, res) => {
                     const message = await Message.findOne({ waMessageId });
                     if(!message) continue;
 
-                    const currentRank = STATUS_RANK[message.status] ?? 0;
-                    const nextRank = STATUS_RANK[status];
+                    // Estado desconocido, repetido o que retrocede → lo ignoramos
+                    const changes = resolveStatusTransition({
+                        currentStatus: message.status,
+                        incomingStatus: status,
+                        timestamp,
+                        hasDeliveredAt: Boolean(message.deliveredAt),
+                    });
 
-                    // Estado desconocido, repedito o que retrocede, pues lo ignoramos
-                    if (nextRank === undefined || nextRank <= currentRank) continue;
+                    if (!changes) continue;
 
-                    message.status = status; 
+                    Object.assign(message, changes);
 
-                    if (status === 'delivered') {
-                        message.deliveredAt = timestamp;
-                    } else if (status === 'read') { 
-                        message.readAt = timestamp;
-                        // Si el delivered nunca llegó, lo inferimos: leído implica entregado
-                        if (!message.deliveredAt) message.deliveredAt = timestamp;
-                    } else if (status === 'failed') {
-                        message.failedAt = timestamp;
-
+                    if (status === 'failed') {
                         const errors = statusData?.errors ?? [];
                         if (!message.errorCode && errors.length > 0) {
                             message.errorCode = errors[0]?.code;
