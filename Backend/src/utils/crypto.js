@@ -3,9 +3,9 @@ import { TOKEN_SECRET } from '../config.js';
 
 const algorithm = 'aes-256-cbc';
 const key = crypto.createHash("sha256").update(String(TOKEN_SECRET)).digest("base64").substring(0, 32);
-const iv = crypto.randomBytes(16);
 
 export const encrypt = (text) => {
+    const iv = crypto.randomBytes(16);
     const cipher = crypto.createCipheriv(algorithm, key, iv);
     let encrypted = cipher.update(text, 'utf8', 'hex');
     encrypted += cipher.final('hex');

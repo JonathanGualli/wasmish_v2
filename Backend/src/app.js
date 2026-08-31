@@ -27,6 +27,7 @@ app.use(morgan('dev'));
 app.use(express.json({
     strict: true, 
     verify: (req, res, buf) => {
+        req.rawBody = buf;
         try {
             JSON.parse(buf);
         } catch (err) {

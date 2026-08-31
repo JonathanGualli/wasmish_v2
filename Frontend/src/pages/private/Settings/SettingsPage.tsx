@@ -47,7 +47,6 @@ export const SettingsPage = () => {
             onSuccess: () => {
                 setContent(<div className="text-brand-accent-strong"><p>Token de WhatsApp actualizado correctamente.</p></div>);
                 setState(true);
-                user!.tokenWhatsapp = token;
                 user!.phoneNumberId = phoneNumberId;
                 user!.waBusinessId = waBusinessId;
             }, onError: (error: Error) => {
@@ -90,7 +89,6 @@ export const SettingsPage = () => {
     }
 
     useEffect(() => {
-        if (user?.tokenWhatsapp) setToken(user.tokenWhatsapp);
         if (user?.phoneNumberId) setPhoneNumberId(user.phoneNumberId);
         if (user?.waBusinessId) setWaBusinessId(user.waBusinessId);
     }, [user]);
@@ -184,9 +182,13 @@ export const SettingsPage = () => {
                         <form onSubmit={handleSubmit} className="grid gap-[18px] mt-5">
                             <CustomInput
                                 label="Token de acceso a WhatsApp"
-                                type="text"
+                                type="password"
                                 value={token}
                                 onChange={(e) => setToken(e.target.value)}
+                                placeholder={user?.whatsappConnected
+                                    ? "Ya hay un token guardado - escribe uno nuevo para reemplazarlo"
+                                    : "EAA..."
+                                }
                             />
                             <div className="grid gap-[18px] sm:grid-cols-2">
                                 <CustomInput

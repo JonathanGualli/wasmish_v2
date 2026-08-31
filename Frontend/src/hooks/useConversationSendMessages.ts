@@ -55,12 +55,6 @@ export const useConversationSendMessages = () => {
             return { previousMessages, temporalId: optimisticMessage.id };
         },
 
-/*         onError: (_err, variables, context) => {
-            if (context?.previousMessages) {
-                queryClient.setQueryData(["conversation", variables.conversationId], context.previousMessages);
-            }
-        },
- */
         onError: (error, variables, context) => {
             const temporalId = context?.temporalId;
             if (!temporalId) return;
@@ -87,7 +81,6 @@ export const useConversationSendMessages = () => {
             );
         },
 
-
         onSuccess: (dataServerResponse, variables, context) => {
             if (context?.temporalId) {
                 queryClient.setQueryData<InfiniteData<{ items: Message[], nextCursor: string | undefined }>>(
@@ -95,10 +88,12 @@ export const useConversationSendMessages = () => {
                     (oldData) => {
                         if (!oldData) return oldData;
                         const newPages = [...oldData.pages];
-                        newPages[0].items = newPages[0].items.map((msg) =>
-                            msg.id === context.temporalId ? { ...msg, ...dataServerResponse } : msg
-                        );
-
+                        newPages[0] = {
+                            ...newPages[0],
+                            items: newPages[0].items.map((msg) => 
+                                msg.id === context.temporalId ? { ...msg, ...dataServerResponse } : msg
+                            ),
+                        };
                         return { ...oldData, pages: newPages };
                     }
                 );

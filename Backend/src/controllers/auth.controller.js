@@ -3,7 +3,6 @@ import { createAccessToken } from '../libs/jwt.js';
 import User from '../models/user.model.js'
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { decrypt } from '../utils/crypto.js';
 
 const isProd = process.env.NODE_ENV === 'production';
 
@@ -72,19 +71,12 @@ export const login = async (req, res) => {
             sameSite: isProd ? 'none' : 'lax',  // OBLIGATORIO EN PROD: Porque localhost != solventyc.com , lax funciona en http 
         });
 
-        // Desencriptar el token de Whatsapp antes de enviarlo
-        const encryptToken = userFound.tokenWhatsapp;
-        let decryptToken = "";
-        if(encryptToken){
-            decryptToken = decrypt(encryptToken); 
-        }
-
         res.json({
             id: userFound._id,
             name: userFound.name,
             email: userFound.email,
             rol: userFound.rol,
-            tokenWhatsapp: decryptToken,
+            whatsappConnected: Boolean(userFound.tokenWhatsapp),
             phoneNumberId: userFound.phoneNumberId ?? "",
             waBusinessId: userFound.waBusinessId ?? "",
             status: userFound.status,
@@ -128,13 +120,6 @@ export const verifyToken = async (req, res) => {
 
         const userFound = await User.findById(user.id);
         if(!userFound) return res.status(401).json([{message: 'Unauthorized'}]);
-
-        //Desencriptar el token de Whatsapp antes de enviarlo
-        const encryptToken = userFound.tokenWhatsapp;
-        let decryptToken = "";
-        if(encryptToken){
-            decryptToken = decrypt(encryptToken); 
-        }
         
         return res.json({
             id: userFound._id,
@@ -142,7 +127,7 @@ export const verifyToken = async (req, res) => {
             email: userFound.email,
             rol: userFound.rol,
             status: userFound.status,
-            tokenWhatsapp: decryptToken,
+            whatsappConnected: Boolean(userFound.tokenWhatsapp),
             phoneNumberId: userFound.phoneNumberId ?? "",
             waBusinessId: userFound.waBusinessId ?? ""
         })

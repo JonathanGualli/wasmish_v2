@@ -4,7 +4,7 @@ export interface User {
     email: string;
     name: string;
     rol: UserRole;
-    tokenWhatsapp?: string;
+    whatsappConnected?: boolean;
     phoneNumberId?: string;
     waBusinessId?: string;
 }

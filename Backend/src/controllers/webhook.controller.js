@@ -4,6 +4,10 @@ import Message from "../models/message.model.js";
 import Conversation from "../models/conversation.model.js";
 import { sendUser } from './stream.controller.js';
 
+// Los webhooks de estado de meta pueden llegar desordenados o repetidos
+// Solo avanzamos en esta escala, nunca se retrocede
+const STATUS_RANK = { sent: 0, delivered: 1, read: 2, failed: 3};
+
 export const verifyWebhook = (req, res) => { 
     const mode = req.query['hub.mode'];
     const token = req.query['hub.verify_token'];
@@ -111,25 +115,28 @@ export const handleWebhook = async (req, res) => {
                     const message = await Message.findOne({ waMessageId });
                     if(!message) continue;
 
-                    if(status === 'delivered' && (!message.deliveredAt || message.status === 'sent')) {
-                        message.status = 'delivered';
-                        message.deliveredAt = timestamp;
-                    } else if(status === 'read') {
-                        message.status = 'read';
-                        message.readAt = timestamp;
-                    } else if(status === 'failed') {
+                    const currentRank = STATUS_RANK[message.status] ?? 0;
+                    const nextRank = STATUS_RANK[status];
 
-                        //Capturar errores
-                        const errors = statusData?.errors ?? [];
-                        if(errors.length > 0) {
-                            for(const error of errors){
-                                if (message.errorCode) continue;
-                                message.errorCode = error?.code;
-                                message.errorDetail = error?.error_data?.details;
-                            }
-                        } 
-                        message.status = 'failed';
+                    // Estado desconocido, repedito o que retrocede, pues lo ignoramos
+                    if (nextRank === undefined || nextRank <= currentRank) continue;
+
+                    message.status = status; 
+
+                    if (status === 'delivered') {
+                        message.deliveredAt = timestamp;
+                    } else if (status === 'read') { 
+                        message.readAt = timestamp;
+                        // Si el delivered nunca llegó, lo inferimos: leído implica entregado
+                        if (!message.deliveredAt) message.deliveredAt = timestamp;
+                    } else if (status === 'failed') {
                         message.failedAt = timestamp;
+
+                        const errors = statusData?.errors ?? [];
+                        if (!message.errorCode && errors.length > 0) {
+                            message.errorCode = errors[0]?.code;
+                            message.errorDetail = errors[0]?.error_data?.details;
+                        }
                     }
 
                     await message.save();

@@ -69,74 +69,6 @@ export const sendMessageControllerOld = async (req, res) => {
 }
 
 // Enviar mensajes simplificado
-/* export const processMessageSending = async ({
-    user,
-    conversation, 
-    text, 
-    temporalId, 
-    destinationNumber,
-    contactName}) => {    
-
-    const token = decrypt (user.tokenWhatsapp);
-    const phoneNumberId = conversation?.phoneNumberId || user.phoneNumberId;
-
-    if(!phoneNumberId) throw new Error("Phone number ID is required");
-
-    // Enviar mensaje a Whatsapp 
-    const apiRes = await sendTextMessage({
-        token, 
-        phoneNumberId, 
-        to: conversation?.contactPhone || destinationNumber,
-        text
-    });
-
-    const waMessageId = apiRes?.data?.messages?.[0]?.id || null;
-
-    // Si no hay conversación (es un mensaje nuevo), lo creamos
-    let targetConversation = conversation; 
-    if(!targetConversation) {
-        targetConversation = await Conversation.create({
-            userId: user._id,
-            contactPhone: destinationNumber,
-            phoneNumberId,
-            lastMessage: text,
-            lastMessageAt: new Date(),
-            unreadCount: 1,
-            contactName: contactName || null,
-        })
-    } else { 
-        targetConversation.lastMessage = text;
-        targetConversation.updatedAt = new Date();
-        await targetConversation.save();
-    }
-
-    // Crear el mensaje en DB
-    const msg = await Message.create({
-        conversationId: targetConversation._id,
-        direction: 'outbound',
-        sender: 'me',
-        waMessageId,
-        text,
-        timestamp: new Date(),
-        temporalId,
-    });
-
-    // Notificar via socket
-    sendUser(String(user._id), 'message_created', {
-        id: String(msg._id),
-        conversationId: String(targetConversation._id),
-        sender: 'me',
-        text, 
-        timestamp: msg.timestamp.toISOString(),
-        status: 'delivered',
-        temporalId,
-    }); 
-
-    return {msg, waMessageId}
-};
- */
-
-// Enviar mensajes simplificado
 export const processMessageSending = async ({
     user,
     conversation,
@@ -172,19 +104,21 @@ export const processMessageSending = async ({
 
     // Si no hay conversación (mensaje nuevo), la creamos; si existe, la actualizamos
     let targetConversation = conversation;
+    const now = new Date();
+
     if (!targetConversation) {
         targetConversation = await Conversation.create({
             userId: user._id,
             contactPhone: destinationNumber,
             phoneNumberId,
             lastMessage: text,
-            lastMessageAt: new Date(),
+            lastMessageAt: now,
             unreadCount: 0,
             contactName: contactName || null,
         });
     } else {
         targetConversation.lastMessage = text;
-        targetConversation.updatedAt = new Date();
+        targetConversation.lastMessageAt = now;
         await targetConversation.save();
     }
 
@@ -195,12 +129,12 @@ export const processMessageSending = async ({
         sender: 'me',
         waMessageId,
         text,
-        timestamp: new Date(),
+        timestamp: now,
         temporalId,
         status,
         errorCode,
         errorDetail,
-        failedAt: status === 'failed' ? new Date() : null,
+        failedAt: status === 'failed' ? now : null,
     });
 
     // Notificamos via SSE con el estado real
@@ -244,29 +178,6 @@ export const sendMessageController = async (req, res) => {
         else {
             return res.status(400).json([{ message: "Conversation ID or Destination Number is required" }]);
         }
-
-        // Llamamos al servicio (que ahora sabe qué hacer si conversation es null)
-/*         const { msg, waMessageId } = await processMessageSending({ 
-            user, 
-            conversation, 
-            text, 
-            temporalId, 
-            destinationNumber ,
-            contactName,
-        });
-
-        // return res.status(201).json({ ...msg._doc, waMessageId, status: 'sent' });
-        return res.status(201).json({
-            id: String(msg._id),
-            conversationId: String(msg.conversationId),
-            sender: msg.sender,
-            text: msg.text,
-            timestamp: msg.timestamp.toISOString(),
-            status: 'sent',
-            waMessageId,
-            temporalId: msg.temporalId,
-        });
- */
 
         // Llamamos al servicio (que ahora persiste incluso si el envío falla)
         const { msg, status, waMessageId, errorCode, errorDetail } = await processMessageSending({
@@ -334,10 +245,12 @@ export const listMessages = async (req, res) => {
         const pageLimit = Math.min(parseInt(limit, 10) || 20, 100);
 
         const cursorDate = before ? new Date(before) : null;
+        const hasCursor = Boolean(cursorDate && !isNaN(cursorDate.getTime()));
+
         const criteria = { conversationId: conversation._id };
-        if (cursorDate && !isNaN(cursorDate.getTime())) {
+       if (hasCursor) { 
             criteria.timestamp = { $lt: cursorDate };
-        }
+       }
 
         const msgs = await Message.find(criteria)
             .sort({ timestamp: -1 })
@@ -364,18 +277,21 @@ export const listMessages = async (req, res) => {
                 waMessageId: msg.waMessageId || null,
             }));
 
-        await Conversation.updateOne(
-            { _id: conversation._id, userId},
-            { $set: { unreadCount: 0 } }
-        );
+        // Solo marcamos como leído al ABRIR la conversación (primera página, sin cursor)
+        if (!hasCursor) {
+            const result = await Conversation.updateOne(
+                { _id: conversation._id, userId, unreadCount: { $gt: 0 } },
+                { $set: { unreadCount: 0 } }
+            );
 
-        sendUser(
-            String(user._id),
-            'conversation_updated', {
-                id: String(conversation._id),
-                unreadCount: 0,
+            // Emitimos solo si de verdad cambió algo
+            if (result.modifiedCount > 0) {
+                sendUser(String(user._id), 'conversation_updated', {
+                    id: String(conversation._id),
+                    unreadCount: 0,
+                })
             }
-        )
+        }
 
         return res.json({ items, nextCursor });
 

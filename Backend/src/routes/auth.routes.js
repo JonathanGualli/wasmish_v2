@@ -3,11 +3,12 @@ import { login, logout, profile, register, verifyToken } from "../controllers/au
 import { validateSchema } from "../middlewares/validator.middleware.js";
 import { loginSchema, registerSchema } from "../schemas/auth.schema.js";
 import { authRequired } from "../middlewares/validate.token.middleware.js";
+import { authLimiter } from "../middlewares/rate.limit.middleware.js";
 
 const router = Router();
 
-router.post('/register', validateSchema(registerSchema), register);
-router.post('/login', validateSchema(loginSchema), login); // Assuming login uses the same schema for simplicity
+router.post('/register', authLimiter, validateSchema(registerSchema), register);
+router.post('/login', authLimiter, validateSchema(loginSchema), login); // Assuming login uses the same schema for simplicity
 router.post('/logout', logout);
 router.get('/verify', verifyToken)
 
