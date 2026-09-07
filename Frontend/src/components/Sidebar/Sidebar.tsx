@@ -152,12 +152,22 @@ export const Sidebar = ({ collapsed, toggle, isMobile }: Props) => {
               <div className="text-[13px] font-semibold text-white truncate">
                 {user?.name ?? 'Mi cuenta'}
               </div>
-              <div className="text-[11px] text-brand-on-deep-muted truncate">
-                {user?.email ?? `v${APP_VERSION}`}
-              </div>
+              {user?.email && (
+                <div className="text-[11px] text-brand-on-deep-muted truncate">
+                  {user.email}
+                </div>
+              )}
             </div>
           )}
         </div>
+
+        {/* Versión — dato comparable, así que va en mono. Colapsada no cabe en
+            76px: ahí vive en el tooltip del bloque de identidad, arriba. */}
+        {!collapsed && (
+          <div className="mt-2 px-1 font-mono tabular-nums text-[11px] text-brand-on-deep-subtle">
+            v{APP_VERSION}
+          </div>
+        )}
       </div>
     </div>
   );

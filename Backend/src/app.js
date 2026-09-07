@@ -13,6 +13,8 @@ import apiKeyRoutes from './routes/api.key.routes.js';
 import whatsappRoutes from './routes/whatsapp.routes.js';
 import adminRoutes from './routes/admin.routes.js';
 
+import { APP_VERSION } from './config.js';
+
 const app = express();
 
 // momentanio mientas se sube 
@@ -39,6 +41,10 @@ app.use(express.json({
 }));
 
 app.use(cookieParser());
+
+// Un router propio para una sola línea sin estado sería ceremonia; queda aquí.
+// Público a propósito: así `curl .../api/version` dice qué código corre en prod.
+app.get('/api/version', (req, res) => res.json({ version: APP_VERSION }));
 
 app.use("/api", authRoutes);
 app.use("/api/users", userRoutes);
