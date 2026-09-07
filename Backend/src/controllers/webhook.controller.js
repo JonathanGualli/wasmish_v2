@@ -4,6 +4,7 @@ import Message from "../models/message.model.js";
 import Conversation from "../models/conversation.model.js";
 import { sendUser } from './stream.controller.js';
 import { resolveStatusTransition } from '../utils/message.status.js';
+import { getWindowExpiry } from '../utils/whatsapp.window.js';
 
 export const verifyWebhook = (req, res) => { 
     const mode = req.query['hub.mode'];
@@ -35,11 +36,14 @@ export const handleWebhook = async (req, res) => {
                 const messages = value?.messages ?? [];
 
                 for(const messageData of messages) {
-                    if(messageData.type !== 'text') continue;
-
                     const from = messageData.from;
-                    const text = messageData.text?.body || '';
                     const timestamp = messageData.timestamp ? new Date(parseInt(messageData.timestamp) * 1000) : new Date();
+
+                    // Cualquier entrante abre la ventana de 24 h para Meta, sea texto
+                    // o no. Por eso el tipo ya no descarta el mensaje entero: solo
+                    // decide si además lo persistimos como Message.
+                    const isText = messageData.type === 'text';
+                    const text = isText ? (messageData.text?.body || '') : '';
 
                     let conversation = await Conversation.findOne({ userId: user._id, contactPhone: from });
 
@@ -52,8 +56,43 @@ export const handleWebhook = async (req, res) => {
                             contactName: null,
                             lastMessage: text,
                             lastMessageAt: timestamp,
-                            unreadCount: 1,
+                            lastInboundAt: timestamp,
+                            // 0, no 1: el incremento de más abajo corre también para la
+                            // conversación recién creada y la dejaba en 2 con un solo mensaje.
+                            unreadCount: 0,
                         });
+                    }
+
+                    // La ventana nunca retrocede: Meta no garantiza el orden de los
+                    // webhooks, y un entrante viejo que llegue tarde la cerraría antes
+                    // de tiempo. Mismo criterio que resolveStatusTransition.
+                    if(!conversation.lastInboundAt || timestamp > conversation.lastInboundAt) {
+                        conversation.lastInboundAt = timestamp;
+                    }
+
+                    const windowExpiresAt = getWindowExpiry(conversation.lastInboundAt)?.toISOString() ?? null;
+
+                    // Audio, imagen, documento, ubicación… todavía no se muestran en el
+                    // hilo, pero la ventana sí se abre. Sellamos y avisamos por SSE sin
+                    // tocar unreadCount: un badge sin mensaje que leer no se apaga nunca.
+                    if(!isText) {
+                        await conversation.save();
+
+                        sendUser(
+                            String(user._id),
+                            'conversation_updated', {
+                                id: String(conversation._id),
+                                unreadCount: conversation.unreadCount || 0,
+                                windowExpiresAt,
+                            }
+                        );
+
+                        console.log("Inbound no-texto: ventana sellada", {
+                            conversationId: String(conversation._id),
+                            type: messageData.type,
+                            windowExpiresAt,
+                        });
+                        continue;
                     }
 
                     // Create message inbound
@@ -83,6 +122,8 @@ export const handleWebhook = async (req, res) => {
                             text, 
                             timestamp: timestamp.toISOString(),
                             status: 'delivered',
+                            unreadCount: conversation.unreadCount,
+                            windowExpiresAt,
                         }
                     );
 

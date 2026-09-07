@@ -32,6 +32,10 @@ const conversationSchema = new mongoose.Schema({
         type: Date, 
         default: Date.now,
     },
+    lastInboundAt: {
+        type: Date,
+        default: null,
+    }
 }, { 
     timestamps: true,
 });

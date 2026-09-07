@@ -34,6 +34,11 @@ export const useConversations = () => {
                 payload.sender === "them"
                   ? payload.unreadCount ?? (c.unreadCount ?? 0) + 1
                   : (c.unreadCount ?? 0),
+              // Solo los entrantes traen este campo (el webhook lo calcula).
+              // En un mensaje propio llega `undefined` y conservamos el actual:
+              // enviar no reabre la ventana, solo un mensaje del contacto.
+              windowExpiresAt: payload.windowExpiresAt ?? c.windowExpiresAt,
+
             }
             : c 
         );
@@ -45,11 +50,27 @@ export const useConversations = () => {
       });
     });
 
-    // Reset de no leídos (cuando abres la conversación)
+    // Reset de no leídos (al abrir la conversación) y sellado de la ventana por
+    // un entrante que no es texto (audio, imagen…), que no genera message_created.
     const unsubUpdated = subscribe("conversation_updated", (payload) => {
-      queryClient.setQueryData<Conversation[]>(["conversations"], (old = []) =>
-        old.map((c) => (c.id === payload.id ? { ...c, unreadCount: payload.unreadCount } : c))
-      );
+      queryClient.setQueryData<Conversation[]>(["conversations"], (old = []) => {
+        // Contacto nuevo cuyo primer mensaje fue un adjunto: la conversación ya
+        // existe en la BD pero todavía no en la lista.
+        if (!old.some((c) => c.id === payload.id)) {
+          queryClient.invalidateQueries({ queryKey: ["conversations"] });
+          return old;
+        }
+        return old.map((c) =>
+          c.id === payload.id
+            ? {
+              ...c,
+              unreadCount: payload.unreadCount,
+              // El reset de no leídos no manda este campo: conservamos el actual.
+              windowExpiresAt: payload.windowExpiresAt ?? c.windowExpiresAt,
+            }
+            : c
+        );
+      });
     });
 
     // Cleanup: des-suscribir ambos al desmontar

@@ -1,4 +1,14 @@
 import { z } from "zod";
+import { templateButtonSchema } from "./template.schema.js";
+
+// Como la ruta es /chats/:id/template, el destinatario sale de la
+// conversación — el cliente no lo manda y por tanto no puede falsearlo.
+export const sendConversationTemplateSchema = z.object({
+    templateName: z.string().min(1, 'templateName es requerido'),
+    language: z.string().nullish(),
+    parameters: z.array(z.any()).nullish(),
+    buttons: z.array(templateButtonSchema).nullish(),
+});
 
 export const sendMessageSchema = z.object({
     contactName: z.string().min(1).optional(),

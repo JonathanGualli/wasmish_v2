@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useInView } from "react-intersection-observer";
-import { ChevronLeft, CircleAlert, SendHorizonal } from "lucide-react";
+import { ChevronLeft, CircleAlert, Clock, LayoutTemplate, SendHorizonal } from "lucide-react";
 import type { AxiosError } from "axios";
 import { useConversationMessages } from "../../hooks/useConversationMessages";
 import { useConversationSendMessages } from "../../hooks/useConversationSendMessages.ts";
@@ -11,6 +11,10 @@ import { renderLegacyTemplateText } from "../../utils/legacyTemplate.ts";
 import { formatDayLabel, dayKey } from "../../utils/formatChatTime.ts";
 import { initials } from "../../utils/initials.ts";
 import type { Message, MessageStatus } from "../../models/message.mode.ts";
+import { Callout } from "../Callout/Callout.tsx";
+import { CustomButton } from "../Button/Button.tsx";
+import { useConversationWindow, formatRemaining, WINDOW_WARNING_MS } from "../../hooks/useConversationWindow.ts";
+import { SendTemplateDialog } from "./SendTemplateDialog.tsx";
 
 interface Props {
     conversationId: string | null;
@@ -81,6 +85,15 @@ export const ChatThread = ({ conversationId, onBack }: Props) => {
         () => conversations?.find(c => c.id === conversationId),
         [conversations, conversationId]
     );
+
+    const { hasWindow, isOpen, msRemaining } = useConversationWindow(conversation?.windowExpiresAt);
+    const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
+
+    // Mientras la lista de conversaciones carga no sabemos el estado real de
+    // la ventana. Bloquear por defecto haría parpadear el aviso en cada carga,
+    // así que hasta tener el dato dejamos el composer como está.
+    const windowBlocked = Boolean(conversation) && !isOpen;
+    const windowEndingSoon = isOpen && msRemaining <= WINDOW_WARNING_MS;
 
     useEffect(() => {
         setText("");
@@ -230,39 +243,86 @@ export const ChatThread = ({ conversationId, onBack }: Props) => {
 
             {/* Composer */}
             {conversationId && (
-                <form
-                    onSubmit={handleSendMessage}
-                    className="bg-brand-surface border-t border-brand-border px-6 py-3.5 flex-none"
-                >
-                    <div className="flex gap-2.5 items-end">
-                        <textarea
-                            ref={textareaRef}
-                            value={text}
-                            onChange={(e) => setText(e.target.value)}
-                            onKeyDown={handleKeyDown}
-                            rows={1}
-                            placeholder="Escribe un mensaje…"
-                            style={{ lineHeight: "21px" }}
-                            className="flex-1 resize-none text-sm text-brand-text bg-brand-bg
-                                border border-brand-border rounded-[10px] px-3.5 py-3
-                                placeholder:text-brand-subtle
-                                focus:outline-none focus:bg-brand-surface focus:border-brand-success
-                                focus:ring-[3px] focus:ring-brand-accent-soft transition-colors"
-                        />
-                        <button
-                            type="submit"
-                            title="Enviar"
-                            disabled={!text.trim()}
-                            className="w-11 h-11 rounded-[10px] bg-brand-accent hover:bg-brand-accent-hover
-                                disabled:bg-brand-raised disabled:cursor-not-allowed
-                                flex items-center justify-center flex-none cursor-pointer transition-colors"
+                windowBlocked ? (
+                    <div className="bg-brand-surface border-t border-brand-border px-6 py-3.5 flex-none">
+                        <Callout
+                            tone="info"
+                            icon={<LayoutTemplate size={16} />}
+                            title={hasWindow
+                                ? "La ventana de 24 h se cerró"
+                                : "Este contacto todavía no te ha escrito"}
                         >
-                            <SendHorizonal size={18} strokeWidth={2.2}
-                                className={text.trim() ? "text-brand-ink" : "text-brand-subtle"} />
-                        </button>
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                                <p className="min-w-0">
+                                    {hasWindow
+                                        ? "Pasaron más de 24 h desde su último mensaje. WhatsApp solo permite retomar la conversación con una plantilla aprobada."
+                                        : "WhatsApp solo permite iniciar una conversación con una plantilla aprobada."}
+                                </p>
+                                <div className="sm:ml-auto flex-none">
+                                    <CustomButton onClick={() => setTemplateDialogOpen(true)}>
+                                        Enviar plantilla
+                                    </CustomButton>
+                                </div>
+                            </div>
+                        </Callout>
                     </div>
-                </form>
+                ) : (
+                    <form
+                        onSubmit={handleSendMessage}
+                        className="bg-brand-surface border-t border-brand-border px-6 py-3.5 flex-none"
+                    >
+                        {windowEndingSoon && (
+                            <div className="mb-3">
+                                <Callout tone="warning" icon={<Clock size={16} />}>
+                                    La ventana de 24 h cierra en{" "}
+                                    <span className="font-mono tabular-nums font-semibold text-brand-warning">
+                                        {formatRemaining(msRemaining)}
+                                    </span>
+                                    . Después solo podrás escribirle con una plantilla.
+                                </Callout>
+                            </div>
+                        )}
+
+                        <div className="flex gap-2.5 items-end">
+                            <textarea
+                                ref={textareaRef}
+                                value={text}
+                                onChange={(e) => setText(e.target.value)}
+                                onKeyDown={handleKeyDown}
+                                rows={1}
+                                placeholder="Escribe un mensaje…"
+                                style={{ lineHeight: "21px" }}
+                                className="flex-1 resize-none text-sm text-brand-text bg-brand-bg
+                                    border border-brand-border rounded-[10px] px-3.5 py-3
+                                    placeholder:text-brand-subtle
+                                    focus:outline-none focus:bg-brand-surface focus:border-brand-success
+                                    focus:ring-[3px] focus:ring-brand-accent-soft transition-colors"
+                            />
+                            <button
+                                type="submit"
+                                title="Enviar"
+                                disabled={!text.trim()}
+                                className="w-11 h-11 rounded-[10px] bg-brand-accent hover:bg-brand-accent-hover
+                                    disabled:bg-brand-raised disabled:cursor-not-allowed
+                                    flex items-center justify-center flex-none cursor-pointer transition-colors"
+                            >
+                                <SendHorizonal size={18} strokeWidth={2.2}
+                                    className={text.trim() ? "text-brand-ink" : "text-brand-subtle"} />
+                            </button>
+                        </div>
+                    </form>
+                )
             )}
+
+            {conversationId && conversation && (
+                <SendTemplateDialog
+                    open={templateDialogOpen}
+                    onClose={() => setTemplateDialogOpen(false)}
+                    conversationId={conversationId}
+                    contactName={title}
+                />
+            )}
+
         </div>
     );
 };

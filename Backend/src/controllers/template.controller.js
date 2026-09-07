@@ -216,124 +216,154 @@ export const getTemplatesController = async (req, res) => {
     }
 }
 
+
+/**
+ * Envía una plantilla y persiste conversación + mensaje + SSE.
+ * No sabe nada de HTTP: los errores de negocio salen como Error con
+ * `statusCode`, y quien la llama decide cómo responder.
+ */
+export const processTemplateSending = async ({
+    user,
+    destinationNumber,
+    templateName,
+    language,
+    parameters = [],
+    buttons = [],
+    contactName,
+}) => {
+    // Cuenta sin WhatsApp conectado: antes reventaba dentro de decrypt()
+    if (!user.tokenWhatsapp || !user.phoneNumberId) {
+        const error = new Error("La cuenta no tiene WhatsApp conectado. Conéctala desde Ajustes antes de enviar plantillas.");
+        error.statusCode = 409;
+        throw error;
+    }
+
+    const token = decrypt(user.tokenWhatsapp);
+    const phoneNumberId = user.phoneNumberId;
+
+    // 1. Plantilla: la buscamos ANTES de enviar, para validar que existe
+    //    y para saber en qué idioma está registrada.
+    let template = await Template.findOne({ userId: user._id, name: templateName });
+    let syncOk = true;
+
+    // Re-sincronizamos también si el documento es anterior a que guardáramos
+    // la definición de los botones: `parameterFormat` solo existe desde
+    // entonces, así que su ausencia distingue «plantilla vieja» de
+    // «plantilla sincronizada que legítimamente no tiene botones».
+    if (!template || template.parameterFormat === undefined) {
+        try {
+            await syncTemplatesForUser(user);
+            template = await Template.findOne({ userId: user._id, name: templateName });
+        } catch (syncError) {
+            // Si el sync falló no podemos afirmar que la plantilla no exista:
+            // dejamos que Meta decida, en vez de bloquear un envío válido.
+            syncOk = false;
+            console.error("Sync JIT de plantillas falló:", syncError.message);
+        }
+    }
+
+    if (!template && syncOk) {
+        const error = new Error(`La plantilla "${templateName}" no existe en tu cuenta de WhatsApp o todavía no está aprobada.`);
+        error.statusCode = 404;
+        throw error;
+    }
+
+    // 2. Idioma: el que tenga registrada la plantilla, salvo que lo fuercen.
+    const templateLanguage = language ?? template?.language ?? 'es';
+
+    // 3. Componentes: cuerpo + botones.
+    //    Parámetros del cuerpo: posicionales ["Juan"] o nombrados [{name, value}]
+    const components = [];
+    let storedParamsString = "";
+
+    if (parameters.length > 0) {
+        const isNamed = typeof parameters[0] === 'object' && parameters[0] !== null;
+        const bodyParams = isNamed
+            ? parameters.map(p => ({ type: "text", parameter_name: p.name, text: String(p.value) }))
+            : parameters.map(p => ({ type: "text", text: String(p) }));
+        storedParamsString = isNamed
+            ? parameters.map(p => `${p.name}: ${p.value}`).join(', ')
+            : parameters.join(', ');
+        components.push({ type: "body", parameters: bodyParams });
+    }
+
+    // Lanza 400 si el botón es inválido — antes de gastar la llamada a Meta.
+    components.push(...buildButtonComponents(buttons, template?.buttons ?? []));
+
+    // 4. Enviar a Meta (capturamos el fallo para persistirlo como 'failed')
+    let waMessageId = null, status = 'sent', errorCode = null, errorDetail = null;
+    try {
+        const apiRes = await sendTemplateMessage({ token, phoneNumberId, to: destinationNumber, templateName, language: templateLanguage, components });
+        waMessageId = apiRes?.data?.messages?.[0]?.id || null;
+    } catch (error) {
+        status = 'failed';
+        errorCode = error.waErrorCode ? String(error.waErrorCode) : null;
+        errorDetail = error.waErrorDetail || error.message;
+    }
+
+    // 5. Texto real que recibe el contacto
+    const storedText = renderTemplateBody(template?.bodyText, parameters)
+        || `Plantilla: ${templateName}${storedParamsString ? ` | Datos: [${storedParamsString}]` : ''}`;
+
+    // 6. Guardar conversación + mensaje
+    // Un único `now` para los dos: el orden de la bandeja sale de
+    // conversation.lastMessageAt y el cursor de paginación de message.timestamp;
+    // con dos relojes distintos quedan desfasados unos milisegundos.
+    const now = new Date();
+
+    let conversation = await Conversation.findOne({ userId: user._id, contactPhone: destinationNumber });
+    if (!conversation) {
+        conversation = await Conversation.create({
+            userId: user._id, contactPhone: destinationNumber, phoneNumberId,
+            lastMessage: storedText, lastMessageAt: now, unreadCount: 0,
+            contactName: contactName || null,
+        });
+    } else {
+        conversation.lastMessage = storedText;
+        conversation.lastMessageAt = now;
+        await conversation.save();
+    }
+
+    const msg = await Message.create({
+        conversationId: conversation._id, direction: 'outbound', sender: 'me',
+        waMessageId, text: storedText, timestamp: now,
+        status, errorCode, errorDetail, failedAt: status === 'failed' ? now : null,
+        templateName,
+        templateParams: parameters.length > 0 ? parameters : undefined,
+    });
+
+    // 7. SSE en vivo → aparece en la UI de wasmish
+    sendUser(String(user._id), 'message_created', {
+        id: String(msg._id), conversationId: String(conversation._id), sender: 'me',
+        text: storedText, timestamp: msg.timestamp.toISOString(),
+        status, errorCode, errorDetail,
+    });
+
+    return { msg, conversation, waMessageId, status, errorCode, errorDetail };
+
+};
+
 export const sendTemplateController = async (req, res) => {
     try {
-        const userId = req.user.id;   // ← viene de validateApiKey (o de authRequired)
+        const userId = req.user.id;   // ← viene de validateApiKey
         const { destinationNumber, templateName, contactName } = req.body;
-
-        // El schema acepta null en estos campos (mandar null no debe romper),
-        // pero de aquí en adelante trabajamos siempre sobre arrays.
-        const parameters = req.body.parameters ?? [];
-        const buttons = req.body.buttons ?? [];
 
         const user = await User.findById(userId);
         if (!user) return res.status(404).json([{ message: "User not found" }]);
 
-        // Cuenta sin WhatsApp conectado: antes reventaba dentro de decrypt()
-        // con un 500 opaco ("Cannot read properties of null (reading 'split')").
-        if (!user.tokenWhatsapp || !user.phoneNumberId) {
-            return res.status(409).json([{
-                message: "La cuenta no tiene WhatsApp conectado. Conéctala desde Ajustes antes de enviar plantillas.",
-            }]);
-        }
-
-        const token = decrypt(user.tokenWhatsapp);
-        const phoneNumberId = user.phoneNumberId;
-
-        // 1. Plantilla: la buscamos ANTES de enviar, para validar que existe
-        //    y para saber en qué idioma está registrada.
-        let template = await Template.findOne({ userId: user._id, name: templateName });
-        let syncOk = true;
-
-        // Re-sincronizamos también si el documento es anterior a que guardáramos
-        // la definición de los botones: `parameterFormat` solo existe desde
-        // entonces, así que su ausencia distingue «plantilla vieja» de
-        // «plantilla sincronizada que legítimamente no tiene botones».
-        if (!template || template.parameterFormat === undefined) {
-            try {
-                await syncTemplatesForUser(user);
-                template = await Template.findOne({ userId: user._id, name: templateName });
-            } catch (syncError) {
-                // Si el sync falló no podemos afirmar que la plantilla no exista:
-                // dejamos que Meta decida, en vez de bloquear un envío válido.
-                syncOk = false;
-                console.error("Sync JIT de plantillas falló:", syncError.message);
-            }
-        }
-
-        if (!template && syncOk) {
-            return res.status(404).json([{
-                message: `La plantilla "${templateName}" no existe en tu cuenta de WhatsApp o todavía no está aprobada.`,
-            }]);
-        }
-
-        // 2. Idioma: el que tenga registrada la plantilla, salvo que lo fuercen.
-        const language = req.body.language ?? template?.language ?? 'es';
-
-        // 3. Componentes: cuerpo + botones.
-        //    Parámetros del cuerpo: posicionales ["Juan"] o nombrados [{name, value}]
-        const components = [];
-        let storedParamsString = "";
-
-        if (parameters.length > 0) {
-            const isNamed = typeof parameters[0] === 'object' && parameters[0] !== null;
-            const bodyParams = isNamed
-                ? parameters.map(p => ({ type: "text", parameter_name: p.name, text: String(p.value) }))
-                : parameters.map(p => ({ type: "text", text: String(p) }));
-            storedParamsString = isNamed
-                ? parameters.map(p => `${p.name}: ${p.value}`).join(', ')
-                : parameters.join(', ');
-            components.push({ type: "body", parameters: bodyParams });
-        }
-
-        // Lanza 400 si el botón es inválido — antes de gastar la llamada a Meta.
-        components.push(...buildButtonComponents(buttons, template?.buttons ?? []));
-
-        // 4. Enviar a Meta (capturamos el fallo para persistirlo como 'failed')
-        let waMessageId = null, status = 'sent', errorCode = null, errorDetail = null;
-        try {
-            const apiRes = await sendTemplateMessage({ token, phoneNumberId, to: destinationNumber, templateName, language, components });
-            waMessageId = apiRes?.data?.messages?.[0]?.id || null;
-        } catch (error) {
-            status = 'failed';
-            errorCode = error.waErrorCode ? String(error.waErrorCode) : null;
-            errorDetail = error.waErrorDetail || error.message;
-        }
-
-        // 5. Texto real que recibe el contacto
-        const storedText = renderTemplateBody(template?.bodyText, parameters)
-            || `Plantilla: ${templateName}${storedParamsString ? ` | Datos: [${storedParamsString}]` : ''}`;
-
-        // 6. Guardar conversación + mensaje
-        let conversation = await Conversation.findOne({ userId: user._id, contactPhone: destinationNumber });
-        if (!conversation) {
-            conversation = await Conversation.create({
-                userId: user._id, contactPhone: destinationNumber, phoneNumberId,
-                lastMessage: storedText, lastMessageAt: new Date(), unreadCount: 0,
-                contactName: contactName || null,
+        const { waMessageId, conversation, status, errorCode, errorDetail } =
+            await processTemplateSending({
+                user,
+                destinationNumber,
+                templateName,
+                language: req.body.language,
+                // El schema acepta null en estos campos (mandar null no debe
+                // romper), pero de aquí en adelante trabajamos sobre arrays.
+                parameters: req.body.parameters ?? [],
+                buttons: req.body.buttons ?? [],
+                contactName,
             });
-        } else {
-            conversation.lastMessage = storedText;
-            conversation.lastMessageAt = new Date();
-            await conversation.save();
-        }
 
-        const msg = await Message.create({
-            conversationId: conversation._id, direction: 'outbound', sender: 'me',
-            waMessageId, text: storedText, timestamp: new Date(),
-            status, errorCode, errorDetail, failedAt: status === 'failed' ? new Date() : null,
-            templateName,
-            templateParams: parameters.length > 0 ? parameters : undefined,
-        });
-
-        // 7. SSE en vivo → aparece en la UI de wasmish
-        sendUser(String(user._id), 'message_created', {
-            id: String(msg._id), conversationId: String(conversation._id), sender: 'me',
-            text: storedText, timestamp: msg.timestamp.toISOString(),
-            status, errorCode, errorDetail,
-        });
-
-        // 8. Responder al cliente de la API
         if (status === 'failed') {
             return res.status(502).json([{ message: "Error enviando plantilla a WhatsApp", errorCode, errorDetail }]);
         }

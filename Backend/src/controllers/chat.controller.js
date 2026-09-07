@@ -4,6 +4,8 @@ import Message from "../models/message.model.js";
 import { decrypt }  from "../utils/crypto.js";
 import { sendTextMessage, sendTemplateMessage } from "../libs/whatsapp.js";
 import { sendUser } from './stream.controller.js';
+import { getWindowExpiry } from "../utils/whatsapp.window.js";
+import { processTemplateSending } from "./template.controller.js";
 
 export const sendMessageControllerOld = async (req, res) => {
     try {
@@ -221,6 +223,7 @@ export const listConversations = async (req, res) => {
             lastMessage: item.lastMessage || '',
             updatedAt: (item.lastMessageAt || item.updatedAt).toISOString(),
             unreadCount: item.unreadCount || 0,
+            windowExpiresAt: getWindowExpiry(item.lastInboundAt)?.toISOString() ?? null,
         }));
 
         return res.json(result);
@@ -297,5 +300,52 @@ export const listMessages = async (req, res) => {
 
     } catch (error) {
         res.status(500).json([{ message: error.message }]);
+    }
+};
+
+export const sendConversationTemplateController = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { id } = req.params;
+
+        // Filtrar por userId además del _id es la comprobación de propiedad:
+        // sin eso, cualquier sesión podría enviar en la conversación de otro.
+        const conversation = await Conversation.findOne({ _id: id, userId });
+        if (!conversation) return res.status(404).json([{ message: "Conversation not found" }]);
+
+        const user = await User.findById(userId);
+        if (!user) return res.status(404).json([{ message: "User not found" }]);
+
+        const { msg, status, errorCode, errorDetail } = await processTemplateSending({
+            user,
+            destinationNumber: conversation.contactPhone,
+            templateName: req.body.templateName,
+            language: req.body.language,
+            parameters: req.body.parameters ?? [],
+            buttons: req.body.buttons ?? [],
+        });
+
+        if (status === 'failed') {
+            return res.status(502).json([{ message: "Error enviando plantilla a WhatsApp", errorCode, errorDetail }]);
+        }
+
+        // Devolvemos el mensaje normalizado, aunque en el chat lo va a insertar
+        // el SSE: sin UI optimista para plantillas, no hay riesgo de duplicado.
+        return res.status(200).json({
+            id: String(msg._id),
+            conversationId: String(conversation._id),
+            sender: 'me',
+            text: msg.text,
+            timestamp: msg.timestamp.toISOString(),
+            status,
+        });
+
+    } catch (error) {
+        const status = error.statusCode || (error.waErrorCode ? 502 : 500);
+        if (status >= 500) console.error('Envío de plantilla desde el chat falló:', error.message);
+        return res.status(status).json([{
+            message: error.message,
+            errorCode: error.waErrorCode ?? null,
+        }]);
     }
 };

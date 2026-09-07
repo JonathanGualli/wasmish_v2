@@ -1,5 +1,6 @@
 import type { QueryFunctionContext } from '@tanstack/react-query';
 import axios from 'axios';
+import type { TemplateButtonParam } from '../models/template.model';
 
 const API_URL = '/api'; // configuracion puesta en vite.config.ts
 // const API_URL = 'https://wasmish-api.solventyc.com/api';
@@ -160,5 +161,21 @@ export const getAdminStatsService = async () => {
 // Servicio para lsitar clientes con sus agregados (superadmin)
 export const getAdminClientsService = async (page: number, limit: number) => {
     const { data } = await axios.get(`${API_URL}/admin/clients?page=${page}&limit=${limit}`, { withCredentials: true });
+    return data;
+}
+
+// Servicio para enviar una plantilla dentro de una conversación existente
+export const sendConversationTemplateService = async (
+    conversationId: string,
+    templateName: string,
+    parameters: (string | { name: string; value: string })[],
+    language?: string,
+    buttons?: TemplateButtonParam[],
+) => {
+    const { data } = await axios.post(
+        `${API_URL}/chats/${conversationId}/template`,
+        { templateName, parameters, language, buttons },
+        { withCredentials: true },
+    );
     return data;
 }

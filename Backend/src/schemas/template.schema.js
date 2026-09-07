@@ -2,7 +2,7 @@ import { z } from "zod";
 
 // Un botón de la plantilla. `parameters` son valores simples (["123456"]);
 // cada sub_type los envuelve distinto para Meta — eso lo hace el controller.
-const templateButtonSchema = z.object({
+export const templateButtonSchema = z.object({
     subType: z.enum(['url', 'quick_reply', 'copy_code'], {
         message: 'subType debe ser url, quick_reply o copy_code',
     }).optional(),
