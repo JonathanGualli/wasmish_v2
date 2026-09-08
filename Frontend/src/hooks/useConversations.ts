@@ -50,27 +50,11 @@ export const useConversations = () => {
       });
     });
 
-    // Reset de no leídos (al abrir la conversación) y sellado de la ventana por
-    // un entrante que no es texto (audio, imagen…), que no genera message_created.
+    // Reset de no leídos (cuando abres la conversación)
     const unsubUpdated = subscribe("conversation_updated", (payload) => {
-      queryClient.setQueryData<Conversation[]>(["conversations"], (old = []) => {
-        // Contacto nuevo cuyo primer mensaje fue un adjunto: la conversación ya
-        // existe en la BD pero todavía no en la lista.
-        if (!old.some((c) => c.id === payload.id)) {
-          queryClient.invalidateQueries({ queryKey: ["conversations"] });
-          return old;
-        }
-        return old.map((c) =>
-          c.id === payload.id
-            ? {
-              ...c,
-              unreadCount: payload.unreadCount,
-              // El reset de no leídos no manda este campo: conservamos el actual.
-              windowExpiresAt: payload.windowExpiresAt ?? c.windowExpiresAt,
-            }
-            : c
-        );
-      });
+      queryClient.setQueryData<Conversation[]>(["conversations"], (old = []) =>
+        old.map((c) => (c.id === payload.id ? { ...c, unreadCount: payload.unreadCount } : c))
+      );
     });
 
     // Cleanup: des-suscribir ambos al desmontar

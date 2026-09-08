@@ -8,6 +8,7 @@ import { useConversations } from "../../hooks/useConversations.ts";
 import { useTemplates } from "../../hooks/useTemplates.ts";
 import { useModalContext } from "../Modal/context/UseModalContext.ts";
 import { renderLegacyTemplateText } from "../../utils/legacyTemplate.ts";
+import { MessageTypeIcon } from "./MessageTypeIcon.tsx";
 import { formatDayLabel, dayKey } from "../../utils/formatChatTime.ts";
 import { initials } from "../../utils/initials.ts";
 import type { Message, MessageStatus } from "../../models/message.mode.ts";
@@ -158,6 +159,10 @@ export const ChatThread = ({ conversationId, onBack }: Props) => {
 
         messages.forEach((msg: Message, i: number) => {
             const mine = msg.sender === "me";
+            // Adjuntos, ubicaciones, respuestas a botones… El texto ya viene
+            // resuelto del backend (el caption, o una etiqueta); aquí solo se
+            // le pone delante el icono que dice de qué se trata.
+            const esAdjunto = Boolean(msg.type) && msg.type !== "text";
 
             nodes.push(
                 <div
@@ -170,7 +175,16 @@ export const ChatThread = ({ conversationId, onBack }: Props) => {
                                 ? "bg-brand-deep text-white rounded-[12px_12px_3px_12px]"
                                 : "bg-brand-surface text-brand-text border border-brand-border rounded-[12px_12px_12px_3px]"}`}
                     >
-                        {renderLegacyTemplateText(msg.text, templates)}
+                        {esAdjunto ? (
+                            <span className="flex items-start gap-2">
+                                <span className={`mt-[3px] ${mine ? "text-brand-on-deep-muted" : "text-brand-muted"}`}>
+                                    <MessageTypeIcon type={msg.type} />
+                                </span>
+                                <span className="min-w-0">{msg.text}</span>
+                            </span>
+                        ) : (
+                            renderLegacyTemplateText(msg.text, templates)
+                        )}
                     </div>
 
                     <div className={`flex items-center gap-[5px] text-[11px] mt-1 text-brand-subtle

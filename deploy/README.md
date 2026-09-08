@@ -114,7 +114,7 @@ La compilación (tanto del front como del back) ocurre **dentro de Docker**, no 
 ```bash
 # 1) LOCAL — subir código del backend
 cd /home/jonathan/Proyects/wasmish_v2
-tar czf - -C Backend --exclude=node_modules --exclude=.git . \
+tar czf - -C Backend --exclude=node_modules --exclude=.git --exclude=.env . \
   | ssh megaserver 'tar xzf - -C /opt/docker-projects/prod-wasmish-main/app/Backend'
 
 # 2) SERVER — reconstruir SOLO la api
@@ -127,7 +127,7 @@ docker compose up -d --build wasmish-api
 ```bash
 # 1) LOCAL — subir código del frontend
 cd /home/jonathan/Proyects/wasmish_v2
-tar czf - -C Frontend --exclude=node_modules --exclude=dist --exclude=.git . \
+tar czf - -C Frontend --exclude=node_modules --exclude=dist --exclude=.git --exclude=.env . \
   | ssh megaserver 'tar xzf - -C /opt/docker-projects/prod-wasmish-main/app/Frontend'
 
 # 2) SERVER — reconstruir SOLO la web
@@ -140,9 +140,9 @@ docker compose up -d --build wasmish-web
 ```bash
 # 1) LOCAL — subir backend y frontend
 cd /home/jonathan/Proyects/wasmish_v2
-tar czf - -C Backend  --exclude=node_modules --exclude=.git . \
+tar czf - -C Backend  --exclude=node_modules --exclude=.git --exclude=.env . \
   | ssh megaserver 'tar xzf - -C /opt/docker-projects/prod-wasmish-main/app/Backend'
-tar czf - -C Frontend --exclude=node_modules --exclude=dist --exclude=.git . \
+tar czf - -C Frontend --exclude=node_modules --exclude=dist --exclude=.git --exclude=.env . \
   | ssh megaserver 'tar xzf - -C /opt/docker-projects/prod-wasmish-main/app/Frontend'
 
 # 2) SERVER — reconstruir todo
@@ -162,6 +162,12 @@ En el navegador: recarga forzada **Ctrl + Shift + R** (los assets tienen hash y 
 
 ## 6. Notas importantes
 
+- **Nunca subas tu `.env` local.** Por eso los `tar` de arriba llevan `--exclude=.env`. Hoy no rompería nada — el `.dockerignore` de cada workspace lo excluye de la imagen, y el contenedor lee `config/api.env` — pero deja un archivo con secretos de desarrollo en el disco de producción, y hace que toda la protección dependa de un único `.dockerignore` que alguien podría editar sin darse cuenta. En local ese `.env` puede apuntar a la app de pruebas de Meta (WasmishTest), que no tiene nada que hacer en el servidor.
+  Si en algún despliegue anterior se subió, se borra así:
+  ```bash
+  ssh megaserver 'rm -f /opt/docker-projects/prod-wasmish-main/app/Backend/.env \
+                        /opt/docker-projects/prod-wasmish-main/app/Frontend/.env'
+  ```
 - **`tar` sobreescribe, no borra.** Si eliminaste archivos en local, no desaparecen del server automáticamente. Para una limpieza total de un lado, borra el contenido de `app/Backend` o `app/Frontend` en el server antes de re-subir.
 - **Cambios solo en `config/api.env`** (sin cambio de código): basta reiniciar la api sin rebuild →
   `docker compose up -d wasmish-api` (Compose detecta el env_file y recrea el contenedor).
