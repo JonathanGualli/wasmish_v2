@@ -88,7 +88,7 @@ const describirInteractivo = (interactive) =>
     ?? ETIQUETA_DESCONOCIDO;
 
 /**
- * @returns {{type: string, text: string, mediaId: string|null, mimeType: string|null}|null}
+ * @returns {{type: string, text: string, mediaId: string|null, mimeType: string|null, filename: string|null}|null}
  *          null si el mensaje no debe guardarse ni abrir la ventana.
  */
 export const describeInboundMessage = (messageData) => {
@@ -104,6 +104,13 @@ export const describeInboundMessage = (messageData) => {
         text,
         mediaId: CON_ARCHIVO.has(type) ? mediaId : null,
         mimeType: CON_ARCHIVO.has(type) ? mimeType : null,
+        // Nombre original del documento. Va aparte del texto porque con caption
+        // el texto es el caption y el nombre se perdería.
+        filename: type === 'document' ? conTexto(contenido?.filename) : null,
+        // El texto que ESCRIBIÓ el contacto, si escribió algo. Distinto de
+        // `text`, que cae a la etiqueta («Imagen») cuando no hay caption. La UI
+        // lo necesita para no poner «Imagen» debajo de una imagen que ya se ve.
+        caption: conTexto(contenido?.caption),
     });
 
     switch (type) {

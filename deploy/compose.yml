@@ -11,6 +11,10 @@
 # ─────────────────────────────────────────────────────────────────────────────
 name: prod-wasmish-main
 
+volumes:
+  media:
+    name: prod-wasmish-main-media          # adjuntos de WhatsApp descargados
+
 networks:
   internal-net:
     name: prod-wasmish-main-internal-net
@@ -34,6 +38,8 @@ services:
     security_opt: [no-new-privileges]
     env_file:
       - ./config/api.env                      # secretos reales (MONGO_URI, TOKEN_SECRET, META_*)
+    volumes:
+      - media:/app/media                      # adjuntos: fuera de la imagen, sobreviven al rebuild
     networks: [internal-net, mongo-net]       # internal-net: la ve la web · mongo-net: alcanza el Mongo
 
   wasmish-web:

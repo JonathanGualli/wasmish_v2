@@ -100,3 +100,30 @@ export const subscribeAppToWaba = async ({ token, waBusinessId }) => {
         { headers: { Authorization: `Bearer ${token}` } }
     );
 };
+
+// --- Medios ---------------------------------------------------------------
+// Meta no manda el archivo en el webhook, manda un id. `GET /{media-id}` da una
+// URL temporal, y esa URL exige el token igual que el resto de la API.
+//
+// El webhook ya trae una `url` lista, pero caduca en horas; el id sirve durante
+// los 30 días que Meta guarda el archivo. Se pasa siempre por el id para tener
+// un solo camino, también cuando haya que reintentar una descarga vieja.
+export const getMediaInfo = async ({ token, mediaId }) => {
+    const { data } = await whatsappApi.get(`/${mediaId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    return data;   // { url, mime_type, sha256, file_size, id }
+};
+
+// La descarga NO va por whatsappApi: el host es lookaside.fbsbx.com, no la Graph
+// API, y la respuesta son bytes, no JSON.
+export const downloadMedia = async ({ token, url, maxBytes }) => {
+    const { data } = await axios.get(url, {
+        headers: { Authorization: `Bearer ${token}` },
+        responseType: 'arraybuffer',
+        timeout: 30000,          // más que los 10 s del resto: aquí se bajan megas
+        maxContentLength: maxBytes,
+        maxBodyLength: maxBytes,
+    });
+    return Buffer.from(data);
+};

@@ -9,6 +9,7 @@ import { useTemplates } from "../../hooks/useTemplates.ts";
 import { useModalContext } from "../Modal/context/UseModalContext.ts";
 import { renderLegacyTemplateText } from "../../utils/legacyTemplate.ts";
 import { MessageTypeIcon } from "./MessageTypeIcon.tsx";
+import { MessageMedia } from "./MessageMedia.tsx";
 import { formatDayLabel, dayKey } from "../../utils/formatChatTime.ts";
 import { initials } from "../../utils/initials.ts";
 import type { Message, MessageStatus } from "../../models/message.mode.ts";
@@ -163,6 +164,11 @@ export const ChatThread = ({ conversationId, onBack }: Props) => {
             // resuelto del backend (el caption, o una etiqueta); aquí solo se
             // le pone delante el icono que dice de qué se trata.
             const esAdjunto = Boolean(msg.type) && msg.type !== "text";
+            // Con archivo se pinta el archivo y, debajo, solo lo que el contacto
+            // escribió de verdad: poner «Imagen» bajo una imagen que ya se ve
+            // sobra. Sin archivo (descarga fallida, o tipo sin nada que bajar)
+            // se cae a la etiqueta con su icono, que es como estaba antes.
+            const conArchivo = Boolean(msg.hasMedia);
 
             nodes.push(
                 <div
@@ -175,7 +181,12 @@ export const ChatThread = ({ conversationId, onBack }: Props) => {
                                 ? "bg-brand-deep text-white rounded-[12px_12px_3px_12px]"
                                 : "bg-brand-surface text-brand-text border border-brand-border rounded-[12px_12px_12px_3px]"}`}
                     >
-                        {esAdjunto ? (
+                        {conArchivo ? (
+                            <span className="flex flex-col gap-2">
+                                <MessageMedia msg={msg} />
+                                {msg.caption && <span className="min-w-0">{msg.caption}</span>}
+                            </span>
+                        ) : esAdjunto ? (
                             <span className="flex items-start gap-2">
                                 <span className={`mt-[3px] ${mine ? "text-brand-on-deep-muted" : "text-brand-muted"}`}>
                                     <MessageTypeIcon type={msg.type} />

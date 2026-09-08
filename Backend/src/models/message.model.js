@@ -41,6 +41,27 @@ const messageSchema = new mongoose.Schema({
         type: String,
         default: null,
     }, 
+    // Nombre del archivo descargado dentro de MEDIA_DIR. null = no hay archivo,
+    // o la descarga falló: el mensaje se muestra igual, solo con su etiqueta.
+    mediaFile: {
+        type: String,
+        default: null,
+    },
+    // Nombre original, solo en documentos: es el que ve el usuario al abrirlo.
+    mediaFilename: {
+        type: String,
+        default: null,
+    },
+    mediaSize: {
+        type: Number,
+        default: null,
+    }, 
+    // Lo que escribió el contacto junto al adjunto. `text` cae a la etiqueta
+    // («Imagen») cuando no hay nada escrito; esto queda en null.
+    caption: {
+        type: String,
+        default: null,
+    }, 
     timestamp: {
         type: Date, 
         default: Date.now,

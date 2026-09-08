@@ -3,8 +3,21 @@ import { createAccessToken } from '../libs/jwt.js';
 import User from '../models/user.model.js'
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'node:crypto';
 
 const isProd = process.env.NODE_ENV === 'production';
+
+// Respuesta única del login. Que un correo no exista y que la contraseña sea
+// incorrecta tienen que ser indistinguibles: si no, cualquiera puede averiguar
+// qué correos están registrados probándolos uno a uno.
+const CREDENCIALES_INVALIDAS = [{ message: 'Correo o contraseña incorrectos' }];
+
+// Hash de descarte contra el que comparar cuando el correo no existe. Sin esto
+// la respuesta sería idéntica pero el TIEMPO no: ~1 ms si no hay usuario (no se
+// llega a bcrypt) frente a ~100 ms si lo hay. Esa diferencia sola ya permite
+// enumerar. Se calcula una vez al arrancar, sobre un valor aleatorio que nadie
+// conoce, así que jamás puede casar con una contraseña real.
+const HASH_DE_DESCARTE = bcrypt.hashSync(crypto.randomBytes(32).toString('hex'), 10);
 
 
 export const register = async (req, res) => {
@@ -57,11 +70,11 @@ export const login = async (req, res) => {
     try { 
         const userFound = await User.findOne({email});
 
-        if(!userFound) return res.status(404).json([{message: 'User not found'}]);
+        // Se compara SIEMPRE, exista el usuario o no, para que las dos ramas
+        // cuesten lo mismo. Mismo estado y mismo mensaje en ambos casos.
+        const isMatch = await bcrypt.compare(password, userFound?.password ?? HASH_DE_DESCARTE);
 
-        const isMatch = await bcrypt.compare(password, userFound.password);
-
-        if(!isMatch) return res.status(400).json([{message: 'Invalid credentials'}]);
+        if(!userFound || !isMatch) return res.status(400).json(CREDENCIALES_INVALIDAS);
 
         const token = await createAccessToken({ id: userFound._id });
 

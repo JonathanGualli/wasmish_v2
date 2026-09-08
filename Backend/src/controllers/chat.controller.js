@@ -272,6 +272,12 @@ export const listMessages = async (req, res) => {
                 // Los mensajes anteriores al campo no lo tienen: 'text' por defecto.
                 type: msg.type || 'text',
                 text: msg.text,
+                // El front no necesita saber dónde está el archivo, solo si lo
+                // hay: lo pide por /api/media/<id del mensaje>.
+                hasMedia: Boolean(msg.mediaFile),
+                caption: msg.caption ?? null,
+                mediaFilename: msg.mediaFilename ?? null,
+                mediaSize: msg.mediaSize ?? null,
                 timestamp: (msg.timestamp || msg.createdAt).toISOString(),
                 status: msg.status || 'sent',
                 deliveredAt: msg.deliveredAt ? msg.deliveredAt.toISOString() : null,

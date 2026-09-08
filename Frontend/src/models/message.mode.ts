@@ -18,6 +18,13 @@ export interface Message {
   /** Ausente en los mensajes anteriores al campo: tratar como "text". */
   type?: MessageType;
   text: string;
+  /** Hay archivo descargado y se puede pedir en `/api/media/<id>`. */
+  hasMedia?: boolean;
+  /** Lo que escribió el contacto junto al adjunto. `null` si no escribió nada. */
+  caption?: string | null;
+  /** Nombre original, solo en documentos. */
+  mediaFilename?: string | null;
+  mediaSize?: number | null;
   timestamp: string; // ISO
   status: MessageStatus;
   deliveredAt?: string; // ISO

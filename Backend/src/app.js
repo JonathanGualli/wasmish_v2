@@ -12,6 +12,7 @@ import templateRoutes from './routes/template.routes.js';
 import apiKeyRoutes from './routes/api.key.routes.js';
 import whatsappRoutes from './routes/whatsapp.routes.js';
 import adminRoutes from './routes/admin.routes.js';
+import mediaRoutes from './routes/media.routes.js';
 
 import { APP_VERSION } from './config.js';
 
@@ -55,5 +56,6 @@ app.use("/api", templateRoutes);
 app.use("/api", apiKeyRoutes);
 app.use("/api", whatsappRoutes);
 app.use("/api", adminRoutes);
+app.use("/api", mediaRoutes);
 
 export default app; 

@@ -110,6 +110,16 @@ La compilación (tanto del front como del back) ocurre **dentro de Docker**, no 
 
 **Regla práctica: reconstruye solo lo que cambió.**
 
+> ⚠️ **Si cambió `deploy/compose.yml`, hay que subirlo aparte.** El `tar` solo
+> sincroniza `app/Backend` y `app/Frontend`; el compose vive un nivel más arriba
+> y no viaja con él. Se olvida fácil y falla en silencio: el despliegue funciona
+> pero sin el volumen o la red nueva que acabas de añadir.
+> ```bash
+> scp deploy/compose.yml megaserver:/opt/docker-projects/prod-wasmish-main/
+> ```
+> Lo mismo con `config/api.env`: las variables nuevas se añaden **a mano en el
+> servidor** (el `.example` del repo es solo la plantilla).
+
 ### 5.1 Solo cambió el Backend
 ```bash
 # 1) LOCAL — subir código del backend
@@ -168,6 +178,8 @@ En el navegador: recarga forzada **Ctrl + Shift + R** (los assets tienen hash y 
   ssh megaserver 'rm -f /opt/docker-projects/prod-wasmish-main/app/Backend/.env \
                         /opt/docker-projects/prod-wasmish-main/app/Frontend/.env'
   ```
+- **Los adjuntos viven en un volumen, no en la imagen.** El servicio `wasmish-api` monta `prod-wasmish-main-media` en `/app/media`, y `MEDIA_DIR` en `config/api.env` tiene que apuntar ahí. Sin el volumen, cada `up --build` borraría todas las fotos y audios recibidos. **Al desplegar por primera vez esta versión hay que añadir `MEDIA_DIR=/app/media` al `config/api.env` del servidor** — si falta, la api escribe en `media/` dentro del contenedor y se pierde en el siguiente rebuild.
+  Para ver cuánto ocupa: `docker run --rm -v prod-wasmish-main-media:/m alpine du -sh /m`
 - **`tar` sobreescribe, no borra.** Si eliminaste archivos en local, no desaparecen del server automáticamente. Para una limpieza total de un lado, borra el contenido de `app/Backend` o `app/Frontend` en el server antes de re-subir.
 - **Cambios solo en `config/api.env`** (sin cambio de código): basta reiniciar la api sin rebuild →
   `docker compose up -d wasmish-api` (Compose detecta el env_file y recrea el contenedor).

@@ -6,6 +6,52 @@ import { sendUser } from './stream.controller.js';
 import { resolveStatusTransition } from '../utils/message.status.js';
 import { getWindowExpiry } from '../utils/whatsapp.window.js';
 import { describeInboundMessage } from '../utils/inbound.message.js';
+import { TIPOS_CON_ARCHIVO, nombreDeArchivo, guardarArchivo } from '../utils/media.storage.js';
+import { getMediaInfo, downloadMedia } from '../libs/whatsapp.js';
+import { decrypt } from '../utils/crypto.js';
+import { MEDIA_DIR, MEDIA_MAX_BYTES } from '../config.js';
+
+// Baja el adjunto y lo deja en disco. Devuelve SIEMPRE un objeto: si algo falla
+// —token caducado, archivo enorme, Meta caída— sale con mediaFile en null y el
+// mensaje se guarda igual con su etiqueta. Perder la foto es un problema;
+// perder el mensaje entero sería mucho peor.
+const descargarAdjunto = async (user, entrante) => {
+    const vacio = { mediaFile: null, mediaFilename: null, mediaSize: null, mimeType: entrante.mimeType };
+
+    if (!entrante.mediaId || !TIPOS_CON_ARCHIVO.has(entrante.type)) return vacio;
+
+    try {
+        const token = decrypt(user.tokenWhatsapp);
+        if (!token) return vacio;
+
+        const info = await getMediaInfo({ token, mediaId: entrante.mediaId });
+
+        // El tamaño se comprueba ANTES de bajar: si no, el tope solo actuaría
+        // después de habernos tragado los bytes.
+        const tamano = Number(info?.file_size ?? 0);
+        if (tamano > MEDIA_MAX_BYTES) {
+            console.warn('Adjunto omitido por tamaño:', { mediaId: entrante.mediaId, tamano, tope: MEDIA_MAX_BYTES });
+            return vacio;
+        }
+
+        // El mime de la descarga manda sobre el del webhook: es el que Meta usa
+        // de verdad para el archivo.
+        const mimeType = info?.mime_type ?? entrante.mimeType;
+        const nombre = nombreDeArchivo(entrante.mediaId, mimeType);
+        if (!nombre) return vacio;
+
+        const contenido = await downloadMedia({ token, url: info.url, maxBytes: MEDIA_MAX_BYTES });
+        await guardarArchivo(MEDIA_DIR, nombre, contenido);
+
+        return { mediaFile: nombre, mediaFilename: entrante.filename ?? null, mediaSize: contenido.length, mimeType };
+    } catch (error) {
+        console.error('No se pudo descargar el adjunto:', {
+            mediaId: entrante.mediaId, type: entrante.type,
+            error: error.waErrorDetail ?? error.message,
+        });
+        return vacio;
+    }
+};
 
 export const verifyWebhook = (req, res) => { 
     const mode = req.query['hub.mode'];
@@ -56,6 +102,11 @@ const procesarEntrante = async (user, phoneNumberId, messageData) => {
         conversation.lastInboundAt = timestamp;
     }
 
+    // El archivo se baja ANTES de crear el mensaje para que, cuando este llegue
+    // por SSE, la foto ya se pueda pintar. Añade unos cientos de ms al webhook; a
+    // cambio no hace falta ni cola ni un segundo evento avisando de que ya está.
+    const adjunto = await descargarAdjunto(user, entrante);
+
     // Create message inbound
     const messageCreated = await Message.create({
         conversationId: conversation._id,
@@ -65,7 +116,11 @@ const procesarEntrante = async (user, phoneNumberId, messageData) => {
         type: entrante.type,
         text: entrante.text, 
         mediaId: entrante.mediaId,
-        mimeType: entrante.mimeType,
+        mimeType: adjunto.mimeType,
+        mediaFile: adjunto.mediaFile,
+        mediaFilename: adjunto.mediaFilename,
+        mediaSize: adjunto.mediaSize,
+        caption: entrante.caption,
         timestamp,
         status: 'delivered',
         deliveredAt: timestamp,
@@ -85,6 +140,10 @@ const procesarEntrante = async (user, phoneNumberId, messageData) => {
             sender: 'them',
             type: entrante.type,
             text: entrante.text, 
+            hasMedia: Boolean(adjunto.mediaFile),
+            caption: entrante.caption,
+            mediaFilename: adjunto.mediaFilename,
+            mediaSize: adjunto.mediaSize,
             timestamp: timestamp.toISOString(),
             status: 'delivered',
             unreadCount: conversation.unreadCount,
