@@ -24,6 +24,23 @@ const messageSchema = new mongoose.Schema({
         type: String, 
         required: true,
     }, 
+    // Tipo del mensaje tal como lo llama Meta: 'text', 'image', 'audio',
+    // 'button'… El default hace que todo el historial anterior siga siendo
+    // texto sin necesidad de migrar nada.
+    type: {
+        type: String,
+        default: 'text',
+    },
+    // Identificador del archivo en Meta. Hoy no se usa: se guarda para poder
+    // descargar el adjunto más adelante sin tener que remigrar el historial.
+    mediaId: {
+        type: String,
+        default: null,
+    },
+    mimeType: {
+        type: String,
+        default: null,
+    }, 
     timestamp: {
         type: Date, 
         default: Date.now,

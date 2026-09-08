@@ -14,9 +14,15 @@ import Message from '../src/models/message.model.js';
 const dryRun = process.argv.includes('--dry-run');
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/wasmish';
 
+// En producción la URI lleva la contraseña de Mongo, y todo lo que se imprima
+// aquí queda en `docker compose logs` y en el scrollback de quien lo ejecute.
+// `[^/]*@` es voraz a propósito: corta hasta el ÚLTIMO @ de la autoridad, para
+// que una contraseña que contenga @ no deje media contraseña visible.
+const uriSegura = MONGO_URI.replace(/\/\/[^/]*@/, '//***:***@');
+
 const main = async () => {
     await mongoose.connect(MONGO_URI);
-    console.log(`Conectado a ${MONGO_URI}`);
+    console.log(`Conectado a ${uriSegura}`);
     if (dryRun) console.log('MODO --dry-run: no se va a escribir nada\n');
 
     // Último mensaje entrante de cada conversación, en una sola pasada.

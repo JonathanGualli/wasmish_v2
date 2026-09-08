@@ -269,6 +269,8 @@ export const listMessages = async (req, res) => {
                 id: String(msg._id),
                 conversationId: String(msg.conversationId),
                 sender: msg.sender,
+                // Los mensajes anteriores al campo no lo tienen: 'text' por defecto.
+                type: msg.type || 'text',
                 text: msg.text,
                 timestamp: (msg.timestamp || msg.createdAt).toISOString(),
                 status: msg.status || 'sent',
