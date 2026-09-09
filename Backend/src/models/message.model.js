@@ -112,4 +112,32 @@ const messageSchema = new mongoose.Schema({
 
 messageSchema.index({ conversationId: 1, timestamp: 1 });
 
+// waMessageId lleva DOS índices, y hacen falta los dos. Suena redundante, pero
+// cada uno resuelve un problema que el otro no puede.
+//
+// 1) Unicidad. Meta no garantiza que un webhook llegue una sola vez: si no recibe
+//    el 200 a tiempo reintenta el lote entero, y como este handler baja los
+//    adjuntos antes de responder, eso pasa de verdad. Sin unicidad el reintento
+//    duplicaba el mensaje en el chat del cliente.
+//
+//    Es PARCIAL, no `sparse`: un mensaje que Meta rechaza se guarda con
+//    `waMessageId: null` explícito para no perderlo, y `sparse` solo excluye el
+//    campo AUSENTE — dos `null` chocarían y el segundo envío fallido se perdería.
+//    `$type: 'string'` deja fuera tanto los null como los ausentes.
+//
+// 2) Búsqueda. `procesarEstado` busca por waMessageId en CADA acuse de recibo, y
+//    cada mensaje enviado genera dos o tres. El índice parcial NO sirve para eso:
+//    Mongo no deduce que `{ waMessageId: 'wamid.x' }` implique `$type: 'string'`,
+//    así que no lo considera elegible y cae en un escaneo completo de la colección
+//    (medido: 5000 documentos examinados frente a 1 con este índice). Antes que
+//    ensuciar cada consulta con un `$type`, se paga un segundo índice.
+//
+// Los nombres son explícitos a propósito: sin ellos ambos se llamarían
+// `waMessageId_1` y Mongo rechazaría el segundo.
+messageSchema.index(
+    { waMessageId: 1 },
+    { name: 'waMessageId_unico', unique: true, partialFilterExpression: { waMessageId: { $type: 'string' } } },
+);
+messageSchema.index({ waMessageId: 1 }, { name: 'waMessageId_busqueda' });
+
 export default mongoose.model('Message', messageSchema);

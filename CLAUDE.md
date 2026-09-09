@@ -27,21 +27,21 @@ Si hay archivos nuevos, actualizar el grafo con `/graphify --update` antes de co
 
 ### Grafo de conocimiento (graphify)
 
-Construido el 2026-05-17. Stats: **332 nodos, 533 edges, 18 comunidades**.
+Reconstruido el 2026-09-09 (full: AST + semántica LLM). Stats: **699 nodos, 1409 edges, 54 comunidades**. Hay un `.graphifyignore` en la raíz que excluye `.agents/` (definiciones de skills empaquetadas) y los `.dc.html`/`support.js` del brand — sin él el grafo se contaminaba con ~17% de ruido ajeno al proyecto.
 
 - `graphify-out/graph.json` — datos del grafo
 - `graphify-out/graph.html` — visualización interactiva
 - `graphify-out/GRAPH_REPORT.md` — reporte completo
 
-**God nodes:** `useAuthContext`, `useModalContext`, `decrypt`, `CustomButton`, `AppRoutes`, `sendUser` (SSE), `Auth Routes`
+**God nodes** (más conectados): `react`, `compilerOptions`, `@tanstack/react-query`, `lucide-react`, `useAuthContext`, `ChatThread`, `Wasmish Interface Design System`, `express`, `useTemplates`
 
 **Comunidades principales:**
-- Frontend UI Components & Hooks
-- Backend Chat & Messaging Controllers
-- Backend Infrastructure & Routes
-- Frontend Auth Context
-- Real-time SSE Services
-- Backend Auth System
+- Chat UI Components
+- Auth Context & Hooks
+- Webhook & Media Backend
+- Architecture & Deploy Rationale
+- Template Sending (Frontend) / Template Controller (Backend)
+- App Shell & SSE Provider
 
 ---
 

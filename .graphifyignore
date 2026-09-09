@@ -1,0 +1,9 @@
+# Definiciones de skills/agentes empaquetadas — no son el proyecto wasmish
+.agents/
+
+# Canvas del manual de marca (Claude Design) — no es arquitectura
+Frontend/brand/**/*.dc.html
+Frontend/brand/**/support.js
+
+# Salida del propio grafo
+graphify-out/

@@ -74,6 +74,13 @@ const procesarEntrante = async (user, phoneNumberId, messageData) => {
     const entrante = describeInboundMessage(messageData);
     if(!entrante) return;
 
+    // Idempotencia. Meta reintenta el lote entero cuando no recibe el 200 a
+    // tiempo, y este handler baja los adjuntos antes de responder: un archivo
+    // grande o una Graph API lenta bastan para provocarlo. Sin esta comprobación
+    // el reintento creaba un segundo Message y el cliente veía el mensaje dos
+    // veces. Va ANTES de descargar nada, que es lo caro de todo el camino.
+    if (messageData.id && await Message.exists({ waMessageId: messageData.id })) return;
+
     const from = messageData.from;
     const timestamp = messageData.timestamp ? new Date(parseInt(messageData.timestamp) * 1000) : new Date();
 
@@ -108,23 +115,34 @@ const procesarEntrante = async (user, phoneNumberId, messageData) => {
     const adjunto = await descargarAdjunto(user, entrante);
 
     // Create message inbound
-    const messageCreated = await Message.create({
-        conversationId: conversation._id,
-        direction: 'inbound',
-        sender: 'them',
-        waMessageId: messageData.id,
-        type: entrante.type,
-        text: entrante.text, 
-        mediaId: entrante.mediaId,
-        mimeType: adjunto.mimeType,
-        mediaFile: adjunto.mediaFile,
-        mediaFilename: adjunto.mediaFilename,
-        mediaSize: adjunto.mediaSize,
-        caption: entrante.caption,
-        timestamp,
-        status: 'delivered',
-        deliveredAt: timestamp,
-    });
+    let messageCreated;
+    try {
+        messageCreated = await Message.create({
+            conversationId: conversation._id,
+            direction: 'inbound',
+            sender: 'them',
+            waMessageId: messageData.id,
+            type: entrante.type,
+            text: entrante.text,
+            mediaId: entrante.mediaId,
+            mimeType: adjunto.mimeType,
+            mediaFile: adjunto.mediaFile,
+            mediaFilename: adjunto.mediaFilename,
+            mediaSize: adjunto.mediaSize,
+            caption: entrante.caption,
+            timestamp,
+            status: 'delivered',
+            deliveredAt: timestamp,
+        });
+    } catch (error) {
+        // 11000 = clave duplicada. El `exists` de arriba no basta por sí solo:
+        // dos entregas del mismo webhook a la vez pueden pasarlo las dos antes
+        // de que ninguna haya escrito. El índice único es quien decide, y que
+        // pare a la segunda es exactamente lo que queremos — el mensaje ya está
+        // guardado, así que salimos sin tocar la conversación ni emitir por SSE.
+        if (error.code === 11000) return;
+        throw error;
+    }
 
     // Update conversation
     conversation.lastMessage = entrante.text;
