@@ -6,8 +6,6 @@ export const updateUserTokenWhatsapp = async (req, res) => {
     const { tokenWhatsapp, phoneNumberId, waBusinessId } = req.body;
     const userId = req.user.id;
 
-    console.log("User ID:", userId);
-
     try {
         const userFound = await User.findById(userId);
 

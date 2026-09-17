@@ -36,6 +36,13 @@ services:
     hostname: prod-wasmish-main-api
     restart: unless-stopped
     security_opt: [no-new-privileges]
+    # Sin esto Docker usa json-file sin límite y el log crece hasta llenar el
+    # disco — el mismo disco donde vive el Mongo compartido de los demás
+    # proyectos. Con 3 archivos de 10 MB, el techo por contenedor es 30 MB y
+    # siempre quedan los últimos para diagnosticar.
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
     env_file:
       - ./config/api.env                      # secretos reales (MONGO_URI, TOKEN_SECRET, META_*)
     volumes:
@@ -55,6 +62,13 @@ services:
     hostname: prod-wasmish-main-web
     restart: unless-stopped
     security_opt: [no-new-privileges]
+    # Sin esto Docker usa json-file sin límite y el log crece hasta llenar el
+    # disco — el mismo disco donde vive el Mongo compartido de los demás
+    # proyectos. Con 3 archivos de 10 MB, el techo por contenedor es 30 MB y
+    # siempre quedan los últimos para diagnosticar.
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
     depends_on: [wasmish-api]
     networks: [internal-net, proxy-net]
     labels:

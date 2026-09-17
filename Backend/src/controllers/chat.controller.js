@@ -181,7 +181,6 @@ export const listMessages = async (req, res) => {
 
         const conversation = await Conversation.findOne({ _id: conversationId, userId });
         if (!conversation) return res.status(404).json([{ message: "Conversation not found" }]);
-        console.log("limit:", limit);
         const pageLimit = Math.min(parseInt(limit, 10) || 20, 100);
 
         const cursorDate = before ? new Date(before) : null;

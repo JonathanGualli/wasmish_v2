@@ -169,13 +169,20 @@ const procesarEntrante = async (user, phoneNumberId, messageData) => {
         }
     );
 
-    // Log the created message
+    // Log the created message.
+    //
+    // SIN el texto a propósito. Esto son conversaciones privadas de los clientes
+    // de nuestros clientes, y `docker compose logs` no caduca, no rota y lo lee
+    // cualquiera con acceso al servidor. Para diagnosticar basta con saber que el
+    // mensaje llegó, de qué tipo era y en qué conversación cayó: el contenido se
+    // mira en la app, que es donde tiene sentido. `longitud` distingue el caso que
+    // de verdad importa —un texto vacío o gigante— sin enseñar nada.
     console.log("Inbound message processed:", {
         id: String(messageCreated._id),
         conversationId: String(messageCreated.conversationId),
         sender: messageCreated.sender,
         type: messageCreated.type,
-        text: messageCreated.text,
+        longitud: messageCreated.text.length,
         unreadCount: conversation.unreadCount,
         timestamp: messageCreated.timestamp.toISOString(),
         status: messageCreated.status,
@@ -233,13 +240,18 @@ const procesarEstado = async (user, statusData) => {
         }
     );
 
-    // Log the status update
-    console.log("Message status updated:", {
-        id: String(message._id),
-        waMessageId: message.waMessageId,
-        newStatus: message.status,
-        errors: statusData.errors,
-    });
+    // Solo se registran los fallos. Cada mensaje enviado genera dos o tres acuses
+    // (`delivered`, `read`), y anotarlos todos multiplicaba por tres el tamaño del
+    // log sin decir nada: que un mensaje llegue es lo normal, y el estado ya queda
+    // guardado en el propio Message y se ve en la UI. Lo que se busca en un log es
+    // lo que salió mal, y eso sí se conserva entero, con el error de Meta.
+    if (message.status === 'failed') {
+        console.error("Message failed:", {
+            id: String(message._id),
+            waMessageId: message.waMessageId,
+            errors: statusData.errors,
+        });
+    }
 };
 
 export const handleWebhook = async (req, res) => {
