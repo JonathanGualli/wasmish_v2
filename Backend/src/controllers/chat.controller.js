@@ -222,6 +222,8 @@ export const listMessages = async (req, res) => {
                 errorCode: msg.errorCode,
                 errorDetail: msg.errorDetail,
                 waMessageId: msg.waMessageId || null,
+                // Con él la UI pinta «Plantilla · nombre» y los botones de la plantilla.
+                templateName: msg.templateName ?? null,
             }));
 
         // Solo marcamos como leído al ABRIR la conversación (primera página, sin cursor)
@@ -247,6 +249,35 @@ export const listMessages = async (req, res) => {
     }
 };
 
+// Respuesta común de los dos envíos de plantilla desde la UI (a una
+// conversación existente, o a un número para iniciar una nueva).
+//
+// Devolvemos el mensaje normalizado, aunque en el chat lo va a insertar el
+// SSE: sin UI optimista para plantillas, no hay riesgo de duplicado.
+const responderEnvioPlantilla = (res, { msg, conversation, status, errorCode, errorDetail }) => {
+    if (status === 'failed') {
+        return res.status(502).json([{ message: "Error enviando plantilla a WhatsApp", errorCode, errorDetail }]);
+    }
+    return res.status(200).json({
+        id: String(msg._id),
+        conversationId: String(conversation._id),
+        sender: 'me',
+        text: msg.text,
+        timestamp: msg.timestamp.toISOString(),
+        status,
+        templateName: msg.templateName ?? null,
+    });
+};
+
+const responderErrorPlantilla = (res, error) => {
+    const status = error.statusCode || (error.waErrorCode ? 502 : 500);
+    if (status >= 500) console.error('Envío de plantilla desde el chat falló:', error.message);
+    return res.status(status).json([{
+        message: error.message,
+        errorCode: error.waErrorCode ?? null,
+    }]);
+};
+
 export const sendConversationTemplateController = async (req, res) => {
     try {
         const userId = req.user.id;
@@ -260,7 +291,7 @@ export const sendConversationTemplateController = async (req, res) => {
         const user = await User.findById(userId);
         if (!user) return res.status(404).json([{ message: "User not found" }]);
 
-        const { msg, status, errorCode, errorDetail } = await processTemplateSending({
+        const resultado = await processTemplateSending({
             user,
             destinationNumber: conversation.contactPhone,
             templateName: req.body.templateName,
@@ -269,27 +300,34 @@ export const sendConversationTemplateController = async (req, res) => {
             buttons: req.body.buttons ?? [],
         });
 
-        if (status === 'failed') {
-            return res.status(502).json([{ message: "Error enviando plantilla a WhatsApp", errorCode, errorDetail }]);
-        }
+        return responderEnvioPlantilla(res, resultado);
+    } catch (error) {
+        return responderErrorPlantilla(res, error);
+    }
+};
 
-        // Devolvemos el mensaje normalizado, aunque en el chat lo va a insertar
-        // el SSE: sin UI optimista para plantillas, no hay riesgo de duplicado.
-        return res.status(200).json({
-            id: String(msg._id),
-            conversationId: String(conversation._id),
-            sender: 'me',
-            text: msg.text,
-            timestamp: msg.timestamp.toISOString(),
-            status,
+// Iniciar una conversación desde la bandeja. A un número que nunca escribió
+// WhatsApp solo le entrega plantillas aprobadas, así que la conversación nace
+// con una. `processTemplateSending` la crea si no existe o reutiliza la que ya
+// hay (el índice { userId, contactPhone } no admite dos), y ya la filtra por
+// el user de la sesión: no hay conversación ajena que comprobar.
+export const startConversationTemplateController = async (req, res) => {
+    try {
+        const user = await User.findById(req.user.id);
+        if (!user) return res.status(404).json([{ message: "User not found" }]);
+
+        const resultado = await processTemplateSending({
+            user,
+            destinationNumber: req.body.destinationNumber,
+            contactName: req.body.contactName || undefined,
+            templateName: req.body.templateName,
+            language: req.body.language,
+            parameters: req.body.parameters ?? [],
+            buttons: req.body.buttons ?? [],
         });
 
+        return responderEnvioPlantilla(res, resultado);
     } catch (error) {
-        const status = error.statusCode || (error.waErrorCode ? 502 : 500);
-        if (status >= 500) console.error('Envío de plantilla desde el chat falló:', error.message);
-        return res.status(status).json([{
-            message: error.message,
-            errorCode: error.waErrorCode ?? null,
-        }]);
+        return responderErrorPlantilla(res, error);
     }
 };

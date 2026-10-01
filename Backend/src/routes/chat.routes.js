@@ -1,8 +1,8 @@
 import { Router } from "express"
 import { authRequired } from "../middlewares/validate.token.middleware.js";
-import { listConversations, listMessages, sendMessageController, sendConversationTemplateController} from "../controllers/chat.controller.js";
+import { listConversations, listMessages, sendMessageController, sendConversationTemplateController, startConversationTemplateController } from "../controllers/chat.controller.js";
 import { validateSchema } from "../middlewares/validator.middleware.js";
-import { sendMessageSchema, sendConversationTemplateSchema } from "../schemas/chat.schema.js";
+import { sendMessageSchema, sendConversationTemplateSchema, startConversationTemplateSchema } from "../schemas/chat.schema.js";
 
 const router = Router();
 
@@ -11,5 +11,6 @@ router.post('/chats/messages', validateSchema(sendMessageSchema), authRequired, 
 router.get('/chats', authRequired, listConversations);
 router.get('/chats/:id/messages', authRequired, listMessages);
 router.post('/chats/:id/template', authRequired, validateSchema(sendConversationTemplateSchema), sendConversationTemplateController);
+router.post('/chats/template', authRequired, validateSchema(startConversationTemplateSchema), startConversationTemplateController);
 
 export default router;

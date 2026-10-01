@@ -336,7 +336,7 @@ export const processTemplateSending = async ({
     sendUser(String(user._id), 'message_created', {
         id: String(msg._id), conversationId: String(conversation._id), sender: 'me',
         text: storedText, timestamp: msg.timestamp.toISOString(),
-        status, errorCode, errorDetail,
+        status, errorCode, errorDetail, templateName,
     });
 
     return { msg, conversation, waMessageId, status, errorCode, errorDetail };

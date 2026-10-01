@@ -10,6 +10,15 @@ export const sendConversationTemplateSchema = z.object({
     buttons: z.array(templateButtonSchema).nullish(),
 });
 
+// Conversación nueva desde la bandeja: aquí el destinatario SÍ viene del body.
+// Solo dígitos, con código de país — el mismo formato con el que Meta manda el
+// `from` en el webhook, para que el contacto que conteste caiga en esta misma
+// conversación y no en una duplicada.
+export const startConversationTemplateSchema = sendConversationTemplateSchema.extend({
+    destinationNumber: z.string().regex(/^\d{8,15}$/, 'El número debe llevar solo dígitos, con código de país (8 a 15)'),
+    contactName: z.string().trim().max(80).optional(),
+});
+
 export const sendMessageSchema = z.object({
     contactName: z.string().min(1).optional(),
     destinationNumber: z.string().min(8).optional(),
