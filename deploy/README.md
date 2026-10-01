@@ -120,6 +120,15 @@ La compilación (tanto del front como del back) ocurre **dentro de Docker**, no 
 > Lo mismo con `config/api.env`: las variables nuevas se añaden **a mano en el
 > servidor** (el `.example` del repo es solo la plantilla).
 
+### 5.0 Subir la versión (antes de desplegar)
+
+La versión se cambia en **un solo sitio**, en local:
+```bash
+cd /home/jonathan/Proyects/wasmish_v2/Backend
+npm run version:bump 1.0.8    # o patch | minor | major
+```
+Escribe `version` en los **dos** `package.json` a la vez (los valida antes de tocar ninguno). No hay que editar nada más: Vite la inyecta en el front al compilar y el Backend la publica en `GET /api/version`. Después, commitea (`v1.0.8`) y despliega.
+
 ### 5.1 Solo cambió el Backend
 ```bash
 # 1) LOCAL — subir código del backend
@@ -165,6 +174,7 @@ docker compose up -d --build
 ```bash
 docker compose ps                          # contenedores "Up"
 curl -sI https://wasmish.solventyc.com     # HTTP/2 200
+curl https://wasmish.solventyc.com/api/version   # debe devolver la versión recién subida
 ```
 En el navegador: recarga forzada **Ctrl + Shift + R** (los assets tienen hash y caché larga).
 

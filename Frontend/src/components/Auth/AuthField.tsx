@@ -16,7 +16,7 @@ const fieldClasses = `
 `;
 
 interface FieldProps {
-  label: string;
+  label: ReactNode;
   /** Enlace o acción alineada a la derecha del label (ej. «¿La olvidaste?»). */
   labelAction?: ReactNode;
   type?: 'text' | 'email' | 'password';
@@ -27,6 +27,11 @@ interface FieldProps {
   autoComplete?: string;
   /** Mensaje de error: pinta el borde en rojo y lo muestra debajo. */
   error?: string;
+  /** Ayuda bajo el campo; el error, si lo hay, ocupa su lugar. */
+  hint?: ReactNode;
+  /** Datos que se copian o comparan (teléfonos, códigos): van en mono. */
+  mono?: boolean;
+  inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode'];
 }
 
 export const AuthField = ({
@@ -39,6 +44,9 @@ export const AuthField = ({
   required,
   autoComplete,
   error,
+  hint,
+  mono,
+  inputMode,
 }: FieldProps) => (
   <label className="grid gap-[7px]">
     <span className="flex items-baseline text-[13px] font-semibold text-brand-strong">
@@ -52,10 +60,14 @@ export const AuthField = ({
       onChange={onChange}
       required={required}
       autoComplete={autoComplete}
+      inputMode={inputMode}
       aria-invalid={error ? true : undefined}
-      className={`${fieldClasses} ${error ? 'border-brand-danger' : 'border-brand-border-strong'}`}
+      className={`${fieldClasses} ${mono ? 'font-mono tabular-nums' : ''}
+        ${error ? 'border-brand-danger' : 'border-brand-border-strong'}`}
     />
-    {error && <span className="text-[13px] text-brand-danger">{error}</span>}
+    {error
+      ? <span className="text-[13px] text-brand-danger">{error}</span>
+      : hint && <span className="text-xs text-brand-muted">{hint}</span>}
   </label>
 );
 

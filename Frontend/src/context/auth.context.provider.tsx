@@ -1,6 +1,7 @@
  import { useEffect, useState, type ReactNode } from "react";
 import { useLogin } from "../hooks/useLogin";
 import { AuthContext } from "./auth.context";
+import { clearAllDrafts } from "../utils/conversationDraft";
 import type { User } from "../models/user.mode";
 import type { AxiosError } from "axios";
 import { useVerifyLogin } from "../hooks/useVerifyLogin";
@@ -89,6 +90,9 @@ export const AuthProvider = ({ children }: AuthProps) => {
     };
  
     const logOut = () => {
+        // El borrador de conversación nueva es de esta sesión: no debe verlo
+        // quien entre después en la misma pestaña.
+        clearAllDrafts();
         setUser(null);
         setErrors([]);
         logOutMutation.mutate();

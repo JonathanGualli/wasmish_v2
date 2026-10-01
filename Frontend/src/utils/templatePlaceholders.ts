@@ -15,11 +15,6 @@ export const extractPlaceholders = (bodyText?: string): string[] => {
 export const isPositional = (placeholders: string[]) =>
     placeholders.length > 0 && placeholders.every(p => /^\d+$/.test(p));
 
-/** Vista previa: sustituye lo que ya escribió y deja el marcador si está vacío. */
-export const previewTemplate = (bodyText: string, values: Record<string, string>) =>
-    bodyText.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (match, key: string) =>
-        values[key.trim()]?.trim() || match);
-
 /**
  * Botones que exigen un valor al enviar, con su índice en la plantilla.
  * Mismo criterio que `buildButtonComponents` en el backend: quick reply y URL

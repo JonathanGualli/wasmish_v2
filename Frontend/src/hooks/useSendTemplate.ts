@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { sendConversationTemplateService } from "../services/api.service";
+import { sendConversationTemplateService, startConversationTemplateService } from "../services/api.service";
 import type { TemplateButtonParam } from "../models/template.model";
 
 export interface SendTemplateVars {
@@ -29,6 +29,33 @@ export const useSendTemplate = () => {
         onSuccess: () => {
             // Enviar no reabre la ventana, pero sí cambia el último mensaje
             // y el orden de la bandeja.
+            queryClient.invalidateQueries({ queryKey: ["conversations"] });
+        },
+    });
+};
+
+export interface StartConversationVars extends Omit<SendTemplateVars, "conversationId"> {
+    /** Solo dígitos, con código de país. */
+    destinationNumber: string;
+    contactName?: string;
+}
+
+/**
+ * Conversación nueva desde la bandeja: la primera plantilla la crea.
+ * Mismo criterio que `useSendTemplate` — sin UI optimista.
+ */
+export const useStartConversation = () => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (vars: StartConversationVars) =>
+            startConversationTemplateService(
+                vars.destinationNumber, vars.templateName, vars.parameters,
+                vars.language, vars.buttons, vars.contactName,
+            ),
+        // También en el error: si Meta rechaza, el backend guarda igual la
+        // conversación con el mensaje fallido, y tiene que aparecer en la bandeja.
+        onSettled: () => {
             queryClient.invalidateQueries({ queryKey: ["conversations"] });
         },
     });

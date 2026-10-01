@@ -27,7 +27,7 @@ Si hay archivos nuevos, actualizar el grafo con `/graphify --update` antes de co
 
 ### Grafo de conocimiento (graphify)
 
-Reconstruido el 2026-09-09 (full: AST + semántica LLM). Stats: **699 nodos, 1409 edges, 54 comunidades**. Hay un `.graphifyignore` en la raíz que excluye `.agents/` (definiciones de skills empaquetadas) y los `.dc.html`/`support.js` del brand — sin él el grafo se contaminaba con ~17% de ruido ajeno al proyecto.
+Reconstruido el 2026-09-09 (full: AST + semántica LLM), actualizado el 2026-09-30 (`graphify update .` tras la conversación nueva con plantilla). Stats: **760 nodos, 1546 edges, 57 comunidades**. Hay un `.graphifyignore` en la raíz que excluye `.agents/` (definiciones de skills empaquetadas) y los `.dc.html`/`support.js` del brand — sin él el grafo se contaminaba con ~17% de ruido ajeno al proyecto.
 
 - `graphify-out/graph.json` — datos del grafo
 - `graphify-out/graph.html` — visualización interactiva
@@ -67,8 +67,12 @@ cd Backend && npm run webhook:simulate -- --clean       # borra la conversación
 ```bash
 cd Backend && npm run backfill:window -- --dry-run   # informa, no escribe
 cd Backend && npm run backfill:window                # aplica
+cd Backend && npm run check:duplicates               # informa duplicados por waMessageId
+cd Backend && npm run check:duplicates -- --fix      # borra las copias, conserva la más antigua
 ```
 `scripts/backfill-last-inbound.js` rellena `Conversation.lastInboundAt` en las conversaciones anteriores al campo, tomando el último `Message` entrante de cada una. Es idempotente y solo escribe si el valor falta o es más viejo, así que nunca pisa lo que el webhook haya puesto mientras corría.
+
+`scripts/check-duplicate-messages.js` busca `Message` que compartan `waMessageId`. Hay que correrlo **antes de desplegar** en una BD que pueda traer duplicados: si los hay, Mongo no puede crear el índice único (E11000), Mongoose solo lo loguea y la app arranca **sin** la protección.
 
 **Versión de la app** — se cambia en **un solo sitio**:
 ```bash
@@ -138,6 +142,7 @@ No se aplica a `/api/webhook` (Meta manda ráfagas) ni a `/api/stream` (conexió
 | GET | `/api/chats` | JWT | Listar conversaciones del usuario |
 | GET | `/api/chats/:id/messages` | JWT | Mensajes paginados (cursor-based) |
 | POST | `/api/chats/:id/template` | JWT | Enviar plantilla a una conversación existente (para reabrir la ventana de 24 h). Body: `{ templateName, language?, parameters?, buttons? }` |
+| POST | `/api/chats/template` | JWT | Iniciar conversación con plantilla desde la bandeja. Body: `{ destinationNumber, contactName?, templateName, language?, parameters?, buttons? }` — el número solo dígitos (8–15) |
 | GET | `/api/media/:id` | JWT | Adjunto de un mensaje (`:id` es el **id del mensaje**, no el del archivo) |
 | GET | `/api/stream` | JWT | SSE stream del usuario |
 | GET | `/api/templates/sync` | JWT | Sincronizar plantillas desde Meta API → MongoDB |
@@ -193,7 +198,7 @@ El webhook trae también una `url` ya resuelta, pero **caduca en horas** mientra
 - **Se guarda todo entrante, no solo el texto.** `utils/inbound.message.js` (`describeInboundMessage`, pura y testeada) traduce la forma que manda Meta — `image.caption`, `document.filename`, `button.text`, `interactive.button_reply.title`… — a `{ type, text, mediaId, mimeType }`, y a partir de ahí **todos los tipos siguen el mismo camino**: `Message`, `lastMessage`, `unreadCount++` y `message_created`. Es el único sitio que conoce esas formas.
 - **`text` nunca sale vacío.** `Message.text` es `required`, y un throw dentro del webhook hace que Meta reintente y que el mensaje del cliente acabe perdiéndose. Por eso todo tipo tiene etiqueta de reserva («Imagen», «Nota de voz», el nombre del archivo) y hasta un tipo que Meta invente mañana cae en «Mensaje no compatible». Es el test que más importa de `inbound.message.test.js`.
 - **Lo que Meta no entrega, lo nombra igual.** Una encuesta llega como `{ type:'unsupported', errors:[…], unsupported:{ type:'poll_creation' } }` — comprobado con un webhook real. `ETIQUETAS_NO_SOPORTADO` traduce ese subtipo («Encuesta») y, si no lo conoce, cae al genérico antes que enseñar el nombre en inglés de Meta. La lista crece según aparezcan tipos nuevos en producción.
-- **Un mensaje roto no tumba el lote.** El cuerpo de cada bucle vive en `procesarEntrante` / `procesarEstado`, y `handleWebhook` los llama envueltos en `try/catch`. Si el error subiera, la respuesta sería 500 y **Meta reintentaría el lote entero**: como no hay índice único en `waMessageId`, los mensajes que sí se guardaron se duplicarían en el chat del cliente. Con el catch, Meta recibe 200 y como mucho se pierde el que venía mal, con su `waMessageId` y su `type` en el log.
+- **Un mensaje roto no tumba el lote.** El cuerpo de cada bucle vive en `procesarEntrante` / `procesarEstado`, y `handleWebhook` los llama envueltos en `try/catch`. Si el error subiera, la respuesta sería 500 y **Meta reintentaría el lote entero** y habría que volver a procesar lo que ya se guardó (el índice único de `waMessageId` evita el duplicado, pero no el trabajo ni el ruido). Con el catch, Meta recibe 200 y como mucho se pierde el que venía mal, con su `waMessageId` y su `type` en el log.
 - **Los `system` se ignoran** (avisos del tipo «este contacto cambió de número»): `describeInboundMessage` devuelve `null`, no se guardan y **no abren la ventana**.
 - **`lastInboundAt` solo avanza**, igual que el estado: `if (!conversation.lastInboundAt || timestamp > conversation.lastInboundAt)`. Un webhook viejo que llegue tarde cerraría la ventana antes de tiempo.
 - La conversación nueva se crea con **`unreadCount: 0`**, no 1: el `+1` de más abajo corre también para ella y el primer mensaje de un contacto nuevo salía con badge 2.
@@ -201,6 +206,7 @@ El webhook trae también una `url` ya resuelta, pero **caduca en horas** mientra
 **Índices MongoDB relevantes:**
 - `Conversation`: `{ userId: 1, contactPhone: 1 }` unique — no puede haber dos conversaciones del mismo user con el mismo teléfono
 - `Message`: `{ conversationId: 1, timestamp: 1 }`
+- `Message`: **dos** índices sobre `waMessageId`, y hacen falta los dos. `waMessageId_unico` es único **parcial** (`$type: 'string'`, no `sparse`: los fallidos se guardan con `null` explícito y dos `null` chocarían) — frena el duplicado cuando Meta reintenta un webhook; `procesarEntrante` trata el E11000 como «ya guardado» y sale sin emitir SSE. `waMessageId_busqueda` es el normal: Mongo no usa el parcial para `{ waMessageId: 'wamid.x' }` y cada acuse de recibo haría un escaneo completo.
 
 ---
 
@@ -253,7 +259,9 @@ QueryClientProvider
 
 **Ventana de 24 h en la UI (`ChatThread`):** `useConversationWindow(windowExpiresAt)` compara el ISO del backend con el reloj local y hace tick cada 60 s (recalcula al vuelo cuando `expiresAt` cambia, si no la UI quedaría hasta un minuto vieja). Tres estados del composer: normal, aviso naranja bajo el umbral de `WINDOW_WARNING_MS` (2 h), y bloqueado con el botón «Enviar plantilla». `windowBlocked = Boolean(conversation) && !isOpen`: mientras la lista carga no se sabe el estado real, y bloquear por defecto haría parpadear el aviso en cada carga.
 
-**`SendTemplateDialog` + `useSendTemplate`:** **sin UI optimista** — el mensaje lo inserta el `message_created` del SSE; adelantarlo lo duplicaría, porque este envío no lleva `temporalId` con el que deduplicar. Los errores se muestran **dentro del diálogo**, no en el modal global, para poder corregir sin perder lo escrito. El diálogo deriva los campos del `bodyText` (`extractPlaceholders`) y **los valores de los botones** de `Template.buttons` (`buttonsNeedingValue`: OTP, `COPY_CODE` y URL con `{{ }}` — el mismo criterio que `buildButtonComponents` en el backend). Sin eso, cualquier plantilla `AUTHENTICATION` fallaba al enviarse desde el chat. Una plantilla sincronizada antes de que existiera `Template.buttons` no muestra esos campos: hay que pulsar *Sincronizar* en la página de Plantillas.
+**Conversación nueva (`NewConversationPanel`):** no es un modal — ocupa el sitio del hilo, y la bandeja enseña una fila «Borrador» mientras exista. **El borrador sobrevive** a abrir otra conversación, cambiar de página o recargar: `ChatPage` lo guarda en `sessionStorage` (`utils/conversationDraft.ts`, clave con el id del usuario) y la fila lo vuelve a abrir. Solo se borra al pulsar *Descartar*, al enviarlo, al cerrar sesión (`clearAllDrafts` en `logOut`) o al cerrar la pestaña. Nunca va a la BD. `useTemplateForm` arranca con lo guardado y expone `selectedName` aparte de `selected`, porque mientras cargan las plantillas `selected` es `undefined` y guardar ese valor borraría la plantilla elegida. **Solo envía plantillas**: a un número que nunca escribió WhatsApp no le entrega texto libre (131047). Va a `POST /api/chats/template`, que llama a `processTemplateSending` con `destinationNumber` + `contactName`; si el número ya tiene conversación la reutiliza (índice único), y el panel lo avisa antes con «Abrirla». Si Meta rechaza, la conversación queda creada con el mensaje fallido — por eso `useStartConversation` invalida la bandeja también en el error. Los mensajes con `templateName` se pintan en el hilo con «Plantilla · nombre» encima y sus botones debajo (`TemplateButtons`, de la definición sincronizada).
+
+**`SendTemplateDialog` + `useSendTemplate`:** **sin UI optimista** — el mensaje lo inserta el `message_created` del SSE; adelantarlo lo duplicaría, porque este envío no lleva `temporalId` con el que deduplicar. Los errores van al **modal global** (igual que en `NewConversationPanel`, con el texto de `templateSendError`: si rechazó Meta, su código y detalle); el diálogo sigue abierto debajo, sin perder lo escrito. Ojo: el modal vive en otro portal, así que para el `Dialog` de Headless UI pulsar su X es un «clic fuera» — `handleDialogClose` ignora el cierre mientras el modal está visible. El diálogo deriva los campos del `bodyText` (`extractPlaceholders`) y **los valores de los botones** de `Template.buttons` (`buttonsNeedingValue`: OTP, `COPY_CODE` y URL con `{{ }}` — el mismo criterio que `buildButtonComponents` en el backend). Sin eso, cualquier plantilla `AUTHENTICATION` fallaba al enviarse desde el chat. Una plantilla sincronizada antes de que existiera `Template.buttons` no muestra esos campos: hay que pulsar *Sincronizar* en la página de Plantillas.
 
 **Mensajes que no son texto:** el backend ya manda el `text` resuelto (el caption, el nombre del archivo o una etiqueta), así que la bandeja no necesita saber nada — pinta `lastMessage` y ya. En el hilo, `MessageTypeIcon` le pone delante el icono de Lucide que corresponde al `type`, y devuelve `null` para `'text'`, que es casi todo el historial: la burbuja normal no cambia. Un `type` desconocido cae en el interrogante, nunca en un hueco. Cuando el mensaje trae archivo (`hasMedia`), `MessageMedia` lo pinta: `<img>` para imagen y sticker, `<video controls>`, `<audio controls>`, y una fila descargable para documentos. La URL es `/api/media/<id>` y es del **mismo origen** que la app (proxy de Vite en dev, nginx en prod), así que la cookie de sesión viaja sola y basta con ponerla en el `src` — sin `fetch` ni blobs. Debajo del archivo solo se pinta el `caption`, nunca la etiqueta.
 
@@ -267,7 +275,8 @@ QueryClientProvider
 - `useUpdateWhatsappToken` — carga manual de credenciales de WhatsApp
 - `useConnectWhatsapp` — Embedded Signup (SDK de Facebook → `/api/whatsapp/connect`)
 - `useConversationWindow(windowExpiresAt)` — cuenta atrás de la ventana de 24 h (tick de 60 s)
-- `useSendTemplate` — envío de plantilla a una conversación (sin UI optimista)
+- `useSendTemplate` — envío de plantilla a una conversación (sin UI optimista); `useStartConversation`, en el mismo archivo, la conversación nueva
+- `useTemplateForm` — estado compartido del formulario de plantilla (elegida, valores, botones, payload); lo usan `SendTemplateDialog` y `NewConversationPanel`
 - `useTemplates` — sync + listado de plantillas
 - `useApiKey` — gestión de API keys (listar / generar / revocar)
 

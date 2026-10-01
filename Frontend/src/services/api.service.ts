@@ -179,3 +179,21 @@ export const sendConversationTemplateService = async (
     );
     return data;
 }
+
+// Servicio para iniciar una conversación nueva con una plantilla (a un número
+// que todavía no está en la bandeja, o que nunca escribió)
+export const startConversationTemplateService = async (
+    destinationNumber: string,
+    templateName: string,
+    parameters: (string | { name: string; value: string })[],
+    language?: string,
+    buttons?: TemplateButtonParam[],
+    contactName?: string,
+) => {
+    const { data } = await axios.post(
+        `${API_URL}/chats/template`,
+        { destinationNumber, contactName, templateName, parameters, language, buttons },
+        { withCredentials: true },
+    );
+    return data;
+}

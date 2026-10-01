@@ -1,16 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
 import { Dialog, DialogPanel, DialogTitle } from '@headlessui/react';
 import { X, LayoutTemplate } from 'lucide-react';
-import type { AxiosError } from 'axios';
 import { CustomButton } from '../Button/Button';
-import { AuthField } from '../Auth/AuthField';
 import { Callout } from '../Callout/Callout';
-import { useTemplates } from '../../hooks/useTemplates';
+import { useModalContext } from '../Modal/context/UseModalContext';
 import { useSendTemplate } from '../../hooks/useSendTemplate';
-import { extractPlaceholders, isPositional, previewTemplate, buttonsNeedingValue, buttonFieldLabel } from '../../utils/templatePlaceholders';
-import type { Template } from '../../models/template.model';
-
-interface ErrorItem { message: string }
+import { useTemplateForm, templateSendError } from '../../hooks/useTemplateForm';
+import { TemplatePicker, TemplateFields } from './TemplateFields';
+import { TemplateBubble, TemplateButtons } from './TemplatePreview';
 
 interface Props {
   open: boolean;
@@ -22,96 +18,41 @@ interface Props {
 
 /**
  * Enviar una plantilla aprobada a una conversación cuya ventana de 24 h se
- * cerró. Los errores se muestran DENTRO del diálogo, no en el modal global:
- * el usuario tiene que poder corregir los datos sin perder lo que escribió.
+ * cerró. Los errores van al modal global, como en el resto de la app; el
+ * diálogo sigue abierto debajo para corregir sin perder lo escrito.
  */
 export const SendTemplateDialog = ({ open, onClose, conversationId, contactName }: Props) => {
-  const { templates, isLoading } = useTemplates();
+  const form = useTemplateForm();
   const sendTemplate = useSendTemplate();
-
-  const [selectedName, setSelectedName] = useState('');
-  const [values, setValues] = useState<Record<string, string>>({});
-  const [buttonValues, setButtonValues] = useState<Record<number, string>>({});
-  const [error, setError] = useState<string | null>(null);
-
-  // Solo las aprobadas se pueden enviar; el resto Meta las rechaza.
-  const approved = useMemo(
-    () => (templates as Template[]).filter(t => t.status === 'APPROVED'),
-    [templates],
-  );
-
-  const selected = useMemo(
-    () => approved.find(t => t.name === selectedName),
-    [approved, selectedName],
-  );
-
-  const placeholders = useMemo(
-    () => extractPlaceholders(selected?.bodyText),
-    [selected],
-  );
-
-  // Una plantilla de OTP, de cupón o con URL dinámica no se puede enviar sin el
-  // valor de su botón: Meta la rechaza. Los pedimos aquí en vez de fallar luego.
-  const buttonFields = useMemo(
-    () => buttonsNeedingValue(selected?.buttons),
-    [selected],
-  );
-
-  // Cambiar de plantilla invalida lo escrito: los marcadores son otros.
-  useEffect(() => {
-    setValues({});
-    setButtonValues({});
-    setError(null);
-  }, [selectedName]);
+  const { state: errorVisible, setState, setContent } = useModalContext();
 
   const handleClose = () => {
     if (sendTemplate.isPending) return;
-    setSelectedName('');
-    setValues({});
-    setButtonValues({});
-    setError(null);
+    form.reset();
     onClose();
   };
 
-  const allFilled = placeholders.every(p => values[p]?.trim())
-    && buttonFields.every(({ index }) => buttonValues[index]?.trim());
+  // El modal de error vive en otro portal: para el Dialog, pulsar su X (o ESC
+  // con él abierto) es un «clic fuera», y cerraría el diálogo con lo escrito.
+  const handleDialogClose = () => {
+    if (!errorVisible) handleClose();
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selected || !allFilled) return;
-    setError(null);
-
-    // Los posicionales van ordenados por su número ({{2}} después de {{1}});
-    // los nombrados llevan su nombre, que es como Meta los identifica.
-    const parameters = isPositional(placeholders)
-      ? [...placeholders].sort((a, b) => Number(a) - Number(b)).map(p => values[p].trim())
-      : placeholders.map(p => ({ name: p, value: values[p].trim() }));
-
-    // El backend deduce el sub_type de la definición guardada; aquí solo va el
-    // índice del botón y su valor.
-    const buttons = buttonFields.map(({ index }) => ({
-      index,
-      parameters: [buttonValues[index].trim()],
-    }));
+    if (!form.selected || form.missing > 0) return;
 
     try {
-      await sendTemplate.mutateAsync({
-        conversationId,
-        templateName: selected.name,
-        parameters,
-        language: selected.language,
-        buttons,
-      });
+      await sendTemplate.mutateAsync({ conversationId, ...form.buildPayload() });
       handleClose();
     } catch (err) {
-      const data = (err as AxiosError<ErrorItem[] | ErrorItem>).response?.data;
-      const messages = Array.isArray(data) ? data.map(d => d.message) : data?.message ? [data.message] : [];
-      setError(messages[0] ?? 'No se pudo enviar la plantilla. Inténtalo de nuevo.');
+      setContent(<div className="text-brand-danger text-sm"><p>{templateSendError(err)}</p></div>);
+      setState(true);
     }
   };
 
   return (
-    <Dialog open={open} onClose={handleClose} className="relative z-50">
+    <Dialog open={open} onClose={handleDialogClose} className="relative z-50">
       <div className="fixed inset-0 bg-brand-ink/50" aria-hidden="true" />
 
       <div className="fixed inset-0 flex items-center justify-center p-4">
@@ -138,9 +79,9 @@ export const SendTemplateDialog = ({ open, onClose, conversationId, contactName 
             </button>
           </div>
 
-          {isLoading ? (
+          {form.isLoading ? (
             <p className="text-sm text-brand-muted mt-6">Cargando plantillas…</p>
-          ) : approved.length === 0 ? (
+          ) : form.approved.length === 0 ? (
             <div className="mt-6">
               <Callout tone="info" icon={<LayoutTemplate size={16} />} title="No tienes plantillas aprobadas">
                 Créalas en el Administrador de WhatsApp de Meta y sincronízalas desde la
@@ -149,75 +90,28 @@ export const SendTemplateDialog = ({ open, onClose, conversationId, contactName 
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="grid gap-[18px] mt-6">
-              <label className="grid gap-[7px]">
-                <span className="text-[13px] font-semibold text-brand-strong">Plantilla</span>
-                <select
-                  value={selectedName}
-                  onChange={(e) => setSelectedName(e.target.value)}
-                  required
-                  className="w-full box-border text-[15px] text-brand-text
-                    bg-brand-surface border border-brand-border-strong rounded-lg px-[14px] py-[13px]
-                    focus:outline-none focus:border-brand-success focus:ring-[3px] focus:ring-brand-accent-soft
-                    transition-colors cursor-pointer"
-                >
-                  <option value="">Elige una plantilla…</option>
-                  {approved.map(t => (
-                    <option key={t.templateId} value={t.name}>
-                      {t.name} ({t.language})
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <TemplatePicker form={form} />
+              <TemplateFields form={form} />
 
-              {placeholders.map((p, i) => (
-                <AuthField
-                  key={p}
-                  label={isPositional(placeholders) ? `Valor ${i + 1} — {{${p}}}` : p}
-                  type="text"
-                  value={values[p] ?? ''}
-                  onChange={(e) => setValues(v => ({ ...v, [p]: e.target.value }))}
-                  required
-                />
-              ))}
-
-              {buttonFields.map(({ button, index }) => (
-                <div key={index} className="grid gap-[7px]">
-                  <AuthField
-                    label={buttonFieldLabel(button)}
-                    type="text"
-                    value={buttonValues[index] ?? ''}
-                    onChange={(e) => setButtonValues(v => ({ ...v, [index]: e.target.value }))}
-                    required
-                  />
-                  {button.type === 'OTP' && (
-                    <span className="text-[13px] text-brand-muted">
-                      Tiene que ser el mismo código que aparece en el texto del mensaje.
-                    </span>
-                  )}
-                </div>
-              ))}
-
-              {selected && (
+              {form.selected && (
                 <div className="grid gap-[7px]">
                   <span className="text-[13px] font-semibold text-brand-strong">Vista previa</span>
-                  <div className="text-sm leading-[1.5] whitespace-pre-line text-white
-                    bg-brand-deep rounded-[12px_12px_3px_12px] px-3.5 py-2.5">
-                    {previewTemplate(selected.bodyText ?? '', values)}
+                  <div>
+                    <TemplateBubble bodyText={form.selected.bodyText ?? ''} values={form.values} />
+                    <TemplateButtons buttons={form.selected.buttons} />
                   </div>
                   <span className="text-[13px] text-brand-muted">
-                    Si la plantilla tiene botones o encabezado, no se ven aquí — pero sí se envían.
+                    Si la plantilla tiene encabezado, no se ve aquí — pero sí se envía.
                   </span>
                 </div>
               )}
-
-              {error && <p className="text-[13px] text-brand-danger">{error}</p>}
 
               <div className="flex gap-2.5 justify-end">
                 <div className="h-10">
                   <CustomButton variant="outline" onClick={handleClose}>Cancelar</CustomButton>
                 </div>
                 <div className="h-10">
-                  <CustomButton type="submit" isLoading={sendTemplate.isPending} disabled={!selected || !allFilled}>
+                  <CustomButton type="submit" isLoading={sendTemplate.isPending} disabled={!form.selected || form.missing > 0}>
                     {sendTemplate.isPending ? 'Enviando…' : 'Enviar'}
                   </CustomButton>
                 </div>

@@ -34,4 +34,6 @@ export interface Message {
   errorCode?: string;
   errorDetail?: string;
   temporalId?: string; // en caso de mensajes optimistas
+  /** Solo en los enviados como plantilla: con él se pintan su nombre y sus botones. */
+  templateName?: string | null;
 }

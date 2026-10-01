@@ -5,11 +5,17 @@ import { useTemplates } from "../../hooks/useTemplates";
 import { renderLegacyTemplateText } from "../../utils/legacyTemplate";
 import { formatChatTime } from "../../utils/formatChatTime";
 import { initials } from "../../utils/initials";
+import { draftTitle, type ConversationDraft } from "../../utils/conversationDraft";
 
 interface Props {
     onSelect: (id: string) => void;
     selectedId?: string | null;
     onNewConversation: () => void;
+    /** Conversación nueva a medio escribir: va arriba del todo mientras exista. */
+    draft?: ConversationDraft | null;
+    /** El borrador es lo que está abierto ahora (si no, otra conversación). */
+    draftActive?: boolean;
+    onOpenDraft?: () => void;
 }
 
 const CenteredState = ({ children, tone = 'muted' }: { children: React.ReactNode; tone?: 'muted' | 'danger' }) => (
@@ -27,7 +33,7 @@ const CenteredState = ({ children, tone = 'muted' }: { children: React.ReactNode
  * Los filtros (Todos / Míos / Sin asignar) y las etiquetas de la maqueta no
  * están: dependen de asignación y etiquetado, que el backend todavía no tiene.
  */
-export const ChatconversationList = ({ onSelect, selectedId, onNewConversation }: Props) => {
+export const ChatconversationList = ({ onSelect, selectedId, onNewConversation, draft, draftActive, onOpenDraft }: Props) => {
     const { data: conversations, isLoading, isError } = useConversations();
     const { templates } = useTemplates();
     const [query, setQuery] = useState('');
@@ -139,6 +145,32 @@ export const ChatconversationList = ({ onSelect, selectedId, onNewConversation }
             </div>
 
             <div className="flex-1 overflow-y-auto min-h-0 flex flex-col">
+                {draft && (
+                    <button
+                        type="button"
+                        onClick={onOpenDraft}
+                        className={`w-full text-left flex gap-3 px-[18px] py-3.5 border-b border-brand-bg
+                            border-l-[3px] cursor-pointer transition-colors
+                            ${draftActive
+                                ? 'bg-brand-bg border-l-brand-deep'
+                                : 'border-l-transparent hover:bg-brand-bg'}`}
+                    >
+                        <div className="w-[38px] h-[38px] rounded-[10px] flex items-center justify-center flex-none
+                            border border-dashed border-brand-border-strong bg-brand-surface text-brand-muted">
+                            <Plus size={16} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <div className="text-sm font-semibold text-brand-text truncate">{draftTitle(draft)}</div>
+                            <div className="text-[13px] text-brand-muted truncate mt-0.5">
+                                {draft.templateName ? `Plantilla ${draft.templateName}` : 'Sin plantilla todavía'}
+                            </div>
+                            <span className="inline-block mt-1.5 rounded-full px-2 py-0.5 text-[10px] font-bold
+                                uppercase tracking-[0.05em] bg-brand-raised text-brand-muted">
+                                Borrador
+                            </span>
+                        </div>
+                    </button>
+                )}
                 {renderRows()}
             </div>
         </div>

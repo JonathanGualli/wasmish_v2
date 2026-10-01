@@ -17,6 +17,8 @@ import { Callout } from "../Callout/Callout.tsx";
 import { CustomButton } from "../Button/Button.tsx";
 import { useConversationWindow, formatRemaining, WINDOW_WARNING_MS } from "../../hooks/useConversationWindow.ts";
 import { SendTemplateDialog } from "./SendTemplateDialog.tsx";
+import { TemplateButtons } from "./TemplatePreview.tsx";
+import type { Template } from "../../models/template.model.ts";
 
 interface Props {
     conversationId: string | null;
@@ -169,12 +171,23 @@ export const ChatThread = ({ conversationId, onBack }: Props) => {
             // sobra. Sin archivo (descarga fallida, o tipo sin nada que bajar)
             // se cae a la etiqueta con su icono, que es como estaba antes.
             const conArchivo = Boolean(msg.hasMedia);
+            // Enviado como plantilla: se nombra encima y se pintan sus botones
+            // debajo, como los ve el contacto. Los botones salen de la definición
+            // sincronizada; si la plantilla ya no está, solo queda el nombre.
+            const plantilla = msg.templateName
+                ? (templates as Template[]).find(t => t.name === msg.templateName)
+                : undefined;
 
             nodes.push(
                 <div
                     key={msg.id ?? msg.temporalId ?? i}
                     className={`max-w-[85%] md:max-w-[62%] ${mine ? "self-end" : "self-start"}`}
                 >
+                    {msg.templateName && (
+                        <div className={`font-mono text-[11px] text-brand-subtle mb-1 ${mine ? "text-right" : ""}`}>
+                            Plantilla · {msg.templateName}
+                        </div>
+                    )}
                     <div
                         className={`px-3.5 py-2.5 text-sm leading-[1.5] whitespace-pre-line
                             ${mine
@@ -197,6 +210,7 @@ export const ChatThread = ({ conversationId, onBack }: Props) => {
                             renderLegacyTemplateText(msg.text, templates)
                         )}
                     </div>
+                    <TemplateButtons buttons={plantilla?.buttons} />
 
                     <div className={`flex items-center gap-[5px] text-[11px] mt-1 text-brand-subtle
                         ${mine ? "justify-end" : ""}`}>
@@ -272,16 +286,16 @@ export const ChatThread = ({ conversationId, onBack }: Props) => {
                     <div className="bg-brand-surface border-t border-brand-border px-6 py-3.5 flex-none">
                         <Callout
                             tone="info"
-                            icon={<LayoutTemplate size={16} />}
+                            icon={hasWindow ? <LayoutTemplate size={16} /> : <Clock size={16} />}
                             title={hasWindow
                                 ? "La ventana de 24 h se cerró"
-                                : "Este contacto todavía no te ha escrito"}
+                                : "Esperando respuesta"}
                         >
                             <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                                 <p className="min-w-0">
                                     {hasWindow
                                         ? "Pasaron más de 24 h desde su último mensaje. WhatsApp solo permite retomar la conversación con una plantilla aprobada."
-                                        : "WhatsApp solo permite iniciar una conversación con una plantilla aprobada."}
+                                        : `Cuando ${title} conteste, se abre la ventana de 24 h y podrás escribir libremente. Mientras tanto, solo plantillas.`}
                                 </p>
                                 <div className="sm:ml-auto flex-none">
                                     <CustomButton onClick={() => setTemplateDialogOpen(true)}>
