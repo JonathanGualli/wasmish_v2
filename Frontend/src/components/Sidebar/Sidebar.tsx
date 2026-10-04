@@ -1,4 +1,4 @@
-import { Menu, Rocket, Settings, MessageSquare, LayoutTemplate, BookOpen, X, ShieldCheck, LogOut } from 'lucide-react';
+import { Menu, Rocket, Settings, MessageSquare, Users, LayoutTemplate, BookOpen, X, ShieldCheck, LogOut } from 'lucide-react';
 import { SidebarItem } from './SidebarItem';
 import { useAuthContext } from '../../context/auth.context';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -38,6 +38,7 @@ export const Sidebar = ({ collapsed, toggle, isMobile }: Props) => {
     const items = [
       { icon: <Rocket size={18} />,         text: 'Inicio rápido',  value: 'quickStart', path: `${AppRoutes.private.root}/${AppRoutes.private.quickStart}`, badge: undefined as number | undefined },
       { icon: <MessageSquare size={18} />,  text: 'Chats',          value: 'chats',      path: `${AppRoutes.private.root}/${AppRoutes.private.chats}`,      badge: unread },
+      { icon: <Users size={18} />,          text: 'Contactos',      value: 'contacts',   path: `${AppRoutes.private.root}/${AppRoutes.private.contacts}`,   badge: undefined },
       { icon: <LayoutTemplate size={18} />, text: 'Plantillas',     value: 'templates',  path: `${AppRoutes.private.root}/${AppRoutes.private.templates}`,  badge: undefined },
       { icon: <BookOpen size={18} />,       text: 'Documentación',  value: 'docs',       path: `${AppRoutes.private.root}/${AppRoutes.private.docs}`,       badge: undefined },
     ];

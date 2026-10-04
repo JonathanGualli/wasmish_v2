@@ -1,6 +1,7 @@
 import type { QueryFunctionContext } from '@tanstack/react-query';
 import axios from 'axios';
 import type { TemplateButtonParam } from '../models/template.model';
+import type { ContactFilter, ContactInput } from '../models/contact.model';
 
 const API_URL = '/api'; // configuracion puesta en vite.config.ts
 // const API_URL = 'https://wasmish-api.solventyc.com/api';
@@ -196,4 +197,33 @@ export const startConversationTemplateService = async (
         { withCredentials: true },
     );
     return data;
+}
+
+// --- Contactos ---------------------------------------------------------------
+
+export const getContactsService = async (page: number, limit: number, search: string, filter: ContactFilter) => {
+    const { data } = await axios.get(`${API_URL}/contacts`, {
+        params: { page, limit, search: search || undefined, filter },
+        withCredentials: true,
+    });
+    return data;
+}
+
+export const getContactService = async (id: string) => {
+    const { data } = await axios.get(`${API_URL}/contacts/${id}`, { withCredentials: true });
+    return data;
+}
+
+export const createContactService = async (input: ContactInput) => {
+    const { data } = await axios.post(`${API_URL}/contacts`, input, { withCredentials: true });
+    return data;
+}
+
+export const updateContactService = async (id: string, input: ContactInput) => {
+    const { data } = await axios.patch(`${API_URL}/contacts/${id}`, input, { withCredentials: true });
+    return data;
+}
+
+export const deleteContactService = async (id: string) => {
+    await axios.delete(`${API_URL}/contacts/${id}`, { withCredentials: true });
 }

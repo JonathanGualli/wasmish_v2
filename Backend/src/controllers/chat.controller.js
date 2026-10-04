@@ -6,8 +6,11 @@ import { sendTextMessage } from "../libs/whatsapp.js";
 import { sendUser } from './stream.controller.js';
 import { getWindowExpiry } from "../utils/whatsapp.window.js";
 import { processTemplateSending } from "./template.controller.js";
+import { getSendingRecipient, getSendingConversation } from "./contact.controller.js";
+import { contactDisplayName } from "../utils/contact.identity.js";
 
-// Enviar mensajes simplificado
+// Envía un texto libre y lo persiste. El destinatario es `conversation` o, si
+// no la hay, `destinationNumber` (mismo criterio que processTemplateSending).
 export const processMessageSending = async ({
     user,
     conversation,
@@ -21,6 +24,8 @@ export const processMessageSending = async ({
 
     if (!phoneNumberId) throw new Error("Phone number ID is required");
 
+    const recipient = await getSendingRecipient(conversation, destinationNumber);
+
     // Intentamos enviar a Meta. Si falla, NO abortamos: marcamos el mensaje como fallido.
     let waMessageId = null;
     let status = 'sent';
@@ -31,7 +36,7 @@ export const processMessageSending = async ({
         const apiRes = await sendTextMessage({
             token,
             phoneNumberId,
-            to: conversation?.contactPhone || destinationNumber,
+            recipient,
             text
         });
         waMessageId = apiRes?.data?.messages?.[0]?.id || null;
@@ -42,24 +47,13 @@ export const processMessageSending = async ({
     }
 
     // Si no hay conversación (mensaje nuevo), la creamos; si existe, la actualizamos
-    let targetConversation = conversation;
     const now = new Date();
-
-    if (!targetConversation) {
-        targetConversation = await Conversation.create({
-            userId: user._id,
-            contactPhone: destinationNumber,
-            phoneNumberId,
-            lastMessage: text,
-            lastMessageAt: now,
-            unreadCount: 0,
-            contactName: contactName || null,
-        });
-    } else {
-        targetConversation.lastMessage = text;
-        targetConversation.lastMessageAt = now;
-        await targetConversation.save();
-    }
+    const targetConversation = await getSendingConversation({
+        userId: user._id, conversation, recipient, phoneNumberId, contactName, source: 'manual',
+    });
+    targetConversation.lastMessage = text;
+    targetConversation.lastMessageAt = now;
+    await targetConversation.save();
 
     // Creamos el mensaje con su estado REAL (sent o failed)
     const msg = await Message.create({
@@ -100,22 +94,18 @@ export const sendMessageController = async (req, res) => {
         const user = await User.findById(req.user.id);
         if (!user) return res.status(404).json([{ message: "User not found" }]);
 
-        let conversation = null;
-
-        // Si hay ID, buscamos la conversación
-        if (id) {
-            conversation = await Conversation.findById(id);
-            if (!conversation) return res.status(404).json([{ message: "Conversation not found" }]);
-        } 
-        // Si no hay ID, pero hay número, intentamos buscar si ya existe una con ese número
-        else if (destinationNumber) {
-            conversation = await Conversation.findOne({ 
-                userId: user._id, 
-                contactPhone: destinationNumber 
-            });
-        } 
-        else {
+        if (!id && !destinationNumber) {
             return res.status(400).json([{ message: "Conversation ID or Destination Number is required" }]);
+        }
+
+        // Con ID, la conversación tiene que ser de esta cuenta: filtrar por userId
+        // es la comprobación de propiedad. Sin él, quien conociera el id de una
+        // conversación ajena podía escribir en ella con el WhatsApp de su dueño.
+        // Sin ID, processMessageSending reutiliza la del contacto de ese número.
+        let conversation = null;
+        if (id) {
+            conversation = await Conversation.findOne({ _id: id, userId: user._id });
+            if (!conversation) return res.status(404).json([{ message: "Conversation not found" }]);
         }
 
         // Llamamos al servicio (que ahora persiste incluso si el envío falla)
@@ -152,16 +142,26 @@ export const sendMessageController = async (req, res) => {
 export const listConversations = async (req, res) => {
     const userId = req.user.id;
     try{
-        const items = await Conversation.find({ userId }).sort({ lastMessageAt: -1 }).lean();
-        const result = items.map((item) => ({
-            id: String(item._id),
-            title: item.contactName || item.contactPhone,
-            phone: item.contactPhone,
-            lastMessage: item.lastMessage || '',
-            updatedAt: (item.lastMessageAt || item.updatedAt).toISOString(),
-            unreadCount: item.unreadCount || 0,
-            windowExpiresAt: getWindowExpiry(item.lastInboundAt)?.toISOString() ?? null,
-        }));
+        const items = await Conversation.find({ userId })
+            .sort({ lastMessageAt: -1 })
+            .populate('contactId', 'name profileName username phone')
+            .lean();
+
+        const result = items.map((item) => {
+            // `populate` deja el contacto en `contactId`. Una conversación anterior
+            // a los contactos aún no lo tiene: se usa lo que ella misma guardaba.
+            const contact = item.contactId ?? { name: item.contactName, phone: item.contactPhone };
+            return {
+                id: String(item._id),
+                title: contactDisplayName(contact),
+                phone: contact.phone ?? null,
+                username: contact.username ?? null,
+                lastMessage: item.lastMessage || '',
+                updatedAt: (item.lastMessageAt || item.updatedAt).toISOString(),
+                unreadCount: item.unreadCount || 0,
+                windowExpiresAt: getWindowExpiry(item.lastInboundAt)?.toISOString() ?? null,
+            };
+        });
 
         return res.json(result);
     }catch(error){
@@ -293,7 +293,7 @@ export const sendConversationTemplateController = async (req, res) => {
 
         const resultado = await processTemplateSending({
             user,
-            destinationNumber: conversation.contactPhone,
+            conversation,
             templateName: req.body.templateName,
             language: req.body.language,
             parameters: req.body.parameters ?? [],
@@ -308,9 +308,9 @@ export const sendConversationTemplateController = async (req, res) => {
 
 // Iniciar una conversación desde la bandeja. A un número que nunca escribió
 // WhatsApp solo le entrega plantillas aprobadas, así que la conversación nace
-// con una. `processTemplateSending` la crea si no existe o reutiliza la que ya
-// hay (el índice { userId, contactPhone } no admite dos), y ya la filtra por
-// el user de la sesión: no hay conversación ajena que comprobar.
+// con una. `processTemplateSending` la crea si no existe o reutiliza la del
+// contacto de ese número (el índice { userId, contactId } no admite dos), y ya
+// la filtra por el user de la sesión: no hay conversación ajena que comprobar.
 export const startConversationTemplateController = async (req, res) => {
     try {
         const user = await User.findById(req.user.id);
@@ -320,6 +320,7 @@ export const startConversationTemplateController = async (req, res) => {
             user,
             destinationNumber: req.body.destinationNumber,
             contactName: req.body.contactName || undefined,
+            source: 'manual',
             templateName: req.body.templateName,
             language: req.body.language,
             parameters: req.body.parameters ?? [],

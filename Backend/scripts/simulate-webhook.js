@@ -10,6 +10,11 @@
 //   npm run webhook:simulate -- --clean          ← borra la conversación de prueba
 //
 // Opciones: --from <numero>  --url <http://...>  --phone-number-id <id>
+//           --name <nombre de perfil>  --username <usuario>
+//
+// Con --username el mensaje llega SIN teléfono, solo con el BSUID: así escribe
+// quien activó su nombre de usuario de WhatsApp y no ha hablado con el negocio
+// en 30 días. --clean con el mismo --username borra ese contacto de prueba.
 //
 // El backend tiene que estar levantado (npm run dev). Como el SSE dispara igual,
 // los mensajes aparecen EN VIVO en el chat que tengas abierto en el navegador.
@@ -18,6 +23,7 @@ import crypto from 'node:crypto';
 import mongoose from 'mongoose';
 
 import User from '../src/models/user.model.js';
+import Contact from '../src/models/contact.model.js';
 import Conversation from '../src/models/conversation.model.js';
 import Message from '../src/models/message.model.js';
 
@@ -53,8 +59,16 @@ const opcion = (nombre, porDefecto) => {
 const FROM = opcion('from', '593000000000');   // número de pruebas, no real
 const URL_BASE = opcion('url', 'http://localhost:3001');
 const phoneNumberIdArg = opcion('phone-number-id', null);
+const PROFILE_NAME = opcion('name', 'Cliente de prueba');
+const USERNAME = opcion('username', null);
 
-const nombres = argv.filter(a => !a.startsWith('--') && a !== FROM && a !== URL_BASE && a !== phoneNumberIdArg);
+// El BSUID que Meta generaría: país + id. Se deriva del número o del usuario
+// para que el mismo contacto de prueba tenga siempre el mismo.
+const USER_ID = `EC.SIM${Buffer.from(USERNAME ?? FROM).toString('hex')}`;
+const PHONE = USERNAME ? null : FROM;
+
+const valoresDeOpciones = [FROM, URL_BASE, phoneNumberIdArg, PROFILE_NAME, USERNAME];
+const nombres = argv.filter(a => !a.startsWith('--') && !valoresDeOpciones.includes(a));
 const todos = argv.includes('--all');
 const listar = argv.includes('--list');
 const limpiar = argv.includes('--clean');
@@ -92,32 +106,49 @@ if (!dueno) {
 
 const phoneNumberId = dueno.phoneNumberId;
 
-// Toda consulta de conversación va filtrada por userId: con varias cuentas en la
-// BD local, buscar solo por contactPhone acierta la cuenta equivocada — y en
-// --clean eso significa borrar la conversación de otro.
-const filtroConversacion = { userId: dueno._id, contactPhone: FROM };
+// Toda consulta va filtrada por userId: con varias cuentas en la BD local,
+// buscar solo por teléfono acierta la cuenta equivocada — y en --clean eso
+// significa borrar la conversación de otro.
+const testIdentity = PHONE ? { $or: [{ phone: PHONE }, { waUserId: USER_ID }] } : { waUserId: USER_ID };
+const senderLabel = USERNAME ? `@${USERNAME} (sin número)` : FROM;
+
+const findTestContact = () => Contact.findOne({ userId: dueno._id, ...testIdentity });
+
+// Una conversación de prueba anterior a los contactos solo se encuentra por teléfono.
+const findTestConversation = async (contact) => contact
+    ? Conversation.findOne({ userId: dueno._id, contactId: contact._id })
+    : PHONE && Conversation.findOne({ userId: dueno._id, contactPhone: PHONE });
 
 if (limpiar) {
-    const conv = await Conversation.findOne(filtroConversacion);
-    if (!conv) {
-        console.log(`No hay conversación de prueba con ${FROM} en la cuenta ${dueno.email}.`);
+    const contact = await findTestContact();
+    const conv = await findTestConversation(contact);
+    if (!contact && !conv) {
+        console.log(`No hay contacto de prueba ${senderLabel} en la cuenta ${dueno.email}.`);
     } else {
-        const { deletedCount } = await Message.deleteMany({ conversationId: conv._id });
-        await Conversation.deleteOne({ _id: conv._id });
-        console.log(`Borrada la conversación de ${FROM} en ${dueno.email}, con sus ${deletedCount} mensajes.`);
+        const { deletedCount } = conv ? await Message.deleteMany({ conversationId: conv._id }) : { deletedCount: 0 };
+        if (conv) await Conversation.deleteOne({ _id: conv._id });
+        if (contact) await Contact.deleteOne({ _id: contact._id });
+        console.log(`Borrado el contacto de prueba ${senderLabel} en ${dueno.email}, con sus ${deletedCount} mensajes.`);
     }
     await mongoose.disconnect();
     process.exit(0);
 }
 
-console.log(`Enviando a ${URL_BASE}/api/webhook  ·  de ${FROM}  ·  a la cuenta ${dueno.email} (${phoneNumberId})\n`);
+console.log(`Enviando a ${URL_BASE}/api/webhook  ·  de ${senderLabel}  ·  a la cuenta ${dueno.email} (${phoneNumberId})\n`);
 
 for (const nombre of elegidos) {
     const body = JSON.stringify({
         entry: [{ changes: [{ value: {
             metadata: { phone_number_id: phoneNumberId },
+            // Desde abril de 2026 llega siempre el BSUID; el teléfono, no siempre.
+            contacts: [{
+                profile: { name: PROFILE_NAME, ...(USERNAME && { username: USERNAME }) },
+                ...(PHONE && { wa_id: PHONE }),
+                user_id: USER_ID,
+            }],
             messages: [{
-                from: FROM,
+                ...(PHONE && { from: PHONE }),
+                from_user_id: USER_ID,
                 id: `wamid.sim.${Date.now()}.${Math.random().toString(36).slice(2)}`,
                 timestamp: String(Math.floor(Date.now() / 1000)),
                 ...MUESTRAS[nombre],
@@ -143,7 +174,11 @@ for (const nombre of elegidos) {
 }
 
 // Lo que quedó guardado, que es lo que de verdad se quiere comprobar.
-const conv = await Conversation.findOne(filtroConversacion).lean();
+const contact = await findTestContact();
+const conv = await findTestConversation(contact);
+if (contact) {
+    console.log(`\nContacto: ${JSON.stringify(contact.profileName)}  ·  teléfono ${contact.phone ?? '—'}  ·  BSUID ${contact.waUserId ?? '—'}`);
+}
 if (conv) {
     const msgs = await Message.find({ conversationId: conv._id }).sort({ createdAt: -1 }).limit(elegidos.length).lean();
     console.log('\nGuardado (lo más nuevo arriba):');
@@ -151,7 +186,7 @@ if (conv) {
         console.log(`  ${String(m.type).padEnd(12)} ${JSON.stringify(m.text)}`);
     }
     console.log(`\nlastMessage: ${JSON.stringify(conv.lastMessage)}  ·  sin leer: ${conv.unreadCount}`);
-    console.log(`Para borrar la conversación de prueba:  npm run webhook:simulate -- --clean`);
+    console.log(`Para borrar el contacto de prueba:  npm run webhook:simulate -- --clean${USERNAME ? ` --username ${USERNAME}` : ''}`);
 }
 
 await mongoose.disconnect();

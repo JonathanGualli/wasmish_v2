@@ -22,7 +22,8 @@ interface FieldProps {
   type?: 'text' | 'email' | 'password';
   placeholder?: string;
   value: string;
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
+  onBlur?: () => void;
   required?: boolean;
   autoComplete?: string;
   /** Mensaje de error: pinta el borde en rojo y lo muestra debajo. */
@@ -32,6 +33,11 @@ interface FieldProps {
   /** Datos que se copian o comparan (teléfonos, códigos): van en mono. */
   mono?: boolean;
   inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode'];
+  maxLength?: number;
+  /** Visible pero no editable (en gris): un dato que no se puede cambiar. */
+  readOnly?: boolean;
+  /** Varias líneas (`<textarea>`) con ese alto en filas. */
+  rows?: number;
 }
 
 export const AuthField = ({
@@ -47,29 +53,35 @@ export const AuthField = ({
   hint,
   mono,
   inputMode,
-}: FieldProps) => (
+  maxLength,
+  readOnly,
+  rows,
+  onBlur,
+}: FieldProps) => {
+  const className = `${fieldClasses} ${mono ? 'font-mono tabular-nums' : ''}
+    ${error ? 'border-brand-danger' : 'border-brand-border-strong'}
+    ${readOnly ? 'bg-brand-bg text-brand-muted focus:border-brand-border-strong focus:ring-0' : ''}
+    ${rows ? 'resize-none leading-[1.5]' : ''}`;
+  const common = {
+    placeholder, value, onChange, onBlur, required, maxLength, readOnly, className,
+    'aria-invalid': error ? true : undefined,
+  };
+
+  return (
   <label className="grid gap-[7px]">
     <span className="flex items-baseline text-[13px] font-semibold text-brand-strong">
       {label}
       {labelAction && <span className="ml-auto">{labelAction}</span>}
     </span>
-    <input
-      type={type}
-      placeholder={placeholder}
-      value={value}
-      onChange={onChange}
-      required={required}
-      autoComplete={autoComplete}
-      inputMode={inputMode}
-      aria-invalid={error ? true : undefined}
-      className={`${fieldClasses} ${mono ? 'font-mono tabular-nums' : ''}
-        ${error ? 'border-brand-danger' : 'border-brand-border-strong'}`}
-    />
+    {rows
+      ? <textarea {...common} rows={rows} />
+      : <input {...common} type={type} autoComplete={autoComplete} inputMode={inputMode} />}
     {error
       ? <span className="text-[13px] text-brand-danger">{error}</span>
       : hint && <span className="text-xs text-brand-muted">{hint}</span>}
   </label>
-);
+  );
+};
 
 /** 0–3. Longitud suficiente, mezcla de mayúsculas/minúsculas, y dígito o símbolo. */
 const passwordStrength = (pw: string) => {

@@ -1,11 +1,12 @@
 import { WHATSAPP_VERIFY_TOKEN } from '../config.js';
 import User from "../models/user.model.js";
 import Message from "../models/message.model.js";
-import Conversation from "../models/conversation.model.js";
 import { sendUser } from './stream.controller.js';
+import { resolveContact, findOrCreateConversation } from './contact.controller.js';
 import { resolveStatusTransition } from '../utils/message.status.js';
 import { getWindowExpiry } from '../utils/whatsapp.window.js';
 import { describeInboundMessage } from '../utils/inbound.message.js';
+import { describeInboundContact, hasContactIdentity } from '../utils/contact.identity.js';
 import { TIPOS_CON_ARCHIVO, nombreDeArchivo, guardarArchivo } from '../utils/media.storage.js';
 import { getMediaInfo, downloadMedia } from '../libs/whatsapp.js';
 import { decrypt } from '../utils/crypto.js';
@@ -67,7 +68,9 @@ export const verifyWebhook = (req, res) => {
 // Procesa UN mensaje entrante: lo guarda, actualiza la conversación y avisa por
 // SSE. Vive fuera de handleWebhook para poder envolver cada mensaje en su
 // propio try/catch — ver el comentario del bucle.
-const procesarEntrante = async (user, phoneNumberId, messageData) => {
+//
+// `contacts` es el `value.contacts` del mismo lote: el perfil del remitente.
+const procesarEntrante = async (user, phoneNumberId, messageData, contacts) => {
     // Traduce la forma que manda Meta (image.caption, button.text…)
     // a { type, text, mediaId, mimeType }. Devuelve null en los que
     // no son mensajes de la conversación, como los 'system'.
@@ -81,26 +84,23 @@ const procesarEntrante = async (user, phoneNumberId, messageData) => {
     // veces. Va ANTES de descargar nada, que es lo caro de todo el camino.
     if (messageData.id && await Message.exists({ waMessageId: messageData.id })) return;
 
-    const from = messageData.from;
+    // Quién escribe. Puede llegar SIN teléfono: si la persona usa nombre de
+    // usuario y no ha hablado con el negocio en 30 días, Meta solo manda su
+    // BSUID. Antes eso hacía fallar la conversación (contactPhone era required)
+    // y el mensaje se perdía.
+    const identity = describeInboundContact(contacts, messageData);
+    if (!hasContactIdentity(identity)) {
+        console.warn('Entrante sin teléfono ni BSUID; se descarta:', { waMessageId: messageData.id, type: messageData.type });
+        return;
+    }
+
     const timestamp = messageData.timestamp ? new Date(parseInt(messageData.timestamp) * 1000) : new Date();
 
-    let conversation = await Conversation.findOne({ userId: user._id, contactPhone: from });
-
-    // Create conversation if it doesn't exist 
-    if(!conversation) {
-        conversation = await Conversation.create({
-            userId: user._id,
-            contactPhone: from,
-            phoneNumberId: phoneNumberId,
-            contactName: null,
-            lastMessage: entrante.text,
-            lastMessageAt: timestamp,
-            lastInboundAt: timestamp,
-            // 0, no 1: el incremento de más abajo corre también para la
-            // conversación recién creada y la dejaba en 2 con un solo mensaje.
-            unreadCount: 0,
-        });
-    }
+    const contact = await resolveContact(user._id, identity, {
+        source: identity.referral ? 'ad' : 'inbound',
+        referral: identity.referral,
+    });
+    const conversation = await findOrCreateConversation({ userId: user._id, contact, phoneNumberId });
 
     // La ventana nunca retrocede: Meta no garantiza el orden de los
     // webhooks, y un entrante viejo que llegue tarde la cerraría antes
@@ -279,7 +279,7 @@ export const handleWebhook = async (req, res) => {
                     // sí se guardaron se duplicarían en el chat del cliente. Ahora Meta
                     // recibe 200 y como mucho se pierde el mensaje que venía roto.
                     try {
-                        await procesarEntrante(user, phoneNumberId, messageData);
+                        await procesarEntrante(user, phoneNumberId, messageData, value.contacts);
                     } catch (error) {
                         console.error("Entrante descartado por error:", {
                             waMessageId: messageData?.id,

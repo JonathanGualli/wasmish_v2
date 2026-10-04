@@ -34,3 +34,22 @@ export const formatDayLabel = (iso: string) => {
 
 /** Clave de día para agrupar mensajes. */
 export const dayKey = (iso: string) => new Date(iso).toDateString();
+
+const pad = (n: number) => String(n).padStart(2, '0');
+
+/** Fecha y hora completas, para datos de la ficha: «14/03/2026 09:12». */
+export const formatDateTime = (iso: string) => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
+/** Última interacción en la ficha: «Hoy · 14:32», «Ayer · 16:20» o la fecha completa. */
+export const formatActivityTime = (iso: string) => {
+  const day = formatDayLabel(iso);
+  if (day === 'Hoy' || day === 'Ayer') {
+    const d = new Date(iso);
+    return `${day} · ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+  return formatDateTime(iso);
+};

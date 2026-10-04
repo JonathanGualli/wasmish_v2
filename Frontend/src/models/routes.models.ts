@@ -7,6 +7,7 @@ export const AppRoutes = {
         quickStart: 'quickStart',
         settings: 'settings',
         chats: 'chats',
+        contacts: 'contacts',
         templates: 'templates',
         docs: 'docs',
         admin: 'admin',

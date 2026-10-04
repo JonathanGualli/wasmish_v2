@@ -48,7 +48,9 @@ export const ChatconversationList = ({ onSelect, selectedId, onNewConversation, 
         const q = query.trim().toLowerCase();
         if (!q) return conversations;
         return conversations.filter(c =>
-            (c.title ?? '').toLowerCase().includes(q) || (c.phone ?? '').includes(q)
+            (c.title ?? '').toLowerCase().includes(q)
+            || (c.phone ?? '').includes(q)
+            || (c.username ?? '').toLowerCase().includes(q.replace(/^@/, ''))
         );
     }, [conversations, query]);
 
@@ -64,7 +66,7 @@ export const ChatconversationList = ({ onSelect, selectedId, onNewConversation, 
 
         return visible.map((chat) => {
             const isActive = selectedId === chat.id;
-            const title = chat.title || chat.phone;
+            const { title } = chat;
 
             return (
                 <button

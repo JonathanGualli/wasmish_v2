@@ -270,7 +270,9 @@ export const ChatThread = ({ conversationId, onBack }: Props) => {
                     </div>
                     <div className="min-w-0">
                         <div className="text-[15px] font-semibold text-brand-text truncate">{title}</div>
-                        <div className="font-mono text-[11px] text-brand-muted">+{conversation.phone}</div>
+                        <div className="font-mono text-[11px] text-brand-muted">
+                            {conversation.phone ? `+${conversation.phone}` : conversation.username && `@${conversation.username}`}
+                        </div>
                     </div>
                 </div>
             )}

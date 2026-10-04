@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { ChatThread } from "../../../components/Chat/ChatThread";
 import { ChatconversationList } from "../../../components/Chat/ConversationList";
 import { NewConversationPanel } from "../../../components/Chat/NewConversationPanel";
@@ -6,6 +7,7 @@ import { useAuthContext } from "../../../context/auth.context";
 import {
     EMPTY_DRAFT, clearDraft, loadDraft, saveDraft, type ConversationDraft,
 } from "../../../utils/conversationDraft";
+import type { ChatsNavigationState } from "../../../models/conversation.mode";
 
 /**
  * Bandeja + conversación — «Sidebar y Chats» del manual de marca v1.0.
@@ -16,14 +18,29 @@ import {
  * vive aparte de que esté abierto: abrir otra conversación solo lo oculta, y la
  * bandeja lo sigue enseñando arriba para volver a él. Se borra al descartarlo,
  * al enviarlo, al cerrar sesión o al cerrar la pestaña (sessionStorage).
+ *
+ * Otra página puede pedir al navegar que se abra una conversación o un
+ * borrador nuevo (`ChatsNavigationState`, desde la ficha de un contacto). El
+ * borrador pedido reemplaza al que hubiera, sin preguntar.
  */
 export const ChatPage = () => {
     const { user } = useAuthContext();
     const userId = user?.id ?? "";
+    const location = useLocation();
+    const navigate = useNavigate();
+    const incoming = location.state as ChatsNavigationState | null;
 
-    const [selectedId, setSelectedId] = useState<string | null>(null);
-    const [draft, setDraft] = useState<ConversationDraft | null>(() => (userId ? loadDraft(userId) : null));
-    const [draftOpen, setDraftOpen] = useState(false);
+    const [selectedId, setSelectedId] = useState<string | null>(incoming?.conversationId ?? null);
+    const [draft, setDraft] = useState<ConversationDraft | null>(() =>
+        incoming?.draft ? { ...EMPTY_DRAFT, ...incoming.draft } : (userId ? loadDraft(userId) : null));
+    const [draftOpen, setDraftOpen] = useState(Boolean(incoming?.draft));
+
+    // La petición se usa una sola vez: si se quedara en el historial, recargar
+    // la página volvería a pisar el borrador. (El borrador pedido lo guarda el
+    // propio panel al montarse, vía handleDraftChange.)
+    useEffect(() => {
+        if (incoming) navigate(location.pathname, { replace: true, state: null });
+    }, [incoming, navigate, location.pathname]);
 
     // ESC cierra lo que esté abierto. El borrador solo se oculta: no se pierde.
     useEffect(() => {

@@ -1,10 +1,10 @@
 import User from "../models/user.model.js";
 import Template from "../models/template.model.js";
-import Conversation from "../models/conversation.model.js";
 import Message from "../models/message.model.js";
 import { decrypt } from "../utils/crypto.js";
 import { getTemplates, sendTemplateMessage } from "../libs/whatsapp.js";
 import { sendUser } from "./stream.controller.js";
+import { getSendingRecipient, getSendingConversation } from "./contact.controller.js";
 
 
 // ---------------------------------------------------------------------------
@@ -221,15 +221,21 @@ export const getTemplatesController = async (req, res) => {
  * Envía una plantilla y persiste conversación + mensaje + SSE.
  * No sabe nada de HTTP: los errores de negocio salen como Error con
  * `statusCode`, y quien la llama decide cómo responder.
+ *
+ * El destinatario es `conversation` (se le escribe a su contacto) o, para
+ * iniciar una conversación, `destinationNumber`. `contactName` y `source` solo
+ * se usan si ese número todavía no es un contacto.
  */
 export const processTemplateSending = async ({
     user,
+    conversation = null,
     destinationNumber,
     templateName,
     language,
     parameters = [],
     buttons = [],
     contactName,
+    source = null,
 }) => {
     // Cuenta sin WhatsApp conectado: antes reventaba dentro de decrypt()
     if (!user.tokenWhatsapp || !user.phoneNumberId) {
@@ -240,6 +246,7 @@ export const processTemplateSending = async ({
 
     const token = decrypt(user.tokenWhatsapp);
     const phoneNumberId = user.phoneNumberId;
+    const recipient = await getSendingRecipient(conversation, destinationNumber);
 
     // 1. Plantilla: la buscamos ANTES de enviar, para validar que existe
     //    y para saber en qué idioma está registrada.
@@ -268,6 +275,15 @@ export const processTemplateSending = async ({
         throw error;
     }
 
+    // Meta no acepta el BSUID en las plantillas de autenticación (las de un
+    // toque, sin toque y copiar código): solo el teléfono. Mejor decirlo aquí
+    // que gastar la llamada y recibir un rechazo.
+    if (template?.category === 'AUTHENTICATION' && !recipient.phone) {
+        const error = new Error("Este contacto escribió con su nombre de usuario y WhatsApp no comparte su número: no se le pueden enviar plantillas de autenticación.");
+        error.statusCode = 400;
+        throw error;
+    }
+
     // 2. Idioma: el que tenga registrada la plantilla, salvo que lo fuercen.
     const templateLanguage = language ?? template?.language ?? 'es';
 
@@ -293,7 +309,7 @@ export const processTemplateSending = async ({
     // 4. Enviar a Meta (capturamos el fallo para persistirlo como 'failed')
     let waMessageId = null, status = 'sent', errorCode = null, errorDetail = null;
     try {
-        const apiRes = await sendTemplateMessage({ token, phoneNumberId, to: destinationNumber, templateName, language: templateLanguage, components });
+        const apiRes = await sendTemplateMessage({ token, phoneNumberId, recipient, templateName, language: templateLanguage, components });
         waMessageId = apiRes?.data?.messages?.[0]?.id || null;
     } catch (error) {
         status = 'failed';
@@ -311,21 +327,15 @@ export const processTemplateSending = async ({
     // con dos relojes distintos quedan desfasados unos milisegundos.
     const now = new Date();
 
-    let conversation = await Conversation.findOne({ userId: user._id, contactPhone: destinationNumber });
-    if (!conversation) {
-        conversation = await Conversation.create({
-            userId: user._id, contactPhone: destinationNumber, phoneNumberId,
-            lastMessage: storedText, lastMessageAt: now, unreadCount: 0,
-            contactName: contactName || null,
-        });
-    } else {
-        conversation.lastMessage = storedText;
-        conversation.lastMessageAt = now;
-        await conversation.save();
-    }
+    const targetConversation = await getSendingConversation({
+        userId: user._id, conversation, recipient, phoneNumberId, contactName, source,
+    });
+    targetConversation.lastMessage = storedText;
+    targetConversation.lastMessageAt = now;
+    await targetConversation.save();
 
     const msg = await Message.create({
-        conversationId: conversation._id, direction: 'outbound', sender: 'me',
+        conversationId: targetConversation._id, direction: 'outbound', sender: 'me',
         waMessageId, text: storedText, timestamp: now,
         status, errorCode, errorDetail, failedAt: status === 'failed' ? now : null,
         templateName,
@@ -334,12 +344,12 @@ export const processTemplateSending = async ({
 
     // 7. SSE en vivo → aparece en la UI de wasmish
     sendUser(String(user._id), 'message_created', {
-        id: String(msg._id), conversationId: String(conversation._id), sender: 'me',
+        id: String(msg._id), conversationId: String(targetConversation._id), sender: 'me',
         text: storedText, timestamp: msg.timestamp.toISOString(),
         status, errorCode, errorDetail, templateName,
     });
 
-    return { msg, conversation, waMessageId, status, errorCode, errorDetail };
+    return { msg, conversation: targetConversation, waMessageId, status, errorCode, errorDetail };
 
 };
 
@@ -362,6 +372,7 @@ export const sendTemplateController = async (req, res) => {
                 parameters: req.body.parameters ?? [],
                 buttons: req.body.buttons ?? [],
                 contactName,
+                source: 'api',
             });
 
         if (status === 'failed') {

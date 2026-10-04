@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { templateButtonSchema } from "./template.schema.js";
+import { phoneNumberSchema } from "./contact.schema.js";
 
 // Como la ruta es /chats/:id/template, el destinatario sale de la
 // conversación — el cliente no lo manda y por tanto no puede falsearlo.
@@ -10,12 +11,10 @@ export const sendConversationTemplateSchema = z.object({
     buttons: z.array(templateButtonSchema).nullish(),
 });
 
-// Conversación nueva desde la bandeja: aquí el destinatario SÍ viene del body.
-// Solo dígitos, con código de país — el mismo formato con el que Meta manda el
-// `from` en el webhook, para que el contacto que conteste caiga en esta misma
-// conversación y no en una duplicada.
+// Conversación nueva desde la bandeja: aquí el destinatario SÍ viene del body,
+// con el mismo formato que el teléfono de un contacto.
 export const startConversationTemplateSchema = sendConversationTemplateSchema.extend({
-    destinationNumber: z.string().regex(/^\d{8,15}$/, 'El número debe llevar solo dígitos, con código de país (8 a 15)'),
+    destinationNumber: phoneNumberSchema,
     contactName: z.string().trim().max(80).optional(),
 });
 

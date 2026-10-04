@@ -1,5 +1,6 @@
 import axios from "axios";
 import {META_APP_ID, META_APP_SECRET, META_GRAPH_VERSION } from "../config.js";
+import { whatsappRecipient } from "../utils/contact.identity.js";
 
 const BASE_URL = `https://graph.facebook.com/${META_GRAPH_VERSION}`; 
 
@@ -25,13 +26,21 @@ whatsappApi.interceptors.response.use(
     }
 );
 
-export const sendTextMessage = async ({ token, phoneNumberId, to, text }) => { 
+// `recipient` es { phone, waUserId }: Meta recibe el teléfono en `to` o, si la
+// persona solo se identificó con su nombre de usuario, el BSUID en `recipient`.
+const recipientFields = (recipient) => {
+    const fields = whatsappRecipient(recipient);
+    if (!fields) throw new Error("El destinatario no tiene teléfono ni BSUID");
+    return fields;
+};
+
+export const sendTextMessage = async ({ token, phoneNumberId, recipient, text }) => { 
     return whatsappApi.post(
         `/${phoneNumberId}/messages`,
         {
             messaging_product: "whatsapp",
             recipient_type: "individual",
-            to,
+            ...recipientFields(recipient),
             type: "text",
             text: {
                 body: text
@@ -45,13 +54,13 @@ export const sendTextMessage = async ({ token, phoneNumberId, to, text }) => {
     );
 }
 
-export const sendTemplateMessage = async ({ token, phoneNumberId, to, templateName, language = "es", components }) => {
+export const sendTemplateMessage = async ({ token, phoneNumberId, recipient, templateName, language = "es", components }) => {
     return whatsappApi.post(
         `/${phoneNumberId}/messages`,
         {
             messaging_product: "whatsapp",
             recipient_type: "individual",
-            to,
+            ...recipientFields(recipient),
             type: "template",
             template: {
                 name: templateName,

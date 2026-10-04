@@ -1,0 +1,356 @@
+import mongoose from "mongoose";
+import Contact from "../models/contact.model.js";
+import Conversation from "../models/conversation.model.js";
+import Message from "../models/message.model.js";
+import { hasContactIdentity, mergeContactUpdates, contactDisplayName } from "../utils/contact.identity.js";
+import { pickContactFields, buildContactSearch, CONTACT_FILTERS } from "../utils/contact.query.js";
+import { getWindowExpiry } from "../utils/whatsapp.window.js";
+
+// ---------------------------------------------------------------------------
+// Contactos y su conversación. Lo usan los sitios por donde entra un número o
+// un BSUID: el webhook, los dos envíos (texto y plantilla) y el alta manual.
+// ---------------------------------------------------------------------------
+
+// El BSUID primero: identifica a la persona aunque Meta no mande el teléfono.
+const findContactByIdentity = async (userId, { phone, waUserId }) => {
+    if (waUserId) {
+        const contact = await Contact.findOne({ userId, waUserId });
+        if (contact) return contact;
+    }
+    return phone ? Contact.findOne({ userId, phone }) : null;
+};
+
+const applyContactUpdates = async (contact, incoming) => {
+    const changes = mergeContactUpdates(contact, incoming);
+    if (Object.keys(changes).length === 0) return contact;
+
+    try {
+        Object.assign(contact, changes);
+        return await contact.save();
+    } catch (error) {
+        // El teléfono o el BSUID ya son de OTRO contacto de la cuenta (uno se creó
+        // solo con teléfono y otro solo con BSUID). Fusionarlos no es algo que deba
+        // decidir un webhook: se deja como está y el mensaje sigue su camino.
+        if (error.code !== 11000) throw error;
+        console.warn('Identificador ya usado por otro contacto; no se actualiza:', { contactId: String(contact._id) });
+        return Contact.findById(contact._id);
+    }
+};
+
+/**
+ * Devuelve el contacto de esa identidad, creándolo si no existe, y le pone al
+ * día lo que sabe WhatsApp de él (ver `mergeContactUpdates`).
+ *
+ * `name`, `source` y `referral` solo cuentan al crearlo, salvo `name`, que
+ * además rellena el de un contacto que no tenga ninguno.
+ */
+export const resolveContact = async (userId, identity, { name = null, source = null, referral = null } = {}) => {
+    if (!hasContactIdentity(identity)) {
+        const error = new Error('El contacto necesita un teléfono o un BSUID');
+        error.statusCode = 400;
+        throw error;
+    }
+
+    const incoming = { ...identity, name };
+    const existing = await findContactByIdentity(userId, identity);
+    if (existing) return applyContactUpdates(existing, incoming);
+
+    try {
+        return await Contact.create({
+            userId,
+            phone: identity.phone ?? null,
+            waUserId: identity.waUserId ?? null,
+            username: identity.username ?? null,
+            profileName: identity.profileName ?? null,
+            name: name || null,
+            source,
+            referral,
+        });
+    } catch (error) {
+        // Dos webhooks del mismo número nuevo a la vez: el índice único deja crear
+        // solo a uno, y el otro usa el que ganó.
+        if (error.code !== 11000) throw error;
+        const created = await findContactByIdentity(userId, identity);
+        if (!created) throw error;
+        return applyContactUpdates(created, incoming);
+    }
+};
+
+// Las conversaciones anteriores a los contactos no tienen contactId. Al tocarlas
+// se enlazan, y el nombre que tenían pasa al contacto si este no tiene uno.
+const linkConversation = async (conversation, contact) => {
+    conversation.contactId = contact._id;
+    if (!contact.name && conversation.contactName) {
+        contact.name = conversation.contactName;
+        await contact.save();
+    }
+};
+
+/**
+ * El contacto de una conversación que ya existe. Si es anterior a los contactos,
+ * lo crea a partir de su teléfono y deja la conversación enlazada.
+ */
+export const getConversationContact = async (conversation) => {
+    if (conversation.contactId) {
+        const contact = await Contact.findOne({ _id: conversation.contactId, userId: conversation.userId });
+        if (contact) return contact;
+    }
+
+    const contact = await resolveContact(
+        conversation.userId,
+        { phone: conversation.contactPhone },
+        { name: conversation.contactName },
+    );
+    await linkConversation(conversation, contact);
+    // Enlazar no es actividad de la conversación: no le cambia el updatedAt.
+    await conversation.save({ timestamps: false });
+    return contact;
+};
+
+/**
+ * La conversación de un contacto, creándola si no existe. Puede volver con
+ * cambios sin guardar: quien la llama le pone el último mensaje y la guarda.
+ */
+export const findOrCreateConversation = async ({ userId, contact, phoneNumberId }) => {
+    let conversation = await Conversation.findOne({ userId, contactId: contact._id });
+
+    if (!conversation && contact.phone) {
+        conversation = await Conversation.findOne({ userId, contactPhone: contact.phone, contactId: null });
+        if (conversation) await linkConversation(conversation, contact);
+    }
+
+    if (!conversation) {
+        try {
+            conversation = await Conversation.create({
+                userId,
+                contactId: contact._id,
+                contactPhone: contact.phone,
+                phoneNumberId,
+                // 0, no 1: el webhook suma el mensaje entrante después, también
+                // para la conversación recién creada.
+                unreadCount: 0,
+            });
+        } catch (error) {
+            // Mismo caso que en resolveContact: otra petición la creó a la vez.
+            if (error.code !== 11000) throw error;
+            conversation = await Conversation.findOne({ userId, contactId: contact._id });
+            if (!conversation) throw error;
+        }
+    }
+
+    // Meta revela el teléfono de alguien que escribió solo con su nombre de usuario.
+    if (contact.phone && conversation.contactPhone !== contact.phone) {
+        conversation.contactPhone = contact.phone;
+    }
+
+    return conversation;
+};
+
+/**
+ * A quién va un envío: el contacto de la conversación, o el número del body
+ * cuando se inicia una conversación nueva. En ese segundo caso el contacto no se
+ * crea todavía: un envío que ni siquiera sale (plantilla inexistente, botón mal
+ * puesto) no debe dejar contactos detrás.
+ */
+export const getSendingRecipient = (conversation, destinationNumber) =>
+    conversation ? getConversationContact(conversation) : { phone: destinationNumber };
+
+// La conversación donde se guarda un envío ya hecho (haya salido o no).
+export const getSendingConversation = async ({ userId, conversation, recipient, phoneNumberId, contactName, source }) => {
+    if (conversation) return conversation;
+    const contact = await resolveContact(userId, recipient, { name: contactName, source });
+    return findOrCreateConversation({ userId, contact, phoneNumberId });
+};
+
+// ---------------------------------------------------------------------------
+// API de la sección de Contactos
+// ---------------------------------------------------------------------------
+
+const PAGE_SIZE = 25;
+const MAX_PAGE_SIZE = 50;
+
+// Un id mal formado es un contacto que no existe: 404, no un CastError (500).
+const findOwnedContact = (userId, id) =>
+    mongoose.isValidObjectId(id) ? Contact.findOne({ _id: id, userId }) : null;
+
+const findContactConversation = (userId, contactId) =>
+    Conversation.findOne({ userId, contactId }).lean();
+
+const toIso = (date) => (date ? new Date(date).toISOString() : null);
+
+// La forma en que la API devuelve un contacto, en la lista y en la ficha.
+const serializeContact = (contact, conversation = null) => ({
+    id: String(contact._id),
+    displayName: contactDisplayName(contact),
+    name: contact.name ?? null,
+    profileName: contact.profileName ?? null,
+    phone: contact.phone ?? null,
+    username: contact.username ?? null,
+    email: contact.email ?? null,
+    company: contact.company ?? null,
+    notes: contact.notes ?? null,
+    source: contact.source ?? null,
+    referral: contact.referral ?? null,
+    marketingOptOut: Boolean(contact.marketingOptOut),
+    marketingOptOutAt: toIso(contact.marketingOptOutAt),
+    conversationId: conversation ? String(conversation._id) : null,
+    lastInteractionAt: toIso(conversation?.lastMessageAt),
+    windowExpiresAt: toIso(getWindowExpiry(conversation?.lastInboundAt)),
+    createdAt: toIso(contact.createdAt),
+});
+
+const sendContactError = (res, status, message, extra = {}) =>
+    res.status(status).json([{ message, ...extra }]);
+
+// El teléfono ya es de otro contacto. Se devuelve su id para que la UI ofrezca
+// «Ver contacto» en vez de un error sin salida.
+const sendDuplicatePhone = async (res, userId, phone) => {
+    const existing = await Contact.findOne({ userId, phone }).select('_id').lean();
+    return sendContactError(res, 409, 'Ya hay un contacto con ese número', {
+        field: 'phone',
+        contactId: existing ? String(existing._id) : null,
+    });
+};
+
+/**
+ * GET /contacts?search=&filter=&page=&limit=
+ *
+ * Ordena por actividad: la última conversación o, si no la hay, la fecha de
+ * alta. Así un contacto recién creado aparece arriba y no al fondo con los
+ * que nunca hablaron.
+ */
+export const listContacts = async (req, res) => {
+    try {
+        // aggregate no convierte tipos como find: el userId tiene que ir ya como ObjectId.
+        const userId = new mongoose.Types.ObjectId(req.user.id);
+        const page = Math.max(parseInt(req.query.page) || 1, 1);
+        const limit = Math.min(Math.max(parseInt(req.query.limit) || PAGE_SIZE, 1), MAX_PAGE_SIZE);
+        const filter = CONTACT_FILTERS.includes(req.query.filter) ? req.query.filter : 'all';
+
+        const match = { userId, ...buildContactSearch(req.query.search) };
+        if (filter === 'opted_out') match.marketingOptOut = true;
+
+        const conversationMatch = {
+            with_conversation: [{ $match: { conversation: { $ne: null } } }],
+            without_conversation: [{ $match: { conversation: null } }],
+        }[filter] ?? [];
+
+        const [result] = await Contact.aggregate([
+            { $match: match },
+            { $lookup: { from: Conversation.collection.name, localField: '_id', foreignField: 'contactId', as: 'conversations' } },
+            { $addFields: { conversation: { $ifNull: [{ $arrayElemAt: ['$conversations', 0] }, null] } } },
+            { $project: { conversations: 0 } },
+            ...conversationMatch,
+            { $addFields: { activityAt: { $ifNull: ['$conversation.lastMessageAt', '$createdAt'] } } },
+            { $sort: { activityAt: -1, _id: -1 } },
+            { $facet: {
+                items: [{ $skip: (page - 1) * limit }, { $limit: limit }],
+                total: [{ $count: 'count' }],
+            } },
+        ]);
+
+        return res.json({
+            contacts: result.items.map(item => serializeContact(item, item.conversation)),
+            totalCount: result.total[0]?.count ?? 0,
+            page,
+            limit,
+        });
+    } catch (error) {
+        return sendContactError(res, 500, error.message);
+    }
+};
+
+// GET /contacts/:id — la ficha: el contacto y la actividad de su conversación.
+export const getContact = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const contact = await findOwnedContact(userId, req.params.id);
+        if (!contact) return sendContactError(res, 404, 'Contacto no encontrado');
+
+        const conversation = await findContactConversation(userId, contact._id);
+
+        const [stats] = conversation
+            ? await Message.aggregate([
+                { $match: { conversationId: conversation._id } },
+                { $group: {
+                    _id: null,
+                    firstMessageAt: { $min: '$timestamp' },
+                    sent: { $sum: { $cond: [{ $eq: ['$direction', 'outbound'] }, 1, 0] } },
+                    received: { $sum: { $cond: [{ $eq: ['$direction', 'inbound'] }, 1, 0] } },
+                    failed: { $sum: { $cond: [{ $eq: ['$status', 'failed'] }, 1, 0] } },
+                } },
+            ])
+            : [];
+
+        return res.json({
+            ...serializeContact(contact, conversation),
+            activity: {
+                firstMessageAt: toIso(stats?.firstMessageAt),
+                sent: stats?.sent ?? 0,
+                received: stats?.received ?? 0,
+                failed: stats?.failed ?? 0,
+            },
+        });
+    } catch (error) {
+        return sendContactError(res, 500, error.message);
+    }
+};
+
+// POST /contacts — alta manual. Crear un contacto no envía nada.
+export const createContact = async (req, res) => {
+    const userId = req.user.id;
+    const fields = pickContactFields(req.body);
+    try {
+        const contact = await Contact.create({ userId, ...fields, source: 'manual' });
+        return res.status(201).json(serializeContact(contact));
+    } catch (error) {
+        if (error.code === 11000) return sendDuplicatePhone(res, userId, fields.phone);
+        return sendContactError(res, 500, error.message);
+    }
+};
+
+/**
+ * PATCH /contacts/:id — solo los campos editables (ver `pickContactFields`).
+ * El teléfono no cambia si hay conversación: para WhatsApp el número es la
+ * persona, y el historial y la ventana de 24 h son de ese número.
+ */
+export const updateContact = async (req, res) => {
+    const userId = req.user.id;
+    const fields = pickContactFields(req.body);
+    try {
+        const contact = await findOwnedContact(userId, req.params.id);
+        if (!contact) return sendContactError(res, 404, 'Contacto no encontrado');
+
+        const conversation = await findContactConversation(userId, contact._id);
+        if (conversation && fields.phone !== undefined && fields.phone !== contact.phone) {
+            return sendContactError(res, 409, 'El número no se puede cambiar: el historial de WhatsApp es de este número.', { field: 'phone' });
+        }
+
+        Object.assign(contact, fields);
+        await contact.save();
+        return res.json(serializeContact(contact, conversation));
+    } catch (error) {
+        if (error.code === 11000) return sendDuplicatePhone(res, userId, fields.phone);
+        return sendContactError(res, 500, error.message);
+    }
+};
+
+// DELETE /contacts/:id — solo si nunca hubo conversación: con ella, borrar el
+// contacto no serviría de nada (el siguiente mensaje lo volvería a crear) y
+// dejaría el historial sin dueño.
+export const deleteContact = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const contact = await findOwnedContact(userId, req.params.id);
+        if (!contact) return sendContactError(res, 404, 'Contacto no encontrado');
+
+        if (await Conversation.exists({ userId, contactId: contact._id })) {
+            return sendContactError(res, 409, 'Tiene conversación: su historial se conserva. Puedes editar sus datos.');
+        }
+
+        await Contact.deleteOne({ _id: contact._id, userId });
+        return res.sendStatus(204);
+    } catch (error) {
+        return sendContactError(res, 500, error.message);
+    }
+};

@@ -12,6 +12,7 @@ import { AppRoutes } from '../../models/routes.models';
 import { TemplatePicker, TemplateFields } from './TemplateFields';
 import { TemplateBubble, TemplateButtons } from './TemplatePreview';
 import type { ConversationDraft } from '../../utils/conversationDraft';
+import { PHONE_RE } from '../../utils/contactDisplay';
 
 interface Props {
   /** Lo guardado del borrador: el panel arranca con eso al volver a abrirlo. */
@@ -27,9 +28,6 @@ interface Props {
   /** Cada cambio, para guardarlo y para la fila «Borrador» de la bandeja. */
   onDraftChange: (draft: ConversationDraft) => void;
 }
-
-// Mismo rango que valida el backend: solo dígitos, con código de país.
-const PHONE_RE = /^\d{8,15}$/;
 
 /**
  * Conversación nueva, en el sitio del hilo y con su misma forma: cabecera con

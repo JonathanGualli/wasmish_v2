@@ -1,7 +1,21 @@
+/**
+ * Lo que otra página pide abrir al navegar a Chats (va en el estado del router,
+ * no en la URL). Lo usa la ficha de un contacto.
+ */
+export interface ChatsNavigationState {
+  /** Abrir esta conversación. */
+  conversationId?: string;
+  /** Empezar una conversación nueva con estos datos; reemplaza el borrador que hubiera. */
+  draft?: { phone: string; name: string };
+}
+
 export interface Conversation {
   id: string;
   title: string;
-  phone: string;
+  /** `null` si la persona escribió con su nombre de usuario y WhatsApp no compartió su número. */
+  phone: string | null;
+  /** Nombre de usuario de WhatsApp, sin la @. */
+  username?: string | null;
   lastMessage: string;
   updatedAt: string; // ISO date
   unreadCount: number;

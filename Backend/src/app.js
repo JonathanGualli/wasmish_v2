@@ -13,6 +13,7 @@ import apiKeyRoutes from './routes/api.key.routes.js';
 import whatsappRoutes from './routes/whatsapp.routes.js';
 import adminRoutes from './routes/admin.routes.js';
 import mediaRoutes from './routes/media.routes.js';
+import contactRoutes from './routes/contact.routes.js';
 
 import { APP_VERSION } from './config.js';
 
@@ -57,5 +58,6 @@ app.use("/api", apiKeyRoutes);
 app.use("/api", whatsappRoutes);
 app.use("/api", adminRoutes);
 app.use("/api", mediaRoutes);
+app.use("/api", contactRoutes);
 
 export default app; 

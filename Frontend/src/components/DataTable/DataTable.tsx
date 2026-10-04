@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { getCoreRowModel, useReactTable, flexRender, type ColumnDef, type OnChangeFn, type PaginationState } from "@tanstack/react-table";
 
 interface Props<T> {
@@ -10,6 +11,15 @@ interface Props<T> {
     };
     setPagination: OnChangeFn<PaginationState>;
     isLoading: boolean;
+    /** Filas que se abren al pulsarlas (y la abierta se resalta, como en la bandeja). */
+    onRowClick?: (row: T) => void;
+    getRowId?: (row: T) => string;
+    activeRowId?: string | null;
+    /**
+     * En móvil, cada fila como tarjeta en vez de la tabla (que obligaría a
+     * desplazarse en horizontal). La paginación es la misma.
+     */
+    renderMobileRow?: (row: T) => ReactNode;
 }
 
 export function DataTable<T>({
@@ -18,7 +28,11 @@ export function DataTable<T>({
     totalCount,
     pagination,
     setPagination,
-    isLoading
+    isLoading,
+    onRowClick,
+    getRowId,
+    activeRowId,
+    renderMobileRow,
 }: Props<T>) {
 
     const pageCount = Math.ceil(totalCount / pagination.pageSize);
@@ -31,7 +45,10 @@ export function DataTable<T>({
         onPaginationChange: setPagination,
         getCoreRowModel: getCoreRowModel(),
         manualPagination: true,
+        getRowId,
     });
+
+    const rows = table.getRowModel().rows;
 
 return (
     <div className="rounded-xl border border-brand-border bg-brand-surface relative overflow-hidden">
@@ -43,7 +60,23 @@ return (
           </div>
         </div>
       )}
-      <div className="overflow-x-auto">
+      {renderMobileRow && (
+        <div className="md:hidden divide-y divide-brand-border">
+          {rows.length > 0 ? rows.map(row => (
+            <div
+              key={row.id}
+              onClick={onRowClick ? () => onRowClick(row.original) : undefined}
+              className={`${onRowClick ? 'cursor-pointer' : ''} ${row.id === activeRowId ? 'bg-brand-bg' : ''}`}
+            >
+              {renderMobileRow(row.original)}
+            </div>
+          )) : (
+            <div className="p-12 text-center text-sm text-brand-muted">No se encontraron registros.</div>
+          )}
+        </div>
+      )}
+
+      <div className={`overflow-x-auto ${renderMobileRow ? 'hidden md:block' : ''}`}>
         <table className="w-full border-collapse">
           <thead className="bg-brand-bg border-b border-brand-border">
             {table.getHeaderGroups().map(group => (
@@ -58,16 +91,30 @@ return (
           </thead>
 
           <tbody className="divide-y divide-brand-border">
-            {table.getRowModel().rows.length > 0 ? (
-              table.getRowModel().rows.map(row => (
-                <tr key={row.id} className="hover:bg-brand-bg transition-colors">
-                  {row.getVisibleCells().map(cell => (
-                    <td key={cell.id} className="px-4 py-3.5 text-sm text-brand-text align-top">
+            {rows.length > 0 ? (
+              rows.map(row => {
+                const isActive = row.id === activeRowId;
+                return (
+                <tr
+                  key={row.id}
+                  onClick={onRowClick ? () => onRowClick(row.original) : undefined}
+                  className={`hover:bg-brand-bg transition-colors
+                    ${onRowClick ? 'cursor-pointer' : ''} ${isActive ? 'bg-brand-bg' : ''}`}
+                >
+                  {row.getVisibleCells().map((cell, i) => (
+                    <td
+                      key={cell.id}
+                      // La barra de la fila abierta va en la primera celda: el borde
+                      // de un <tr> no se pinta con border-collapse.
+                      className={`px-4 py-3.5 text-sm text-brand-text align-top
+                        ${isActive && i === 0 ? 'shadow-[inset_3px_0_0_var(--color-brand-deep)]' : ''}`}
+                    >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
                   ))}
                 </tr>
-              ))
+                );
+              })
             ) : (
               <tr>
                 <td colSpan={columns.length} className="p-12 text-center text-sm text-brand-muted">
