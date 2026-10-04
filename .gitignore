@@ -1,49 +1,74 @@
-# --- General ---
-.DS_Store
-.vscode/
-.idea/
-*.log
+# --- Secretos -----------------------------------------------------------------
+# Cualquier .env en cualquier carpeta (Backend, Frontend, deploy, raíz...), con
+# sus variantes .env.local, .env.production, etc. Solo los *.example se suben.
+.env
+.env.*
+*.env
+!*.env.example
+!.env.example
+# Certificados y claves (p. ej. el .pem del túnel SSH al server)
+*.pem
+*.key
+*.p12
+*.crt
+
+# --- Dependencias -------------------------------------------------------------
 node_modules/
+# La raíz del monorepo no tiene package.json: un npm install lanzado aquí por
+# error solo deja un lock huérfano. Cada workspace tiene el suyo.
+/package-lock.json
+/package.json
 
-# --- Backend (Node.js) ---
-Backend/node_modules/
-Backend/dist/
-Backend/.env
-Backend/npm-debug.log*
-Backend/node_modules/*
-**/node_modules/
-
-# --- Frontend (React + Vite) ---
-Frontend/node_modules/
-Frontend/dist/
-Frontend/.env
-Frontend/.env.local
-Frontend/.env.development.local
-Frontend/.env.test.local
-Frontend/.env.production.local
-
-# --- Herramientas de empaquetado/Linter ---
+# --- Builds, cachés y artefactos generados ------------------------------------
+dist/
+dist-ssr/
+build/
+coverage/
 .eslintcache
 *.tsbuildinfo
+.vite/
+*.tgz
 
-# --- Otros ---
-# Si usas el archivo .pem para el túnel SSH en la carpeta del proyecto
-*.pem
+# --- Logs y temporales --------------------------------------------------------
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+tmp/
+*.tmp
+*.bak
 
-# --- Claude Code (personal/local) ---
+# --- Sistema operativo y editores --------------------------------------------
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# --- Adjuntos de WhatsApp descargados (en prod es un volumen Docker) ---------
+Backend/media/
+
+# --- Deploy (código copiado al server) ----------------------------------------
+deploy/app/
+
+# --- Claude Code (personal/local) ---------------------------------------------
+# Las skills de .claude/skills y .agents/ SÍ se suben: son parte del proyecto.
 .claude/settings.local.json
 .claude/memory/
+.claude/worktrees/
 
-# --- Graphify (artefactos generados) ---
+# --- Graphify (artefactos generados) ------------------------------------------
 graphify-out/
 
-# --- Deploy (secretos y código copiado al server) ---
-deploy/config/*.env
-!deploy/config/*.env.example
-deploy/.env
-deploy/app/
 # Mockups de brainstorming (visual companion)
 .superpowers/
 
-# --- Adjuntos de WhatsApp descargados (en prod es un volumen Docker) ---
-Backend/media/
+# Lockfiles de otros gestores: el proyecto usa npm (package-lock.json)
+bun.lock
+bun.lockb
+yarn.lock
+pnpm-lock.yaml

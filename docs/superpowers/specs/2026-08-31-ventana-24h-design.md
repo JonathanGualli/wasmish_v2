@@ -1,7 +1,7 @@
 # Ventana de 24 h de WhatsApp + envío de plantillas desde la UI
 
 **Fecha:** 2026-08-31
-**Estado:** diseño aprobado, pendiente de implementación
+**Estado:** implementado (commit 2178623, 2026-09-07; incluido desde la v1.0.6)
 
 ## El problema
 

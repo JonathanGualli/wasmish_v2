@@ -27,21 +27,21 @@ Si hay archivos nuevos, actualizar el grafo con `/graphify --update` antes de co
 
 ### Grafo de conocimiento (graphify)
 
-Reconstruido el 2026-09-09 (full: AST + semántica LLM), actualizado el 2026-09-30 (`graphify update .` tras la conversación nueva con plantilla). Stats: **760 nodos, 1546 edges, 57 comunidades**. Hay un `.graphifyignore` en la raíz que excluye `.agents/` (definiciones de skills empaquetadas) y los `.dc.html`/`support.js` del brand — sin él el grafo se contaminaba con ~17% de ruido ajeno al proyecto.
+Reconstruido el 2026-09-09 (full: AST + semántica LLM), reconstruido de nuevo el 2026-10-03 (`/graphify --update`: AST de todo el código + caché semántica + re-extracción de los docs/imágenes cambiados). Stats: **629 nodos, 1200 edges, 44 comunidades**. Ojo: `graphify update .` (CLI, solo AST) había dejado el `graph.json` en 332 nodos sin la capa semántica — preferir `/graphify --update`. Hay un `.graphifyignore` en la raíz que excluye `.agents/` (definiciones de skills empaquetadas) y los `.dc.html`/`support.js` del brand — sin él el grafo se contaminaba con ~17% de ruido ajeno al proyecto.
 
 - `graphify-out/graph.json` — datos del grafo
 - `graphify-out/graph.html` — visualización interactiva
 - `graphify-out/GRAPH_REPORT.md` — reporte completo
 
-**God nodes** (más conectados): `react`, `compilerOptions`, `@tanstack/react-query`, `lucide-react`, `useAuthContext`, `ChatThread`, `Wasmish Interface Design System`, `express`, `useTemplates`
+**God nodes** (más conectados): `CLAUDE.md`, `useAuthContext`, `useModalContext`, spec de ventana 24 h, guía de deploy, `describeInboundMessage`, `processTemplateSending`, `CustomButton`, `ChatThread`, `AppRoutes`
 
 **Comunidades principales:**
-- Chat UI Components
-- Auth Context & Hooks
-- Webhook & Media Backend
-- Architecture & Deploy Rationale
-- Template Sending (Frontend) / Template Controller (Backend)
-- App Shell & SSE Provider
+- Admin & Settings Pages / Chat Thread UI / Auth Forms & New Conversation
+- Backend App Core & Auth
+- Chat & Template Controllers
+- Webhook & Media Backend / Inbound Message Parsing
+- Architecture Decisions / Deploy & Infra Rationale / 24h Window Design Spec
+- SSE & Modal Providers
 
 ---
 
@@ -92,7 +92,7 @@ cd Frontend && npm run preview # preview production build
 
 **Tests** (solo Backend, `node:test` nativo — sin dependencias):
 ```bash
-cd Backend && npm test         # node --test tests/
+cd Backend && npm test         # node --test "tests/**/*.test.js"
 cd Backend && npm run test:watch
 ```
 Cubren **funciones puras**, sin BD ni red: `utils/crypto.js`, `utils/message.status.js`, `utils/whatsapp.window.js`, `utils/inbound.message.js`, `utils/media.storage.js` y las de plantillas de `template.controller.js` (`buildButtonComponents`, `renderTemplateBody`). Cada test que corresponde a un bug ya corregido lleva un comentario explicando la regresión que vigila — verificados reintroduciendo el bug a propósito y comprobando que fallan. El Frontend no tiene tests.
@@ -158,7 +158,7 @@ No se aplica a `/api/webhook` (Meta manda ráfagas) ni a `/api/stream` (conexió
 
 **WhatsApp:** `libs/whatsapp.js` llama a `graph.facebook.com/${META_GRAPH_VERSION}`. Cada user guarda `tokenWhatsapp`, `phoneNumberId`, `waBusinessId` en MongoDB. El token WA se **cifra** con AES-256-CBC (`utils/crypto.js`, key derivada de `TOKEN_SECRET`); **`decrypt` se llama en cada mensaje/plantilla saliente y sync**. El **IV se genera dentro de `encrypt()`**, uno nuevo por cifrado, y viaja como prefijo `iv:ciphertext` — no puede volver a nivel de módulo (eso reusaría el mismo IV en todo el proceso y, como todos los tokens de Meta empiezan por `EAA...`, los primeros bloques cifrados saldrían idénticos). Las **API keys** en cambio se **hashean** (SHA-256, `hashApiKey`) — irreversibles. El interceptor de `whatsappApi` preserva el error de Meta en `err.waErrorCode` / `err.waErrorDetail`.
 
-**Embedded Signup (objetivo central — SaaS multi-cliente):** que cada cliente conecte su WhatsApp con "login con Facebook". Frontend: `libs/facebookSdk.ts` (carga el SDK) + `useConnectWhatsapp` (popup con `config_id`, captura `code` + `phone_number_id` + `waba_id`) → `POST /api/whatsapp/connect`. Requiere App Review para cuentas reales (en modo dev solo con testers). En local el frontend se expone con **ngrok** (dominio fijo) y Vite proxya `/api` → `localhost:3001`.
+**Embedded Signup (objetivo central — SaaS multi-cliente):** que cada cliente conecte su WhatsApp con "login con Facebook". Frontend: `libs/facebookSdk.ts` (carga el SDK) + `useConnectWhatsapp` (popup con `config_id`, captura `code` + `phone_number_id` + `waba_id`) → `POST /api/whatsapp/connect`. App Review de Meta aprobado: clientes reales pueden conectarse en producción. En local el frontend se expone con **ngrok** (dominio fijo) y Vite proxya `/api` → `localhost:3001`.
 
 **API pública de plantillas (`sendTemplateController`):** autenticada por API key. Descifra el token WA del user, envía la plantilla a Meta (parámetros posicionales `["Juan"]` o nombrados `[{name,value}]`), persiste la conversación + `Message` (con `status`; si Meta rechaza, `status:'failed'` + error), y **emite `message_created` por SSE** para que aparezca en vivo en la UI del dueño.
 
@@ -229,7 +229,7 @@ QueryClientProvider
 - Protegido: `/*` → `PrivateGuard` → `PrivateRouter` → páginas bajo `PrivateLayout`
 - Constantes de rutas en `models/routes.models.ts` (`AppRoutes`) — **no hardcodear strings de rutas**.
 
-**Páginas privadas:** `dashboard`, `quickStart`, `settings`, `chats`, `templates`
+**Páginas privadas:** `quickStart` (destino de `/`), `chats`, `templates`, `docs` (documentación de la API pública), `settings`, y `admin` — esta última solo se registra en `PrivateRouter` si `user.rol === 'superadmin'`. `AppRoutes.private.dashboard` y `pages/private/DashboardPage` existen pero no están enrutados.
 
 **`AuthProvider` — lógica no obvia:**
 - `isLoading = !authChecked || loginMutation.isPending`
