@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSSE } from "../context/sse.context";
+import { useThrottledInvalidate } from "./useThrottledInvalidate";
 import type { AxiosError } from "axios";
 import {
     createContactService, deleteContactService, getContactService, getContactsService, updateContactService,
@@ -8,21 +9,21 @@ import {
 import type { ContactDetail, ContactFilter, ContactInput, ContactsPage } from "../models/contact.model";
 
 export const useContacts = (pageIndex: number, pageSize: number, search: string, filter: ContactFilter) => {
-    const queryClient = useQueryClient();
     const { subscribe } = useSSE();
 
     // Un mensaje cambia la «última interacción», abre la ventana o trae un
     // contacto nuevo, y `contact_updated` es una baja o un alta de publicidad:
-    // la lista y la ficha se refrescan, como la bandeja.
+    // la lista y la ficha se refrescan, como la bandeja. Agrupado: un envío
+    // masivo dispara cientos de `message_created` seguidos.
+    const refresh = useThrottledInvalidate(['contacts']);
     useEffect(() => {
-        const refresh = () => queryClient.invalidateQueries({ queryKey: ['contacts'] });
         const unsubMessage = subscribe("message_created", refresh);
         const unsubContact = subscribe("contact_updated", refresh);
         return () => {
             unsubMessage();
             unsubContact();
         };
-    }, [subscribe, queryClient]);
+    }, [subscribe, refresh]);
 
     return useQuery<ContactsPage>({
         // pageIndex es 0-based (react-table); la API es 1-based

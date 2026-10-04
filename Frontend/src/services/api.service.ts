@@ -2,6 +2,7 @@ import type { QueryFunctionContext } from '@tanstack/react-query';
 import axios from 'axios';
 import type { TemplateButtonParam } from '../models/template.model';
 import type { ContactFilter, ContactInput } from '../models/contact.model';
+import type { CampaignDraftInput, CreateCampaignInput, RecipientState } from '../models/campaign.model';
 
 const API_URL = '/api'; // configuracion puesta en vite.config.ts
 // const API_URL = 'https://wasmish-api.solventyc.com/api';
@@ -11,6 +12,7 @@ interface SSEHandlers {
     onMessageStatus?: (event: MessageEvent) => void;
     onConversationUpdated?: (event: MessageEvent) => void;
     onContactUpdated?: (event: MessageEvent) => void;
+    onCampaignProgress?: (event: MessageEvent) => void;
     onError?: (err: ErrorEvent) => void;
 }
 
@@ -102,6 +104,9 @@ export const createSSEConnection = (
     }
     if (handlers.onContactUpdated) {
         source.addEventListener("contact_updated", handlers.onContactUpdated);
+    }
+    if (handlers.onCampaignProgress) {
+        source.addEventListener("campaign_progress", handlers.onCampaignProgress);
     }
 
     source.onmessage = (event) => {
@@ -230,4 +235,40 @@ export const updateContactService = async (id: string, input: ContactInput) => {
 
 export const deleteContactService = async (id: string) => {
     await axios.delete(`${API_URL}/contacts/${id}`, { withCredentials: true });
+}
+
+// --- Envíos masivos ----------------------------------------------------------
+
+export const previewCampaignService = async (input: CampaignDraftInput) => {
+    const { data } = await axios.post(`${API_URL}/campaigns/preview`, input, { withCredentials: true });
+    return data;
+}
+
+export const createCampaignService = async (input: CreateCampaignInput) => {
+    const { data } = await axios.post(`${API_URL}/campaigns`, input, { withCredentials: true });
+    return data;
+}
+
+export const getCampaignsService = async (page: number, limit: number) => {
+    const { data } = await axios.get(`${API_URL}/campaigns`, { params: { page, limit }, withCredentials: true });
+    return data;
+}
+
+export const getCampaignService = async (id: string) => {
+    const { data } = await axios.get(`${API_URL}/campaigns/${id}`, { withCredentials: true });
+    return data;
+}
+
+export const getCampaignRecipientsService = async (id: string, page: number, limit: number, state: RecipientState | null) => {
+    const { data } = await axios.get(`${API_URL}/campaigns/${id}/recipients`, {
+        params: { page, limit, state: state ?? undefined },
+        withCredentials: true,
+    });
+    return data;
+}
+
+/** Pausar, reanudar o cancelar. Sin cuerpo: el id va en la ruta. */
+export const campaignActionService = async (id: string, action: 'pause' | 'resume' | 'cancel') => {
+    const { data } = await axios.post(`${API_URL}/campaigns/${id}/${action}`, undefined, { withCredentials: true });
+    return data;
 }

@@ -29,9 +29,10 @@ const recipientsSchema = z.discriminatedUnion('mode', [
     }),
 ]);
 
-// Lo que pide la vista previa; crear pide además el nombre.
+// Lo que pide la vista previa. La plantilla es opcional: el paso de los
+// destinatarios va antes de elegirla y solo necesita los conteos.
 export const campaignDraftSchema = z.object({
-    templateId: z.string().min(1, 'Elige una plantilla'),
+    templateId: z.string().min(1).nullish(),
     variables: z.array(z.object({ key: z.string().min(1).max(64), ...fill })).max(30).nullish(),
     buttons: z.array(z.object({ index: z.number().int().min(0).max(9), ...fill })).max(10).nullish(),
     excludeOptedOut: z.boolean().nullish(),
@@ -39,5 +40,6 @@ export const campaignDraftSchema = z.object({
 });
 
 export const createCampaignSchema = campaignDraftSchema.extend({
-    name: z.string().trim().min(1, 'Ponle un nombre al envío').max(80),
+    templateId: z.string({ error: 'Elige una plantilla' }).min(1, 'Elige una plantilla'),
+    name: z.string({ error: 'Ponle un nombre al envío' }).trim().min(1, 'Ponle un nombre al envío').max(80),
 });

@@ -13,6 +13,7 @@ export const SSEProvider = ({ children }: { children: ReactNode }) => {
         message_status: new Set(),
         conversation_updated: new Set(),
         contact_updated: new Set(),
+        campaign_progress: new Set(),
     });
 
     // Abrir UNA conexión SSE, solo cuando hay sesión.
@@ -35,6 +36,7 @@ export const SSEProvider = ({ children }: { children: ReactNode }) => {
             onMessageStatus: dispatch("message_status"),
             onConversationUpdated: dispatch("conversation_updated"),
             onContactUpdated: dispatch("contact_updated"),
+            onCampaignProgress: dispatch("campaign_progress"),
         });
 
         return () => close(); // al cerrar sesión / desmontar, cerramos la conexión

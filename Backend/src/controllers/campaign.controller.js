@@ -66,11 +66,13 @@ const selectContacts = async (userId, recipients) => {
 };
 
 const buildDraft = async (userId, body) => {
-    const template = await Template.findOne({ userId, templateId: body.templateId }).lean();
+    // Sin plantilla (vista previa del paso de destinatarios) solo se cuentan
+    // los contactos: no hay mensaje que validar todavía.
+    const template = body.templateId ? await Template.findOne({ userId, templateId: body.templateId }).lean() : null;
     const config = { variables: body.variables ?? [], buttons: body.buttons ?? [] };
     const excludeOptedOut = Boolean(body.excludeOptedOut);
 
-    const errors = validateCampaignMessage(template, config);
+    const errors = body.templateId ? validateCampaignMessage(template, config) : [];
     const { contacts, duplicates, notFound } = await selectContacts(userId, body.recipients);
 
     if (contacts.length > CAMPAIGN_MAX_RECIPIENTS) {
@@ -91,7 +93,7 @@ const buildDraft = async (userId, body) => {
 const previewMessages = (draft) => {
     const fallbacks = {};
     const samples = [];
-    if (draft.errors.some(e => e.field !== 'recipients')) return { fallbacks, samples };
+    if (!draft.template || draft.errors.some(e => e.field !== 'recipients')) return { fallbacks, samples };
 
     for (const { contact } of draft.sendable) {
         const built = buildContactParameters(draft.template, draft.config, contact);

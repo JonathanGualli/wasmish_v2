@@ -2,6 +2,7 @@
 import { useLogin } from "../hooks/useLogin";
 import { AuthContext } from "./auth.context";
 import { clearAllDrafts } from "../utils/conversationDraft";
+import { clearAllCampaignDrafts } from "../utils/campaignDraft";
 import type { User } from "../models/user.mode";
 import type { AxiosError } from "axios";
 import { useVerifyLogin } from "../hooks/useVerifyLogin";
@@ -90,9 +91,10 @@ export const AuthProvider = ({ children }: AuthProps) => {
     };
  
     const logOut = () => {
-        // El borrador de conversación nueva es de esta sesión: no debe verlo
-        // quien entre después en la misma pestaña.
+        // Los borradores (conversación nueva, envío masivo) son de esta sesión:
+        // no debe verlos quien entre después en el mismo navegador.
         clearAllDrafts();
+        clearAllCampaignDrafts();
         setUser(null);
         setErrors([]);
         logOutMutation.mutate();

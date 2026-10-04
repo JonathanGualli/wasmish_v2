@@ -3,6 +3,7 @@ import { getConversationsService } from "../services/api.service.ts";
 import type { Conversation } from "../models/conversation.mode.ts";
 import { useEffect } from "react";
 import { useSSE } from "../context/sse.context.ts";
+import { useThrottledInvalidate } from "./useThrottledInvalidate.ts";
 
 export const useConversations = () => {
   const queryClient = useQueryClient();
@@ -13,6 +14,10 @@ export const useConversations = () => {
     queryFn: getConversationsService,
   });
 
+  // Agrupado: un envío masivo estrena cientos de conversaciones seguidas, y
+  // cada una pedía la bandeja entera otra vez.
+  const refreshList = useThrottledInvalidate(["conversations"]);
+
   useEffect(() => {
     // Mensaje nuevo (entrante o propio) → actualizar la conversación en la lista
     const unsubCreated = subscribe("message_created", (payload) => {
@@ -21,7 +26,7 @@ export const useConversations = () => {
 
         // Si la conversación NO existe aún (contacto nuevo), refrescamos la lista
         if (!exists) {
-          queryClient.invalidateQueries({ queryKey: ["conversations"] });
+          refreshList();
           return old;
         }
         const updated = old.map((c) =>
@@ -62,7 +67,7 @@ export const useConversations = () => {
       unsubCreated();
       unsubUpdated();
     };
-  }, [subscribe, queryClient]);
+  }, [subscribe, queryClient, refreshList]);
 
   return query;
 };
