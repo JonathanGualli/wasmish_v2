@@ -8,6 +8,8 @@
 //   npm run webhook:simulate -- imagen boton ubicacion
 //   npm run webhook:simulate -- --all
 //   npm run webhook:simulate -- --clean          ← borra la conversación de prueba
+//   npm run webhook:simulate -- baja-marketing   ← se da de baja de la publicidad
+//   npm run webhook:simulate -- alta-marketing   ← vuelve a aceptarla
 //
 // Opciones: --from <numero>  --url <http://...>  --phone-number-id <id>
 //           --name <nombre de perfil>  --username <usuario>
@@ -49,6 +51,14 @@ const MUESTRAS = {
     desconocido:  { type: 'nfm_reply', nfm_reply: { response_json: '{}' } },
 };
 
+// No son mensajes: van en `value.user_preferences` (webhook del mismo nombre).
+// No entran en --all, que es para los tipos de mensaje. El contacto de prueba
+// tiene que existir antes: manda primero un mensaje.
+const PREFERENCIAS = {
+    'baja-marketing': 'stop',
+    'alta-marketing': 'resume',
+};
+
 // --- argumentos -------------------------------------------------------------
 const argv = process.argv.slice(2);
 const opcion = (nombre, porDefecto) => {
@@ -77,6 +87,7 @@ const morir = (mensaje) => { console.error(mensaje); process.exit(1); };
 
 if (listar) {
     console.log('Tipos disponibles:\n  ' + Object.keys(MUESTRAS).join('\n  '));
+    console.log('\nPreferencias de marketing:\n  ' + Object.keys(PREFERENCIAS).join('\n  '));
     process.exit(0);
 }
 
@@ -88,7 +99,7 @@ if (!limpiar && elegidos.length === 0) {
     morir('Dime qué mandar.  Ej: npm run webhook:simulate -- audio boton   (o --all, o --list)');
 }
 
-const desconocidos = elegidos.filter(n => !MUESTRAS[n]);
+const desconocidos = elegidos.filter(n => !MUESTRAS[n] && !PREFERENCIAS[n]);
 if (desconocidos.length > 0) morir(`No conozco: ${desconocidos.join(', ')}.  Usa --list para ver los tipos.`);
 
 // --- ejecución --------------------------------------------------------------
@@ -136,6 +147,33 @@ if (limpiar) {
 
 console.log(`Enviando a ${URL_BASE}/api/webhook  ·  de ${senderLabel}  ·  a la cuenta ${dueno.email} (${phoneNumberId})\n`);
 
+// El `value` de un mensaje o de un aviso de preferencia de marketing.
+const valorDe = (nombre) => {
+    const ahora = Math.floor(Date.now() / 1000);
+    if (PREFERENCIAS[nombre]) {
+        const value = PREFERENCIAS[nombre];
+        return {
+            user_preferences: [{
+                ...(PHONE && { wa_id: PHONE }),
+                user_id: USER_ID,
+                detail: `User requested to ${value} marketing messages`,
+                category: 'marketing_messages',
+                value,
+                timestamp: ahora,
+            }],
+        };
+    }
+    return {
+        messages: [{
+            ...(PHONE && { from: PHONE }),
+            from_user_id: USER_ID,
+            id: `wamid.sim.${Date.now()}.${Math.random().toString(36).slice(2)}`,
+            timestamp: String(ahora),
+            ...MUESTRAS[nombre],
+        }],
+    };
+};
+
 for (const nombre of elegidos) {
     const body = JSON.stringify({
         entry: [{ changes: [{ value: {
@@ -146,13 +184,7 @@ for (const nombre of elegidos) {
                 ...(PHONE && { wa_id: PHONE }),
                 user_id: USER_ID,
             }],
-            messages: [{
-                ...(PHONE && { from: PHONE }),
-                from_user_id: USER_ID,
-                id: `wamid.sim.${Date.now()}.${Math.random().toString(36).slice(2)}`,
-                timestamp: String(Math.floor(Date.now() / 1000)),
-                ...MUESTRAS[nombre],
-            }],
+            ...valorDe(nombre),
         } }] }],
     });
 
@@ -178,6 +210,7 @@ const contact = await findTestContact();
 const conv = await findTestConversation(contact);
 if (contact) {
     console.log(`\nContacto: ${JSON.stringify(contact.profileName)}  ·  teléfono ${contact.phone ?? '—'}  ·  BSUID ${contact.waUserId ?? '—'}`);
+    console.log(`Publicidad: ${contact.marketingOptOut ? `dado de baja desde ${contact.marketingOptOutAt?.toISOString()}` : 'la acepta'}`);
 }
 if (conv) {
     const msgs = await Message.find({ conversationId: conv._id }).sort({ createdAt: -1 }).limit(elegidos.length).lean();

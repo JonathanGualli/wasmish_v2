@@ -10,6 +10,7 @@ interface SSEHandlers {
     onMessageCreated?: (event: MessageEvent) => void;
     onMessageStatus?: (event: MessageEvent) => void;
     onConversationUpdated?: (event: MessageEvent) => void;
+    onContactUpdated?: (event: MessageEvent) => void;
     onError?: (err: ErrorEvent) => void;
 }
 
@@ -98,6 +99,9 @@ export const createSSEConnection = (
     }
     if (handlers.onConversationUpdated) {
         source.addEventListener("conversation_updated", handlers.onConversationUpdated);
+    }
+    if (handlers.onContactUpdated) {
+        source.addEventListener("contact_updated", handlers.onContactUpdated);
     }
 
     source.onmessage = (event) => {

@@ -12,10 +12,17 @@ export const useContacts = (pageIndex: number, pageSize: number, search: string,
     const { subscribe } = useSSE();
 
     // Un mensaje cambia la «última interacción», abre la ventana o trae un
-    // contacto nuevo: la lista y la ficha se refrescan, como la bandeja.
-    useEffect(() => subscribe("message_created", () => {
-        queryClient.invalidateQueries({ queryKey: ['contacts'] });
-    }), [subscribe, queryClient]);
+    // contacto nuevo, y `contact_updated` es una baja o un alta de publicidad:
+    // la lista y la ficha se refrescan, como la bandeja.
+    useEffect(() => {
+        const refresh = () => queryClient.invalidateQueries({ queryKey: ['contacts'] });
+        const unsubMessage = subscribe("message_created", refresh);
+        const unsubContact = subscribe("contact_updated", refresh);
+        return () => {
+            unsubMessage();
+            unsubContact();
+        };
+    }, [subscribe, queryClient]);
 
     return useQuery<ContactsPage>({
         // pageIndex es 0-based (react-table); la API es 1-based

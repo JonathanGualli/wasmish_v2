@@ -2,11 +2,15 @@ import { WHATSAPP_VERIFY_TOKEN } from '../config.js';
 import User from "../models/user.model.js";
 import Message from "../models/message.model.js";
 import { sendUser } from './stream.controller.js';
-import { resolveContact, findOrCreateConversation } from './contact.controller.js';
+import Conversation from "../models/conversation.model.js";
+import {
+    resolveContact, findOrCreateConversation, findContactByIdentity, getConversationContact, applyMarketingPreference,
+} from './contact.controller.js';
 import { resolveStatusTransition } from '../utils/message.status.js';
 import { getWindowExpiry } from '../utils/whatsapp.window.js';
 import { describeInboundMessage } from '../utils/inbound.message.js';
 import { describeInboundContact, hasContactIdentity } from '../utils/contact.identity.js';
+import { describeUserPreference, isMarketingOptOutFailure } from '../utils/marketing.preference.js';
 import { TIPOS_CON_ARCHIVO, nombreDeArchivo, guardarArchivo } from '../utils/media.storage.js';
 import { getMediaInfo, downloadMedia } from '../libs/whatsapp.js';
 import { decrypt } from '../utils/crypto.js';
@@ -190,6 +194,57 @@ const procesarEntrante = async (user, phoneNumberId, messageData, contacts) => {
     });
 };
 
+// Avisa a la UI de que un contacto se dio de baja o de alta de la publicidad.
+// La ficha y la lista de Contactos se refrescan con él.
+const avisarPreferencia = (user, contact) => {
+    sendUser(String(user._id), 'contact_updated', {
+        id: String(contact._id),
+        marketingOptOut: contact.marketingOptOut,
+        marketingOptOutAt: contact.marketingOptOutAt ? contact.marketingOptOutAt.toISOString() : null,
+    });
+    // Sin teléfono ni nombre: basta el id para encontrarlo en la app.
+    console.log('Preferencia de marketing:', {
+        contactId: String(contact._id),
+        marketingOptOut: contact.marketingOptOut,
+    });
+};
+
+// Procesa UN aviso de `user_preferences`: la persona pidió dejar de recibir
+// publicidad, o volver a recibirla.
+const procesarPreferencia = async (user, preferenceData) => {
+    const preference = describeUserPreference(preferenceData);
+    if (!preference) return;
+
+    if (!hasContactIdentity(preference)) {
+        console.warn('Preferencia sin teléfono ni BSUID; se descarta:', { category: preferenceData?.category });
+        return;
+    }
+
+    // No se crea el contacto: para darse de baja tuvo que recibir una plantilla
+    // nuestra, y cada envío ya deja su contacto. Si no está, es de otra
+    // herramienta que comparte el número, y no hay nada que marcar.
+    const contact = await findContactByIdentity(user._id, preference);
+    if (!contact) {
+        console.warn('Preferencia de marketing de un contacto que no existe; se ignora.');
+        return;
+    }
+
+    const updated = await applyMarketingPreference(contact, preference);
+    if (updated) avisarPreferencia(user, updated);
+};
+
+// El 131050 dice que la persona está dada de baja aunque el webhook de
+// `user_preferences` no haya llegado (no estar suscrito a ese campo, o que se
+// perdiera). Se marca con la hora del acuse.
+const marcarBajaPorFallo = async (user, message, timestamp) => {
+    const conversation = await Conversation.findOne({ _id: message.conversationId, userId: user._id });
+    if (!conversation) return;
+
+    const contact = await getConversationContact(conversation);
+    const updated = await applyMarketingPreference(contact, { optOut: true, at: timestamp });
+    if (updated) avisarPreferencia(user, updated);
+};
+
 // Procesa UN acuse de recibo (entregado / leído / fallido).
 const procesarEstado = async (user, statusData) => {
 
@@ -251,6 +306,10 @@ const procesarEstado = async (user, statusData) => {
             waMessageId: message.waMessageId,
             errors: statusData.errors,
         });
+
+        if (isMarketingOptOutFailure(statusData.errors)) {
+            await marcarBajaPorFallo(user, message, timestamp);
+        }
     }
 };
 
@@ -298,6 +357,22 @@ export const handleWebhook = async (req, res) => {
                         console.error("Acuse descartado por error:", {
                             waMessageId: statusData?.id,
                             status: statusData?.status,
+                            error: error.message,
+                        });
+                    }
+                }
+
+                // Bajas y altas de publicidad. Llegan en su propio campo del
+                // webhook (`user_preferences`), que hay que tener marcado en el
+                // panel de la app de Meta para que Meta lo mande.
+                const preferences = value?.user_preferences ?? [];
+                for(const preferenceData of preferences) {
+                    try {
+                        await procesarPreferencia(user, preferenceData);
+                    } catch (error) {
+                        console.error("Preferencia descartada por error:", {
+                            category: preferenceData?.category,
+                            value: preferenceData?.value,
                             error: error.message,
                         });
                     }

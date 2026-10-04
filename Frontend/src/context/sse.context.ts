@@ -1,7 +1,7 @@
 import { createContext, useContext } from "react";
 
 // Los 3 tipos de evento que emite tu backend
-export type SSEEventType = "message_created" | "message_status" | "conversation_updated";
+export type SSEEventType = "message_created" | "message_status" | "conversation_updated" | "contact_updated";
 
 // Un suscriptor recibe el payload ya parseado (objeto), no el evento crudo
 export type SSEHandler = (data: any) => void;

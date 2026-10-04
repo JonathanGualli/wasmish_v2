@@ -69,12 +69,20 @@ const contactSchema = new mongoose.Schema({
         default: null,
     },
     // Pidió no recibir marketing. Enviarle una plantilla de marketing la rechaza
-    // Meta (131050) y baja la calidad del número.
+    // Meta (131050) y baja la calidad del número. Lo escribe el webhook
+    // (`user_preferences` y el 131050), ver utils/marketing.preference.js.
     marketingOptOut: {
         type: Boolean,
         default: false,
     },
+    // Cuándo se dio de baja; null si acepta publicidad.
     marketingOptOutAt: {
+        type: Date,
+        default: null,
+    },
+    // Cuándo ocurrió el último cambio aplicado (baja o alta). Meta no garantiza
+    // el orden de los webhooks: lo que sea más viejo que esto se ignora.
+    marketingPreferenceAt: {
         type: Date,
         default: null,
     },

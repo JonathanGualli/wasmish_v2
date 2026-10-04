@@ -5,6 +5,7 @@ import Message from "../models/message.model.js";
 import { hasContactIdentity, mergeContactUpdates, contactDisplayName } from "../utils/contact.identity.js";
 import { pickContactFields, buildContactSearch, CONTACT_FILTERS } from "../utils/contact.query.js";
 import { getWindowExpiry } from "../utils/whatsapp.window.js";
+import { resolveMarketingPreference } from "../utils/marketing.preference.js";
 
 // ---------------------------------------------------------------------------
 // Contactos y su conversación. Lo usan los sitios por donde entra un número o
@@ -12,7 +13,7 @@ import { getWindowExpiry } from "../utils/whatsapp.window.js";
 // ---------------------------------------------------------------------------
 
 // El BSUID primero: identifica a la persona aunque Meta no mande el teléfono.
-const findContactByIdentity = async (userId, { phone, waUserId }) => {
+export const findContactByIdentity = async (userId, { phone, waUserId }) => {
     if (waUserId) {
         const contact = await Contact.findOne({ userId, waUserId });
         if (contact) return contact;
@@ -160,6 +161,31 @@ export const getSendingConversation = async ({ userId, conversation, recipient, 
     if (conversation) return conversation;
     const contact = await resolveContact(userId, recipient, { name: contactName, source });
     return findOrCreateConversation({ userId, contact, phoneNumberId });
+};
+
+/**
+ * Aplica una baja o un alta de publicidad (ver `resolveMarketingPreference`).
+ * Devuelve el contacto actualizado si cambió `marketingOptOut` —que es cuando
+ * hay que avisar a la UI— y null si no.
+ *
+ * El update repite la condición de fecha en el filtro: dos webhooks del mismo
+ * contacto a la vez leerían el mismo documento, y sin ella el más viejo podría
+ * escribir el último.
+ */
+export const applyMarketingPreference = async (contact, preference) => {
+    const changes = resolveMarketingPreference(contact, preference);
+    if (!changes) return null;
+
+    const updated = await Contact.findOneAndUpdate(
+        {
+            _id: contact._id,
+            $or: [{ marketingPreferenceAt: null }, { marketingPreferenceAt: { $lte: preference.at } }],
+        },
+        { $set: changes },
+        { new: true },
+    );
+
+    return updated && 'marketingOptOut' in changes ? updated : null;
 };
 
 // ---------------------------------------------------------------------------
