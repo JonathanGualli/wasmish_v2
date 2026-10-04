@@ -69,7 +69,11 @@ cd Backend && npm run backfill:window -- --dry-run   # informa, no escribe
 cd Backend && npm run backfill:window                # aplica
 cd Backend && npm run check:duplicates               # informa duplicados por waMessageId
 cd Backend && npm run check:duplicates -- --fix      # borra las copias, conserva la más antigua
+cd Backend && npm run backfill:contacts -- --dry-run # informa, no escribe
+cd Backend && npm run backfill:contacts              # aplica
 ```
+`scripts/backfill-contacts.js` crea un `Contact` por cada conversación anterior a los contactos, la enlaza (`contactId`) y pasa su `contactName` al contacto; al final borra el índice viejo `userId_1_contactPhone_1`. Idempotente (solo toca las conversaciones sin `contactId`). **Ya corrido en producción** el 2026-10-01: 453 contactos, ninguna conversación sin enlazar.
+
 `scripts/backfill-last-inbound.js` rellena `Conversation.lastInboundAt` en las conversaciones anteriores al campo, tomando el último `Message` entrante de cada una. Es idempotente y solo escribe si el valor falta o es más viejo, así que nunca pisa lo que el webhook haya puesto mientras corría.
 
 `scripts/check-duplicate-messages.js` busca `Message` que compartan `waMessageId`. Hay que correrlo **antes de desplegar** en una BD que pueda traer duplicados: si los hay, Mongo no puede crear el índice único (E11000), Mongoose solo lo loguea y la app arranca **sin** la protección.
@@ -95,7 +99,7 @@ cd Frontend && npm run preview # preview production build
 cd Backend && npm test         # node --test "tests/**/*.test.js"
 cd Backend && npm run test:watch
 ```
-Cubren **funciones puras**, sin BD ni red: `utils/crypto.js`, `utils/message.status.js`, `utils/whatsapp.window.js`, `utils/inbound.message.js`, `utils/media.storage.js` y las de plantillas de `template.controller.js` (`buildButtonComponents`, `renderTemplateBody`). Cada test que corresponde a un bug ya corregido lleva un comentario explicando la regresión que vigila — verificados reintroduciendo el bug a propósito y comprobando que fallan. El Frontend no tiene tests.
+Cubren **funciones puras**, sin BD ni red: `utils/crypto.js`, `utils/message.status.js`, `utils/whatsapp.window.js`, `utils/inbound.message.js`, `utils/media.storage.js`, `utils/contact.identity.js`, `utils/contact.query.js` y las de plantillas de `template.controller.js` (`buildButtonComponents`, `renderTemplateBody`). Cada test que corresponde a un bug ya corregido lleva un comentario explicando la regresión que vigila — verificados reintroduciendo el bug a propósito y comprobando que fallan. El Frontend no tiene tests.
 
 Los tests fijan `process.env` **antes** de un `await import(...)` dinámico, porque `crypto.js` y el middleware de firma leen la config al importarse; con un `import` estático la variable llegaría tarde.
 
@@ -144,6 +148,11 @@ No se aplica a `/api/webhook` (Meta manda ráfagas) ni a `/api/stream` (conexió
 | POST | `/api/chats/:id/template` | JWT | Enviar plantilla a una conversación existente (para reabrir la ventana de 24 h). Body: `{ templateName, language?, parameters?, buttons? }` |
 | POST | `/api/chats/template` | JWT | Iniciar conversación con plantilla desde la bandeja. Body: `{ destinationNumber, contactName?, templateName, language?, parameters?, buttons? }` — el número solo dígitos (8–15) |
 | GET | `/api/media/:id` | JWT | Adjunto de un mensaje (`:id` es el **id del mensaje**, no el del archivo) |
+| GET | `/api/contacts` | JWT | Contactos paginados (`?search`, `?filter=all\|with_conversation\|without_conversation\|opted_out`, `?page`, `?limit` máx 50), ordenados por actividad |
+| GET | `/api/contacts/:id` | JWT | Ficha: contacto + `activity` (primer mensaje, enviados, recibidos, fallidos) |
+| POST | `/api/contacts` | JWT | Alta manual (`phone` obligatorio). No envía nada. 409 con `contactId` si el teléfono ya existe |
+| PATCH | `/api/contacts/:id` | JWT | Editar `phone`, `name`, `email`, `company`, `notes`. El teléfono **no** cambia si hay conversación (409) |
+| DELETE | `/api/contacts/:id` | JWT | Borrar, **solo si nunca hubo conversación** (409 si la hay) |
 | GET | `/api/stream` | JWT | SSE stream del usuario |
 | GET | `/api/templates/sync` | JWT | Sincronizar plantillas desde Meta API → MongoDB |
 | GET | `/api/templates` | JWT | Listar plantillas guardadas en DB |
@@ -176,10 +185,20 @@ El webhook trae también una `url` ya resuelta, pero **caduca en horas** mientra
 
 **Plantilla desde el chat (`sendConversationTemplateController`):** la lógica de envío se extrajo de `sendTemplateController` a **`processTemplateSending`** (en `template.controller.js`), que no sabe nada de HTTP: los errores de negocio salen como `Error` con `statusCode` y quien la llama decide la respuesta. La usan la API pública y esta ruta. El destinatario **sale de la conversación**, no del body, y el `findOne({ _id: id, userId })` es la comprobación de propiedad — sin ese filtro cualquier sesión podría escribir en la conversación de otro. Envía la plantilla pero **no toca `lastInboundAt`**: enviar no reabre la ventana, solo un mensaje del contacto.
 
+**Contactos (`Contact`, `contact.controller.js`):** hasta el 2026-10-01 la persona *era* la conversación (`contactPhone` + `contactName`). Ahora es un documento propio y la conversación apunta a él con **`Conversation.contactId`**. Una conversación por contacto y cuenta.
+- **Dos identidades.** Desde abril de 2026 Meta identifica a cada persona por el teléfono (`wa_id`) **y** por el **BSUID** (`user_id`, p. ej. `EC.1349…`, propio de cada negocio). Si la persona activó su nombre de usuario de WhatsApp y no habló con el negocio en 30 días, **el teléfono no llega**. Por eso un contacto necesita al menos uno de los dos (`pre('validate')`), `Conversation.contactPhone` pasó a ser opcional y `whatsappRecipient` manda `to` (teléfono, preferido) o `recipient` (BSUID). `utils/contact.identity.js` es **el único sitio** que conoce cómo los manda Meta. Las plantillas `AUTHENTICATION` solo aceptan teléfono: `processTemplateSending` rechaza con 400 antes de llamar a Meta.
+- **Un solo camino de alta.** `resolveContact` (busca por BSUID primero, luego teléfono; crea si no existe) lo usan el webhook (`source:'inbound'` o `'ad'` si trae `referral` de un anuncio Click-to-WhatsApp), el envío desde la UI (`'manual'`) y la API pública (`'api'`). Una carrera de dos webhooks del mismo número nuevo la resuelve el E11000: el perdedor usa el que ganó.
+- **Qué se actualiza solo** (`mergeContactUpdates`, puro): teléfono y BSUID solo **rellenan** el hueco (un mensaje no cambia la identidad); `profileName` y `username` son de la persona y se pisan siempre; `name` es el que pone quien usa Wasmish y **nunca** lo pisa WhatsApp, solo se rellena si no hay. Si el identificador nuevo ya es de **otro** contacto (uno nació solo con teléfono y otro solo con BSUID) no se fusionan: un webhook no debe decidir eso, se loguea y sigue.
+- **El nombre que se ve** sale de `contactDisplayName`: `name` → `profileName` → `@username` → teléfono → «Contacto de WhatsApp». `listConversations` hace `populate('contactId')` y lo usa como `title`.
+- **Conversaciones anteriores** a los contactos se enlazan **al tocarlas** (`getConversationContact` / `linkConversation`), sin cambiarles el `updatedAt`, y su `contactName` (ya **obsoleto**) pasa al contacto si este no tiene nombre. Con eso, correr o no el backfill no rompe nada.
+- **Enviar a un número nuevo no crea el contacto antes de tiempo**: `getSendingRecipient` devuelve solo `{ phone }`, y `getSendingConversation` crea contacto + conversación **después** del envío (haya salido o fallado). Un envío que ni sale (plantilla inexistente, botón mal puesto) no deja contactos huérfanos.
+- **Edición:** solo `phone`, `name`, `email`, `company`, `notes` (`pickContactFields`); lo que pone WhatsApp se ignora aunque venga en el body. El teléfono se guarda **solo dígitos** (`phoneNumberSchema`, el mismo de `startConversationTemplateSchema`): con `+` o espacios no casaría con el `wa_id` del webhook y nacería un duplicado. La búsqueda escapa el texto (`escapeRegex`) y busca el teléfono por sus dígitos.
+- **`marketingOptOut` / `marketingOptOutAt`** existen en el modelo, en el filtro `opted_out` y en la UI («Baja publicidad»), pero **nada los escribe todavía**: falta procesar el aviso de baja de Meta. Enviar marketing a quien se dio de baja lo rechaza Meta (131050) y baja la calidad del número.
+
 **Flujo de mensaje saliente (`sendMessageController`):**
-1. Busca conversación por `id` (params) o `destinationNumber` (body)
-2. Decripta `user.tokenWhatsapp` → llama Meta Cloud API
-3. Si no existe conversación, la crea; si existe, actualiza `lastMessage` y **`lastMessageAt`** — nunca `updatedAt`, que Mongoose pisa en el `save()` por `timestamps: true` y que además no es el campo por el que ordena `listConversations`. La conversación y el `Message` comparten un único `const now` para que el orden de la lista y el cursor de paginación estén en la misma escala
+1. Con `id` (params) busca la conversación con `findOne({ _id: id, userId })` — es la comprobación de propiedad; sin `id`, el destinatario es `destinationNumber` (body) y se reutiliza la conversación de su contacto si existe
+2. Decripta `user.tokenWhatsapp` → llama Meta Cloud API con el destinatario del contacto (teléfono o BSUID)
+3. `getSendingConversation` da la conversación (la crea con su contacto si no existía); se actualiza `lastMessage` y **`lastMessageAt`** — nunca `updatedAt`, que Mongoose pisa en el `save()` por `timestamps: true` y que además no es el campo por el que ordena `listConversations`. La conversación y el `Message` comparten un único `const now` para que el orden de la lista y el cursor de paginación estén en la misma escala
 4. Persiste `Message` con `temporalId` (para UI optimista). Si Meta rechaza, guarda igual `status:'failed'` + `errorCode`/`errorDetail` (no se pierde)
 5. Emite `message_created` via SSE; el POST responde el mensaje normalizado con `id` real (para que los `message_status` posteriores casen con el optimista del frontend)
 
@@ -201,10 +220,12 @@ El webhook trae también una `url` ya resuelta, pero **caduca en horas** mientra
 - **Un mensaje roto no tumba el lote.** El cuerpo de cada bucle vive en `procesarEntrante` / `procesarEstado`, y `handleWebhook` los llama envueltos en `try/catch`. Si el error subiera, la respuesta sería 500 y **Meta reintentaría el lote entero** y habría que volver a procesar lo que ya se guardó (el índice único de `waMessageId` evita el duplicado, pero no el trabajo ni el ruido). Con el catch, Meta recibe 200 y como mucho se pierde el que venía mal, con su `waMessageId` y su `type` en el log.
 - **Los `system` se ignoran** (avisos del tipo «este contacto cambió de número»): `describeInboundMessage` devuelve `null`, no se guardan y **no abren la ventana**.
 - **`lastInboundAt` solo avanza**, igual que el estado: `if (!conversation.lastInboundAt || timestamp > conversation.lastInboundAt)`. Un webhook viejo que llegue tarde cerraría la ventana antes de tiempo.
-- La conversación nueva se crea con **`unreadCount: 0`**, no 1: el `+1` de más abajo corre también para ella y el primer mensaje de un contacto nuevo salía con badge 2.
+- **Quién escribe sale de `value.contacts`**, no solo de `messages[].from`: `describeInboundContact` casa el perfil por teléfono o BSUID (con varios remitentes en un lote, coger el primero pondría el nombre de otra persona). Un entrante **sin teléfono ni BSUID** se descarta con un `warn`. Antes, uno sin teléfono reventaba al crear la conversación (`contactPhone` era `required`) y el mensaje se perdía.
+- La conversación nueva (`findOrCreateConversation`) se crea con **`unreadCount: 0`**, no 1: el `+1` de más abajo corre también para ella y el primer mensaje de un contacto nuevo salía con badge 2. Si Meta revela el teléfono de alguien que antes escribió solo con usuario, se copia a `contactPhone`.
 
 **Índices MongoDB relevantes:**
-- `Conversation`: `{ userId: 1, contactPhone: 1 }` unique — no puede haber dos conversaciones del mismo user con el mismo teléfono
+- `Conversation`: `conversation_contact_unique` = `{ userId: 1, contactId: 1 }` único **parcial** (`contactId: { $type: 'objectId' }`) — una conversación por contacto; parcial para que las anteriores a los contactos, sin `contactId`, no choquen entre sí. Más `contactId_1` simple, para el `$lookup` de la lista de contactos. El viejo `userId_1_contactPhone_1` ya **no existe** (lo borra `backfill:contacts`): un contacto puede no tener teléfono.
+- `Contact`: `contact_phone_unique` `{ userId, phone }` y `contact_waUserId_unique` `{ userId, waUserId }`, únicos **parciales** por `$type: 'string'` — el mismo motivo que `waMessageId_unico`: los dos campos pueden ser `null`
 - `Message`: `{ conversationId: 1, timestamp: 1 }`
 - `Message`: **dos** índices sobre `waMessageId`, y hacen falta los dos. `waMessageId_unico` es único **parcial** (`$type: 'string'`, no `sparse`: los fallidos se guardan con `null` explícito y dos `null` chocarían) — frena el duplicado cuando Meta reintenta un webhook; `procesarEntrante` trata el E11000 como «ya guardado» y sale sin emitir SSE. `waMessageId_busqueda` es el normal: Mongo no usa el parcial para `{ waMessageId: 'wamid.x' }` y cada acuse de recibo haría un escaneo completo.
 
@@ -229,7 +250,7 @@ QueryClientProvider
 - Protegido: `/*` → `PrivateGuard` → `PrivateRouter` → páginas bajo `PrivateLayout`
 - Constantes de rutas en `models/routes.models.ts` (`AppRoutes`) — **no hardcodear strings de rutas**.
 
-**Páginas privadas:** `quickStart` (destino de `/`), `chats`, `templates`, `docs` (documentación de la API pública), `settings`, y `admin` — esta última solo se registra en `PrivateRouter` si `user.rol === 'superadmin'`. `AppRoutes.private.dashboard` y `pages/private/DashboardPage` existen pero no están enrutados.
+**Páginas privadas:** `quickStart` (destino de `/`), `chats`, `contacts`, `templates`, `docs` (documentación de la API pública), `settings`, y `admin` — esta última solo se registra en `PrivateRouter` si `user.rol === 'superadmin'`. `AppRoutes.private.dashboard` y `pages/private/DashboardPage` existen pero no están enrutados.
 
 **`AuthProvider` — lógica no obvia:**
 - `isLoading = !authChecked || loginMutation.isPending`
@@ -261,6 +282,10 @@ QueryClientProvider
 
 **Conversación nueva (`NewConversationPanel`):** no es un modal — ocupa el sitio del hilo, y la bandeja enseña una fila «Borrador» mientras exista. **El borrador sobrevive** a abrir otra conversación, cambiar de página o recargar: `ChatPage` lo guarda en `sessionStorage` (`utils/conversationDraft.ts`, clave con el id del usuario) y la fila lo vuelve a abrir. Solo se borra al pulsar *Descartar*, al enviarlo, al cerrar sesión (`clearAllDrafts` en `logOut`) o al cerrar la pestaña. Nunca va a la BD. `useTemplateForm` arranca con lo guardado y expone `selectedName` aparte de `selected`, porque mientras cargan las plantillas `selected` es `undefined` y guardar ese valor borraría la plantilla elegida. **Solo envía plantillas**: a un número que nunca escribió WhatsApp no le entrega texto libre (131047). Va a `POST /api/chats/template`, que llama a `processTemplateSending` con `destinationNumber` + `contactName`; si el número ya tiene conversación la reutiliza (índice único), y el panel lo avisa antes con «Abrirla». Si Meta rechaza, la conversación queda creada con el mensaje fallido — por eso `useStartConversation` invalida la bandeja también en el error. Los mensajes con `templateName` se pintan en el hilo con «Plantilla · nombre» encima y sus botones debajo (`TemplateButtons`, de la definición sincronizada).
 
+**Contactos (`pages/private/Contacts`):** tabla paginada en el servidor (`DataTable` + `ContactColumns`/`ContactRow`), búsqueda con `useDebouncedValue`, filtros por conversación y baja de publicidad, y la ficha lateral `ContactPanel` (datos, origen —«Escribió él», «Desde un anuncio»…—, actividad y ventana de 24 h con `useConversationWindow`). El estado de cada fila lo resume `contactStatus` (`utils/contactDisplay.ts`): baja de publicidad > sin conversación > ventana abierta/cerrada. Un contacto sin teléfono se muestra por su `@usuario`. `ContactForm` avisa del teléfono duplicado **mientras se escribe** (`useContactByPhone`, que exige coincidencia exacta porque la búsqueda es por subcadena) y además maneja el 409 del backend con «Ver contacto». La lista se refresca con cada `message_created` del SSE, y las mutaciones invalidan también `['conversations']`, porque el nombre del contacto es el título de su chat.
+
+**Ir de la ficha al chat (`ChatsNavigationState`):** la ficha navega a `chats` con `state: { conversationId }` (abrir su conversación) o `state: { draft: { phone, name } }` (empezar una nueva, **reemplazando** el borrador que hubiera sin preguntar). `ChatPage` consume ese `state` una sola vez y lo borra del historial con `navigate(..., { replace: true, state: null })`; si se quedara, recargar la página volvería a pisar el borrador.
+
 **`SendTemplateDialog` + `useSendTemplate`:** **sin UI optimista** — el mensaje lo inserta el `message_created` del SSE; adelantarlo lo duplicaría, porque este envío no lleva `temporalId` con el que deduplicar. Los errores van al **modal global** (igual que en `NewConversationPanel`, con el texto de `templateSendError`: si rechazó Meta, su código y detalle); el diálogo sigue abierto debajo, sin perder lo escrito. Ojo: el modal vive en otro portal, así que para el `Dialog` de Headless UI pulsar su X es un «clic fuera» — `handleDialogClose` ignora el cierre mientras el modal está visible. El diálogo deriva los campos del `bodyText` (`extractPlaceholders`) y **los valores de los botones** de `Template.buttons` (`buttonsNeedingValue`: OTP, `COPY_CODE` y URL con `{{ }}` — el mismo criterio que `buildButtonComponents` en el backend). Sin eso, cualquier plantilla `AUTHENTICATION` fallaba al enviarse desde el chat. Una plantilla sincronizada antes de que existiera `Template.buttons` no muestra esos campos: hay que pulsar *Sincronizar* en la página de Plantillas.
 
 **Mensajes que no son texto:** el backend ya manda el `text` resuelto (el caption, el nombre del archivo o una etiqueta), así que la bandeja no necesita saber nada — pinta `lastMessage` y ya. En el hilo, `MessageTypeIcon` le pone delante el icono de Lucide que corresponde al `type`, y devuelve `null` para `'text'`, que es casi todo el historial: la burbuja normal no cambia. Un `type` desconocido cae en el interrogante, nunca en un hueco. Cuando el mensaje trae archivo (`hasMedia`), `MessageMedia` lo pinta: `<img>` para imagen y sticker, `<video controls>`, `<audio controls>`, y una fila descargable para documentos. La URL es `/api/media/<id>` y es del **mismo origen** que la app (proxy de Vite en dev, nginx en prod), así que la cookie de sesión viaja sola y basta con ponerla en el `src` — sin `fetch` ni blobs. Debajo del archivo solo se pinta el `caption`, nunca la etiqueta.
@@ -279,5 +304,7 @@ QueryClientProvider
 - `useTemplateForm` — estado compartido del formulario de plantilla (elegida, valores, botones, payload); lo usan `SendTemplateDialog` y `NewConversationPanel`
 - `useTemplates` — sync + listado de plantillas
 - `useApiKey` — gestión de API keys (listar / generar / revocar)
+- `useContacts(pageIndex, pageSize, search, filter)`, `useContact(id)`, `useContactByPhone(phone)`, `useContactMutations` — sección de Contactos (en `useContacts.ts`)
+- `useDebouncedValue` — retrasa un valor (la búsqueda de contactos)
 
 **Íconos:** `lucide-react` + `@heroicons/react`. Componentes UI accesibles con `@headlessui/react`.
