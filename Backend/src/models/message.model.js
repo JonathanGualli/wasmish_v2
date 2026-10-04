@@ -106,11 +106,21 @@ const messageSchema = new mongoose.Schema({
         type: String,
         default: null,
     },
+    // El envío masivo del que salió, si salió de uno. Con él se cuentan los
+    // entregados y leídos de la campaña, que el webhook va actualizando aquí.
+    campaignId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Campaign',
+    },
 }, { 
     timestamps: true,
 });
 
 messageSchema.index({ conversationId: 1, timestamp: 1 });
+// Los conteos de una campaña por estado. Normal, ni parcial ni sparse: Mongo
+// no usa un parcial para `{ campaignId: id }` (ver waMessageId abajo), y un
+// sparse compuesto indexa igual todo documento que tenga `status`, o sea todos.
+messageSchema.index({ campaignId: 1, status: 1 }, { name: 'campaignId_status' });
 
 // waMessageId lleva DOS índices, y hacen falta los dos. Suena redundante, pero
 // cada uno resuelve un problema que el otro no puede.

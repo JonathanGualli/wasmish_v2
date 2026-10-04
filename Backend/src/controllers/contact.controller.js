@@ -156,11 +156,12 @@ export const findOrCreateConversation = async ({ userId, contact, phoneNumberId 
 export const getSendingRecipient = (conversation, destinationNumber) =>
     conversation ? getConversationContact(conversation) : { phone: destinationNumber };
 
-// La conversación donde se guarda un envío ya hecho (haya salido o no).
-export const getSendingConversation = async ({ userId, conversation, recipient, phoneNumberId, contactName, source }) => {
+// La conversación donde se guarda un envío ya hecho (haya salido o no). Con
+// `contact` (envío masivo) el contacto ya existe: no hay que resolverlo.
+export const getSendingConversation = async ({ userId, conversation, contact = null, recipient, phoneNumberId, contactName, source }) => {
     if (conversation) return conversation;
-    const contact = await resolveContact(userId, recipient, { name: contactName, source });
-    return findOrCreateConversation({ userId, contact, phoneNumberId });
+    const target = contact ?? await resolveContact(userId, recipient, { name: contactName, source });
+    return findOrCreateConversation({ userId, contact: target, phoneNumberId });
 };
 
 /**
@@ -239,6 +240,31 @@ const sendDuplicatePhone = async (res, userId, phone) => {
 };
 
 /**
+ * Las etapas de aggregate que dejan los contactos de una búsqueda y un filtro,
+ * cada uno con su `conversation` (o null). Las comparten la lista y el envío
+ * masivo: «todos los que coinciden» tiene que ser exactamente lo que se ve.
+ *
+ * `userId` como ObjectId: aggregate no convierte tipos como find.
+ */
+export const contactSelectionStages = ({ userId, search, filter }) => {
+    const match = { userId, ...buildContactSearch(search) };
+    if (filter === 'opted_out') match.marketingOptOut = true;
+
+    const conversationMatch = {
+        with_conversation: [{ $match: { conversation: { $ne: null } } }],
+        without_conversation: [{ $match: { conversation: null } }],
+    }[filter] ?? [];
+
+    return [
+        { $match: match },
+        { $lookup: { from: Conversation.collection.name, localField: '_id', foreignField: 'contactId', as: 'conversations' } },
+        { $addFields: { conversation: { $ifNull: [{ $arrayElemAt: ['$conversations', 0] }, null] } } },
+        { $project: { conversations: 0 } },
+        ...conversationMatch,
+    ];
+};
+
+/**
  * GET /contacts?search=&filter=&page=&limit=
  *
  * Ordena por actividad: la última conversación o, si no la hay, la fecha de
@@ -253,20 +279,8 @@ export const listContacts = async (req, res) => {
         const limit = Math.min(Math.max(parseInt(req.query.limit) || PAGE_SIZE, 1), MAX_PAGE_SIZE);
         const filter = CONTACT_FILTERS.includes(req.query.filter) ? req.query.filter : 'all';
 
-        const match = { userId, ...buildContactSearch(req.query.search) };
-        if (filter === 'opted_out') match.marketingOptOut = true;
-
-        const conversationMatch = {
-            with_conversation: [{ $match: { conversation: { $ne: null } } }],
-            without_conversation: [{ $match: { conversation: null } }],
-        }[filter] ?? [];
-
         const [result] = await Contact.aggregate([
-            { $match: match },
-            { $lookup: { from: Conversation.collection.name, localField: '_id', foreignField: 'contactId', as: 'conversations' } },
-            { $addFields: { conversation: { $ifNull: [{ $arrayElemAt: ['$conversations', 0] }, null] } } },
-            { $project: { conversations: 0 } },
-            ...conversationMatch,
+            ...contactSelectionStages({ userId, search: req.query.search, filter }),
             { $addFields: { activityAt: { $ifNull: ['$conversation.lastMessageAt', '$createdAt'] } } },
             { $sort: { activityAt: -1, _id: -1 } },
             { $facet: {

@@ -5,6 +5,7 @@ import { decrypt } from "../utils/crypto.js";
 import { getTemplates, sendTemplateMessage } from "../libs/whatsapp.js";
 import { sendUser } from "./stream.controller.js";
 import { getSendingRecipient, getSendingConversation } from "./contact.controller.js";
+import { MARKETING_OPT_OUT_ERROR } from "../utils/marketing.preference.js";
 
 
 // ---------------------------------------------------------------------------
@@ -174,6 +175,26 @@ export const buildButtonComponents = (buttons = [], templateButtons = []) => {
 
 
 // ---------------------------------------------------------------------------
+// Modo de prueba de los envíos masivos (CAMPAIGN_DRY_RUN)
+// ---------------------------------------------------------------------------
+
+/**
+ * Lo que respondería Meta, sin llamarla: en local, probar un envío masivo de
+ * verdad mandaría WhatsApps reales a los contactos de la BD. Imita el único
+ * rechazo que se puede prever, el de un contacto dado de baja que recibe
+ * marketing (131050), para que ese camino también se pueda ver.
+ */
+export const fakeTemplateSend = ({ contact, template }) => {
+    if (template?.category === 'MARKETING' && contact?.marketingOptOut) {
+        const error = new Error('Simulado: el contacto pidió no recibir marketing');
+        error.waErrorCode = MARKETING_OPT_OUT_ERROR;
+        error.waErrorDetail = 'Simulado (CAMPAIGN_DRY_RUN): this recipient has chosen to stop receiving marketing messages.';
+        throw error;
+    }
+    return { data: { messages: [{ id: `wamid.dryrun.${Date.now()}.${Math.random().toString(36).slice(2)}` }] } };
+};
+
+// ---------------------------------------------------------------------------
 // Controllers
 // ---------------------------------------------------------------------------
 
@@ -222,13 +243,20 @@ export const getTemplatesController = async (req, res) => {
  * No sabe nada de HTTP: los errores de negocio salen como Error con
  * `statusCode`, y quien la llama decide cómo responder.
  *
- * El destinatario es `conversation` (se le escribe a su contacto) o, para
- * iniciar una conversación, `destinationNumber`. `contactName` y `source` solo
- * se usan si ese número todavía no es un contacto.
+ * El destinatario es `conversation` (se le escribe a su contacto), `contact`
+ * (envío masivo: se usa o se crea su conversación) o, para iniciar una
+ * conversación, `destinationNumber`. `contactName` y `source` solo se usan si
+ * ese número todavía no es un contacto.
+ *
+ * Solo para envíos masivos: `template` llega ya resuelta (la copia guardada en
+ * la campaña; así no se busca ni se sincroniza en cada destinatario),
+ * `campaignId` queda en el Message, y `dryRun` no llama a Meta (ver
+ * `fakeTemplateSend`).
  */
 export const processTemplateSending = async ({
     user,
     conversation = null,
+    contact = null,
     destinationNumber,
     templateName,
     language,
@@ -236,6 +264,9 @@ export const processTemplateSending = async ({
     buttons = [],
     contactName,
     source = null,
+    template: resolvedTemplate = null,
+    campaignId = null,
+    dryRun = false,
 }) => {
     // Cuenta sin WhatsApp conectado: antes reventaba dentro de decrypt()
     if (!user.tokenWhatsapp || !user.phoneNumberId) {
@@ -246,18 +277,20 @@ export const processTemplateSending = async ({
 
     const token = decrypt(user.tokenWhatsapp);
     const phoneNumberId = user.phoneNumberId;
-    const recipient = await getSendingRecipient(conversation, destinationNumber);
+    const recipient = contact
+        ? { phone: contact.phone, waUserId: contact.waUserId }
+        : await getSendingRecipient(conversation, destinationNumber);
 
     // 1. Plantilla: la buscamos ANTES de enviar, para validar que existe
     //    y para saber en qué idioma está registrada.
-    let template = await Template.findOne({ userId: user._id, name: templateName });
+    let template = resolvedTemplate ?? await Template.findOne({ userId: user._id, name: templateName });
     let syncOk = true;
 
     // Re-sincronizamos también si el documento es anterior a que guardáramos
     // la definición de los botones: `parameterFormat` solo existe desde
     // entonces, así que su ausencia distingue «plantilla vieja» de
     // «plantilla sincronizada que legítimamente no tiene botones».
-    if (!template || template.parameterFormat === undefined) {
+    if (!resolvedTemplate && (!template || template.parameterFormat === undefined)) {
         try {
             await syncTemplatesForUser(user);
             template = await Template.findOne({ userId: user._id, name: templateName });
@@ -309,7 +342,9 @@ export const processTemplateSending = async ({
     // 4. Enviar a Meta (capturamos el fallo para persistirlo como 'failed')
     let waMessageId = null, status = 'sent', errorCode = null, errorDetail = null;
     try {
-        const apiRes = await sendTemplateMessage({ token, phoneNumberId, recipient, templateName, language: templateLanguage, components });
+        const apiRes = dryRun
+            ? fakeTemplateSend({ contact, template })
+            : await sendTemplateMessage({ token, phoneNumberId, recipient, templateName, language: templateLanguage, components });
         waMessageId = apiRes?.data?.messages?.[0]?.id || null;
     } catch (error) {
         status = 'failed';
@@ -328,7 +363,7 @@ export const processTemplateSending = async ({
     const now = new Date();
 
     const targetConversation = await getSendingConversation({
-        userId: user._id, conversation, recipient, phoneNumberId, contactName, source,
+        userId: user._id, conversation, contact, recipient, phoneNumberId, contactName, source,
     });
     targetConversation.lastMessage = storedText;
     targetConversation.lastMessageAt = now;
@@ -340,13 +375,16 @@ export const processTemplateSending = async ({
         status, errorCode, errorDetail, failedAt: status === 'failed' ? now : null,
         templateName,
         templateParams: parameters.length > 0 ? parameters : undefined,
+        campaignId: campaignId ?? undefined,
     });
 
-    // 7. SSE en vivo → aparece en la UI de wasmish
+    // 7. SSE en vivo → aparece en la UI de wasmish. `campaignId` deja al
+    //    frontend agrupar los cientos de eventos de un envío masivo.
     sendUser(String(user._id), 'message_created', {
         id: String(msg._id), conversationId: String(targetConversation._id), sender: 'me',
         text: storedText, timestamp: msg.timestamp.toISOString(),
         status, errorCode, errorDetail, templateName,
+        ...(campaignId && { campaignId: String(campaignId) }),
     });
 
     return { msg, conversation: targetConversation, waMessageId, status, errorCode, errorDetail };

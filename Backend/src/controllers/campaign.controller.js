@@ -1,0 +1,374 @@
+import mongoose from "mongoose";
+import Campaign from "../models/campaign.model.js";
+import CampaignRecipient from "../models/campaign.recipient.model.js";
+import Contact from "../models/contact.model.js";
+import Template from "../models/template.model.js";
+import User from "../models/user.model.js";
+import Message from "../models/message.model.js";
+import { contactSelectionStages } from "./contact.controller.js";
+import { renderTemplateBody } from "./template.controller.js";
+import { wakeCampaignWorker } from "../workers/campaign.worker.js";
+import { getCampaignsStats, getCampaignStats, serializeCampaign, emitCampaignProgress } from "../services/campaign.service.js";
+import {
+    validateCampaignMessage, buildContactParameters, extractTemplateVariables, buttonsNeedingValue,
+} from "../utils/campaign.message.js";
+import { recipientSkipReason } from "../utils/campaign.status.js";
+import { contactDisplayName } from "../utils/contact.identity.js";
+import { CONTACT_FILTERS } from "../utils/contact.query.js";
+import { CAMPAIGN_MAX_RECIPIENTS } from "../config.js";
+
+const PAGE_SIZE = 20;
+const MAX_PAGE_SIZE = 50;
+const SAMPLE_SIZE = 5;
+
+// Lo único del contacto que hace falta para decidir y rellenar el mensaje.
+const CONTACT_FIELDS = { name: 1, profileName: 1, username: 1, phone: 1, waUserId: 1, email: 1, company: 1, marketingOptOut: 1 };
+
+const sendError = (res, status, message, extra = {}) => res.status(status).json([{ message, ...extra }]);
+
+const toIso = (date) => (date ? new Date(date).toISOString() : null);
+
+const findOwnedCampaign = (userId, id) =>
+    mongoose.isValidObjectId(id) ? Campaign.findOne({ _id: id, userId }) : null;
+
+// ---------------------------------------------------------------------------
+// Borrador: plantilla + destinatarios + cómo se rellena. Lo comparten la vista
+// previa y la creación, para que lo que se confirma sea lo que se revisó.
+// ---------------------------------------------------------------------------
+
+/**
+ * Los contactos elegidos, como mucho CAMPAIGN_MAX_RECIPIENTS. `ids` comprueba
+ * que sean de la cuenta (un id ajeno cuenta como no encontrado); `query` repite
+ * la búsqueda y el filtro de la lista de Contactos.
+ */
+const selectContacts = async (userId, recipients) => {
+    if (recipients.mode === 'ids') {
+        const uniqueIds = [...new Set(recipients.contactIds)];
+        const contacts = await Contact.find({ _id: { $in: uniqueIds }, userId }).select(CONTACT_FIELDS).lean();
+        return {
+            contacts,
+            duplicates: recipients.contactIds.length - uniqueIds.length,
+            notFound: uniqueIds.length - contacts.length,
+        };
+    }
+
+    const filter = CONTACT_FILTERS.includes(recipients.filter) ? recipients.filter : 'all';
+    const excludeIds = (recipients.excludeIds ?? []).map(id => new mongoose.Types.ObjectId(id));
+    const contacts = await Contact.aggregate([
+        ...contactSelectionStages({ userId: new mongoose.Types.ObjectId(userId), search: recipients.search, filter }),
+        { $match: { _id: { $nin: excludeIds } } },
+        { $sort: { _id: 1 } },
+        // Uno de más para saber si se pasó del tope sin contarlos todos.
+        { $limit: CAMPAIGN_MAX_RECIPIENTS + 1 },
+        { $project: CONTACT_FIELDS },
+    ]);
+    return { contacts, duplicates: 0, notFound: 0 };
+};
+
+const buildDraft = async (userId, body) => {
+    const template = await Template.findOne({ userId, templateId: body.templateId }).lean();
+    const config = { variables: body.variables ?? [], buttons: body.buttons ?? [] };
+    const excludeOptedOut = Boolean(body.excludeOptedOut);
+
+    const errors = validateCampaignMessage(template, config);
+    const { contacts, duplicates, notFound } = await selectContacts(userId, body.recipients);
+
+    if (contacts.length > CAMPAIGN_MAX_RECIPIENTS) {
+        errors.push({ field: 'recipients', message: `Un envío admite como mucho ${CAMPAIGN_MAX_RECIPIENTS} contactos. Acota la búsqueda o divídelo en varios.` });
+    }
+
+    const plan = contacts.map(contact => ({ contact, skipReason: recipientSkipReason(contact, { excludeOptedOut }) }));
+    const sendable = plan.filter(p => !p.skipReason);
+    if (errors.length === 0 && sendable.length === 0) {
+        errors.push({ field: 'recipients', message: 'No queda ningún contacto al que enviar.' });
+    }
+
+    return { template, config, excludeOptedOut, plan, sendable, duplicates, notFound, errors };
+};
+
+// Cuántos usarán la reserva de cada variable y cómo queda el mensaje para los
+// primeros. Solo con una configuración válida: con huecos no hay qué rellenar.
+const previewMessages = (draft) => {
+    const fallbacks = {};
+    const samples = [];
+    if (draft.errors.some(e => e.field !== 'recipients')) return { fallbacks, samples };
+
+    for (const { contact } of draft.sendable) {
+        const built = buildContactParameters(draft.template, draft.config, contact);
+        built.fallbacks.forEach(key => { fallbacks[key] = (fallbacks[key] ?? 0) + 1; });
+        if (samples.length < SAMPLE_SIZE) {
+            samples.push({
+                contactId: String(contact._id),
+                displayName: contactDisplayName(contact),
+                text: renderTemplateBody(draft.template.bodyText, built.parameters) ?? '',
+                fallbacks: built.fallbacks,
+            });
+        }
+    }
+    return { fallbacks, samples };
+};
+
+const summarizeDraft = (draft) => {
+    const count = (fn) => draft.plan.filter(fn).length;
+    const { fallbacks, samples } = previewMessages(draft);
+    const template = draft.template;
+
+    return {
+        template: template ? {
+            templateId: template.templateId,
+            name: template.name,
+            language: template.language,
+            category: template.category,
+            bodyText: template.bodyText ?? '',
+            variables: extractTemplateVariables(template.bodyText),
+            buttonsNeedingValue: buttonsNeedingValue(template.buttons).map(index => ({
+                index, type: template.buttons[index]?.type, text: template.buttons[index]?.text ?? null,
+            })),
+        } : null,
+        recipients: {
+            selected: draft.plan.length,
+            toSend: draft.sendable.length,
+            optedOut: count(p => p.contact.marketingOptOut),
+            excludedOptedOut: count(p => p.skipReason === 'opted_out'),
+            withoutPhone: count(p => !p.contact.phone),
+            duplicates: draft.duplicates,
+            notFound: draft.notFound,
+        },
+        fallbacks,
+        samples,
+        errors: draft.errors,
+    };
+};
+
+// ---------------------------------------------------------------------------
+// Endpoints
+// ---------------------------------------------------------------------------
+
+/**
+ * POST /campaigns/preview — lo que se va a enviar, sin crear nada: cuántos
+ * contactos, cuántos de baja o sin teléfono, cuántos usarán cada reserva y el
+ * mensaje de ejemplo de los primeros. Responde 200 aunque haya `errors`: la UI
+ * los enseña junto al campo.
+ */
+export const previewCampaign = async (req, res) => {
+    try {
+        const draft = await buildDraft(req.user.id, req.body);
+        return res.json(summarizeDraft(draft));
+    } catch (error) {
+        return sendError(res, 500, error.message);
+    }
+};
+
+/**
+ * POST /campaigns — crea el envío y congela la lista de destinatarios. No
+ * envía nada aquí: lo hace el worker, a su ritmo, aunque se cierre la página.
+ */
+export const createCampaign = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const user = await User.findById(userId).select('tokenWhatsapp phoneNumberId').lean();
+        if (!user?.tokenWhatsapp || !user?.phoneNumberId) {
+            return sendError(res, 409, 'La cuenta no tiene WhatsApp conectado. Conéctala desde Ajustes antes de enviar.');
+        }
+
+        const draft = await buildDraft(userId, req.body);
+        if (draft.errors.length > 0) return res.status(400).json(draft.errors);
+
+        const { template } = draft;
+        const campaign = await Campaign.create({
+            userId,
+            name: req.body.name,
+            template: {
+                templateId: template.templateId,
+                name: template.name,
+                language: template.language,
+                category: template.category,
+                bodyText: template.bodyText ?? '',
+                parameterFormat: template.parameterFormat,
+                buttons: template.buttons ?? [],
+            },
+            variables: draft.config.variables,
+            buttons: draft.config.buttons,
+            excludeOptedOut: draft.excludeOptedOut,
+            totalRecipients: draft.plan.length,
+        });
+
+        // Los omitidos también se guardan: el detalle tiene que decir a quién
+        // no se le envió y por qué.
+        await CampaignRecipient.insertMany(draft.plan.map(({ contact, skipReason }) => ({
+            campaignId: campaign._id,
+            userId,
+            contactId: contact._id,
+            status: skipReason ? 'skipped' : 'pending',
+            skipReason,
+            processedAt: skipReason ? new Date() : null,
+        })), { ordered: false });
+
+        wakeCampaignWorker();
+        console.log('Envío masivo creado:', {
+            campaignId: String(campaign._id), template: template.name, destinatarios: draft.sendable.length,
+        });
+
+        return res.status(201).json(serializeCampaign(campaign, await getCampaignStats(campaign._id)));
+    } catch (error) {
+        return sendError(res, 500, error.message);
+    }
+};
+
+// GET /campaigns?page=&limit= — los envíos de la cuenta, del más reciente al más antiguo.
+export const listCampaigns = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const page = Math.max(parseInt(req.query.page) || 1, 1);
+        const limit = Math.min(Math.max(parseInt(req.query.limit) || PAGE_SIZE, 1), MAX_PAGE_SIZE);
+
+        const [campaigns, totalCount] = await Promise.all([
+            Campaign.find({ userId }).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+            Campaign.countDocuments({ userId }),
+        ]);
+        const stats = await getCampaignsStats(campaigns.map(c => c._id));
+
+        return res.json({
+            campaigns: campaigns.map(c => serializeCampaign(c, stats.get(String(c._id)))),
+            totalCount,
+            page,
+            limit,
+        });
+    } catch (error) {
+        return sendError(res, 500, error.message);
+    }
+};
+
+// GET /campaigns/:id
+export const getCampaign = async (req, res) => {
+    try {
+        const campaign = await findOwnedCampaign(req.user.id, req.params.id);
+        if (!campaign) return sendError(res, 404, 'Envío no encontrado');
+        return res.json(serializeCampaign(campaign, await getCampaignStats(campaign._id)));
+    } catch (error) {
+        return sendError(res, 500, error.message);
+    }
+};
+
+// Estado de un destinatario tal como lo ve el usuario: el de su mensaje en
+// WhatsApp si llegó a crearse, y si no, el de la cola. `sending` es «pendiente».
+const RECIPIENT_STATES = ['pending', 'sent', 'delivered', 'read', 'failed', 'skipped', 'cancelled', 'interrupted'];
+
+/**
+ * GET /campaigns/:id/recipients?state=&page=&limit= — quién recibió qué. Cada
+ * fila trae el contacto, el estado, el error de Meta si falló y la conversación
+ * para poder abrirla.
+ */
+export const listCampaignRecipients = async (req, res) => {
+    try {
+        const campaign = await findOwnedCampaign(req.user.id, req.params.id);
+        if (!campaign) return sendError(res, 404, 'Envío no encontrado');
+
+        const page = Math.max(parseInt(req.query.page) || 1, 1);
+        const limit = Math.min(Math.max(parseInt(req.query.limit) || PAGE_SIZE, 1), MAX_PAGE_SIZE);
+        const state = RECIPIENT_STATES.includes(req.query.state) ? req.query.state : null;
+
+        const [result] = await CampaignRecipient.aggregate([
+            { $match: { campaignId: campaign._id } },
+            { $lookup: { from: Message.collection.name, localField: 'messageId', foreignField: '_id', as: 'message' } },
+            { $addFields: { message: { $arrayElemAt: ['$message', 0] } } },
+            { $addFields: { state: { $switch: {
+                branches: [
+                    { case: { $ifNull: ['$message', false] }, then: '$message.status' },
+                    { case: { $eq: ['$status', 'sending'] }, then: 'pending' },
+                ],
+                default: '$status',
+            } } } },
+            ...(state ? [{ $match: { state } }] : []),
+            { $sort: { _id: 1 } },
+            { $facet: {
+                items: [
+                    { $skip: (page - 1) * limit },
+                    { $limit: limit },
+                    { $lookup: { from: Contact.collection.name, localField: 'contactId', foreignField: '_id', as: 'contact' } },
+                    { $addFields: { contact: { $arrayElemAt: ['$contact', 0] } } },
+                ],
+                total: [{ $count: 'count' }],
+            } },
+        ]);
+
+        return res.json({
+            recipients: result.items.map(row => ({
+                id: String(row._id),
+                contactId: String(row.contactId),
+                // Un contacto borrado después de crear el envío ya no tiene ficha.
+                displayName: row.contact ? contactDisplayName(row.contact) : 'Contacto borrado',
+                phone: row.contact?.phone ?? null,
+                username: row.contact?.username ?? null,
+                state: row.state,
+                skipReason: row.skipReason ?? null,
+                errorCode: row.message?.errorCode ?? row.errorCode ?? null,
+                errorDetail: row.message?.errorDetail ?? row.errorDetail ?? null,
+                conversationId: row.message?.conversationId ? String(row.message.conversationId) : null,
+                sentAt: toIso(row.message?.timestamp),
+                deliveredAt: toIso(row.message?.deliveredAt),
+                readAt: toIso(row.message?.readAt),
+                failedAt: toIso(row.message?.failedAt),
+                processedAt: toIso(row.processedAt),
+            })),
+            totalCount: result.total[0]?.count ?? 0,
+            page,
+            limit,
+        });
+    } catch (error) {
+        return sendError(res, 500, error.message);
+    }
+};
+
+// Cambia el estado solo desde los permitidos; 409 si ya no se puede (p. ej.
+// pausar uno que terminó mientras tanto).
+const transition = async (req, res, { from, set, conflict, after }) => {
+    try {
+        const { id } = req.params;
+        if (!mongoose.isValidObjectId(id)) return sendError(res, 404, 'Envío no encontrado');
+
+        const campaign = await Campaign.findOneAndUpdate(
+            { _id: id, userId: req.user.id, status: { $in: from } },
+            { $set: set() },
+            { new: true },
+        );
+        if (!campaign) {
+            const exists = await Campaign.exists({ _id: id, userId: req.user.id });
+            return exists ? sendError(res, 409, conflict) : sendError(res, 404, 'Envío no encontrado');
+        }
+
+        await after?.(campaign);
+        await emitCampaignProgress(campaign._id, { force: true });
+        return res.json(serializeCampaign(campaign, await getCampaignStats(campaign._id)));
+    } catch (error) {
+        return sendError(res, 500, error.message);
+    }
+};
+
+// POST /campaigns/:id/pause — el envío en curso termina; el resto espera.
+export const pauseCampaign = (req, res) => transition(req, res, {
+    from: ['queued', 'sending'],
+    set: () => ({ status: 'paused', pauseReason: { code: null, message: null } }),
+    conflict: 'Este envío ya no se puede pausar.',
+});
+
+// POST /campaigns/:id/resume — vuelve a la cola; si la cuenta tiene otro
+// enviándose, espera a que termine.
+export const resumeCampaign = (req, res) => transition(req, res, {
+    from: ['paused'],
+    set: () => ({ status: 'queued', pauseReason: { code: null, message: null } }),
+    conflict: 'Solo se puede reanudar un envío pausado.',
+    after: () => wakeCampaignWorker(),
+});
+
+// POST /campaigns/:id/cancel — los que faltan ya no se envían. Lo enviado no
+// se puede deshacer.
+export const cancelCampaign = (req, res) => transition(req, res, {
+    from: ['queued', 'sending', 'paused'],
+    set: () => ({ status: 'cancelled', finishedAt: new Date() }),
+    conflict: 'Este envío ya terminó.',
+    after: (campaign) => CampaignRecipient.updateMany(
+        { campaignId: campaign._id, status: 'pending' },
+        { $set: { status: 'cancelled', processedAt: new Date() } },
+    ),
+});

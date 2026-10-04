@@ -24,3 +24,19 @@ export const MEDIA_DIR = process.env.MEDIA_DIR || 'media';
 // en documentos; bajamos de ahí para que un documento enorme no llene el disco.
 // Si se supera, el mensaje se guarda igual con su etiqueta, solo sin archivo.
 export const MEDIA_MAX_BYTES = Number(process.env.MEDIA_MAX_BYTES || 25 * 1024 * 1024);
+
+// Envíos masivos (workers/campaign.worker.js).
+//
+// CAMPAIGN_DRY_RUN: no llama a Meta, simula la respuesta (ver fakeTemplateSend).
+// Por defecto ENCENDIDO fuera de producción: en local, un envío masivo de verdad
+// mandaría WhatsApps reales a los contactos de la BD. Para probarlo contra Meta
+// en local hay que ponerlo a `false` a propósito. En el servidor lo apaga
+// NODE_ENV=production (lo fija el Dockerfile).
+export const CAMPAIGN_DRY_RUN = process.env.CAMPAIGN_DRY_RUN
+    ? process.env.CAMPAIGN_DRY_RUN === 'true'
+    : process.env.NODE_ENV !== 'production';
+// Ritmo de envío, sumando todas las cuentas. Meta admite unos 80/s por número;
+// ir muy por debajo deja margen y no dispara el control de ráfagas.
+export const CAMPAIGN_RATE_PER_SECOND = Number(process.env.CAMPAIGN_RATE_PER_SECOND || 10);
+// Tope de destinatarios por envío.
+export const CAMPAIGN_MAX_RECIPIENTS = Number(process.env.CAMPAIGN_MAX_RECIPIENTS || 5000);

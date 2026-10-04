@@ -14,6 +14,7 @@ import whatsappRoutes from './routes/whatsapp.routes.js';
 import adminRoutes from './routes/admin.routes.js';
 import mediaRoutes from './routes/media.routes.js';
 import contactRoutes from './routes/contact.routes.js';
+import campaignRoutes from './routes/campaign.routes.js';
 
 import { APP_VERSION } from './config.js';
 
@@ -32,6 +33,9 @@ app.use(express.json({
     strict: true, 
     verify: (req, res, buf) => {
         req.rawBody = buf;
+        // Un POST sin cuerpo (pausar un envío, p. ej.) con Content-Type JSON no
+        // es un JSON inválido: JSON.parse('') fallaría y respondería un 400 HTML.
+        if (buf.length === 0) return;
         try {
             JSON.parse(buf);
         } catch (err) {
@@ -59,5 +63,6 @@ app.use("/api", whatsappRoutes);
 app.use("/api", adminRoutes);
 app.use("/api", mediaRoutes);
 app.use("/api", contactRoutes);
+app.use("/api", campaignRoutes);
 
 export default app; 

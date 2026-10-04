@@ -291,7 +291,9 @@ const procesarEstado = async (user, statusData) => {
             failedAt: message.failedAt ? message.failedAt.toISOString() : null,
             errorCode: message.errorCode,
             errorDetail: message.errorDetail,
-
+            // Si salió de un envío masivo: su detalle se refresca con esto,
+            // porque las entregas y lecturas llegan horas después de enviar.
+            ...(message.campaignId && { campaignId: String(message.campaignId) }),
         }
     );
 
