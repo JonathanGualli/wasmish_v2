@@ -4,7 +4,7 @@ import { ChevronLeft, LayoutTemplate, LoaderCircle, Plus, Send, X } from 'lucide
 import { AuthField } from '../Auth/AuthField';
 import { CustomButton } from '../Button/Button';
 import { Callout } from '../Callout/Callout';
-import { useModalContext } from '../Modal/context/UseModalContext';
+import { useNoticeContext } from '../Notice/context/UseNoticeContext';
 import { useConversations } from '../../hooks/useConversations';
 import { useStartConversation } from '../../hooks/useSendTemplate';
 import { useTemplateForm, templateSendError } from '../../hooks/useTemplateForm';
@@ -42,7 +42,7 @@ interface Props {
 export const NewConversationPanel = ({ initialDraft, onClose, onBack, onCreated, onOpenExisting, onDraftChange }: Props) => {
   const [phone, setPhone] = useState(initialDraft.phone);
   const [name, setName] = useState(initialDraft.name);
-  const { setState, setContent } = useModalContext();
+  const { setState, setContent } = useNoticeContext();
 
   const form = useTemplateForm(initialDraft);
   const startConversation = useStartConversation();
@@ -90,7 +90,7 @@ export const NewConversationPanel = ({ initialDraft, onClose, onBack, onCreated,
       });
       onCreated(message.conversationId);
     } catch (err) {
-      // El error va al modal global, como el resto de la app. Lo escrito no se
+      // El error va al aviso global, como el resto de la app. Lo escrito no se
       // pierde: el panel sigue montado debajo y se puede corregir y reenviar.
       setContent(<div className="text-brand-danger text-sm"><p>{templateSendError(err)}</p></div>);
       setState(true);

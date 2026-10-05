@@ -6,13 +6,13 @@ import { AuthShell, AuthHero, AuthAvatars } from '../../../components/Auth/AuthS
 import { LogoLockup } from '../../../components/Logo/Logo';
 import { useAuthContext } from '../../../context/auth.context';
 import { AppRoutes } from '../../../models/routes.models';
-import { useModalContext } from '../../../components/Modal/context/UseModalContext';
+import { useNoticeContext } from '../../../components/Notice/context/UseNoticeContext';
 
 export const LoginPage = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const { signIn, errors, isAuthenticated, isLoading } = useAuthContext();
-  const { setState, setContent } = useModalContext();
+  const { setState, setContent } = useNoticeContext();
   const navigate = useNavigate();
 
   useEffect(() => {

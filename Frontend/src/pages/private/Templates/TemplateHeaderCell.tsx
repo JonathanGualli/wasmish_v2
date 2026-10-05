@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { FileText, Upload, Video } from "lucide-react";
 import { Pill } from "../../../components/Pill/Pill";
-import { useModalContext } from "../../../components/Modal/context/UseModalContext";
+import { useNoticeContext } from "../../../components/Notice/context/UseNoticeContext";
 import { parseError, useTemplates } from "../../../hooks/useTemplates";
 import type { Template } from "../../../models/template.model";
 import { formatFileSize, headerMediaRule, headerMediaUrl, templateHeaderIssue } from "../../../utils/templateHeader";
@@ -38,7 +38,7 @@ const MediaThumb = ({ template }: { template: Template }) => {
 export const TemplateHeaderCell = ({ template }: { template: Template }) => {
     const inputRef = useRef<HTMLInputElement>(null);
     const { uploadHeaderMedia, removeHeaderMedia } = useTemplates();
-    const { setState: showNotice, setContent: setNoticeContent } = useModalContext();
+    const { setState: showNotice, setContent: setNoticeContent } = useNoticeContext();
     const rule = headerMediaRule(template);
     // Las mutaciones son de esta celda: cada fila lleva su propio estado.
     const busy = uploadHeaderMedia.isPending || removeHeaderMedia.isPending;

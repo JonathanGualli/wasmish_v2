@@ -33,7 +33,7 @@ Reconstruido el 2026-09-09 (full: AST + semántica LLM), reconstruido de nuevo e
 - `graphify-out/graph.html` — visualización interactiva
 - `graphify-out/GRAPH_REPORT.md` — reporte completo
 
-**God nodes** (más conectados): `CLAUDE.md`, `useAuthContext`, `useModalContext`, spec de ventana 24 h, guía de deploy, `describeInboundMessage`, `processTemplateSending`, `CustomButton`, `ChatThread`, `AppRoutes`
+**God nodes** (más conectados): `CLAUDE.md`, `useAuthContext`, `useNoticeContext` (antes `useModalContext`), spec de ventana 24 h, guía de deploy, `describeInboundMessage`, `processTemplateSending`, `CustomButton`, `ChatThread`, `AppRoutes`
 
 **Comunidades principales:**
 - Admin & Settings Pages / Chat Thread UI / Auth Forms & New Conversation
@@ -278,15 +278,15 @@ El webhook trae también una `url` ya resuelta, pero **caduca en horas** mientra
 
 ### Frontend (`Frontend/src/`)
 
-React 19 + TypeScript + Vite + Tailwind v4. Estado: React Query v5 (server state) + React Context (auth, modal).
+React 19 + TypeScript + Vite + Tailwind v4. Estado: React Query v5 (server state) + React Context (auth, aviso global).
 
 **Provider tree** (`main.tsx`):
 ```
 QueryClientProvider
   └── AuthProvider          ← auth state, login/signup/logout
         └── SSEProvider     ← UNA sola conexión SSE global (pub/sub), solo con sesión
-              └── ModalProvider   ← global modal visibility
-                    └── App       ← renderiza <Modal /> + children
+              └── NoticeProvider  ← aviso global (notificación arriba a la derecha)
+                    └── App       ← renderiza <Notice /> + children
                           └── AppRouter
 ```
 
@@ -334,14 +334,14 @@ QueryClientProvider
 
 **Campañas en la UI (`pages/private/Campaigns/`):**
 - **Selección en Contactos** (`useContactSelection`): `ids` (los marcados, sobreviven a cambiar de página o de filtro) o `query` («todos los que coinciden», menos los desmarcados). Esta va atada a la búsqueda y al filtro: cambiarlos pide confirmación y la reinicia. `DataTable` acepta `selection` (casillas, cabecera parcial y banner); la barra flotante es `SelectionBar`.
-- **Contactos en modo campaña** (`ContactsNavigationState.campaignPick`): `new` desde «Nueva campaña» (aviso fijo arriba y «Continuar (N)») y `edit` desde «Cambiar selección» del paso 1 (parte de la selección del borrador y vuelve con «Volver a la campaña»). Sin modo, «Enviar plantilla» crea el borrador.
+- **Contactos en modo campaña** (`ContactsNavigationState.campaignPick`): `new` desde «Nueva campaña» y `edit` desde «Cambiar selección» del paso 1 (parte de la selección del borrador y vuelve con «Volver a la campaña»). Sin modo, «Enviar plantilla» crea el borrador. Elegir destinatarios se ve como el **paso 1 de la campaña**, no como otra sección: la cabecera es la del asistente (`WizardHeader`, compartida con `NewCampaignPage`), el sidebar marca «Campañas» (lo lee del `state` de la navegación), y la `SelectionBar` se ve desde el principio con la pista «Marca los contactos…» y «Continuar» deshabilitado (`emptyHint`). La primera vez, en modo `new`, sale una explicación de tres pasos; se recuerda en `localStorage` (`hasSeenPickIntro`, fuera del prefijo de los borradores: cerrar sesión no la vuelve a mostrar). En móvil la tabla no tiene cabecera, así que `DataTable` pone encima de las tarjetas la fila «Seleccionar esta página».
 - **Asistente** (`NewCampaign/`, estado en `useCampaignWizard`): página, no modal, con el pie fijo. Todo vive en el borrador y se guarda en cada cambio. La validación es la de la vista previa del backend (la misma que al crear); los errores de campo se enseñan tras pulsar «Siguiente», y mientras la vista previa no está al día (`isUpdating`) no se avanza. Las plantillas de autenticación salen deshabilitadas con su motivo.
 - **Detalle** (`Detail/`): progreso, cifras acumuladas, embudo enviados→leídos, motivos de fallo (`useCampaignFailures`) y destinatarios filtrables por estado. En el paso 1, «Ver los N» despliega la lista en el sitio (sin ventana), con buscador y scroll infinito (`useOnVisible`). Los filtros usan conteos **exclusivos** (`recipientStateCounts`): las estadísticas son acumuladas (un leído también cuenta como entregado). Los textos de estados y errores de Meta viven en `utils/campaignDisplay.ts`.
 - **Fuera por ahora:** el aviso del límite diario de mensajes de WhatsApp (no hay forma fiable de leerlo; se decidió quitarlo hasta tenerla).
 
 **Ir de la ficha al chat (`ChatsNavigationState`):** la ficha navega a `chats` con `state: { conversationId }` (abrir su conversación) o `state: { draft: { phone, name } }` (empezar una nueva, **reemplazando** el borrador que hubiera sin preguntar). `ChatPage` consume ese `state` una sola vez y lo borra del historial con `navigate(..., { replace: true, state: null })`; si se quedara, recargar la página volvería a pisar el borrador.
 
-**`SendTemplateDialog` + `useSendTemplate`:** **sin UI optimista** — el mensaje lo inserta el `message_created` del SSE; adelantarlo lo duplicaría, porque este envío no lleva `temporalId` con el que deduplicar. Los errores van al **modal global** (igual que en `NewConversationPanel`, con el texto de `templateSendError`: si rechazó Meta, su código y detalle); el diálogo sigue abierto debajo, sin perder lo escrito. Ojo: el modal vive en otro portal, así que para el `Dialog` de Headless UI pulsar su X es un «clic fuera» — `handleDialogClose` ignora el cierre mientras el modal está visible. El diálogo deriva los campos del `bodyText` (`extractPlaceholders`) y **los valores de los botones** de `Template.buttons` (`buttonsNeedingValue`: OTP, `COPY_CODE` y URL con `{{ }}` — el mismo criterio que `buildButtonComponents` en el backend). Sin eso, cualquier plantilla `AUTHENTICATION` fallaba al enviarse desde el chat. Una plantilla sincronizada antes de que existiera `Template.buttons` no muestra esos campos: hay que pulsar *Sincronizar* en la página de Plantillas.
+**`SendTemplateDialog` + `useSendTemplate`:** **sin UI optimista** — el mensaje lo inserta el `message_created` del SSE; adelantarlo lo duplicaría, porque este envío no lleva `temporalId` con el que deduplicar. Los errores van al **aviso global** (igual que en `NewConversationPanel`, con el texto de `templateSendError`: si rechazó Meta, su código y detalle); el diálogo sigue abierto debajo, sin perder lo escrito. Ojo: el aviso vive en otro portal, así que para el `Dialog` de Headless UI pulsar su X es un «clic fuera» — `handleDialogClose` ignora el cierre mientras el aviso está visible. El diálogo deriva los campos del `bodyText` (`extractPlaceholders`) y **los valores de los botones** de `Template.buttons` (`buttonsNeedingValue`: OTP, `COPY_CODE` y URL con `{{ }}` — el mismo criterio que `buildButtonComponents` en el backend). Sin eso, cualquier plantilla `AUTHENTICATION` fallaba al enviarse desde el chat. Una plantilla sincronizada antes de que existiera `Template.buttons` no muestra esos campos: hay que pulsar *Sincronizar* en la página de Plantillas.
 
 **Mensajes que no son texto:** el backend ya manda el `text` resuelto (el caption, el nombre del archivo o una etiqueta), así que la bandeja no necesita saber nada — pinta `lastMessage` y ya. En el hilo, `MessageTypeIcon` le pone delante el icono de Lucide que corresponde al `type`, y devuelve `null` para `'text'`, que es casi todo el historial: la burbuja normal no cambia. Un `type` desconocido cae en el interrogante, nunca en un hueco. Cuando el mensaje trae archivo (`hasMedia`), `MessageMedia` lo pinta: `<img>` para imagen y sticker, `<video controls>`, `<audio controls>`, y una fila descargable para documentos. La URL es `/api/media/<id>` y es del **mismo origen** que la app (proxy de Vite en dev, nginx en prod), así que la cookie de sesión viaja sola y basta con ponerla en el `src` — sin `fetch` ni blobs. Debajo del archivo solo se pinta el `caption`, nunca la etiqueta.
 
@@ -367,4 +367,4 @@ QueryClientProvider
 
 **Íconos:** `lucide-react` + `@heroicons/react`. Componentes UI accesibles con `@headlessui/react`.
 
-**Componentes compartidos** (en `components/`, reutilizarlos antes de maquetar a mano): `PageShell`/`PageHeader`, `DataTable` (con `selection` opcional), `BlankState` (lista vacía o error a pantalla completa), `Callout` (avisos, con `action` opcional a la derecha), `ConfirmDialog` (confirmar una acción; `onSecondary` si el botón secundario hace algo más que cerrar), `Checkbox` (con estado parcial y área de toque de 44px), `SelectField` (desplegable nativo con el aspecto de `AuthField`), `ProgressBar`, `SearchInput` (la caja con lupa de la bandeja, Contactos y los destinatarios), `Pill`, y en `components/Chat/` `TemplatePicker` (genérico, con `disabledReason`), `CategoryPill`, `TemplateBubble` (con `highlights` para marcar dato o reserva) y `TemplateButtons`. El aviso global (`useModalContext`) hace de notificación: arriba a la derecha y se cierra solo a los 5 s.
+**Componentes compartidos** (en `components/`, reutilizarlos antes de maquetar a mano): `PageShell`/`PageHeader`, `DataTable` (con `selection` opcional), `BlankState` (lista vacía o error a pantalla completa), `Callout` (avisos, con `action` opcional a la derecha), `ConfirmDialog` (confirmar una acción; `onSecondary` si el botón secundario hace algo más que cerrar), `Checkbox` (con estado parcial y área de toque de 44px), `SelectField` (desplegable nativo con el aspecto de `AuthField`), `ProgressBar`, `SearchInput` (la caja con lupa de la bandeja, Contactos y los destinatarios), `Pill`, y en `components/Chat/` `TemplatePicker` (genérico, con `disabledReason`), `CategoryPill`, `TemplateBubble` (con `highlights` para marcar dato o reserva) y `TemplateButtons`. El aviso global (`components/Notice`, `useNoticeContext`) es una notificación: arriba a la derecha, no bloquea la página y se cierra solo a los 5 s. Hasta el 2026-10-04 se llamaba `Modal`/`useModalContext`, y no lo es: un **modal** bloquea la página hasta que se elige algo (`ConfirmDialog`, `SendTemplateDialog`). Para avisar de lo que pasó, `useNoticeContext`; para que la persona lea o decida antes de seguir, un diálogo.

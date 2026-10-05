@@ -1,4 +1,4 @@
-.overlay {
+.notice-overlay {
   position: fixed;
   top: 0;
   left: 0;
@@ -8,7 +8,7 @@
   pointer-events: none;
 }
 
-.modal {
+.notice {
   position: fixed;
   top: 20px;
   right: 20px;
@@ -27,7 +27,7 @@
   animation: slideFadeIn 0.3s ease-out;
 }
 
-.modal.exit {
+.notice.exit {
   animation: slideFadeOut 0.3s ease-in forwards;
 }
 

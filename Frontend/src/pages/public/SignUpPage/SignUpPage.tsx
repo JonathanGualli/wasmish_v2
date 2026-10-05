@@ -6,7 +6,7 @@ import { AuthField, AuthPasswordField } from '../../../components/Auth/AuthField
 import { AuthShell, AuthHero } from '../../../components/Auth/AuthShell';
 import { useAuthContext } from '../../../context/auth.context';
 import { AppRoutes } from '../../../models/routes.models';
-import { useModalContext } from '../../../components/Modal/context/UseModalContext';
+import { useNoticeContext } from '../../../components/Notice/context/UseNoticeContext';
 import { useSignUp } from '../../../hooks/useSignUp';
 import type { AxiosError } from 'axios';
 
@@ -36,7 +36,7 @@ export const SignUpPage = () => {
   const [password, setPassword] = useState('');
 
   const { isLoading, errors, isAuthenticated, signUp } = useAuthContext();
-  const { setState, setContent } = useModalContext();
+  const { setState, setContent } = useNoticeContext();
   const signUpMutation = useSignUp();
   const navigate = useNavigate();
 

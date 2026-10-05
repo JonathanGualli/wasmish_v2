@@ -7,7 +7,7 @@ import { Callout } from "../../../components/Callout/Callout";
 import { PageShell, PageHeader, SectionTitle } from "../../../components/Page/PageShell";
 import { useUpdateWhatsappToken } from "../../../hooks/useUpdateWhatsappToken";
 import { useAuthContext } from "../../../context/auth.context";
-import { useModalContext } from "../../../components/Modal/context/UseModalContext";
+import { useNoticeContext } from "../../../components/Notice/context/UseNoticeContext";
 import { useApiKey } from "../../../hooks/useApiKey";
 import { useConnectWhatsapp } from "../../../hooks/useConnectWhatsapp";
 import type { ApiKey } from "../../../models/apikey.model";
@@ -32,7 +32,7 @@ export const SettingsPage = () => {
 
     const updateTokenWhatsappMutation = useUpdateWhatsappToken();
     const { user } = useAuthContext();
-    const { setState, setContent } = useModalContext();
+    const { setState, setContent } = useNoticeContext();
 
     const { apiKeys, isLoading: apiKeysLoading, generate, revoke } = useApiKey();
     const [apiKeyName, setApiKeyName] = useState('');

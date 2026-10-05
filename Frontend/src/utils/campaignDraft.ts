@@ -86,6 +86,25 @@ export const clearAllCampaignDrafts = () => {
     } catch { /* nada que borrar */ }
 };
 
+// La explicación de cómo elegir los destinatarios sale una sola vez por
+// navegador. Fuera de PREFIX a propósito: cerrar sesión no la vuelve a mostrar.
+const PICK_INTRO_KEY = 'wasmish:campaign-pick-intro-seen';
+
+/** Sin storage cuenta como vista: mejor no explicarlo que explicarlo cada vez. */
+export const hasSeenPickIntro = () => {
+    try {
+        return localStorage.getItem(PICK_INTRO_KEY) === '1';
+    } catch {
+        return true;
+    }
+};
+
+export const markPickIntroSeen = () => {
+    try {
+        localStorage.setItem(PICK_INTRO_KEY, '1');
+    } catch { /* sin storage: no se vuelve a mostrar en esta visita igualmente */ }
+};
+
 /** Los pasos del asistente, para «se quedó en el paso 2 · Mensaje». */
 export const CAMPAIGN_STEPS = ['Destinatarios', 'Mensaje', 'Revisar y enviar'] as const;
 

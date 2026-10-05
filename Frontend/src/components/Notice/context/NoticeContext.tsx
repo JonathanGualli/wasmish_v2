@@ -1,6 +1,6 @@
 import React, { createContext, useState, type ReactNode } from "react";
 
-const ModalContext = createContext<{
+const NoticeContext = createContext<{
     state: boolean;
     setState: React.Dispatch<React.SetStateAction<boolean>>;
     content: ReactNode;
@@ -13,14 +13,14 @@ const ModalContext = createContext<{
     setContent: () => null,
 })
 
-const ModalProvider = ({ children }: { children: ReactNode }) => {
+const NoticeProvider = ({ children }: { children: ReactNode }) => {
     const [state, setState] = useState<boolean>(false);
     const [content, setContent] = useState<ReactNode>(null);
 
-    return <ModalContext.Provider value={{ state, setState, content, setContent }}>{children}</ModalContext.Provider>
+    return <NoticeContext.Provider value={{ state, setState, content, setContent }}>{children}</NoticeContext.Provider>
 }
 
 export {
-    ModalProvider,
-    ModalContext,
+    NoticeProvider,
+    NoticeContext,
 }

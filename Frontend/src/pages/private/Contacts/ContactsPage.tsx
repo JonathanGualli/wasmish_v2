@@ -11,13 +11,13 @@ import { useDebouncedValue } from "../../../hooks/useDebouncedValue";
 import { useContactSelection } from "../../../hooks/useContactSelection";
 import { useCampaignDraft } from "../../../hooks/useCampaignDraft";
 import { useNewCampaign } from "../../../hooks/useNewCampaign";
-import { Callout } from "../../../components/Callout/Callout";
 import { ConfirmDialog } from "../../../components/Dialog/ConfirmDialog";
 import { CampaignPaths } from "../../../models/routes.models";
 import type { Contact, ContactFilter, ContactsNavigationState } from "../../../models/contact.model";
-import { newCampaignDraft } from "../../../utils/campaignDraft";
+import { hasSeenPickIntro, markPickIntroSeen, newCampaignDraft } from "../../../utils/campaignDraft";
 import { pluralize } from "../../../utils/campaignDisplay";
 import { DraftConflictDialog } from "../Campaigns/DraftConflictDialog";
+import { WizardHeader } from "../Campaigns/NewCampaign/WizardHeader";
 import { contactColumns } from "./ContactColumns";
 import { ContactMobileRow } from "./ContactRow";
 import { ContactPanel, type ContactPanelState } from "./ContactPanel";
@@ -32,11 +32,18 @@ const FILTERS: { value: ContactFilter; label: string }[] = [
 
 const FIRST_PAGE = { pageIndex: 0, pageSize: 20 };
 
-/** Lo que dice el aviso de arriba cuando Campañas pide elegir contactos. */
+/** Lo que dice la cabecera del asistente cuando Campañas pide elegir contactos. */
 const PICK_MODE_COPY = {
-    new: { title: 'Nueva campaña:', text: 'elige los contactos que la recibirán y pulsa «Continuar».', back: 'Cancelar' },
-    edit: { title: 'Cambiando la selección de la campaña.', text: 'Cuando termines, pulsa «Volver a la campaña».', back: 'Volver sin cambios' },
+    new: { description: 'Marca los contactos que recibirán la campaña y pulsa «Continuar».', back: 'Cancelar' },
+    edit: { description: 'Cambia los contactos que recibirán la campaña y pulsa «Volver a la campaña».', back: 'Volver sin cambios' },
 };
+
+/** La explicación de la primera vez que se eligen destinatarios. */
+const PICK_INTRO_STEPS = [
+    'Marca la casilla de cada contacto que quieras incluir. Puedes buscar y filtrar.',
+    'Para incluir a todos los de una búsqueda, marca la casilla de arriba de la lista y luego «Seleccionar los que coinciden».',
+    'Cuando termines, pulsa «Continuar» en la barra de abajo.',
+];
 
 /** Un cambio de búsqueda o de filtro que espera confirmación. */
 type PendingQueryChange = { query?: string; filter?: ContactFilter };
@@ -64,6 +71,8 @@ export const ContactsPage = () => {
     const [filter, setFilter] = useState<ContactFilter>(initialFilter);
     const [panel, setPanel] = useState<ContactPanelState | null>(null);
     const [pendingChange, setPendingChange] = useState<PendingQueryChange | null>(null);
+    // La primera vez que se eligen destinatarios, una explicación corta.
+    const [showPickIntro, setShowPickIntro] = useState(() => pickMode === 'new' && !hasSeenPickIntro());
     const selection = useContactSelection(editing);
 
     const search = useDebouncedValue(query.trim(), 300);
@@ -110,6 +119,10 @@ export const ContactsPage = () => {
         else newCampaign.start(() => goToWizard());
     };
     const leavePickMode = () => navigate(pickMode === 'edit' ? CampaignPaths.create : CampaignPaths.list);
+    const closePickIntro = () => {
+        markPickIntroSeen();
+        setShowPickIntro(false);
+    };
 
     const selectionBanner = () => {
         if (selection.isAllMatching) {
@@ -217,36 +230,46 @@ export const ContactsPage = () => {
         );
     };
 
+    // Eligiendo destinatarios la barra se ve desde el principio, con la pista
+    // de qué hacer; si no, solo cuando hay alguien marcado.
+    const showSelectionBar = selectedCount > 0 || (Boolean(pickMode) && !isEmpty && !(isError && !data));
+
     return (
         <PageShell width="wide">
-            <PageHeader
-                icon={<Users size={20} />}
-                title="Contactos"
-                description="Las personas con las que habla tu negocio por WhatsApp."
-                actions={
-                    <div className="w-full sm:w-auto h-10">
-                        <CustomButton onClick={() => setPanel({ mode: 'create' })}>
-                            <span className="flex items-center justify-center gap-2"><Plus size={16} />Nuevo contacto</span>
-                        </CustomButton>
-                    </div>
-                }
-            />
-
-            {pickMode && (
-                <div className="mb-4">
-                    <Callout
-                        icon={<Send size={16} />}
-                        title={PICK_MODE_COPY[pickMode].title}
-                        action={
+            {pickMode ? (
+                // Elegir destinatarios es el paso 1 de la campaña: la misma cabecera
+                // que el asistente, para que no parezca que se salió a otra sección.
+                <WizardHeader
+                    step={1}
+                    description={PICK_MODE_COPY[pickMode].description}
+                    aside={
+                        <div className="flex items-center gap-3">
+                            {/* Outline: la menta de esta vista es «Continuar», en la barra. */}
+                            <div className="hidden sm:block h-10">
+                                <CustomButton variant="outline" onClick={() => setPanel({ mode: 'create' })}>
+                                    <span className="flex items-center gap-2"><Plus size={16} />Nuevo contacto</span>
+                                </CustomButton>
+                            </div>
                             <button type="button" onClick={leavePickMode}
                                 className="text-[13px] font-semibold text-brand-accent-strong cursor-pointer hover:underline">
                                 {PICK_MODE_COPY[pickMode].back}
                             </button>
-                        }
-                    >
-                        {PICK_MODE_COPY[pickMode].text}
-                    </Callout>
-                </div>
+                        </div>
+                    }
+                />
+            ) : (
+                <PageHeader
+                    icon={<Users size={20} />}
+                    title="Contactos"
+                    description="Las personas con las que habla tu negocio por WhatsApp."
+                    actions={
+                        <div className="w-full sm:w-auto h-10">
+                            <CustomButton onClick={() => setPanel({ mode: 'create' })}>
+                                <span className="flex items-center justify-center gap-2"><Plus size={16} />Nuevo contacto</span>
+                            </CustomButton>
+                        </div>
+                    }
+                />
             )}
 
             {!isEmpty && !(isError && !data) && (
@@ -280,12 +303,13 @@ export const ContactsPage = () => {
             {renderBody()}
 
             {/* Hueco para que la barra de selección no tape la paginación. */}
-            {selectedCount > 0 && <div className="h-24" />}
+            {showSelectionBar && <div className="h-24" />}
 
-            {selectedCount > 0 && (
+            {showSelectionBar && (
                 <SelectionBar
                     count={selectedCount}
                     note={selection.excludedCount > 0 ? pluralize(selection.excludedCount, 'excluido', 'excluidos') : undefined}
+                    emptyHint="Marca los contactos que recibirán la campaña."
                     actionLabel={selectionActionLabel()}
                     onAction={handleSelectionAction}
                     onClear={selection.clear}
@@ -305,6 +329,31 @@ export const ContactsPage = () => {
             />
 
             <DraftConflictDialog {...newCampaign.conflictDialog} />
+
+            <ConfirmDialog
+                open={showPickIntro}
+                icon={<Send size={20} />}
+                title="Elige quién recibe la campaña"
+                description="Es el primer paso. Después eliges la plantilla y la revisas antes de enviarla."
+                cancelLabel="Volver a Campañas"
+                confirmLabel="Elegir contactos"
+                onConfirm={closePickIntro}
+                onCancel={closePickIntro}
+                onSecondary={() => {
+                    closePickIntro();
+                    leavePickMode();
+                }}
+            >
+                <ol className="grid gap-2.5 text-sm text-brand-strong">
+                    {PICK_INTRO_STEPS.map((step, i) => (
+                        <li key={i} className="flex gap-3">
+                            <span className="flex-none w-6 h-6 rounded-full bg-brand-raised text-brand-gray-600
+                                font-mono text-xs font-semibold flex items-center justify-center">{i + 1}</span>
+                            <span className="pt-0.5 leading-[1.5]">{step}</span>
+                        </li>
+                    ))}
+                </ol>
+            </ConfirmDialog>
         </PageShell>
     );
 };

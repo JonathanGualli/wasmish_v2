@@ -1,17 +1,17 @@
 import { useEffect, useRef, useState, useCallback } from "react"
 import { createPortal } from "react-dom";
-import "./Modal.css"
-import { useModalContext } from "./context/UseModalContext";
+import "./Notice.css"
+import { useNoticeContext } from "./context/UseNoticeContext";
 import { X } from "lucide-react";
 
 const eventListener = "keydown";
 
-export const Modal = () => {
-    const modalRef = useRef<HTMLDivElement>(null);
-    const { state, setState, content } = useModalContext();
+export const Notice = () => {
+    const noticeRef = useRef<HTMLDivElement>(null);
+    const { state, setState, content } = useNoticeContext();
     const [exiting, setExiting] = useState(false);
 
-    const closeModal = useCallback(() => {
+    const closeNotice = useCallback(() => {
         setExiting(true);
         setTimeout(() => {
             setState(false);
@@ -22,13 +22,13 @@ export const Modal = () => {
     useEffect(() => {
         if(state) {
             const timer = setTimeout(()=>{
-               closeModal();
+               closeNotice();
             }, 5000);
             return () => clearTimeout(timer);
         }
-    }, [state, closeModal]);
+    }, [state, closeNotice]);
 
-    const modalRoot = document.getElementById("modal");
+    const noticeRoot = document.getElementById("notice");
 
     const handleContentClick = (e: React.MouseEvent<HTMLDivElement>) => {
         e.stopPropagation();
@@ -38,7 +38,7 @@ export const Modal = () => {
         const handleEsc = (e: KeyboardEvent) => {
 
             if (e.key === "Escape") {
-                closeModal();
+                closeNotice();
             }
         }
 
@@ -49,21 +49,21 @@ export const Modal = () => {
         return () => {
             document.removeEventListener(eventListener, handleEsc)
         }
-    }, [state, closeModal])
+    }, [state, closeNotice])
 
-    if (!state || !modalRoot) {
+    if (!state || !noticeRoot) {
         return null;
     }
 
 
     
     return createPortal(
-        <div className="overlay" >
-            <div className={`modal ${exiting ? "exit" : ""}`} onClick={handleContentClick} ref={modalRef}>
+        <div className="notice-overlay" >
+            <div className={`notice ${exiting ? "exit" : ""}`} onClick={handleContentClick} ref={noticeRef}>
                 {content}
-                <button className="close-button" onClick={closeModal}> <X className="w-6 h-6 text-red-600" /></button>
+                <button className="close-button" onClick={closeNotice}> <X className="w-6 h-6 text-red-600" /></button>
             </div>
         </div>,
-        modalRoot
+        noticeRoot
     )
 }

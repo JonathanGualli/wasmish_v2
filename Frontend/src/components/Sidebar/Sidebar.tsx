@@ -3,6 +3,7 @@ import { SidebarItem } from './SidebarItem';
 import { useAuthContext } from '../../context/auth.context';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AppRoutes } from '../../models/routes.models';
+import type { ContactsNavigationState } from '../../models/contact.model';
 import { useEffect, useMemo, useState } from 'react';
 import { Logo, LogoLockup } from '../Logo/Logo';
 import { useConversations } from '../../hooks/useConversations';
@@ -64,11 +65,19 @@ export const Sidebar = ({ collapsed, toggle, isMobile }: Props) => {
     if (isMobile) toggle();
   };
 
+  // Contactos eligiendo los destinatarios de una campaña es el paso 1 de esa
+  // campaña: se marca «Campañas», no «Contactos».
+  const pickingRecipients = Boolean((location.state as ContactsNavigationState | null)?.campaignPick);
+
   useEffect(() => {
+    if (pickingRecipients) {
+      setValueSelected('campaigns');
+      return;
+    }
     // También en las subrutas: el detalle de una campaña sigue siendo «Campañas».
     const current = allItems.find(item => location.pathname === item.path || location.pathname.startsWith(`${item.path}/`));
     if (current) setValueSelected(current.value);
-  }, [location.pathname, allItems]);
+  }, [location.pathname, pickingRecipients, allItems]);
 
   return (
     <div

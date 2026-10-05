@@ -1,57 +1,19 @@
 import { useState } from "react";
-import { Link, Navigate, useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { Check, Send } from "lucide-react";
 import { CustomButton } from "../../../../components/Button/Button";
-import { useModalContext } from "../../../../components/Modal/context/UseModalContext";
+import { useNoticeContext } from "../../../../components/Notice/context/UseNoticeContext";
 import { campaignErrors, useCampaignMutations } from "../../../../hooks/useCampaigns";
 import { CampaignPaths } from "../../../../models/routes.models";
-import { CAMPAIGN_STEPS, type CampaignDraft } from "../../../../utils/campaignDraft";
+import type { CampaignDraft } from "../../../../utils/campaignDraft";
 import { formatDuration, pluralize, suggestCampaignName } from "../../../../utils/campaignDisplay";
 import { useCampaignWizard, type CampaignWizard } from "./useCampaignWizard";
 import { RecipientsStep } from "./RecipientsStep";
 import { MessageStep } from "./MessageStep";
 import { ReviewStep } from "./ReviewStep";
+import { WizardHeader } from "./WizardHeader";
 
 type Step = CampaignDraft['step'];
-
-/** Los tres pasos; en móvil, tres barras y «Paso 1 de 3 · Destinatarios». */
-const WizardStepper = ({ current }: { current: Step }) => (
-    <>
-        <ol className="hidden md:flex items-center gap-2.5">
-            {CAMPAIGN_STEPS.map((label, i) => {
-                const step = i + 1;
-                const done = step < current;
-                const active = step === current;
-                return (
-                    <li key={label} className="flex items-center gap-2.5" aria-current={active ? 'step' : undefined}>
-                        <span className={`w-6 h-6 rounded-full border-[1.5px] box-border flex items-center justify-center
-                            font-mono text-xs font-semibold
-                            ${done ? 'bg-brand-accent-soft border-brand-accent-soft text-brand-accent-strong'
-                                : active ? 'bg-brand-deep border-brand-deep text-white'
-                                    : 'bg-brand-surface border-brand-border-strong text-brand-subtle'}`}>
-                            {done ? <Check size={12} strokeWidth={3.5} /> : step}
-                        </span>
-                        <span className={`text-[13.5px] ${active ? 'font-bold text-brand-text' : done ? 'text-brand-strong' : 'text-brand-subtle'}`}>
-                            {label}
-                        </span>
-                        {step < CAMPAIGN_STEPS.length && <span className="w-9 h-px bg-brand-border-strong ml-1" />}
-                    </li>
-                );
-            })}
-        </ol>
-        <div className="md:hidden grid gap-2">
-            <div className="grid grid-cols-3 gap-1">
-                {CAMPAIGN_STEPS.map((label, i) => (
-                    <span key={label} className={`h-1 rounded-sm ${i + 1 < current ? 'bg-brand-success' : i + 1 === current ? 'bg-brand-deep' : 'bg-brand-border'}`} />
-                ))}
-            </div>
-            <span className="text-[13px] text-brand-gray-600">
-                Paso <span className="font-mono">{current}</span> de <span className="font-mono">{CAMPAIGN_STEPS.length}</span> ·{' '}
-                <b className="font-semibold text-brand-text">{CAMPAIGN_STEPS[current - 1]}</b>
-            </span>
-        </div>
-    </>
-);
 
 /** Lo que dice el pie de cada paso: qué falta, o qué va a pasar. */
 const footerHint = (wizard: CampaignWizard) => {
@@ -84,7 +46,7 @@ export const NewCampaignPage = () => {
     const navigate = useNavigate();
     const wizard = useCampaignWizard();
     const { create } = useCampaignMutations();
-    const { setState: showNotice, setContent: setNoticeContent } = useModalContext();
+    const { setState: showNotice, setContent: setNoticeContent } = useNoticeContext();
     const { draft, preview, template, update, isPreviewUpdating } = wizard;
     // La campaña recién creada. Redirigir desde aquí y no con navigate(): React
     // Router 7 navega dentro de una transición, el borrador se borra antes y
@@ -158,28 +120,15 @@ export const NewCampaignPage = () => {
     return (
         <div className="min-h-full flex flex-col">
             <div className="flex-1 mx-auto w-full max-w-6xl px-5 sm:px-8 pt-6 sm:pt-8 pb-10">
-                <nav className="flex items-center gap-1.5 text-[13px]">
-                    <Link to={CampaignPaths.list} className="font-semibold text-brand-accent-strong hover:underline">Campañas</Link>
-                    <span className="text-brand-subtle">›</span>
-                    <span className="text-brand-gray-600">Nueva campaña</span>
-                </nav>
-
-                <header className="mt-3 flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-[10px] bg-brand-accent-soft text-brand-accent-strong flex items-center justify-center flex-none">
-                        <Send size={20} />
-                    </div>
-                    <div className="min-w-0">
-                        <h1 className="text-[30px] font-bold tracking-[-0.03em] leading-none text-brand-text">Nueva campaña</h1>
-                        <p className="hidden sm:block text-[15px] text-brand-muted mt-2">Una plantilla aprobada para muchos contactos a la vez.</p>
-                    </div>
-                </header>
-
-                <div className="mt-6 pb-4 mb-6 border-b border-brand-raised flex items-center gap-4">
-                    <div className="flex-1 min-w-0"><WizardStepper current={draft.step} /></div>
-                    <span className="flex-none self-start md:self-center flex items-center gap-1.5 text-[12.5px] text-brand-muted">
-                        <Check size={14} className="text-brand-success" />Borrador guardado
-                    </span>
-                </div>
+                <WizardHeader
+                    step={draft.step}
+                    description="Una plantilla aprobada para muchos contactos a la vez."
+                    aside={
+                        <span className="flex items-center gap-1.5 text-[12.5px] text-brand-muted">
+                            <Check size={14} className="text-brand-success" />Borrador guardado
+                        </span>
+                    }
+                />
 
                 {draft.step === 1 && <RecipientsStep wizard={wizard} />}
                 {draft.step === 2 && <MessageStep wizard={wizard} />}

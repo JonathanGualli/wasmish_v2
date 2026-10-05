@@ -6,7 +6,7 @@ import { useConversationMessages } from "../../hooks/useConversationMessages";
 import { useConversationSendMessages } from "../../hooks/useConversationSendMessages.ts";
 import { useConversations } from "../../hooks/useConversations.ts";
 import { useTemplates } from "../../hooks/useTemplates.ts";
-import { useModalContext } from "../Modal/context/UseModalContext.ts";
+import { useNoticeContext } from "../Notice/context/UseNoticeContext.ts";
 import { renderLegacyTemplateText } from "../../utils/legacyTemplate.ts";
 import { MessageTypeIcon } from "./MessageTypeIcon.tsx";
 import { MessageMedia } from "./MessageMedia.tsx";
@@ -79,7 +79,7 @@ export const ChatThread = ({ conversationId, onBack }: Props) => {
     const { data: conversations } = useConversations();
     const { templates } = useTemplates();
     const sendMessageMutation = useConversationSendMessages();
-    const { setState, setContent } = useModalContext();
+    const { setState, setContent } = useNoticeContext();
 
     const [text, setText] = useState("");
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);

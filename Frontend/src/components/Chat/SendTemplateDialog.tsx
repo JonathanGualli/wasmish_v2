@@ -2,7 +2,7 @@ import { Dialog, DialogPanel, DialogTitle } from '@headlessui/react';
 import { X, LayoutTemplate } from 'lucide-react';
 import { CustomButton } from '../Button/Button';
 import { Callout } from '../Callout/Callout';
-import { useModalContext } from '../Modal/context/UseModalContext';
+import { useNoticeContext } from '../Notice/context/UseNoticeContext';
 import { useSendTemplate } from '../../hooks/useSendTemplate';
 import { useTemplateForm, templateSendError } from '../../hooks/useTemplateForm';
 import { TemplatePicker, TemplateFields } from './TemplateFields';
@@ -19,13 +19,13 @@ interface Props {
 
 /**
  * Enviar una plantilla aprobada a una conversación cuya ventana de 24 h se
- * cerró. Los errores van al modal global, como en el resto de la app; el
+ * cerró. Los errores van al aviso global, como en el resto de la app; el
  * diálogo sigue abierto debajo para corregir sin perder lo escrito.
  */
 export const SendTemplateDialog = ({ open, onClose, conversationId, contactName }: Props) => {
   const form = useTemplateForm();
   const sendTemplate = useSendTemplate();
-  const { state: errorVisible, setState, setContent } = useModalContext();
+  const { state: errorVisible, setState, setContent } = useNoticeContext();
 
   const handleClose = () => {
     if (sendTemplate.isPending) return;
@@ -33,7 +33,7 @@ export const SendTemplateDialog = ({ open, onClose, conversationId, contactName 
     onClose();
   };
 
-  // El modal de error vive en otro portal: para el Dialog, pulsar su X (o ESC
+  // El aviso de error vive en otro portal: para el Dialog, pulsar su X (o ESC
   // con él abierto) es un «clic fuera», y cerraría el diálogo con lo escrito.
   const handleDialogClose = () => {
     if (!errorVisible) handleClose();

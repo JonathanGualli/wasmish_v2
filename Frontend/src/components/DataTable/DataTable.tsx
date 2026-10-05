@@ -97,6 +97,19 @@ return (
       )}
       {renderMobileRow && (
         <div className="md:hidden divide-y divide-brand-border">
+          {/* En móvil no hay cabecera de tabla: la casilla de la página va aquí. */}
+          {selection && rows.length > 0 && (
+            <div onClick={selection.onTogglePage} className="flex items-center gap-3 pl-4 pr-4 py-3 bg-brand-bg cursor-pointer">
+              <Checkbox
+                checked={selection.pageState === 'all'}
+                indeterminate={selection.pageState === 'some'}
+                onChange={selection.onTogglePage}
+                label="Seleccionar la página"
+                touch
+              />
+              <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-brand-muted">Seleccionar esta página</span>
+            </div>
+          )}
           {rows.length > 0 ? rows.map(row => (
             <div
               key={row.id}

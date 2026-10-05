@@ -341,12 +341,20 @@ backend): etiquetas por conversación, asignación de agente («Sin asignar»,
 «Asignarme», «Respondiendo como…»), notas internas y los filtros Todos / Míos /
 Sin asignar. Están omitidos a propósito — no maquetar botones que no hacen nada.
 
-### Modal — `components/Modal/Modal.css`
+### Aviso global — `components/Notice/Notice.css`
 
-Tarjeta clara (el contenido siempre es blanco): `#ffffff`, borde
-`#e4e7eb`, borde izquierdo 3px menta, radio 12px, esquina superior derecha,
-auto-dismiss a los 5s. El contenido lo inyectan las páginas con tokens de texto
-sobre claro — **no oscurecer este modal**, rompería ese contraste.
+Notificación, no modal: no bloquea la página (`useNoticeContext`). Tarjeta clara
+(el contenido siempre es blanco): `#ffffff`, borde `#e4e7eb`, borde izquierdo
+3px menta, radio 12px, esquina superior derecha, auto-dismiss a los 5s. El
+contenido lo inyectan las páginas con tokens de texto sobre claro — **no
+oscurecer este aviso**, rompería ese contraste.
+
+### Diálogos (modales) — `components/Dialog/ConfirmDialog.tsx`
+
+Los que bloquean la página hasta que se elige algo: fondo `bg-brand-ink/50`,
+panel blanco `rounded-2xl` con borde `brand-border`, sello de icono en
+`accent-soft` (o `danger-soft` si es destructivo) y dos botones que dicen qué
+pasa, nunca «Aceptar». Usar `ConfirmDialog` antes de maquetar uno a mano.
 
 ---
 

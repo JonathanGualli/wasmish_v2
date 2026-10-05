@@ -8,7 +8,7 @@ import {
 import { CustomButton } from '../../../components/Button/Button';
 import { Callout } from '../../../components/Callout/Callout';
 import { Pill } from '../../../components/Pill/Pill';
-import { useModalContext } from '../../../components/Modal/context/UseModalContext';
+import { useNoticeContext } from '../../../components/Notice/context/UseNoticeContext';
 import { contactError, useContact, useContactMutations } from '../../../hooks/useContacts';
 import { formatRemaining, useConversationWindow } from '../../../hooks/useConversationWindow';
 import type { ContactDetail } from '../../../models/contact.model';
@@ -34,10 +34,10 @@ interface Props {
  * En escritorio se abre sobre la lista; en móvil ocupa la pantalla.
  */
 export const ContactPanel = ({ state, onChange }: Props) => {
-    const { state: errorVisible } = useModalContext();
+    const { state: errorVisible } = useNoticeContext();
     const close = () => onChange(null);
 
-    // El modal de error vive en otro portal: para el Dialog, pulsar su X es un
+    // El aviso de error vive en otro portal: para el Dialog, pulsar su X es un
     // «clic fuera» y cerraría el panel con lo escrito (igual que en Chats).
     const handleDialogClose = () => {
         if (!errorVisible) close();
@@ -383,7 +383,7 @@ const DeleteContactDialog = ({ contact, open, onCancel, onDeleted }: {
     onDeleted: () => void;
 }) => {
     const { remove } = useContactMutations();
-    const { setState, setContent } = useModalContext();
+    const { setState, setContent } = useNoticeContext();
 
     const handleDelete = async () => {
         try {

@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
 import { CustomButton } from '../Button/Button';
-import { useModalContext } from '../Modal/context/UseModalContext';
+import { useNoticeContext } from '../Notice/context/UseNoticeContext';
 
 interface ConfirmDialogProps {
     open: boolean;
@@ -34,7 +34,7 @@ export const ConfirmDialog = ({
     open, title, description, confirmLabel, cancelLabel = 'Cancelar', tone = 'default', icon, children,
     isLoading = false, onConfirm, onCancel, onSecondary,
 }: ConfirmDialogProps) => {
-    const { state: notificationVisible } = useModalContext();
+    const { state: notificationVisible } = useNoticeContext();
 
     // El aviso global vive en otro portal: para el Dialog, pulsar su X es un
     // «clic fuera». Mientras se ve, o mientras la acción está en curso, no se cierra.

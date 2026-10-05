@@ -3,7 +3,7 @@ import { AlertTriangle, Lock } from 'lucide-react';
 import { AuthField } from '../../../components/Auth/AuthField';
 import { CustomButton } from '../../../components/Button/Button';
 import { Callout } from '../../../components/Callout/Callout';
-import { useModalContext } from '../../../components/Modal/context/UseModalContext';
+import { useNoticeContext } from '../../../components/Notice/context/UseNoticeContext';
 import { contactError, useContactByPhone, useContactMutations } from '../../../hooks/useContacts';
 import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
 import type { ContactDetail, ContactInput } from '../../../models/contact.model';
@@ -47,7 +47,7 @@ export const ContactForm = ({ contact, onCancel, onSaved, onViewContact }: Props
     const [serverDuplicateId, setServerDuplicateId] = useState<string | null>(null);
 
     const { create, update } = useContactMutations();
-    const { setState, setContent } = useModalContext();
+    const { setState, setContent } = useNoticeContext();
     const isPending = create.isPending || update.isPending;
 
     const phoneLocked = Boolean(contact?.conversationId);

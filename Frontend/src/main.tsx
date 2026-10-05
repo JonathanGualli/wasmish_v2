@@ -3,7 +3,7 @@ import App from './App.tsx'
 import { QueryClientProvider, QueryClient  } from '@tanstack/react-query';
 import { AppRouter } from './AppRouter.tsx';
 import { AuthProvider } from './context/auth.context.provider.tsx';
-import { ModalProvider } from './components/Modal/context/ModalContext.tsx';
+import { NoticeProvider } from './components/Notice/context/NoticeContext.tsx';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { SSEProvider } from './context/sse.provider.tsx';
 
@@ -13,11 +13,11 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <SSEProvider>
-        <ModalProvider>
+        <NoticeProvider>
           <App> 
             <AppRouter />
           </App>
-        </ModalProvider>
+        </NoticeProvider>
       </SSEProvider>
     </AuthProvider>
     <ReactQueryDevtools initialIsOpen={false} />

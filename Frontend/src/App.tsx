@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import './App.css'
-import { Modal } from './components/Modal/Modal';
+import { Notice } from './components/Notice/Notice';
 
 interface Props {
   children: ReactNode;
@@ -10,7 +10,7 @@ function App({children}: Props) {
 
   return (
     <>
-      <Modal></Modal>
+      <Notice></Notice>
       {children}
     </>
   )
