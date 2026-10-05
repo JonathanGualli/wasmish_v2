@@ -10,9 +10,13 @@
 //   npm run webhook:simulate -- --clean          ← borra la conversación de prueba
 //   npm run webhook:simulate -- baja-marketing   ← se da de baja de la publicidad
 //   npm run webhook:simulate -- alta-marketing   ← vuelve a aceptarla
+//   npm run webhook:simulate -- cambio-numero --new-from 593000000001
+//                                                ← cambia de número y de BSUID
 //
 // Opciones: --from <numero>  --url <http://...>  --phone-number-id <id>
-//           --name <nombre de perfil>  --username <usuario>
+//           --name <nombre de perfil>  --username <usuario>  --new-from <numero>
+//
+// Después de cambio-numero, el contacto de prueba es el de --from <número nuevo>.
 //
 // Con --username el mensaje llega SIN teléfono, solo con el BSUID: así escribe
 // quien activó su nombre de usuario de WhatsApp y no ha hablado con el negocio
@@ -59,6 +63,9 @@ const PREFERENCIAS = {
     'alta-marketing': 'resume',
 };
 
+// Tampoco es un mensaje: va en `value.user_id_update`. Necesita --new-from.
+const CAMBIO_NUMERO = 'cambio-numero';
+
 // --- argumentos -------------------------------------------------------------
 const argv = process.argv.slice(2);
 const opcion = (nombre, porDefecto) => {
@@ -71,13 +78,17 @@ const URL_BASE = opcion('url', 'http://localhost:3001');
 const phoneNumberIdArg = opcion('phone-number-id', null);
 const PROFILE_NAME = opcion('name', 'Cliente de prueba');
 const USERNAME = opcion('username', null);
+const NEW_FROM = opcion('new-from', null);
 
 // El BSUID que Meta generaría: país + id. Se deriva del número o del usuario
 // para que el mismo contacto de prueba tenga siempre el mismo.
-const USER_ID = `EC.SIM${Buffer.from(USERNAME ?? FROM).toString('hex')}`;
+const simulatedUserId = (seed) => `EC.SIM${Buffer.from(seed).toString('hex')}`;
+const USER_ID = simulatedUserId(USERNAME ?? FROM);
 const PHONE = USERNAME ? null : FROM;
+// Tras el cambio de número, el BSUID es el que tendría --from <número nuevo>.
+const NEW_USER_ID = NEW_FROM && simulatedUserId(NEW_FROM);
 
-const valoresDeOpciones = [FROM, URL_BASE, phoneNumberIdArg, PROFILE_NAME, USERNAME];
+const valoresDeOpciones = [FROM, URL_BASE, phoneNumberIdArg, PROFILE_NAME, USERNAME, NEW_FROM];
 const nombres = argv.filter(a => !a.startsWith('--') && !valoresDeOpciones.includes(a));
 const todos = argv.includes('--all');
 const listar = argv.includes('--list');
@@ -88,6 +99,7 @@ const morir = (mensaje) => { console.error(mensaje); process.exit(1); };
 if (listar) {
     console.log('Tipos disponibles:\n  ' + Object.keys(MUESTRAS).join('\n  '));
     console.log('\nPreferencias de marketing:\n  ' + Object.keys(PREFERENCIAS).join('\n  '));
+    console.log(`\nOtros avisos:\n  ${CAMBIO_NUMERO}   (con --new-from <número>)`);
     process.exit(0);
 }
 
@@ -99,8 +111,9 @@ if (!limpiar && elegidos.length === 0) {
     morir('Dime qué mandar.  Ej: npm run webhook:simulate -- audio boton   (o --all, o --list)');
 }
 
-const desconocidos = elegidos.filter(n => !MUESTRAS[n] && !PREFERENCIAS[n]);
+const desconocidos = elegidos.filter(n => !MUESTRAS[n] && !PREFERENCIAS[n] && n !== CAMBIO_NUMERO);
 if (desconocidos.length > 0) morir(`No conozco: ${desconocidos.join(', ')}.  Usa --list para ver los tipos.`);
+if (elegidos.includes(CAMBIO_NUMERO) && !NEW_FROM) morir(`${CAMBIO_NUMERO} necesita el número nuevo:  --new-from 593000000001`);
 
 // --- ejecución --------------------------------------------------------------
 await mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/wasmish');
@@ -120,7 +133,11 @@ const phoneNumberId = dueno.phoneNumberId;
 // Toda consulta va filtrada por userId: con varias cuentas en la BD local,
 // buscar solo por teléfono acierta la cuenta equivocada — y en --clean eso
 // significa borrar la conversación de otro.
-const testIdentity = PHONE ? { $or: [{ phone: PHONE }, { waUserId: USER_ID }] } : { waUserId: USER_ID };
+// Con --new-from, el contacto puede estar ya con la identidad nueva.
+const testIdentity = { $or: [
+    PHONE && { phone: PHONE }, { waUserId: USER_ID },
+    NEW_FROM && { phone: NEW_FROM }, NEW_FROM && { waUserId: NEW_USER_ID },
+].filter(Boolean) };
 const senderLabel = USERNAME ? `@${USERNAME} (sin número)` : FROM;
 
 const findTestContact = () => Contact.findOne({ userId: dueno._id, ...testIdentity });
@@ -147,9 +164,20 @@ if (limpiar) {
 
 console.log(`Enviando a ${URL_BASE}/api/webhook  ·  de ${senderLabel}  ·  a la cuenta ${dueno.email} (${phoneNumberId})\n`);
 
-// El `value` de un mensaje o de un aviso de preferencia de marketing.
+// El `value` de un mensaje, de un aviso de preferencia de marketing o de un
+// cambio de número.
 const valorDe = (nombre) => {
     const ahora = Math.floor(Date.now() / 1000);
+    if (nombre === CAMBIO_NUMERO) {
+        return {
+            user_id_update: [{
+                wa_id: NEW_FROM,
+                detail: `User id for ${PROFILE_NAME} has been updated.`,
+                user_id: { previous: USER_ID, current: NEW_USER_ID },
+                timestamp: String(ahora),
+            }],
+        };
+    }
     if (PREFERENCIAS[nombre]) {
         const value = PREFERENCIAS[nombre];
         return {

@@ -7,6 +7,7 @@ import {
     mergeContactUpdates,
     whatsappRecipient,
     contactDisplayName,
+    describeUserIdUpdate,
 } from '../src/utils/contact.identity.js';
 
 const PHONE = '593999111222';
@@ -103,4 +104,27 @@ test('el nombre a mostrar sigue el orden nombre, perfil, usuario, teléfono', ()
     assert.equal(contactDisplayName({ username: 'ana.p' }), '@ana.p');
     assert.equal(contactDisplayName({ name: '  ', phone: PHONE }), PHONE);
     assert.equal(contactDisplayName({}), 'Contacto de WhatsApp');
+});
+
+// --- Cambio de número y BSUID (webhook user_id_update) ----------------------
+
+test('lee el BSUID viejo, el nuevo y el teléfono actual', () => {
+    const update = describeUserIdUpdate({
+        wa_id: PHONE,
+        user_id: { previous: BSUID, current: 'EC.999' },
+        parent_user_id: { previous: 'EC.P1', current: 'EC.P2' },
+    });
+
+    assert.deepEqual(update, { previousWaUserId: BSUID, waUserId: 'EC.999', phone: PHONE });
+});
+
+test('el cambio de número puede llegar sin teléfono', () => {
+    const update = describeUserIdUpdate({ user_id: { previous: BSUID, current: 'EC.999' } });
+    assert.deepEqual(update, { previousWaUserId: BSUID, waUserId: 'EC.999', phone: null });
+});
+
+test('sin los dos BSUID, o si no cambia, no hay nada que aplicar', () => {
+    assert.equal(describeUserIdUpdate({ wa_id: PHONE, user_id: { current: 'EC.999' } }), null);
+    assert.equal(describeUserIdUpdate({ user_id: { previous: BSUID, current: BSUID } }), null);
+    assert.equal(describeUserIdUpdate(undefined), null);
 });

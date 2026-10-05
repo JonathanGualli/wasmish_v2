@@ -5,11 +5,12 @@ import { sendUser } from './stream.controller.js';
 import Conversation from "../models/conversation.model.js";
 import {
     resolveContact, findOrCreateConversation, findContactByIdentity, getConversationContact, applyMarketingPreference,
+    applyUserIdUpdate,
 } from './contact.controller.js';
 import { resolveStatusTransition } from '../utils/message.status.js';
 import { getWindowExpiry } from '../utils/whatsapp.window.js';
 import { describeInboundMessage } from '../utils/inbound.message.js';
-import { describeInboundContact, hasContactIdentity } from '../utils/contact.identity.js';
+import { describeInboundContact, hasContactIdentity, describeUserIdUpdate } from '../utils/contact.identity.js';
 import { describeUserPreference, isMarketingOptOutFailure } from '../utils/marketing.preference.js';
 import { TIPOS_CON_ARCHIVO, nombreDeArchivo, guardarArchivo } from '../utils/media.storage.js';
 import { getMediaInfo, downloadMedia } from '../libs/whatsapp.js';
@@ -233,6 +234,20 @@ const procesarPreferencia = async (user, preferenceData) => {
     if (updated) avisarPreferencia(user, updated);
 };
 
+// Procesa UN aviso de `user_id_update`: la persona cambió de número y WhatsApp
+// le dio otro BSUID. Sin aplicarlo, su siguiente mensaje sin teléfono abriría
+// un contacto y una conversación nuevos, separados de su historial.
+const procesarCambioDeNumero = async (user, updateData) => {
+    const update = describeUserIdUpdate(updateData);
+    if (!update) return;
+
+    const contact = await applyUserIdUpdate(user._id, update);
+    if (!contact) return;
+
+    sendUser(String(user._id), 'contact_updated', { id: String(contact._id) });
+    console.log('Cambio de número aplicado:', { contactId: String(contact._id) });
+};
+
 // El 131050 dice que la persona está dada de baja aunque el webhook de
 // `user_preferences` no haya llegado (no estar suscrito a ese campo, o que se
 // perdiera). Se marca con la hora del acuse.
@@ -377,6 +392,18 @@ export const handleWebhook = async (req, res) => {
                             value: preferenceData?.value,
                             error: error.message,
                         });
+                    }
+                }
+
+                // Cambios de número. Mismo requisito: el campo `user_id_update`
+                // marcado en el panel de la app de Meta.
+                const userIdUpdates = value?.user_id_update ?? [];
+                for(const updateData of userIdUpdates) {
+                    try {
+                        await procesarCambioDeNumero(user, updateData);
+                    } catch (error) {
+                        // Sin BSUID ni teléfono: solo el error.
+                        console.error("Cambio de número descartado por error:", { error: error.message });
                     }
                 }
             }

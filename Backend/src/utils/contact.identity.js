@@ -55,12 +55,26 @@ export const describeInboundContact = (contacts, messageData) => {
 export const hasContactIdentity = (identity) => Boolean(identity?.phone || identity?.waUserId);
 
 /**
+ * Un aviso del webhook `user_id_update`. WhatsApp regenera el BSUID cuando la
+ * persona cambia de número, y avisa con el viejo, el nuevo y —en `wa_id`— el
+ * teléfono actual, que puede no venir (nombre de usuario activado). Devuelve
+ * null si no trae los dos BSUID o si no cambia.
+ */
+export const describeUserIdUpdate = (update) => {
+    const previousWaUserId = cleanString(update?.user_id?.previous);
+    const waUserId = cleanString(update?.user_id?.current);
+    if (!previousWaUserId || !waUserId || previousWaUserId === waUserId) return null;
+
+    return { previousWaUserId, waUserId, phone: cleanString(update?.wa_id) };
+};
+
+/**
  * Qué hay que cambiar en un contacto guardado con lo que llega de un mensaje o
  * de un envío. Devuelve solo los campos que cambian (vacío si ninguno).
  *
  * - Teléfono y BSUID solo RELLENAN el hueco: un contacto ya identificado no
  *   cambia de identidad por un mensaje. (Si Meta regenera el BSUID, lo avisa con
- *   un webhook propio.)
+ *   un webhook propio: ver `describeUserIdUpdate`.)
  * - Nombre de perfil y nombre de usuario son de la persona y los cambia cuando
  *   quiere: se actualizan siempre.
  * - `name` es el que puso quien usa Wasmish: solo se rellena si no hay ninguno,

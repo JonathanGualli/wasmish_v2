@@ -191,6 +191,47 @@ export const applyMarketingPreference = async (contact, preference) => {
     return updated && 'marketingOptOut' in changes ? updated : null;
 };
 
+/**
+ * La persona cambió de número y WhatsApp le regeneró el BSUID (ver
+ * `describeUserIdUpdate`). Es la misma persona: el contacto cambia los dos y
+ * conserva su conversación. La regla de no editar el teléfono de un contacto
+ * con conversación es para quien usa Wasmish; aquí es WhatsApp quien dice que
+ * el número cambió.
+ *
+ * Se busca por el BSUID viejo: sin él guardado no hay a quién aplicarlo (y un
+ * reintento del mismo aviso ya no lo encuentra). Devuelve el contacto si
+ * cambió, o null.
+ */
+export const applyUserIdUpdate = async (userId, { previousWaUserId, waUserId, phone }) => {
+    const contact = await Contact.findOne({ userId, waUserId: previousWaUserId });
+    if (!contact) {
+        console.warn('Cambio de número de alguien que no es contacto (o ya aplicado); se ignora.');
+        return null;
+    }
+
+    contact.waUserId = waUserId;
+    if (phone) contact.phone = phone;
+
+    try {
+        await contact.save();
+    } catch (error) {
+        // El BSUID o el número nuevos ya son de otro contacto: escribió desde el
+        // número nuevo antes de que llegara este aviso. Como en
+        // applyContactUpdates, fusionarlos no lo decide un webhook.
+        if (error.code !== 11000) throw error;
+        console.warn('Cambio de número hacia un identificador de otro contacto; no se aplica:', { contactId: String(contact._id) });
+        return null;
+    }
+
+    // La copia del teléfono en la conversación, al momento: si no, buscar el
+    // número VIEJO (`findConversationByNumber`) seguiría dando con ella.
+    if (phone) {
+        await Conversation.updateMany({ userId, contactId: contact._id }, { $set: { contactPhone: phone } });
+    }
+
+    return contact;
+};
+
 // ---------------------------------------------------------------------------
 // API de la sección de Contactos
 // ---------------------------------------------------------------------------
