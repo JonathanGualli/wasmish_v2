@@ -33,11 +33,15 @@ export interface CampaignDraftInput {
     buttons: CampaignButton[];
     excludeOptedOut: boolean;
     recipients: CampaignRecipientsInput;
+    /** El archivo de la cabecera elegido para esta campaña; sin él, el de la plantilla. */
+    headerMediaId?: string | null;
 }
 
 export interface CreateCampaignInput extends CampaignDraftInput {
     templateId: string;
     name: string;
+    /** Que el archivo elegido pase a ser también el de la plantilla. */
+    saveHeaderAsDefault?: boolean;
 }
 
 export interface CampaignStats {
@@ -108,6 +112,7 @@ export interface CampaignPreview {
         toSend: number;
         optedOut: number;
         excludedOptedOut: number;
+        /** De los que lo recibirán, cuántos no tienen teléfono (para una variable que lo use). */
         withoutPhone: number;
         duplicates: number;
         notFound: number;

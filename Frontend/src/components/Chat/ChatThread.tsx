@@ -19,6 +19,7 @@ import { useConversationWindow, formatRemaining, WINDOW_WARNING_MS } from "../..
 import { SendTemplateDialog } from "./SendTemplateDialog.tsx";
 import { TemplateButtons } from "./TemplatePreview.tsx";
 import type { Template } from "../../models/template.model.ts";
+import { whatsappErrorLabel, whatsappErrorText } from "../../utils/whatsappErrors";
 
 interface Props {
     conversationId: string | null;
@@ -52,7 +53,11 @@ const formatTime = (iso?: string) => {
         : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 };
 
-/** Tooltip del mensaje fallido con el error que devolvió Meta. */
+/**
+ * Tooltip del mensaje fallido: el motivo en palabras y, debajo, el código y el
+ * texto original de Meta (por si hay que buscarlo o pasárselo a soporte). Sin
+ * código, el error es nuestro (de antes de llamar a Meta) y ya viene en español.
+ */
 const FailedBadge = ({ msg }: { msg: Message }) => (
     <span className="relative group inline-flex items-center gap-1 text-brand-danger font-semibold cursor-pointer">
         <CircleAlert className="w-3.5 h-3.5 transition-transform duration-200 group-hover:scale-110" />
@@ -63,12 +68,17 @@ const FailedBadge = ({ msg }: { msg: Message }) => (
             <span className="absolute -bottom-2 right-6 w-4 h-4 bg-brand-surface
                 border-r border-b border-brand-border rotate-45" />
             <span className="font-bold text-[15px] text-brand-danger">
-                WhatsApp (Meta) respondió con el siguiente error:
+                {msg.errorCode ? 'WhatsApp no entregó el mensaje' : 'No se pudo enviar'}
             </span>
-            <span className="mt-1 text-brand-muted text-[13px] leading-relaxed">
-                <span className="block font-mono text-brand-danger">Error {msg.errorCode || "000"}</span>
-                {msg.errorDetail || "Error desconocido"}
+            <span className="mt-1 text-brand-strong text-[13px] leading-relaxed">
+                {whatsappErrorText(msg.errorCode, msg.errorDetail)}
             </span>
+            {msg.errorCode && (
+                <span className="mt-2 text-brand-muted text-xs leading-relaxed">
+                    <span className="font-mono">Código {msg.errorCode}</span>
+                    {whatsappErrorLabel(msg.errorCode) && msg.errorDetail && <> · {msg.errorDetail}</>}
+                </span>
+            )}
         </span>
     </span>
 );

@@ -4,6 +4,7 @@ import { useTemplates } from "./useTemplates";
 import { extractPlaceholders, isPositional, buttonsNeedingValue } from "../utils/templatePlaceholders";
 import type { Template, TemplateButtonParam } from "../models/template.model";
 import { templateHeaderIssue } from "../utils/templateHeader";
+import { whatsappErrorLabel } from "../utils/whatsappErrors";
 
 interface ErrorItem { message: string; errorCode?: string | null; errorDetail?: string | null }
 
@@ -98,14 +99,18 @@ export const useTemplateForm = (initial?: InitialValues) => {
 export type TemplateForm = ReturnType<typeof useTemplateForm>;
 
 /**
- * El error del envío en una frase. Si fue Meta quien lo rechazó (502), su
- * código y su detalle dicen mucho más que el «Error enviando plantilla» genérico.
+ * El error del envío en una frase. Si fue WhatsApp quien lo rechazó (502), el
+ * motivo en palabras y su código; si no conocemos el código, el detalle que
+ * mandó Meta. Lo demás (400 de validación, 409 sin WhatsApp) ya viene en español.
  */
 export const templateSendError = (err: unknown) => {
     const data = (err as AxiosError<ErrorItem[] | ErrorItem>).response?.data;
     const first = Array.isArray(data) ? data[0] : data;
-    if (first?.errorCode && first.errorDetail) {
-        return `Meta rechazó el mensaje (${first.errorCode}): ${first.errorDetail}`;
+    if (first?.errorCode) {
+        const label = whatsappErrorLabel(first.errorCode);
+        return label
+            ? `WhatsApp rechazó el mensaje: ${label} (código ${first.errorCode}).`
+            : `WhatsApp rechazó el mensaje (código ${first.errorCode})${first.errorDetail ? `: ${first.errorDetail}` : '.'}`;
     }
     return first?.message ?? 'No se pudo enviar la plantilla. Inténtalo de nuevo.';
 };

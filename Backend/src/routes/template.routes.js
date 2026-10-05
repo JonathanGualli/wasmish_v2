@@ -5,7 +5,7 @@ import { validateSchema } from "../middlewares/validator.middleware.js";
 import { sendTemplateSchema } from "../schemas/template.schema.js";
 import {
     getTemplatesController, syncTemplatesController, sendTemplateController,
-    uploadHeaderMediaController, removeHeaderMediaController, getHeaderMediaFileController,
+    uploadHeaderMediaController, uploadHeaderMediaFileController, removeHeaderMediaController, getHeaderMediaFileController,
 } from "../controllers/template.controller.js";
 import { publicApiIpLimiter, publicApiUserLimiter } from "../middlewares/rate.limit.middleware.js";
 
@@ -26,6 +26,7 @@ const readFile = (req, res, next) => rawFile(req, res, (err) => (err
     : next()));
 
 router.put('/templates/:templateId/header-media', authRequired, readFile, uploadHeaderMediaController);
+router.post('/templates/:templateId/header-media/files', authRequired, readFile, uploadHeaderMediaFileController);
 router.delete('/templates/:templateId/header-media', authRequired, removeHeaderMediaController);
 router.get('/templates/media/:id', authRequired, getHeaderMediaFileController);
 

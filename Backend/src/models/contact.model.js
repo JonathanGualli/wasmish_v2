@@ -58,10 +58,15 @@ const contactSchema = new mongoose.Schema({
         type: String,
         default: null,
     },
+    // Etiquetas de la cuenta (`Tag`), como mucho MAX_TAGS_PER_CONTACT.
+    tags: {
+        type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Tag' }],
+        default: [],
+    },
     // Cómo llegó. null = anterior a que existieran los contactos: no se sabe.
     source: {
         type: String,
-        enum: ['inbound', 'manual', 'api', 'ad', null],
+        enum: ['inbound', 'manual', 'api', 'ad', 'import', null],
         default: null,
     },
     referral: {
@@ -103,6 +108,8 @@ contactSchema.index(
     { userId: 1, phone: 1 },
     { name: 'contact_phone_unique', unique: true, partialFilterExpression: { phone: { $type: 'string' } } },
 );
+// El filtro por etiquetas de Contactos y de las campañas.
+contactSchema.index({ userId: 1, tags: 1 });
 contactSchema.index(
     { userId: 1, waUserId: 1 },
     { name: 'contact_waUserId_unique', unique: true, partialFilterExpression: { waUserId: { $type: 'string' } } },

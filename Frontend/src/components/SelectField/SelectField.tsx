@@ -15,7 +15,8 @@ interface SelectFieldProps<T extends string> {
 export const SelectField = <T extends string>({ label, value, options, onChange }: SelectFieldProps<T>) => {
     const id = useId();
     return (
-        <div className="grid gap-[7px] min-w-0">
+        // content-start: junto a un campo con error (más alto), la caja no baja.
+        <div className="grid content-start gap-[7px] min-w-0">
             <label htmlFor={id} className="text-[13px] font-semibold text-brand-strong">{label}</label>
             <div className="relative">
                 <select

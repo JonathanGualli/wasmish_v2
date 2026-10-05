@@ -7,6 +7,7 @@ import {
     buildHeaderComponent,
     isMetaMediaFresh,
     headerMediaFileIssue,
+    headerMediaMismatch,
     META_MEDIA_TTL_MS,
 } from '../src/utils/template.header.js';
 import { validateCampaignMessage } from '../src/utils/campaign.message.js';
@@ -85,6 +86,19 @@ test('headerMediaFileIssue: tipo, tamaño y contenido de verdad', () => {
 
 test('validateCampaignMessage: una campaña no se crea sin el archivo de la cabecera', () => {
     const template = { status: 'APPROVED', category: 'MARKETING', bodyText: 'Hola', buttons: [], ...CON_IMAGEN };
-    assert.deepEqual(validateCampaignMessage(template, {}).map(e => e.field), ['templateId']);
+    // El error es del campo de la cabecera: es donde el asistente deja elegirla.
+    assert.deepEqual(validateCampaignMessage(template, {}).map(e => e.field), ['headerMedia']);
     assert.deepEqual(validateCampaignMessage({ ...template, headerMedia: 'media-id' }, {}), []);
+    // Un formato que no se sabe enviar sigue siendo de la plantilla.
+    const conUbicacion = { ...template, header: { format: 'LOCATION', text: null } };
+    assert.deepEqual(validateCampaignMessage(conUbicacion, {}).map(e => e.field), ['templateId']);
+});
+
+test('headerMediaMismatch: el archivo elegido para un envío tiene que ser del formato de la cabecera', () => {
+    assert.equal(headerMediaMismatch(CON_IMAGEN, { mimeType: 'image/png' }), null);
+    assert.equal(headerMediaMismatch(CON_IMAGEN, { mimeType: 'image/jpeg' }), null);
+    // Un PDF subido para otra plantilla no vale para una cabecera de imagen.
+    assert.match(headerMediaMismatch(CON_IMAGEN, { mimeType: 'application/pdf' }), /pide una imagen/);
+    assert.match(headerMediaMismatch(CON_IMAGEN, null), /no existe/);
+    assert.match(headerMediaMismatch({ header: { format: 'TEXT', text: 'Hola' } }, { mimeType: 'image/png' }), /no lleva ningún archivo/);
 });

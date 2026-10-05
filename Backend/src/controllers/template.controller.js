@@ -271,29 +271,56 @@ export const getTemplatesController = async (req, res) => {
 }
 
 /**
- * PUT /templates/:templateId/header-media — el archivo de la cabecera. El
- * cuerpo es el archivo tal cual (Content-Type = su tipo) y el nombre original
- * va en `X-Filename`. Solo se guarda: se sube a Meta al enviar la primera vez,
- * así que funciona aunque el token de WhatsApp esté caducado.
+ * Valida y guarda el archivo de cabecera que llega en el cuerpo: el archivo tal
+ * cual (Content-Type = su tipo) y el nombre original en `X-Filename`. Solo se
+ * guarda: se sube a Meta al enviar la primera vez, así que funciona aunque el
+ * token de WhatsApp esté caducado. `{ issue }` si no vale para la plantilla.
  */
+const saveUploadedHeaderMedia = async (req, template) => {
+    const buffer = Buffer.isBuffer(req.body) ? req.body : null;
+    const mimeType = String(req.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase();
+    const issue = headerMediaFileIssue(template, { mimeType, size: buffer?.length ?? 0, buffer });
+    if (issue) return { issue };
+
+    const media = await saveHeaderMedia({
+        userId: req.user.id, buffer, mimeType, filename: cleanFilename(req.headers['x-filename']),
+    });
+    return { media };
+};
+
+/** PUT /templates/:templateId/header-media — el archivo de la cabecera de la plantilla. */
 export const uploadHeaderMediaController = async (req, res) => {
     try {
-        const userId = req.user.id;
-        const template = await Template.findOne({ userId, templateId: req.params.templateId });
+        const template = await Template.findOne({ userId: req.user.id, templateId: req.params.templateId });
         if (!template) return res.status(404).json([{ message: 'La plantilla no existe en tu cuenta.' }]);
 
-        const buffer = Buffer.isBuffer(req.body) ? req.body : null;
-        const mimeType = String(req.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase();
-        const issue = headerMediaFileIssue(template, { mimeType, size: buffer?.length ?? 0, buffer });
+        const { issue, media } = await saveUploadedHeaderMedia(req, template);
         if (issue) return res.status(400).json([{ message: issue }]);
 
-        const media = await saveHeaderMedia({
-            userId, buffer, mimeType, filename: cleanFilename(req.headers['x-filename']),
-        });
         template.headerMedia = media._id;
         await template.save();
 
         return res.json(serializeTemplate({ ...template.toObject(), headerMedia: media }));
+    } catch (error) {
+        console.error('Subida del archivo de cabecera falló:', error.message);
+        return res.status(500).json([{ message: error.message }]);
+    }
+};
+
+/**
+ * POST /templates/:templateId/header-media/files — un archivo para la cabecera
+ * de UN envío (una campaña), sin tocar el de la plantilla. Se valida contra
+ * su formato igual que el de la plantilla y devuelve el archivo guardado: quien
+ * envía lo pasa después como `headerMediaId`.
+ */
+export const uploadHeaderMediaFileController = async (req, res) => {
+    try {
+        const template = await Template.findOne({ userId: req.user.id, templateId: req.params.templateId }).lean();
+        if (!template) return res.status(404).json([{ message: 'La plantilla no existe en tu cuenta.' }]);
+
+        const { issue, media } = await saveUploadedHeaderMedia(req, template);
+        if (issue) return res.status(400).json([{ message: issue }]);
+        return res.status(201).json(serializeHeaderMedia(media));
     } catch (error) {
         console.error('Subida del archivo de cabecera falló:', error.message);
         return res.status(500).json([{ message: error.message }]);

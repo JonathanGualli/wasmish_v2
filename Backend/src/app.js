@@ -14,6 +14,7 @@ import whatsappRoutes from './routes/whatsapp.routes.js';
 import adminRoutes from './routes/admin.routes.js';
 import mediaRoutes from './routes/media.routes.js';
 import contactRoutes from './routes/contact.routes.js';
+import tagRoutes from './routes/tag.routes.js';
 import campaignRoutes from './routes/campaign.routes.js';
 
 import { APP_VERSION } from './config.js';
@@ -29,6 +30,10 @@ app.use(cors({
 }));
 
 app.use(morgan('dev'));
+// La vista previa de una importación trae el archivo entero (hasta 10 000
+// filas), que no cabe en los 100 KB por defecto. Va antes del parser general:
+// un cuerpo ya leído, aquel lo deja pasar.
+app.use('/api/contacts/import', express.json({ limit: '3mb' }));
 app.use(express.json({
     strict: true, 
     verify: (req, res, buf) => {
@@ -63,6 +68,7 @@ app.use("/api", whatsappRoutes);
 app.use("/api", adminRoutes);
 app.use("/api", mediaRoutes);
 app.use("/api", contactRoutes);
+app.use("/api", tagRoutes);
 app.use("/api", campaignRoutes);
 
 export default app; 

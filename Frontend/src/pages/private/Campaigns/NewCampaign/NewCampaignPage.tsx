@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { Check, Send } from "lucide-react";
 import { CustomButton } from "../../../../components/Button/Button";
@@ -7,6 +7,7 @@ import { campaignErrors, useCampaignMutations } from "../../../../hooks/useCampa
 import { CampaignPaths } from "../../../../models/routes.models";
 import type { CampaignDraft } from "../../../../utils/campaignDraft";
 import { formatDuration, pluralize, suggestCampaignName } from "../../../../utils/campaignDisplay";
+import { headerMediaRule } from "../../../../utils/templateHeader";
 import { useCampaignWizard, type CampaignWizard } from "./useCampaignWizard";
 import { RecipientsStep } from "./RecipientsStep";
 import { MessageStep } from "./MessageStep";
@@ -17,7 +18,7 @@ type Step = CampaignDraft['step'];
 
 /** Lo que dice el pie de cada paso: qué falta, o qué va a pasar. */
 const footerHint = (wizard: CampaignWizard) => {
-    const { draft, preview, template, messageErrors, showErrors } = wizard;
+    const { draft, preview, template, messageErrors, showErrors, headerUpload } = wizard;
     if (!draft || !preview) return 'Calculando…';
     if (draft.step === 1) {
         return preview.recipients.toSend === 0
@@ -27,6 +28,11 @@ const footerHint = (wizard: CampaignWizard) => {
     if (draft.step === 2) {
         if (!template) return 'Elige una plantilla para continuar.';
         if (preview.recipients.toSend === 0) return 'Con 0 destinatarios no se puede continuar.';
+        const headerRule = headerMediaRule(template);
+        if (headerRule && headerUpload.pending) return `Espera a que termine de subir ${headerRule.the} ${headerRule.noun}.`;
+        if (headerRule && messageErrors.length > 0 && messageErrors.every(e => e.field === 'headerMedia')) {
+            return `Falta ${headerRule.the} ${headerRule.noun} del mensaje.`;
+        }
         if (messageErrors.length > 0) {
             return showErrors
                 ? `Falta completar ${pluralize(messageErrors.length, 'dato', 'datos')}.`
@@ -53,6 +59,18 @@ export const NewCampaignPage = () => {
     // la página, al quedarse sin él, mandaba a la lista en vez de al detalle.
     const [createdId, setCreatedId] = useState<string | null>(null);
 
+    // Al pulsar «Siguiente» con huecos: se baja al primero y se le pone el foco,
+    // para no tener que buscarlo. Se pide con un contador porque los campos en
+    // rojo aparecen en el render siguiente, no en el clic.
+    const contentRef = useRef<HTMLDivElement>(null);
+    const [errorFocusRequest, setErrorFocusRequest] = useState(0);
+    useEffect(() => {
+        if (!errorFocusRequest) return;
+        const field = contentRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]');
+        field?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        field?.focus({ preventScroll: true });
+    }, [errorFocusRequest]);
+
     if (createdId) return <Navigate to={CampaignPaths.detail(createdId)} replace />;
     if (!draft) return <Navigate to={CampaignPaths.list} replace />;
 
@@ -69,7 +87,12 @@ export const NewCampaignPage = () => {
     const submit = () => {
         if (!template || !wizard.previewInput) return;
         create.mutate(
-            { ...wizard.previewInput, templateId: template.templateId, name: draft.name.trim() },
+            {
+                ...wizard.previewInput,
+                templateId: template.templateId,
+                name: draft.name.trim(),
+                saveHeaderAsDefault: Boolean(draft.headerMedia && draft.saveHeaderAsDefault),
+            },
             {
                 onSuccess: (campaign) => {
                     setCreatedId(campaign.id);
@@ -90,19 +113,24 @@ export const NewCampaignPage = () => {
         );
     };
 
+    const showErrors = () => {
+        wizard.setShowErrors(true);
+        setErrorFocusRequest(n => n + 1);
+    };
+
     const handleNext = () => {
         if (draft.step === 1) {
             // Al seguir, el número de ahora pasa a ser el «antes» del aviso de cambios.
             update({ step: 2, selectedCount: preview?.recipients.selected ?? draft.selectedCount });
         } else if (draft.step === 2) {
             if (wizard.messageErrors.length > 0) {
-                wizard.setShowErrors(true);
+                showErrors();
             } else {
                 wizard.setShowErrors(false);
                 update({ step: 3, name: draft.name || suggestCampaignName(template!.name) });
             }
         } else if (wizard.nameMissing || wizard.messageErrors.length > 0) {
-            wizard.setShowErrors(true);
+            showErrors();
         } else {
             submit();
         }
@@ -111,7 +139,10 @@ export const NewCampaignPage = () => {
     // Sin nadie a quien enviar no se avanza en ningún paso: en el 2, una
     // plantilla de marketing puede dejar fuera a todos los dados de baja.
     const hasRecipients = (preview?.recipients.toSend ?? 0) > 0 && !preview?.errors.some(e => e.field === 'recipients');
-    const canAdvance = Boolean(preview) && !isPreviewUpdating && hasRecipients && (draft.step === 1 || Boolean(template));
+    const canAdvance = Boolean(preview) && !isPreviewUpdating && hasRecipients && !wizard.headerUpload.pending
+        && (draft.step === 1 || Boolean(template));
+    // Tras pulsar «Siguiente» con huecos, el pie también lo dice en rojo.
+    const hintIsError = draft.step > 1 && wizard.showErrors && wizard.messageErrors.length > 0;
 
     const nextLabel = draft.step === 3
         ? <><Send size={15} />Enviar a {pluralize(preview?.recipients.toSend ?? 0, 'contacto', 'contactos')}</>
@@ -119,7 +150,7 @@ export const NewCampaignPage = () => {
 
     return (
         <div className="min-h-full flex flex-col">
-            <div className="flex-1 mx-auto w-full max-w-6xl px-5 sm:px-8 pt-6 sm:pt-8 pb-10">
+            <div ref={contentRef} className="flex-1 mx-auto w-full max-w-6xl px-5 sm:px-8 pt-6 sm:pt-8 pb-10">
                 <WizardHeader
                     step={draft.step}
                     description="Una plantilla aprobada para muchos contactos a la vez."
@@ -138,7 +169,9 @@ export const NewCampaignPage = () => {
             <footer className="sticky bottom-0 z-10 bg-brand-surface border-t border-brand-border
                 shadow-[0_-8px_20px_rgba(14,17,22,0.04)]">
                 <div className="mx-auto w-full max-w-6xl px-5 sm:px-8 py-3.5 flex flex-col sm:flex-row sm:items-center gap-3">
-                    <span className="hidden sm:block flex-1 min-w-0 text-[13px] text-brand-muted">{footerHint(wizard)}</span>
+                    <span className={`hidden sm:block flex-1 min-w-0 text-[13px] ${hintIsError ? 'text-brand-danger' : 'text-brand-muted'}`}>
+                        {footerHint(wizard)}
+                    </span>
                     <div className="flex gap-2">
                         <div className="h-11 sm:h-[42px]">
                             <CustomButton

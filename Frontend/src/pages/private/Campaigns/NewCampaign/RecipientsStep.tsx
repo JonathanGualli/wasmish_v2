@@ -62,11 +62,6 @@ export const RecipientsStep = ({ wizard }: { wizard: CampaignWizard }) => {
                     </p>
                 )}
 
-                {counts && counts.withoutPhone > 0 && (
-                    <Callout icon={<Info size={16} />} title={`${pluralize(counts.withoutPhone, 'contacto no tiene', 'contactos no tienen')} teléfono.`}>
-                        Escribieron con su nombre de usuario. Les llega igual; solo importa si una variable usa el teléfono.
-                    </Callout>
-                )}
                 {counts && counts.duplicates > 0 && (
                     <Callout icon={<Info size={16} />} title={`${pluralize(counts.duplicates, 'contacto repetido', 'contactos repetidos')} se enviará una sola vez.`} />
                 )}

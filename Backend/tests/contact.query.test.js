@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { pickContactFields, buildContactSearch, matchesContactSearch, escapeRegex } from '../src/utils/contact.query.js';
+import { pickContactFields, buildContactSearch, buildContactMatch, matchesContactSearch, escapeRegex } from '../src/utils/contact.query.js';
 
 // Lo que pone WhatsApp no se edita a mano: aunque llegue en el body, se ignora.
 test('solo pasan los campos editables', () => {
@@ -73,4 +73,23 @@ test('matchesContactSearch busca lo mismo que la consulta', () => {
     assert.equal(matchesContactSearch(contact, 'luis'), false);
     assert.equal(matchesContactSearch(contact, '  '), true);
     assert.equal(matchesContactSearch({ username: 'sin.telefono' }, '099'), false);
+});
+
+test('la selección filtra por la cuenta, la búsqueda y la baja de publicidad', () => {
+    const match = buildContactMatch({ userId: 'u1', search: 'ana', filter: 'opted_out' });
+    assert.equal(match.userId, 'u1');
+    assert.equal(match.marketingOptOut, true);
+    assert.ok(match.$or);
+});
+
+// «VIP y ESTÁNDAR» en el filtro es mandar a los dos grupos: con $all, una
+// campaña a ambos segmentos se quedaría solo con quien tenga las dos.
+test('varias etiquetas: basta con tener alguna', () => {
+    const match = buildContactMatch({ userId: 'u1', tagIds: ['vip', 'estandar'] });
+    assert.deepEqual(match.tags, { $in: ['vip', 'estandar'] });
+});
+
+test('sin etiquetas no se filtra por ellas', () => {
+    assert.equal('tags' in buildContactMatch({ userId: 'u1' }), false);
+    assert.equal('tags' in buildContactMatch({ userId: 'u1', tagIds: [] }), false);
 });

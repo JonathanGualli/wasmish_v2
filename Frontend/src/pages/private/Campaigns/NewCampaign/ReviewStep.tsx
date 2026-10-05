@@ -2,8 +2,10 @@ import { CircleDollarSign, FlaskConical, Info } from "lucide-react";
 import { AuthField } from "../../../../components/Auth/AuthField";
 import { Callout } from "../../../../components/Callout/Callout";
 import { CategoryPill } from "../../../../components/Chat/TemplateFields";
+import { Pill } from "../../../../components/Pill/Pill";
 import type { CampaignFill } from "../../../../models/campaign.model";
 import { VARIABLE_SOURCE_LABEL, pluralize } from "../../../../utils/campaignDisplay";
+import { HEADER_SOURCE_LABEL, headerMediaRule } from "../../../../utils/templateHeader";
 import type { CampaignWizard } from "./useCampaignWizard";
 import { MessagePreview } from "./MessagePreview";
 
@@ -22,11 +24,12 @@ const SummaryRow = ({ label, children }: { label: string; children: React.ReactN
 
 /** Paso 3: el nombre de la campaña y lo que se va a mandar, antes de mandarlo. */
 export const ReviewStep = ({ wizard }: { wizard: CampaignWizard }) => {
-    const { draft, template, preview, update, fieldError } = wizard;
+    const { draft, template, preview, update, fieldError, headerMedia, headerSource } = wizard;
     if (!draft || !template || !preview) return null;
 
     const { recipients } = preview;
     const isMarketing = template.category === 'MARKETING';
+    const headerRule = headerMediaRule(template);
 
     return (
         <div className="grid lg:grid-cols-[minmax(0,1fr)_340px] gap-8">
@@ -64,6 +67,19 @@ export const ReviewStep = ({ wizard }: { wizard: CampaignWizard }) => {
                             </span>
                         )}
                     </SummaryRow>
+                    {headerRule && headerMedia && headerSource && (
+                        <SummaryRow label={headerRule.title}>
+                            <span className="inline-flex flex-wrap items-center gap-2">
+                                <span className="font-semibold text-brand-text [overflow-wrap:anywhere]">{headerMedia.filename ?? headerRule.title}</span>
+                                <Pill tone={headerSource === 'campaign' ? 'positive' : 'neutral'}>{HEADER_SOURCE_LABEL[headerSource]}</Pill>
+                            </span>
+                            {headerSource === 'campaign' && draft.saveHeaderAsDefault && (
+                                <span className="block mt-1 text-[13px] text-brand-gray-600">
+                                    Al enviar, también pasa a ser {headerRule.the} {headerRule.noun} de la plantilla.
+                                </span>
+                            )}
+                        </SummaryRow>
+                    )}
                     {draft.variables.length + draft.buttons.length > 0 && (
                         <SummaryRow label="Variables">
                             <ul className="grid gap-1 leading-[1.6]">
@@ -98,7 +114,7 @@ export const ReviewStep = ({ wizard }: { wizard: CampaignWizard }) => {
 
             <div className="lg:border-l lg:border-brand-border lg:pl-8">
                 <MessagePreview
-                    template={template}
+                    template={wizard.headerTemplate ?? template}
                     variables={draft.variables}
                     samples={preview.samples}
                     fallbacks={preview.fallbacks}

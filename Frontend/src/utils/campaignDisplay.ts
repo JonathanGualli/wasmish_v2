@@ -1,5 +1,6 @@
 import type { PillTone } from "../components/Pill/Pill";
 import { formatChatTime } from "./formatChatTime";
+import { whatsappErrorText } from "./whatsappErrors";
 import type {
     CampaignRecipient, CampaignStats, CampaignStatus, RecipientState, SkipReason, VariableSource,
 } from "../models/campaign.model";
@@ -61,25 +62,8 @@ export const SKIP_REASON_LABEL: Record<SkipReason, string> = {
     no_identity: 'Sin teléfono ni usuario de WhatsApp',
 };
 
-/**
- * Los errores de Meta más comunes en una campaña, en palabras. El resto se
- * enseña con el detalle que mandó Meta, que viene en inglés.
- */
-const WHATSAPP_ERROR_LABEL: Record<string, string> = {
-    '131026': 'No se pudo entregar (número sin WhatsApp o app desactualizada)',
-    '131047': 'La ventana de 24 h está cerrada',
-    '131048': 'Envío frenado por WhatsApp: demasiados reportes de spam',
-    '131049': 'WhatsApp no lo entregó para no saturar al usuario con publicidad',
-    '131050': 'Pidió no recibir publicidad',
-    '130429': 'WhatsApp pidió bajar el ritmo de envío',
-    '132012': 'No coincide con el formato de la plantilla (p. ej., falta el archivo de la cabecera)',
-    '190': 'El token de WhatsApp caducó',
-    '409': 'La cuenta no tenía WhatsApp conectado',
-};
-
 /** El motivo de un fallo en una frase: el conocido, o el detalle que mandaron. */
-export const failureLabel = (code: string | null, detail: string | null) =>
-    (code && WHATSAPP_ERROR_LABEL[code]) || detail || 'Error desconocido';
+export const failureLabel = (code: string | null, detail: string | null) => whatsappErrorText(code, detail);
 
 /** Por qué está así un destinatario: el motivo del fallo o de la omisión. */
 export const recipientReason = (r: CampaignRecipient): { text: string; code: string | null } | null => {

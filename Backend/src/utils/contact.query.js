@@ -54,6 +54,20 @@ export const buildContactSearch = (search) => {
 };
 
 /**
+ * El `$match` de una selección de contactos: la cuenta, la búsqueda, el filtro
+ * de baja de publicidad y las etiquetas. Con varias etiquetas basta con tener
+ * alguna («VIP o ESTÁNDAR»). Los ids ya convertidos a ObjectId: aggregate no
+ * convierte tipos como find. Los filtros por conversación necesitan el
+ * `$lookup` y los pone `contactSelectionStages`.
+ */
+export const buildContactMatch = ({ userId, search, filter, tagIds = [] }) => {
+    const match = { userId, ...buildContactSearch(search) };
+    if (filter === 'opted_out') match.marketingOptOut = true;
+    if (tagIds.length > 0) match.tags = { $in: tagIds };
+    return match;
+};
+
+/**
  * La misma búsqueda que `buildContactSearch`, sobre un contacto ya cargado:
  * para filtrar una lista que ya está en memoria (los destinatarios de un
  * campaña) sin volver a consultar. Sin búsqueda, todos coinciden.

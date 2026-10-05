@@ -14,6 +14,8 @@ interface MessagePreviewProps {
     fallbacks: Record<string, number>;
     /** Elegir entre los ejemplos («Ver como»); si no, solo el primero. */
     selectable?: boolean;
+    /** De dónde sale el archivo de la cabecera («Imagen de la plantilla»). */
+    headerNote?: string | null;
 }
 
 const sampleBubble = (sample: CampaignSample) => {
@@ -31,7 +33,7 @@ const sampleBubble = (sample: CampaignSample) => {
  * dónde salió. Mientras falte algo por completar no hay ejemplos: se ve la
  * plantilla con los textos fijos puestos y los huecos a la vista.
  */
-export const MessagePreview = ({ template, variables, samples, fallbacks, selectable = true }: MessagePreviewProps) => {
+export const MessagePreview = ({ template, variables, samples, fallbacks, selectable = true, headerNote }: MessagePreviewProps) => {
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const sample = samples.find(s => s.contactId === selectedId) ?? samples[0];
 
@@ -90,6 +92,7 @@ export const MessagePreview = ({ template, variables, samples, fallbacks, select
             <div className="justify-self-end w-full max-w-[300px] grid gap-1">
                 <TemplateBubble bodyText={template.bodyText ?? ''} values={values} highlights={highlights} template={template} />
                 <TemplateButtons buttons={template.buttons} />
+                {headerNote && <span className="justify-self-end text-xs text-brand-muted">{headerNote}</span>}
             </div>
 
             {sample && withFallback.length > 0 && (

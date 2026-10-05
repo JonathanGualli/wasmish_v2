@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { getWindowExpiry, isWindowOpen, WINDOW_MS } from '../src/utils/whatsapp.window.js';
+import { freeTextBlockReason, getWindowExpiry, isWindowOpen, WINDOW_MS } from '../src/utils/whatsapp.window.js';
 
 const AHORA = new Date('2026-08-31T12:00:00Z');
 const haceHoras = (h) => new Date(AHORA.getTime() - h * 60 * 60 * 1000);
@@ -48,4 +48,13 @@ test('una fecha inválida se trata como sin ventana', () => {
 
 test('acepta el timestamp como string ISO', () => {
     assert.equal(isWindowOpen(haceHoras(1).toISOString(), AHORA), true);
+});
+
+// El backend rechaza el texto libre fuera de ventana antes de llamar a Meta
+// (que respondería 131047): el motivo decide qué se le dice al usuario.
+test('freeTextBlockReason: abierta, cerrada o nunca escribió', () => {
+    assert.equal(freeTextBlockReason(haceHoras(3), AHORA), null);
+    assert.equal(freeTextBlockReason(haceHoras(25), AHORA), 'closed');
+    assert.equal(freeTextBlockReason(null, AHORA), 'never');
+    assert.equal(freeTextBlockReason('no-es-una-fecha', AHORA), 'never');
 });

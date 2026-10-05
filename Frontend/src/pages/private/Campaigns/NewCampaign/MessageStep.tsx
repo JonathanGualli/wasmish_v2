@@ -4,10 +4,13 @@ import { Checkbox } from "../../../../components/Checkbox/Checkbox";
 import { TemplatePicker } from "../../../../components/Chat/TemplateFields";
 import { formatTimeAgo, pluralize } from "../../../../utils/campaignDisplay";
 import { placeholderContext } from "../../../../utils/templatePlaceholders";
+import { headerSourceNote } from "../../../../utils/templateHeader";
 import type { Template } from "../../../../models/template.model";
+import type { CampaignFill } from "../../../../models/campaign.model";
 import { bulkDisabledReason, type CampaignWizard } from "./useCampaignWizard";
 import { FillField } from "./FillField";
 import { MessagePreview } from "./MessagePreview";
+import { HeaderMediaField } from "../../../../components/HeaderMediaField/HeaderMediaField";
 
 /** La sincronización más reciente: cualquier plantilla se toca en cada una. */
 const lastSyncedAt = (templates: Template[]) =>
@@ -59,6 +62,9 @@ export const MessageStep = ({ wizard }: { wizard: CampaignWizard }) => {
     const syncedAt = lastSyncedAt(templates);
     const hasFields = draft.variables.length > 0 || draft.buttons.length > 0;
     const toSend = preview?.recipients.toSend ?? 0;
+    // Solo del teléfono se sabe de antemano cuántos no lo tienen: los que
+    // escribieron con su nombre de usuario.
+    const missingCount = (fill: CampaignFill) => (fill.source === 'phone' ? preview?.recipients.withoutPhone : undefined);
 
     return (
         <div className="grid lg:grid-cols-[minmax(0,1fr)_340px] gap-8">
@@ -82,6 +88,17 @@ export const MessageStep = ({ wizard }: { wizard: CampaignWizard }) => {
                         </button>
                     </div>
                 </div>
+
+                {template && (
+                    <HeaderMediaField
+                        template={template}
+                        override={draft.headerMedia ?? null}
+                        upload={wizard.headerUpload}
+                        onRevert={wizard.resetHeaderToTemplate}
+                        saveAsDefault={{ checked: Boolean(draft.saveHeaderAsDefault), onToggle: wizard.toggleSaveHeaderAsDefault }}
+                        error={fieldError('headerMedia')}
+                    />
+                )}
 
                 {template?.category === 'MARKETING' && <OptOutNotice wizard={wizard} />}
 
@@ -110,6 +127,7 @@ export const MessageStep = ({ wizard }: { wizard: CampaignWizard }) => {
                                     onChange={fill => wizard.setVariable(variable.key, fill)}
                                     fixedLabel="Texto para todos"
                                     fallbackCount={preview?.fallbacks[variable.key]}
+                                    missingCount={missingCount(variable)}
                                     error={fieldError(`variables.${variable.key}`)}
                                 />
                             );
@@ -129,6 +147,7 @@ export const MessageStep = ({ wizard }: { wizard: CampaignWizard }) => {
                                     onChange={fill => wizard.setButton(button.index, fill)}
                                     fixedLabel={prefix ? 'Final del enlace' : 'Código para todos'}
                                     fallbackCount={preview?.fallbacks[`button.${button.index}`]}
+                                    missingCount={missingCount(button)}
                                     error={fieldError(`buttons.${button.index}`)}
                                 />
                             );
@@ -140,10 +159,11 @@ export const MessageStep = ({ wizard }: { wizard: CampaignWizard }) => {
             <div className="lg:border-l lg:border-brand-border lg:pl-8">
                 {template ? (
                     <MessagePreview
-                        template={template}
+                        template={wizard.headerTemplate ?? template}
                         variables={draft.variables}
                         samples={preview?.samples ?? []}
                         fallbacks={preview?.fallbacks ?? {}}
+                        headerNote={wizard.headerUpload.pending ? 'Subiendo…' : headerSourceNote(template, wizard.headerSource)}
                     />
                 ) : (
                     <p className="hidden lg:block pt-10 text-center text-[13px] text-brand-subtle">

@@ -73,6 +73,21 @@ export const templateHeaderIssue = (template) => {
 };
 
 /**
+ * Por qué no sirve un archivo ya guardado (`TemplateMedia`) para la cabecera de
+ * esta plantilla, o `null` si sirve. Es el caso de elegir, para un envío
+ * concreto, un archivo distinto del de la plantilla: hay que comprobar que es
+ * del formato que pide (una imagen no vale para una cabecera de vídeo).
+ */
+export const headerMediaMismatch = (template, media) => {
+    const rule = headerMediaRule(template);
+    if (!rule) return 'La cabecera de esta plantilla no lleva ningún archivo.';
+    if (!media) return 'El archivo de la cabecera no existe en tu cuenta.';
+    return rule.mimeTypes.includes(media.mimeType)
+        ? null
+        : `La cabecera pide ${rule.article} ${rule.label}: el archivo elegido no lo es.`;
+};
+
+/**
  * El componente `header` para Meta con el id del archivo subido. El documento
  * lleva su nombre: es el que ve el contacto al abrirlo.
  */

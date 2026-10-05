@@ -38,10 +38,11 @@ export const TemplatesPage = () => {
                 <div className="mb-6">
                     <Callout tone="warning" icon={<ImageUp size={16} />}
                         title={missingMedia === 1
-                            ? 'Una plantilla no se puede enviar hasta que subas el archivo de su cabecera.'
-                            : `${missingMedia} plantillas no se pueden enviar hasta que subas el archivo de su cabecera.`}>
+                            ? 'Una plantilla no tiene guardado el archivo de su cabecera.'
+                            : `${missingMedia} plantillas no tienen guardado el archivo de su cabecera.`}>
                         WhatsApp aprueba que la cabecera lleve una imagen (o un vídeo, o un documento), pero no cuál:
-                        el archivo va en cada envío. Sube el que quieras usar en la columna «Cabecera»; puedes cambiarlo cuando quieras.
+                        el archivo va en cada envío. En una campaña lo eliges al prepararla; para enviarla desde el chat
+                        o la API, sube uno en la columna «Cabecera». Es el que se usa por defecto y puedes cambiarlo cuando quieras.
                     </Callout>
                 </div>
             )}

@@ -1,10 +1,11 @@
 import User from "../models/user.model.js";
 import Conversation from "../models/conversation.model.js";
+import Contact from "../models/contact.model.js";
 import Message from "../models/message.model.js";
 import { decrypt }  from "../utils/crypto.js";
 import { sendTextMessage } from "../libs/whatsapp.js";
 import { sendUser } from './stream.controller.js';
-import { getWindowExpiry } from "../utils/whatsapp.window.js";
+import { freeTextBlockReason, getWindowExpiry } from "../utils/whatsapp.window.js";
 import { processTemplateSending } from "./template.controller.js";
 import { getSendingRecipient, getSendingConversation } from "./contact.controller.js";
 import { contactDisplayName } from "../utils/contact.identity.js";
@@ -86,6 +87,33 @@ export const processMessageSending = async ({
     return { msg, waMessageId, status, errorCode, errorDetail };
 };
 
+// Lo que se le dice al usuario según `freeTextBlockReason`.
+const WINDOW_BLOCK_MESSAGES = {
+    closed: 'La ventana de 24 h está cerrada: el contacto no te escribió en las últimas 24 horas. Envíale una plantilla para retomar la conversación.',
+    never: 'Este contacto todavía no te ha escrito: para empezar la conversación, envíale una plantilla.',
+};
+
+// La conversación de un número, sin crear nada (el envío puede no salir). Por
+// el contacto, o por `contactPhone` si es anterior a los contactos y no se enlazó.
+const findConversationByNumber = async (userId, phone) => {
+    const contact = await Contact.findOne({ userId, phone }).select('_id').lean();
+    return Conversation.findOne({
+        userId,
+        $or: [...(contact ? [{ contactId: contact._id }] : []), { contactPhone: phone }],
+    }).lean();
+};
+
+// El último mensaje del contacto. `lastInboundAt` lo tiene; si falta (una
+// conversación anterior al campo, sin backfill) se busca, para no bloquear un
+// envío válido.
+const lastInboundOf = async (conversation) => {
+    if (!conversation) return null;
+    if (conversation.lastInboundAt) return conversation.lastInboundAt;
+    const last = await Message.findOne({ conversationId: conversation._id, direction: 'inbound' })
+        .sort({ timestamp: -1 }).select('timestamp').lean();
+    return last?.timestamp ?? null;
+};
+
 export const sendMessageController = async (req, res) => {
     try {
         const { id } = req.params; // Puede ser undefined si es un chat nuevo
@@ -107,6 +135,14 @@ export const sendMessageController = async (req, res) => {
             conversation = await Conversation.findOne({ _id: id, userId: user._id });
             if (!conversation) return res.status(404).json([{ message: "Conversation not found" }]);
         }
+
+        // Fuera de la ventana de 24 h, Meta no entrega texto libre (131047): se
+        // rechaza aquí, sin llamarla y sin dejar un mensaje fallido. La interfaz
+        // ya lo frena; esto cubre lo que se cuele (otra pestaña, la ventana que
+        // se cierra mientras se escribe). Lo que sí pasa al chat es el aviso.
+        const target = conversation ?? await findConversationByNumber(user._id, destinationNumber);
+        const blocked = freeTextBlockReason(await lastInboundOf(target));
+        if (blocked) return res.status(409).json([{ message: WINDOW_BLOCK_MESSAGES[blocked], code: 'window_closed' }]);
 
         // Llamamos al servicio (que ahora persiste incluso si el envío falla)
         const { msg, status, waMessageId, errorCode, errorDetail } = await processMessageSending({

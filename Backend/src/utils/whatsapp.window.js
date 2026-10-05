@@ -21,3 +21,12 @@ export const isWindowOpen = (lastInboundAt, now = new Date()) => {
     const expiry = getWindowExpiry(lastInboundAt);
     return expiry !== null && expiry.getTime() > now.getTime();
 };
+
+// Por qué no se puede mandar texto libre, o null si se puede: 'never' si el
+// contacto nunca escribió (hay que empezar con una plantilla) y 'closed' si
+// escribió hace más de 24 h. Se mira antes de llamar a Meta, que respondería
+// 131047 y dejaría un mensaje fallido en el chat.
+export const freeTextBlockReason = (lastInboundAt, now = new Date()) => {
+    if (isWindowOpen(lastInboundAt, now)) return null;
+    return getWindowExpiry(lastInboundAt) ? 'closed' : 'never';
+};

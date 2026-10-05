@@ -1,0 +1,14 @@
+Celular;Nombres;Apellidos;Correo;Razón social;Grupo
+0990099001;María José;Peña Ibáñez;mjose@ejemplo.com;Ferretería La Estrella;VIP; Quito
++593 99 009 9002;Andrés;Muñoz;andres@ejemplo.com;;ESTÁNDAR
+00593990099003;Lucía;Núñez;;Distribuidora Ñandú;VIP
+990099004;Excel le quitó el cero;;;;
+5,93990E+11;Notación científica;;;;
+099123;Demasiado corto;;;;
+099-ABC-123;Con letras;;;;
+;Sin teléfono;;sin@ejemplo.com;;
+022099005;Teléfono fijo;;;Oficina central;
++57 300 099 9006;Camilo;Restrepo;camilo@ejemplo.co;;Colombia
+099 009 9001;María;Peña;otra@ejemplo.com;;Mayorista
+0990099007;Email roto;;roto@;;
+0990099008;NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN;;;;

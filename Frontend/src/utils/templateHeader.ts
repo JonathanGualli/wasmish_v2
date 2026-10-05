@@ -1,17 +1,32 @@
-import type { Template } from '../models/template.model';
+import type { Template, TemplateHeaderMedia } from '../models/template.model';
 
 /**
  * Lo que admite la cabecera de cada formato al subir su archivo. Mismos tipos y
  * topes que `HEADER_MEDIA_RULES` del backend (utils/template.header.js), que es
- * quien decide: esto solo avisa antes de subir.
+ * quien decide: esto solo avisa antes de subir. Llevan también las palabras
+ * con las que se nombra el archivo, porque concuerdan con su tipo: «la imagen»,
+ * «el vídeo», «otra», «otro»…
  */
 export const HEADER_MEDIA = {
-    IMAGE: { accept: 'image/jpeg,image/png', types: 'JPG o PNG', maxBytes: 5 * 1024 * 1024, noun: 'imagen', article: 'una', upload: 'súbela' },
-    VIDEO: { accept: 'video/mp4,video/3gpp', types: 'MP4 o 3GP', maxBytes: 16 * 1024 * 1024, noun: 'vídeo', article: 'un', upload: 'súbelo' },
-    DOCUMENT: { accept: 'application/pdf', types: 'PDF', maxBytes: 16 * 1024 * 1024, noun: 'documento', article: 'un', upload: 'súbelo' },
+    IMAGE: {
+        accept: 'image/jpeg,image/png', types: 'JPG o PNG', maxBytes: 5 * 1024 * 1024,
+        noun: 'imagen', title: 'Imagen', the: 'la', article: 'una', another: 'otra', toThe: 'a la',
+        saved: 'guardada', noneSaved: 'ninguna guardada', upload: 'súbela', dropHint: 'o arrástrala aquí',
+    },
+    VIDEO: {
+        accept: 'video/mp4,video/3gpp', types: 'MP4 o 3GP', maxBytes: 16 * 1024 * 1024,
+        noun: 'vídeo', title: 'Vídeo', the: 'el', article: 'un', another: 'otro', toThe: 'al',
+        saved: 'guardado', noneSaved: 'ninguno guardado', upload: 'súbelo', dropHint: 'o arrástralo aquí',
+    },
+    DOCUMENT: {
+        accept: 'application/pdf', types: 'PDF', maxBytes: 16 * 1024 * 1024,
+        noun: 'documento', title: 'Documento', the: 'el', article: 'un', another: 'otro', toThe: 'al',
+        saved: 'guardado', noneSaved: 'ninguno guardado', upload: 'súbelo', dropHint: 'o arrástralo aquí',
+    },
 } as const;
 
 export type HeaderMediaFormat = keyof typeof HEADER_MEDIA;
+export type HeaderMediaRule = (typeof HEADER_MEDIA)[HeaderMediaFormat];
 
 /** Las reglas del archivo que pide la cabecera, o `null` si no pide ninguno. */
 export const headerMediaRule = (template?: Template | null) =>
@@ -40,8 +55,45 @@ export const templateHeaderIssue = (template: Template): string | null => {
     return 'Su cabecera es de un tipo que Wasmish no sabe enviar.';
 };
 
-/** «1,4 MB», «312 KB». */
+/** «1,4 MB», «312 KB», «5 MB». */
 export const formatFileSize = (bytes: number) =>
     bytes < 1024 * 1024
         ? `${Math.max(1, Math.round(bytes / 1024))} KB`
-        : `${(bytes / (1024 * 1024)).toFixed(1).replace('.', ',')} MB`;
+        : `${(bytes / (1024 * 1024)).toFixed(1).replace('.', ',').replace(/,0$/, '')} MB`;
+
+/**
+ * Por qué no vale el archivo para la cabecera, o `null` si vale. Se mira antes
+ * de subirlo para no mandar megas para nada; el backend lo vuelve a comprobar
+ * (`headerMediaFileIssue`), y además mira que los bytes sean de ese tipo.
+ */
+export const headerFileIssue = (rule: HeaderMediaRule, file: { name: string; type: string; size: number }) => {
+    if (!rule.accept.split(',').includes(file.type)) {
+        return `La cabecera pide ${rule.article} ${rule.noun}: elige un archivo ${rule.types}. «${file.name}» no lo es.`;
+    }
+    if (file.size > rule.maxBytes) {
+        return `El archivo pesa ${formatFileSize(file.size)}: el máximo es ${formatFileSize(rule.maxBytes)}.`;
+    }
+    return null;
+};
+
+const FILE_EXTENSION: Record<string, string> = {
+    'image/jpeg': 'JPG', 'image/png': 'PNG', 'video/mp4': 'MP4', 'video/3gpp': '3GP', 'application/pdf': 'PDF',
+};
+
+/** «JPG · 312 KB»: el tipo y el peso de un archivo de cabecera. */
+export const headerFileMeta = (media: TemplateHeaderMedia) =>
+    [FILE_EXTENSION[media.mimeType], formatFileSize(media.size)].filter(Boolean).join(' · ');
+
+/** De dónde sale el archivo que se manda en un envío. */
+export type HeaderSource = 'template' | 'campaign';
+
+export const HEADER_SOURCE_LABEL: Record<HeaderSource, string> = {
+    template: 'De la plantilla',
+    campaign: 'Solo para esta campaña',
+};
+
+/** «Imagen de la plantilla», «Vídeo solo para esta campaña»: debajo de la vista previa. */
+export const headerSourceNote = (template: Template, source: HeaderSource | null) => {
+    const rule = headerMediaRule(template);
+    return rule && source ? `${rule.title} ${HEADER_SOURCE_LABEL[source].toLowerCase()}` : null;
+};

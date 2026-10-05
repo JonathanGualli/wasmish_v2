@@ -3,9 +3,10 @@ import Campaign from "../models/campaign.model.js";
 import CampaignRecipient from "../models/campaign.recipient.model.js";
 import Contact from "../models/contact.model.js";
 import Template from "../models/template.model.js";
+import TemplateMedia from "../models/template.media.model.js";
 import User from "../models/user.model.js";
 import Message from "../models/message.model.js";
-import { contactSelectionStages } from "./contact.controller.js";
+import { selectionQueryStages } from "./contact.controller.js";
 import { renderTemplateBody } from "./template.controller.js";
 import { wakeCampaignWorker } from "../workers/campaign.worker.js";
 import {
@@ -16,7 +17,9 @@ import {
 } from "../utils/campaign.message.js";
 import { recipientSkipReason, shouldExcludeOptedOut } from "../utils/campaign.status.js";
 import { contactDisplayName } from "../utils/contact.identity.js";
-import { CONTACT_FILTERS, matchesContactSearch } from "../utils/contact.query.js";
+import { headerMediaMismatch } from "../utils/template.header.js";
+import { headerMediaFileExists } from "../services/template.media.service.js";
+import { matchesContactSearch } from "../utils/contact.query.js";
 import { CAMPAIGN_DRY_RUN, CAMPAIGN_MAX_RECIPIENTS, CAMPAIGN_RATE_PER_SECOND } from "../config.js";
 
 const PAGE_SIZE = 20;
@@ -41,7 +44,7 @@ const findOwnedCampaign = (userId, id) =>
 /**
  * Los contactos elegidos, como mucho CAMPAIGN_MAX_RECIPIENTS. `ids` comprueba
  * que sean de la cuenta (un id ajeno cuenta como no encontrado); `query` repite
- * la búsqueda y el filtro de la lista de Contactos.
+ * la búsqueda, el filtro y las etiquetas de la lista de Contactos.
  */
 const selectContacts = async (userId, recipients) => {
     if (recipients.mode === 'ids') {
@@ -54,11 +57,8 @@ const selectContacts = async (userId, recipients) => {
         };
     }
 
-    const filter = CONTACT_FILTERS.includes(recipients.filter) ? recipients.filter : 'all';
-    const excludeIds = (recipients.excludeIds ?? []).map(id => new mongoose.Types.ObjectId(id));
     const contacts = await Contact.aggregate([
-        ...contactSelectionStages({ userId: new mongoose.Types.ObjectId(userId), search: recipients.search, filter }),
-        { $match: { _id: { $nin: excludeIds } } },
+        ...selectionQueryStages(userId, recipients),
         { $sort: { _id: 1 } },
         // Uno de más para saber si se pasó del tope sin contarlos todos.
         { $limit: CAMPAIGN_MAX_RECIPIENTS + 1 },
@@ -77,15 +77,39 @@ const parsePage = (query) => ({
     limit: Math.min(Math.max(parseInt(query.limit) || PAGE_SIZE, 1), MAX_PAGE_SIZE),
 });
 
+/**
+ * La plantilla con el archivo de cabecera que usará la campaña: el elegido en
+ * el asistente (`headerMediaId`) en vez del de la plantilla. Tiene que ser de
+ * la cuenta, del formato de la cabecera y seguir en disco.
+ */
+const withCampaignHeader = async (userId, template, headerMediaId) => {
+    if (!template || !headerMediaId) return { template, errors: [] };
+
+    const media = mongoose.isValidObjectId(headerMediaId)
+        ? await TemplateMedia.findOne({ _id: headerMediaId, userId }).lean()
+        : null;
+    const mismatch = headerMediaMismatch(template, media);
+    if (mismatch) return { template, errors: [{ field: 'headerMedia', message: mismatch }] };
+    if (!await headerMediaFileExists(media)) {
+        return { template, errors: [{ field: 'headerMedia', message: 'El archivo ya no está en el servidor: súbelo otra vez.' }] };
+    }
+    return { template: { ...template, headerMedia: media._id }, errors: [] };
+};
+
 const buildDraft = async (userId, body) => {
     // Sin plantilla (vista previa del paso de destinatarios) solo se cuentan
     // los contactos: no hay mensaje que validar todavía.
-    const template = body.templateId ? await Template.findOne({ userId, templateId: body.templateId }).lean() : null;
+    const stored = body.templateId ? await Template.findOne({ userId, templateId: body.templateId }).lean() : null;
+    const { template, errors: headerErrors } = await withCampaignHeader(userId, stored, body.headerMediaId);
     const config = { variables: body.variables ?? [], buttons: body.buttons ?? [] };
     // El que vale, no el que se pidió: es el que se guarda en la campaña.
     const excludeOptedOut = shouldExcludeOptedOut(template, body.excludeOptedOut);
 
-    const errors = body.templateId ? validateCampaignMessage(template, config) : [];
+    // Si el archivo elegido no vale, ese es el error de la cabecera (no «falta»).
+    const messageErrors = body.templateId ? validateCampaignMessage(template, config) : [];
+    const errors = headerErrors.length > 0
+        ? [...headerErrors, ...messageErrors.filter(e => e.field !== 'headerMedia')]
+        : messageErrors;
     const { contacts, duplicates, notFound } = await selectContacts(userId, body.recipients);
 
     if (contacts.length > CAMPAIGN_MAX_RECIPIENTS) {
@@ -147,7 +171,9 @@ const summarizeDraft = (draft) => {
             toSend: draft.sendable.length,
             optedOut: count(p => p.contact.marketingOptOut),
             excludedOptedOut: count(p => p.skipReason === 'opted_out'),
-            withoutPhone: count(p => !p.contact.phone),
+            // De los que lo recibirán: es lo que importa si una variable usa el
+            // teléfono (la UI lo avisa en esa variable, no antes).
+            withoutPhone: draft.sendable.filter(p => !p.contact.phone).length,
             duplicates: draft.duplicates,
             notFound: draft.notFound,
         },
@@ -264,6 +290,12 @@ export const createCampaign = async (req, res) => {
             skipReason,
             processedAt: skipReason ? new Date() : null,
         })), { ordered: false });
+
+        // «Usar también como imagen de la plantilla»: el archivo elegido pasa a
+        // ser el de la plantilla para los envíos siguientes.
+        if (req.body.saveHeaderAsDefault && req.body.headerMediaId && template.headerMedia) {
+            await Template.updateOne({ userId, templateId: template.templateId }, { $set: { headerMedia: template.headerMedia } });
+        }
 
         wakeCampaignWorker();
         console.log('Campaña creada:', {

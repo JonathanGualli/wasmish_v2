@@ -4,7 +4,7 @@ import { Pill } from "../../../components/Pill/Pill";
 import { useNoticeContext } from "../../../components/Notice/context/UseNoticeContext";
 import { parseError, useTemplates } from "../../../hooks/useTemplates";
 import type { Template } from "../../../models/template.model";
-import { formatFileSize, headerMediaRule, headerMediaUrl, templateHeaderIssue } from "../../../utils/templateHeader";
+import { formatFileSize, headerFileIssue, headerMediaRule, headerMediaUrl, templateHeaderIssue } from "../../../utils/templateHeader";
 
 const linkButton = `text-[12.5px] font-semibold cursor-pointer hover:underline disabled:text-brand-subtle
     disabled:cursor-wait disabled:no-underline`;
@@ -61,13 +61,9 @@ export const TemplateHeaderCell = ({ template }: { template: Template }) => {
         const file = event.target.files?.[0];
         event.target.value = '';   // elegir el mismo archivo otra vez también avisa
         if (!file) return;
-        // El backend lo vuelve a mirar; esto ahorra subir megas para nada.
-        if (!rule.accept.split(',').includes(file.type)) {
-            notify(`La cabecera pide ${rule.article} ${rule.noun}: elige un archivo ${rule.types}.`);
-            return;
-        }
-        if (file.size > rule.maxBytes) {
-            notify(`El archivo pesa ${formatFileSize(file.size)}: el máximo es ${formatFileSize(rule.maxBytes)}.`);
+        const issue = headerFileIssue(rule, file);
+        if (issue) {
+            notify(issue);
             return;
         }
         uploadHeaderMedia.mutate({ templateId: template.templateId, file }, {

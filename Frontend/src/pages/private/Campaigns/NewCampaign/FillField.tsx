@@ -18,6 +18,11 @@ interface FillFieldProps {
     fixedLabel: string;
     /** Cuántos destinatarios no tienen el dato y usarán la reserva. */
     fallbackCount?: number;
+    /**
+     * Cuántos no tienen el dato, aunque la reserva siga vacía (`fallbackCount`
+     * solo llega con el mensaje completo). Hoy solo se sabe del teléfono.
+     */
+    missingCount?: number;
     error?: string;
 }
 
@@ -25,9 +30,18 @@ interface FillFieldProps {
  * Una variable o un botón de la campaña: de dónde sale el valor y, si sale del
  * contacto, qué se pone cuando no lo tiene (Meta rechaza una variable vacía).
  */
-export const FillField = ({ tag, context, fill, onChange, fixedLabel, fallbackCount = 0, error }: FillFieldProps) => {
+export const FillField = ({ tag, context, fill, onChange, fixedLabel, fallbackCount = 0, missingCount = 0, error }: FillFieldProps) => {
     const isFixed = fill.source === 'fixed';
     const noun = fill.source === 'fixed' ? '' : VARIABLE_SOURCE_NOUN[fill.source];
+    const fallback = fill.fallback?.trim();
+    // El conteo exacto llega con el mensaje completo; mientras tanto, el que se
+    // sabe de antemano (el teléfono).
+    const missing = fallbackCount || missingCount;
+    // Corto: la tarjeta ya dice de qué variable se trata. El largo del backend
+    // («Escribe el texto de la variable {{2}}») queda para lo que no sea un hueco.
+    const shortError = error && (isFixed
+        ? (fill.value?.trim() ? error : 'Escribe el texto.')
+        : (fallback ? error : 'Escribe el valor de reserva.'));
 
     return (
         <div className={`border rounded-xl px-4 py-3.5 grid gap-3 ${error ? 'border-brand-danger-border' : 'border-brand-border'}`}>
@@ -51,7 +65,7 @@ export const FillField = ({ tag, context, fill, onChange, fixedLabel, fallbackCo
                         value={fill.value ?? ''}
                         onChange={e => onChange({ ...fill, value: e.target.value })}
                         maxLength={1024}
-                        error={error}
+                        error={shortError}
                     />
                 ) : (
                     <AuthField
@@ -60,15 +74,17 @@ export const FillField = ({ tag, context, fill, onChange, fixedLabel, fallbackCo
                         value={fill.fallback ?? ''}
                         onChange={e => onChange({ ...fill, fallback: e.target.value })}
                         maxLength={1024}
-                        error={error}
+                        error={shortError}
                     />
                 )}
             </div>
 
-            {!isFixed && fallbackCount > 0 && fill.fallback?.trim() && (
+            {/* Con el error a la vista sobra el «escribe qué verán»; el número, cuando ya hay reserva. */}
+            {!isFixed && missing > 0 && (fallback || !error) && (
                 <div className="flex items-center gap-2 text-[12.5px] text-brand-strong">
                     <span className="w-3.5 flex-none border-b-[1.5px] border-dashed border-brand-accent-strong" />
-                    {pluralize(fallbackCount, `contacto no tiene ${noun}`, `contactos no tienen ${noun}`)}: verán «{fill.fallback.trim()}».
+                    {pluralize(missing, `contacto no tiene ${noun}`, `contactos no tienen ${noun}`)}
+                    {fallback ? `: verán «${fallback}».` : ': escribe qué verán en el valor de reserva.'}
                 </div>
             )}
         </div>

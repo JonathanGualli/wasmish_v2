@@ -1,4 +1,5 @@
 import type { CampaignButton, CampaignRecipientsInput, CampaignVariable } from "../models/campaign.model";
+import type { TemplateHeaderMedia } from "../models/template.model";
 
 /**
  * Borrador de «Nueva campaña»: el que se empezó y no se terminó. Hay uno a la
@@ -27,6 +28,13 @@ export interface CampaignDraft {
     variables: CampaignVariable[];
     buttons: CampaignButton[];
     excludeOptedOut: boolean;
+    /**
+     * El archivo de la cabecera subido para esta campaña, en vez del de la
+     * plantilla. Opcional: un borrador guardado antes no lo trae.
+     */
+    headerMedia?: TemplateHeaderMedia | null;
+    /** «Usar también como imagen de la plantilla». */
+    saveHeaderAsDefault?: boolean;
     name: string;
     /** ISO de la última edición, para «editado hace…». */
     updatedAt: string;
@@ -44,6 +52,8 @@ export const newCampaignDraft = (recipients: CampaignRecipientsInput, selectedCo
     buttons: [],
     // Solo cuenta con plantillas de marketing (lo decide el backend).
     excludeOptedOut: true,
+    headerMedia: null,
+    saveHeaderAsDefault: false,
     name: '',
     updatedAt: new Date().toISOString(),
 });

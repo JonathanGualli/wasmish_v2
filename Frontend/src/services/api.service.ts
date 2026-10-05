@@ -1,6 +1,6 @@
 import type { QueryFunctionContext } from '@tanstack/react-query';
 import axios from 'axios';
-import type { Template, TemplateButtonParam } from '../models/template.model';
+import type { Template, TemplateButtonParam, TemplateHeaderMedia } from '../models/template.model';
 import type { ContactFilter, ContactInput } from '../models/contact.model';
 import type { CampaignAudienceInput, CampaignDraftInput, CreateCampaignInput, RecipientState } from '../models/campaign.model';
 
@@ -156,6 +156,24 @@ export const uploadTemplateHeaderMediaService = async (templateId: string, file:
     const { data } = await axios.put(`${API_URL}/templates/${templateId}/header-media`, file, {
         withCredentials: true,
         headers: { 'Content-Type': file.type || 'application/octet-stream', 'X-Filename': encodeURIComponent(file.name) },
+    });
+    return data;
+}
+
+// Un archivo para la cabecera de UN envío (una campaña), sin cambiar el de la
+// plantilla. Se valida contra su formato y devuelve el archivo guardado. Un
+// vídeo pesa hasta 16 MB: `onProgress` cuenta los bytes ya enviados y `signal`
+// deja cancelarlo.
+export const uploadHeaderMediaFileService = async (
+    templateId: string,
+    file: File,
+    { onProgress, signal }: { onProgress?: (loadedBytes: number) => void; signal?: AbortSignal } = {},
+): Promise<TemplateHeaderMedia> => {
+    const { data } = await axios.post(`${API_URL}/templates/${templateId}/header-media/files`, file, {
+        withCredentials: true,
+        headers: { 'Content-Type': file.type || 'application/octet-stream', 'X-Filename': encodeURIComponent(file.name) },
+        onUploadProgress: (event) => onProgress?.(event.loaded),
+        signal,
     });
     return data;
 }

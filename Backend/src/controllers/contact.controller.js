@@ -3,9 +3,11 @@ import Contact from "../models/contact.model.js";
 import Conversation from "../models/conversation.model.js";
 import Message from "../models/message.model.js";
 import { hasContactIdentity, mergeContactUpdates, contactDisplayName } from "../utils/contact.identity.js";
-import { pickContactFields, buildContactSearch, CONTACT_FILTERS } from "../utils/contact.query.js";
+import { pickContactFields, buildContactMatch, CONTACT_FILTERS } from "../utils/contact.query.js";
 import { getWindowExpiry } from "../utils/whatsapp.window.js";
 import { resolveMarketingPreference } from "../utils/marketing.preference.js";
+import { MAX_TAGS_PER_CONTACT } from "../utils/contact.tags.js";
+import { resolveOwnedTagIds } from "../services/tag.service.js";
 
 // ---------------------------------------------------------------------------
 // Contactos y su conversación. Lo usan los sitios por donde entra un número o
@@ -218,6 +220,8 @@ const serializeContact = (contact, conversation = null) => ({
     notes: contact.notes ?? null,
     source: contact.source ?? null,
     referral: contact.referral ?? null,
+    // Solo los ids: los nombres los tiene el front con GET /tags.
+    tagIds: (contact.tags ?? []).map(String),
     marketingOptOut: Boolean(contact.marketingOptOut),
     marketingOptOutAt: toIso(contact.marketingOptOutAt),
     conversationId: conversation ? String(conversation._id) : null,
@@ -239,6 +243,9 @@ const sendDuplicatePhone = async (res, userId, phone) => {
     });
 };
 
+const sendUnknownTags = (res) =>
+    sendContactError(res, 400, 'Alguna etiqueta ya no existe: vuelve a elegirlas.', { field: 'tagIds' });
+
 /**
  * Las etapas de aggregate que dejan los contactos de una búsqueda y un filtro,
  * cada uno con su `conversation` (o null). Las comparten la lista y las
@@ -246,9 +253,8 @@ const sendDuplicatePhone = async (res, userId, phone) => {
  *
  * `userId` como ObjectId: aggregate no convierte tipos como find.
  */
-export const contactSelectionStages = ({ userId, search, filter }) => {
-    const match = { userId, ...buildContactSearch(search) };
-    if (filter === 'opted_out') match.marketingOptOut = true;
+export const contactSelectionStages = ({ userId, search, filter, tagIds }) => {
+    const match = buildContactMatch({ userId, search, filter, tagIds });
 
     const conversationMatch = {
         with_conversation: [{ $match: { conversation: { $ne: null } } }],
@@ -264,8 +270,27 @@ export const contactSelectionStages = ({ userId, search, filter }) => {
     ];
 };
 
+/** Los ids válidos como ObjectId; los mal formados se ignoran. */
+const toObjectIds = (ids = []) =>
+    ids.filter(id => mongoose.isValidObjectId(id)).map(id => new mongoose.Types.ObjectId(id));
+
 /**
- * GET /contacts?search=&filter=&page=&limit=
+ * Una selección «todos los que coinciden» (`mode: 'query'`): la búsqueda, el
+ * filtro y las etiquetas de la lista de Contactos, menos los desmarcados. La
+ * comparten las campañas y el etiquetado en bloque.
+ */
+export const selectionQueryStages = (userId, { search, filter, tagIds, excludeIds }) => [
+    ...contactSelectionStages({
+        userId: new mongoose.Types.ObjectId(userId),
+        search,
+        filter: CONTACT_FILTERS.includes(filter) ? filter : 'all',
+        tagIds: toObjectIds(tagIds ?? []),
+    }),
+    { $match: { _id: { $nin: toObjectIds(excludeIds ?? []) } } },
+];
+
+/**
+ * GET /contacts?search=&filter=&tags=&page=&limit=
  *
  * Ordena por actividad: la última conversación o, si no la hay, la fecha de
  * alta. Así un contacto recién creado aparece arriba y no al fondo con los
@@ -278,9 +303,11 @@ export const listContacts = async (req, res) => {
         const page = Math.max(parseInt(req.query.page) || 1, 1);
         const limit = Math.min(Math.max(parseInt(req.query.limit) || PAGE_SIZE, 1), MAX_PAGE_SIZE);
         const filter = CONTACT_FILTERS.includes(req.query.filter) ? req.query.filter : 'all';
+        // `?tags=id,id`: los que tienen alguna de esas etiquetas.
+        const tagIds = toObjectIds(String(req.query.tags ?? '').split(',').filter(Boolean));
 
         const [result] = await Contact.aggregate([
-            ...contactSelectionStages({ userId, search: req.query.search, filter }),
+            ...contactSelectionStages({ userId, search: req.query.search, filter, tagIds }),
             { $addFields: { activityAt: { $ifNull: ['$conversation.lastMessageAt', '$createdAt'] } } },
             { $sort: { activityAt: -1, _id: -1 } },
             { $facet: {
@@ -341,7 +368,10 @@ export const createContact = async (req, res) => {
     const userId = req.user.id;
     const fields = pickContactFields(req.body);
     try {
-        const contact = await Contact.create({ userId, ...fields, source: 'manual' });
+        const tags = await resolveOwnedTagIds(userId, req.body.tagIds ?? []);
+        if (!tags) return sendUnknownTags(res);
+
+        const contact = await Contact.create({ userId, ...fields, tags, source: 'manual' });
         return res.status(201).json(serializeContact(contact));
     } catch (error) {
         if (error.code === 11000) return sendDuplicatePhone(res, userId, fields.phone);
@@ -364,6 +394,12 @@ export const updateContact = async (req, res) => {
         const conversation = await findContactConversation(userId, contact._id);
         if (conversation && fields.phone !== undefined && fields.phone !== contact.phone) {
             return sendContactError(res, 409, 'El número no se puede cambiar: el historial de WhatsApp es de este número.', { field: 'phone' });
+        }
+
+        if (req.body.tagIds !== undefined) {
+            const tags = await resolveOwnedTagIds(userId, req.body.tagIds ?? []);
+            if (!tags) return sendUnknownTags(res);
+            contact.tags = tags;
         }
 
         Object.assign(contact, fields);
@@ -390,6 +426,43 @@ export const deleteContact = async (req, res) => {
 
         await Contact.deleteOne({ _id: contact._id, userId });
         return res.sendStatus(204);
+    } catch (error) {
+        return sendContactError(res, 500, error.message);
+    }
+};
+
+/** Los ids de los contactos de una selección (ver `contactSelectionSchema`). */
+const selectedContactIds = async (userId, selection) => {
+    const stages = selection.mode === 'ids'
+        ? [{ $match: { userId: new mongoose.Types.ObjectId(userId), _id: { $in: toObjectIds(selection.contactIds) } } }]
+        : selectionQueryStages(userId, selection);
+    const rows = await Contact.aggregate([...stages, { $project: { _id: 1 } }]);
+    return rows.map(row => row._id);
+};
+
+/**
+ * POST /contacts/tags — añadir y quitar etiquetas a muchos a la vez: los
+ * marcados o «todos los que coinciden». Un solo update por contacto, con las
+ * etiquetas que tenía menos las quitadas más las añadidas. A quien se pasaría
+ * de MAX_TAGS_PER_CONTACT no se le toca y se cuenta en `overLimit`.
+ */
+export const bulkTagContacts = async (req, res) => {
+    const userId = req.user.id;
+    try {
+        const add = await resolveOwnedTagIds(userId, req.body.add ?? []);
+        if (!add) return sendUnknownTags(res);
+        // Quitar una que no es de la cuenta no hace nada: no hace falta comprobarla.
+        const remove = toObjectIds(req.body.remove ?? []);
+
+        const contactIds = await selectedContactIds(userId, req.body.selection);
+        if (contactIds.length === 0) return res.json({ matched: 0, modified: 0, overLimit: 0 });
+
+        const nextTags = { $setUnion: [{ $setDifference: [{ $ifNull: ['$tags', []] }, remove] }, add] };
+        const { matchedCount, modifiedCount } = await Contact.updateMany(
+            { _id: { $in: contactIds }, userId, $expr: { $lte: [{ $size: nextTags }, MAX_TAGS_PER_CONTACT] } },
+            [{ $set: { tags: nextTags } }],
+        );
+        return res.json({ matched: contactIds.length, modified: modifiedCount, overLimit: contactIds.length - matchedCount });
     } catch (error) {
         return sendContactError(res, 500, error.message);
     }

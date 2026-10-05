@@ -1,6 +1,6 @@
-import { Copy, ExternalLink, FileText, ImageOff, Phone, Reply, Video } from 'lucide-react';
+import { Copy, ExternalLink, FileText, ImageOff, Phone, Play, Reply } from 'lucide-react';
 import type { Template, TemplateButton } from '../../models/template.model';
-import { headerMediaRule, headerMediaUrl } from '../../utils/templateHeader';
+import { headerFileMeta, headerMediaRule, headerMediaUrl } from '../../utils/templateHeader';
 
 const BUTTON_ICON: Record<string, React.ReactNode> = {
   URL: <ExternalLink size={14} />,
@@ -89,19 +89,32 @@ const TemplateHeaderPreview = ({ template }: { template: Template }) => {
   const media = template.headerMedia;
   if (!media) {
     return (
-      <div className="flex items-center justify-center gap-2 h-24 mb-2 rounded-[8px] border border-dashed
-        border-brand-on-deep-subtle text-[13px] text-brand-on-deep-muted">
-        <ImageOff size={15} />Sin {rule.noun}
+      <div className="flex items-center justify-center gap-2 h-24 mb-2 px-3 rounded-[8px] border border-dashed text-center
+        border-brand-on-deep-subtle text-[13px] leading-[1.45] text-brand-on-deep-muted">
+        <ImageOff size={15} className="flex-none" />Sin {rule.noun}, WhatsApp no envía este mensaje.
       </div>
     );
   }
   if (header.format === 'IMAGE') {
     return <img src={headerMediaUrl(media.id)} alt="" className="w-full max-h-[200px] object-cover rounded-[8px] mb-2" />;
   }
+  if (header.format === 'VIDEO') {
+    return (
+      <div className="h-36 mb-2 rounded-[8px] bg-brand-ink flex items-center justify-center">
+        <span className="w-12 h-12 rounded-full bg-brand-deep-hover text-white flex items-center justify-center">
+          <Play size={20} fill="currentColor" />
+        </span>
+      </div>
+    );
+  }
+  // El documento no tiene miniatura: su nombre es lo que ve el contacto.
   return (
-    <div className="flex items-center gap-2 px-3 py-2.5 mb-2 rounded-[8px] bg-brand-deep-active text-[13px] text-brand-on-deep">
-      {header.format === 'VIDEO' ? <Video size={15} className="flex-none" /> : <FileText size={15} className="flex-none" />}
-      <span className="truncate">{media.filename ?? rule.noun}</span>
+    <div className="flex items-center gap-2.5 p-2.5 mb-2 rounded-[8px] bg-brand-deep-active">
+      <FileText size={22} className="flex-none text-brand-on-deep" />
+      <span className="min-w-0 grid gap-0.5">
+        <span className="text-[13.5px] font-semibold leading-snug [overflow-wrap:anywhere]">{media.filename ?? rule.title}</span>
+        <span className="font-mono text-[11px] text-brand-on-deep-muted">{headerFileMeta(media)}</span>
+      </span>
     </div>
   );
 };

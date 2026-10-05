@@ -139,9 +139,11 @@ export const useCampaignMutations = () => {
 
     const create = useMutation<Campaign, unknown, CreateCampaignInput>({
         mutationFn: createCampaignService,
-        onSuccess: (campaign) => {
+        onSuccess: (campaign, input) => {
             queryClient.setQueryData(['campaigns', 'detail', campaign.id], campaign);
             queryClient.invalidateQueries({ queryKey: ['campaigns', 'list'] });
+            // El archivo elegido pasó a ser el de la plantilla: Plantillas lo enseña.
+            if (input.saveHeaderAsDefault) queryClient.invalidateQueries({ queryKey: ['templates'] });
         },
     });
 

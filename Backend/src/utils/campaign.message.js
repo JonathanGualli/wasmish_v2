@@ -2,7 +2,7 @@
 // con qué valor se rellena cada uno para cada contacto. Todo puro: lo usan la
 // vista previa, la creación de la campaña y el worker que la envía.
 
-import { templateHeaderIssue } from './template.header.js';
+import { headerMediaRule, templateHeaderIssue } from './template.header.js';
 
 // De dónde sale el valor de una variable. `fixed` es el mismo texto para todos;
 // el resto son datos del contacto, que pueden faltar y por eso piden reserva.
@@ -62,8 +62,16 @@ export const validateCampaignMessage = (template, config = {}) => {
     if (!BULK_CATEGORIES.includes(template.category)) {
         errors.push({ field: 'templateId', message: 'Las plantillas de autenticación no se pueden enviar de forma masiva.' });
     }
-    const headerIssue = templateHeaderIssue(template);
-    if (headerIssue) errors.push({ field: 'templateId', message: headerIssue });
+    // Sin archivo, el error es del campo de la cabecera, que es donde se elige
+    // (en el asistente o en Plantillas). Un formato que no sabemos enviar es de
+    // la plantilla: no hay archivo que lo arregle.
+    const rule = headerMediaRule(template);
+    if (rule && !template.headerMedia) {
+        errors.push({ field: 'headerMedia', message: `Elige ${rule.article} ${rule.label} para la cabecera.` });
+    } else {
+        const headerIssue = templateHeaderIssue(template);
+        if (headerIssue) errors.push({ field: 'templateId', message: headerIssue });
+    }
 
     const checkEntry = (entry, field, label) => {
         if (!entry) {
