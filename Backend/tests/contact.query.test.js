@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { pickContactFields, buildContactSearch, escapeRegex } from '../src/utils/contact.query.js';
+import { pickContactFields, buildContactSearch, matchesContactSearch, escapeRegex } from '../src/utils/contact.query.js';
 
 // Lo que pone WhatsApp no se edita a mano: aunque llegue en el body, se ignora.
 test('solo pasan los campos editables', () => {
@@ -60,4 +60,17 @@ test('«@usuario» busca el usuario sin la arroba', () => {
     const username = search.$or.find(c => c.username).username;
 
     assert.equal(username.test('ana.p'), true);
+});
+
+// La lista de destinatarios de un envío se filtra en memoria: tiene que
+// encontrar lo mismo que la búsqueda de Contactos.
+test('matchesContactSearch busca lo mismo que la consulta', () => {
+    const contact = { name: 'Ana Pérez', username: 'ana.p', phone: '593991234567', company: null };
+
+    assert.equal(matchesContactSearch(contact, 'pérez'), true);
+    assert.equal(matchesContactSearch(contact, '@ana.p'), true);
+    assert.equal(matchesContactSearch(contact, '+593 99 123'), true);
+    assert.equal(matchesContactSearch(contact, 'luis'), false);
+    assert.equal(matchesContactSearch(contact, '  '), true);
+    assert.equal(matchesContactSearch({ username: 'sin.telefono' }, '099'), false);
 });

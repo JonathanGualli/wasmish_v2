@@ -11,6 +11,7 @@ import { useTemplateForm, templateSendError } from '../../hooks/useTemplateForm'
 import { AppRoutes } from '../../models/routes.models';
 import { TemplatePicker, TemplateFields } from './TemplateFields';
 import { TemplateBubble, TemplateButtons } from './TemplatePreview';
+import { templateHeaderIssue } from '../../utils/templateHeader';
 import type { ConversationDraft } from '../../utils/conversationDraft';
 import { PHONE_RE } from '../../utils/contactDisplay';
 
@@ -67,10 +68,11 @@ export const NewConversationPanel = ({ initialDraft, onClose, onBack, onCreated,
     : form.isLoading ? 'Cargando plantillas…'
     : form.approved.length === 0 ? 'Necesitas una plantilla aprobada.'
     : !form.selected ? 'Elige una plantilla.'
+    : form.headerIssue ? form.headerIssue
     : form.missing === 1 ? 'Falta 1 valor por completar.'
     : form.missing > 1 ? `Faltan ${form.missing} valores por completar.`
     : 'Listo para enviar.';
-  const ready = phoneValid && Boolean(form.selected) && form.missing === 0;
+  const ready = phoneValid && Boolean(form.selected) && form.missing === 0 && !form.headerIssue;
 
   const handleClose = () => {
     if (!startConversation.isPending) onClose();
@@ -121,7 +123,8 @@ export const NewConversationPanel = ({ initialDraft, onClose, onBack, onCreated,
     }
     return (
       <div className="grid gap-3.5">
-        <TemplatePicker form={form} />
+        <TemplatePicker templates={form.approved} selected={form.selected} onSelect={t => form.selectTemplate(t.name)}
+          disabledReason={templateHeaderIssue} />
         <TemplateFields form={form} />
       </div>
     );
@@ -208,7 +211,7 @@ export const NewConversationPanel = ({ initialDraft, onClose, onBack, onCreated,
               <span className="font-semibold uppercase tracking-[0.1em]">Vista previa</span>
               <span className="font-mono">· {form.selected.name} · {form.selected.language}</span>
             </div>
-            <TemplateBubble bodyText={form.selected.bodyText ?? ''} values={form.values} />
+            <TemplateBubble bodyText={form.selected.bodyText ?? ''} values={form.values} template={form.selected} />
             <TemplateButtons buttons={form.selected.buttons} />
             <p className="text-[11px] text-brand-subtle text-right mt-1.5">
               Si la plantilla tiene encabezado, no se ve aquí — pero sí se envía.

@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import mongoose from "mongoose";
 import User from "../models/user.model.js";
 import Template from "../models/template.model.js";
 import Message from "../models/message.model.js";
@@ -6,6 +8,13 @@ import { getTemplates, sendTemplateMessage } from "../libs/whatsapp.js";
 import { sendUser } from "./stream.controller.js";
 import { getSendingRecipient, getSendingConversation } from "./contact.controller.js";
 import { MARKETING_OPT_OUT_ERROR } from "../utils/marketing.preference.js";
+import TemplateMedia from "../models/template.media.model.js";
+import { buildHeaderComponent, extractTemplateHeader, headerMediaFileIssue, headerMediaRule, templateHeaderIssue } from "../utils/template.header.js";
+import {
+    cleanFilename, ensureMetaMediaId, headerMediaFileExists, saveHeaderMedia, serializeHeaderMedia,
+} from "../services/template.media.service.js";
+import { MEDIA_DIR } from "../config.js";
+import { mimeParaServir, rutaDeArchivo } from "../utils/media.storage.js";
 
 
 // ---------------------------------------------------------------------------
@@ -35,7 +44,8 @@ export const syncTemplatesForUser = async (user) => {
     }
 
     const bulkOperations = templates.map(tpl => {
-        // Solo guardamos el BODY: es el componente que se renderiza en el chat.
+        // El BODY es lo que se renderiza en el chat; de la cabecera se guarda
+        // el formato, para saber si al enviar hay que mandar un archivo.
         const bodyComponent = tpl.components?.find(c => c.type === 'BODY');
         const buttonsComponent = tpl.components?.find(c => c.type === 'BUTTONS');
 
@@ -54,6 +64,7 @@ export const syncTemplatesForUser = async (user) => {
                         bodyText: text,
                         buttons: buttonsComponent?.buttons ?? [],
                         parameterFormat: tpl.parameter_format,
+                        header: extractTemplateHeader(tpl.components),
                     }
                 },
                 upsert: true,
@@ -224,18 +235,110 @@ export const syncTemplatesController = async (req, res) => {
     }
 }
 
+/** La plantilla para el frontend: el archivo de la cabecera, resumido. */
+const serializeTemplate = (template) => ({
+    ...template,
+    headerMedia: serializeHeaderMedia(template.headerMedia),
+});
+
+const findUserTemplates = (userId) =>
+    Template.find({ userId }).populate('headerMedia', 'mimeType filename size').lean();
+
 export const getTemplatesController = async (req, res) => {
     try {
         const userId = req.user.id;
         const user = await User.findById(userId);
         if (!user) return res.status(404).json([{ message: "User not found" }]);
 
-        const templates = await Template.find({ userId });
-        return res.json(templates);
+        let templates = await findUserTemplates(userId);
+
+        // Sincronizadas antes de guardar la cabecera: se vuelven a sincronizar
+        // una vez, para saber cuáles piden un archivo. Si Meta falla, se
+        // devuelven como están: la lista no puede depender de Meta.
+        if (templates.some(t => t.header === undefined) && user.tokenWhatsapp) {
+            try {
+                await syncTemplatesForUser(user);
+                templates = await findUserTemplates(userId);
+            } catch (syncError) {
+                console.error('Sync de plantillas (cabeceras) falló:', syncError.message);
+            }
+        }
+
+        return res.json(templates.map(serializeTemplate));
     } catch (error) {
         return res.status(500).json([{ message: error.message }]);
     }
 }
+
+/**
+ * PUT /templates/:templateId/header-media — el archivo de la cabecera. El
+ * cuerpo es el archivo tal cual (Content-Type = su tipo) y el nombre original
+ * va en `X-Filename`. Solo se guarda: se sube a Meta al enviar la primera vez,
+ * así que funciona aunque el token de WhatsApp esté caducado.
+ */
+export const uploadHeaderMediaController = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const template = await Template.findOne({ userId, templateId: req.params.templateId });
+        if (!template) return res.status(404).json([{ message: 'La plantilla no existe en tu cuenta.' }]);
+
+        const buffer = Buffer.isBuffer(req.body) ? req.body : null;
+        const mimeType = String(req.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase();
+        const issue = headerMediaFileIssue(template, { mimeType, size: buffer?.length ?? 0, buffer });
+        if (issue) return res.status(400).json([{ message: issue }]);
+
+        const media = await saveHeaderMedia({
+            userId, buffer, mimeType, filename: cleanFilename(req.headers['x-filename']),
+        });
+        template.headerMedia = media._id;
+        await template.save();
+
+        return res.json(serializeTemplate({ ...template.toObject(), headerMedia: media }));
+    } catch (error) {
+        console.error('Subida del archivo de cabecera falló:', error.message);
+        return res.status(500).json([{ message: error.message }]);
+    }
+};
+
+/**
+ * DELETE /templates/:templateId/header-media — la plantilla se queda sin
+ * archivo (y sin poder enviarse). El archivo no se borra: un envío masivo
+ * creado antes puede estar usándolo.
+ */
+export const removeHeaderMediaController = async (req, res) => {
+    try {
+        const template = await Template.findOneAndUpdate(
+            { userId: req.user.id, templateId: req.params.templateId },
+            { $set: { headerMedia: null } },
+            { new: true },
+        ).lean();
+        if (!template) return res.status(404).json([{ message: 'La plantilla no existe en tu cuenta.' }]);
+        return res.json(serializeTemplate(template));
+    } catch (error) {
+        return res.status(500).json([{ message: error.message }]);
+    }
+};
+
+/**
+ * GET /templates/media/:id — el archivo de una cabecera, para verlo en
+ * Plantillas y en las vistas previas. Uno ajeno da 404, como en /media.
+ */
+export const getHeaderMediaFileController = async (req, res) => {
+    try {
+        const media = mongoose.isValidObjectId(req.params.id)
+            ? await TemplateMedia.findOne({ _id: req.params.id, userId: req.user.id }).lean()
+            : null;
+        const ruta = media && rutaDeArchivo(MEDIA_DIR, media.file);
+        if (!ruta || !fs.existsSync(ruta)) return res.status(404).json([{ message: 'Media not found' }]);
+
+        res.setHeader('Content-Type', mimeParaServir(media.mimeType));
+        res.setHeader('Cache-Control', 'private, max-age=86400');
+        res.setHeader('Content-Disposition', 'inline');
+        return fs.createReadStream(ruta).pipe(res);
+    } catch (error) {
+        return res.status(500).json([{ message: error.message }]);
+    }
+};
 
 
 /**
@@ -287,10 +390,10 @@ export const processTemplateSending = async ({
     let syncOk = true;
 
     // Re-sincronizamos también si el documento es anterior a que guardáramos
-    // la definición de los botones: `parameterFormat` solo existe desde
-    // entonces, así que su ausencia distingue «plantilla vieja» de
-    // «plantilla sincronizada que legítimamente no tiene botones».
-    if (!resolvedTemplate && (!template || template.parameterFormat === undefined)) {
+    // la definición de los botones o la cabecera: `parameterFormat` y `header`
+    // solo existen desde entonces, así que su ausencia distingue «plantilla
+    // vieja» de «plantilla sincronizada que legítimamente no tiene botones».
+    if (!resolvedTemplate && (!template || template.parameterFormat === undefined || template.header === undefined)) {
         try {
             await syncTemplatesForUser(user);
             template = await Template.findOne({ userId: user._id, name: templateName });
@@ -317,10 +420,29 @@ export const processTemplateSending = async ({
         throw error;
     }
 
+    // La cabecera: un archivo que falta o un formato que no sabemos enviar se
+    // rechaza aquí. Meta respondería 132012 a cada destinatario.
+    const headerIssue = templateHeaderIssue(template);
+    if (headerIssue) {
+        const error = new Error(headerIssue);
+        error.statusCode = 400;
+        error.pausesCampaign = true;
+        throw error;
+    }
+    const headerMedia = headerMediaRule(template)
+        ? await TemplateMedia.findOne({ _id: template.headerMedia, userId: user._id })
+        : null;
+    if (headerMediaRule(template) && !(headerMedia && await headerMediaFileExists(headerMedia))) {
+        const error = new Error('El archivo de la cabecera de la plantilla ya no está en el servidor. Vuelve a subirlo en Plantillas.');
+        error.statusCode = 400;
+        error.pausesCampaign = true;
+        throw error;
+    }
+
     // 2. Idioma: el que tenga registrada la plantilla, salvo que lo fuercen.
     const templateLanguage = language ?? template?.language ?? 'es';
 
-    // 3. Componentes: cuerpo + botones.
+    // 3. Componentes: cabecera (más abajo, al enviar) + cuerpo + botones.
     //    Parámetros del cuerpo: posicionales ["Juan"] o nombrados [{name, value}]
     const components = [];
     let storedParamsString = "";
@@ -342,6 +464,13 @@ export const processTemplateSending = async ({
     // 4. Enviar a Meta (capturamos el fallo para persistirlo como 'failed')
     let waMessageId = null, status = 'sent', errorCode = null, errorDetail = null;
     try {
+        // El archivo de la cabecera se sube a Meta la primera vez (y cuando su
+        // id caduca); dentro del try, para que un token caducado quede como
+        // cualquier rechazo. En modo de prueba no se sube nada.
+        if (headerMedia && !dryRun) {
+            const mediaId = await ensureMetaMediaId(headerMedia, { token, phoneNumberId });
+            components.unshift(buildHeaderComponent(template.header.format, { mediaId, filename: headerMedia.filename }));
+        }
         const apiRes = dryRun
             ? fakeTemplateSend({ contact, template })
             : await sendTemplateMessage({ token, phoneNumberId, recipient, templateName, language: templateLanguage, components });
@@ -376,6 +505,15 @@ export const processTemplateSending = async ({
         templateName,
         templateParams: parameters.length > 0 ? parameters : undefined,
         campaignId: campaignId ?? undefined,
+        // El archivo de la cabecera, para que el chat lo enseñe como lo vio
+        // el contacto. Es el mismo archivo de la plantilla, no una copia.
+        ...(headerMedia && {
+            type: template.header.format.toLowerCase(),
+            mediaFile: headerMedia.file,
+            mimeType: headerMedia.mimeType,
+            mediaFilename: headerMedia.filename,
+            mediaSize: headerMedia.size,
+        }),
     });
 
     // 7. SSE en vivo → aparece en la UI de wasmish. `campaignId` deja al
@@ -384,6 +522,8 @@ export const processTemplateSending = async ({
         id: String(msg._id), conversationId: String(targetConversation._id), sender: 'me',
         text: storedText, timestamp: msg.timestamp.toISOString(),
         status, errorCode, errorDetail, templateName,
+        type: msg.type, hasMedia: Boolean(msg.mediaFile),
+        mediaFilename: msg.mediaFilename, mediaSize: msg.mediaSize,
         ...(campaignId && { campaignId: String(campaignId) }),
     });
 

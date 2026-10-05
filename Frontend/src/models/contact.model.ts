@@ -66,3 +66,11 @@ export interface ContactInput {
     company?: string;
     notes?: string;
 }
+
+/**
+ * Lo que pide Envíos al abrir Contactos (va en el estado del router): elegir
+ * a quién mandar un envío nuevo (`new`) o cambiar los de un borrador (`edit`).
+ */
+export interface ContactsNavigationState {
+    campaignPick?: 'new' | 'edit';
+}

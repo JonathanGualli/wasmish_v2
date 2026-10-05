@@ -136,3 +136,22 @@ export const downloadMedia = async ({ token, url, maxBytes }) => {
     });
     return Buffer.from(data);
 };
+
+// Sube un archivo a Meta para enviarlo después por su id (la cabecera de una
+// plantilla). El id es del número que lo subió y dura 30 días.
+//
+// El Content-Type va explícito: la instancia lo fija en JSON y, con ese valor,
+// axios convertiría el FormData en un JSON en vez de mandarlo como multipart.
+export const uploadMedia = async ({ token, phoneNumberId, buffer, mimeType, filename }) => {
+    const form = new FormData();
+    form.append('messaging_product', 'whatsapp');
+    form.append('type', mimeType);
+    form.append('file', new Blob([buffer], { type: mimeType }), filename || 'archivo');
+
+    const { data } = await whatsappApi.post(`/${phoneNumberId}/media`, form, {
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' },
+        timeout: 60000,          // un vídeo de 16 MB no sube en los 10 s del resto
+        maxBodyLength: Infinity,
+    });
+    return data.id;
+};

@@ -7,3 +7,6 @@ Frontend/brand/**/support.js
 
 # Salida del propio grafo
 graphify-out/
+
+# Adjuntos de WhatsApp y archivos de cabecera: datos de clientes, no del proyecto
+Backend/media/

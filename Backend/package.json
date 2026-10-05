@@ -12,7 +12,8 @@
     "backfill:contacts": "node scripts/backfill-contacts.js",
     "check:duplicates": "node scripts/check-duplicate-messages.js",
     "version:bump": "node scripts/bump-version.js",
-    "webhook:simulate": "node scripts/simulate-webhook.js"
+    "webhook:simulate": "node scripts/simulate-webhook.js",
+    "seed:contacts": "node scripts/seed-test-contacts.js"
   },
   "author": "Jonathan Gualli",
   "license": "ISC",

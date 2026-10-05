@@ -50,6 +50,7 @@
   --color-brand-danger-soft:  #fdf6f5;  /* Fondo de error / uso incorrecto */
   --color-brand-danger-border: #f0d5d2;
   --color-brand-info:    #2563a8;   /* Informativo del sistema */
+  --color-brand-info-soft: #edf3fa;   /* Fondo de lo que está en curso (enviando, entregado) */
 
   /* ── Rampa verde ───────────────────────────────────────────────────────── */
   --color-brand-green-50:  #effcf5;

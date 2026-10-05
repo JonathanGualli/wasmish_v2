@@ -22,6 +22,8 @@ export interface CampaignDraft {
      */
     selectedCount: number;
     templateId: string | null;
+    /** Para la lista de Envíos, que no carga las plantillas. */
+    templateName: string | null;
     variables: CampaignVariable[];
     buttons: CampaignButton[];
     excludeOptedOut: boolean;
@@ -37,9 +39,11 @@ export const newCampaignDraft = (recipients: CampaignRecipientsInput, selectedCo
     recipients,
     selectedCount,
     templateId: null,
+    templateName: null,
     variables: [],
     buttons: [],
-    excludeOptedOut: false,
+    // Solo cuenta con plantillas de marketing (lo decide el backend).
+    excludeOptedOut: true,
     name: '',
     updatedAt: new Date().toISOString(),
 });
@@ -58,10 +62,13 @@ export const loadCampaignDraft = (userId: string): CampaignDraft | null => {
     }
 };
 
-export const saveCampaignDraft = (userId: string, draft: CampaignDraft) => {
+/** Lo guarda con la hora de ahora y lo devuelve tal como quedó. */
+export const saveCampaignDraft = (userId: string, draft: CampaignDraft): CampaignDraft => {
+    const saved = { ...draft, updatedAt: new Date().toISOString() };
     try {
-        localStorage.setItem(PREFIX + userId, JSON.stringify({ ...draft, updatedAt: new Date().toISOString() }));
+        localStorage.setItem(PREFIX + userId, JSON.stringify(saved));
     } catch { /* sin storage: el borrador vive solo mientras la página esté abierta */ }
+    return saved;
 };
 
 export const clearCampaignDraft = (userId: string) => {
@@ -78,6 +85,9 @@ export const clearAllCampaignDrafts = () => {
             .forEach(k => localStorage.removeItem(k));
     } catch { /* nada que borrar */ }
 };
+
+/** Los pasos del asistente, para «se quedó en el paso 2 · Mensaje». */
+export const CAMPAIGN_STEPS = ['Destinatarios', 'Mensaje', 'Revisar y enviar'] as const;
 
 /** Título del borrador en la lista de Envíos. */
 export const campaignDraftTitle = (draft: CampaignDraft) => draft.name.trim() || 'Sin nombre';

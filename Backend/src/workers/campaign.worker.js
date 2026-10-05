@@ -131,7 +131,9 @@ const processNext = async (campaign) => {
             buttons,
             template: campaign.template,
             campaignId: campaign._id,
-            dryRun: CAMPAIGN_DRY_RUN,
+            // Con el modo de prueba encendido no sale nada, aunque el envío
+            // se hubiera creado sin él.
+            dryRun: CAMPAIGN_DRY_RUN || campaign.dryRun,
         });
 
         await markRecipient(recipient, {
@@ -159,7 +161,9 @@ const processNext = async (campaign) => {
         });
 
         // 409 = la cuenta ya no tiene WhatsApp conectado: le pasará a todos.
+        // Lo mismo con la cabecera de la plantilla (su archivo ya no está).
         if (error.statusCode === 409) await autoPause(campaign, 'whatsapp_disconnected', error.message);
+        else if (error.pausesCampaign) await autoPause(campaign, 'template_header', error.message);
 
         await emitCampaignProgress(campaign._id);
         return 'sent';

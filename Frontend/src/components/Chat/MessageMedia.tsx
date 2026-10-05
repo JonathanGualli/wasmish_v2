@@ -38,7 +38,7 @@ export const MessageMedia = ({ msg }: { msg: Message }) => {
       <a href={url} target="_blank" rel="noreferrer" className="block">
         <img
           src={url}
-          alt={msg.caption ?? 'Imagen recibida'}
+          alt={msg.caption ?? 'Imagen'}
           onError={() => setFallo(true)}
           className={`rounded-[10px] object-contain ${esSticker ? 'max-h-[140px]' : 'max-h-[320px] w-full'}`}
         />

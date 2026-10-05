@@ -15,23 +15,27 @@ export const Callout = ({
     icon,
     title,
     children,
+    action,
 }: {
     tone?: CalloutTone;
     icon: ReactNode;
     title?: string;
-    children: ReactNode;
+    children?: ReactNode;
+    /** Un enlace o botón a la derecha: lo que arregla el aviso («Ir a Ajustes»). */
+    action?: ReactNode;
 }) => {
     const t = TONES[tone];
     return (
         <div className={`flex gap-3 border border-brand-border border-l-[3px] ${t.bar} ${t.bg}
             rounded-r-xl px-4 py-3.5`}>
             <span className={`${t.icon} flex-none mt-0.5`}>{icon}</span>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
                 {title && (
-                    <h4 className="text-[15px] font-semibold text-brand-text mb-1">{title}</h4>
+                    <h4 className={`text-[15px] font-semibold text-brand-text ${children ? 'mb-1' : ''}`}>{title}</h4>
                 )}
-                <div className="text-sm leading-[1.6] text-brand-muted">{children}</div>
+                {children && <div className="text-sm leading-[1.6] text-brand-muted">{children}</div>}
             </div>
+            {action && <div className="flex-none self-center">{action}</div>}
         </div>
     );
 };

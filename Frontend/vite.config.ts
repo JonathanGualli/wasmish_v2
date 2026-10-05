@@ -4,6 +4,16 @@ import tailwindcss from '@tailwindcss/vite'
 
 import pkg from './package.json'
 
+// Lo poco que se usa del proxy de Vite. Sin @types/node (el proyecto no lo
+// necesita para nada más) sus eventos no vienen tipados.
+type ProxyWithEvents = {
+  on(event: 'proxyRes', listener: (
+    proxyRes: { on(event: 'close', listener: () => void): void },
+    req: unknown,
+    res: { writableEnded: boolean; destroy(): void },
+  ) => void): void
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
@@ -24,6 +34,17 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:3001',
         changeOrigin: true,
+        // Si el backend se cae a media respuesta (nodemon reinicia), cortar
+        // también la del navegador. Sin esto la conexión SSE queda abierta sin
+        // recibir nada: el navegador no se entera, no reconecta y la app se
+        // queda sin tiempo real hasta recargar.
+        configure: (proxy) => {
+          (proxy as unknown as ProxyWithEvents).on('proxyRes', (proxyRes, _req, res) => {
+            proxyRes.on('close', () => {
+              if (!res.writableEnded) res.destroy();
+            });
+          });
+        },
       }
     }
   }

@@ -2,6 +2,8 @@
 // con qué valor se rellena cada uno para cada contacto. Todo puro: lo usan la
 // vista previa, la creación de la campaña y el worker que la envía.
 
+import { templateHeaderIssue } from './template.header.js';
+
 // De dónde sale el valor de una variable. `fixed` es el mismo texto para todos;
 // el resto son datos del contacto, que pueden faltar y por eso piden reserva.
 export const VARIABLE_SOURCES = ['fixed', 'name', 'firstName', 'company', 'phone', 'email'];
@@ -60,6 +62,8 @@ export const validateCampaignMessage = (template, config = {}) => {
     if (!BULK_CATEGORIES.includes(template.category)) {
         errors.push({ field: 'templateId', message: 'Las plantillas de autenticación no se pueden enviar de forma masiva.' });
     }
+    const headerIssue = templateHeaderIssue(template);
+    if (headerIssue) errors.push({ field: 'templateId', message: headerIssue });
 
     const checkEntry = (entry, field, label) => {
         if (!entry) {
@@ -122,6 +126,27 @@ export const resolveVariableValue = (entry, contact = {}) => {
     return { value: cleanValue(entry.fallback), usedFallback: true };
 };
 
+/** La clave de un botón en `fallbacks` y en los valores de la vista previa. */
+export const buttonKey = (index) => `button.${index}`;
+
+/**
+ * Lo que recibe un contacto en cada variable y en cada botón, como
+ * `{ [clave]: { value, usedFallback } }` con las claves `'1'`, `'nombre'` o
+ * `'button.0'`. La vista previa lo usa para resaltar cada dato en el mensaje.
+ */
+export const resolveContactValues = (template, config, contact) => {
+    const values = {};
+    extractTemplateVariables(template.bodyText).forEach(key => {
+        const entry = (config.variables ?? []).find(v => String(v.key) === key);
+        values[key] = resolveVariableValue(entry, contact);
+    });
+    buttonsNeedingValue(template.buttons).forEach(index => {
+        const entry = (config.buttons ?? []).find(b => Number(b.index) === index);
+        values[buttonKey(index)] = resolveVariableValue(entry, contact);
+    });
+    return values;
+};
+
 /**
  * Los parámetros de un contacto en el formato de `processTemplateSending`:
  * posicionales `['Ana', 'Quito']` o nombrados `[{ name, value }]`, y los botones
@@ -129,32 +154,23 @@ export const resolveVariableValue = (entry, contact = {}) => {
  * cayeron en la reserva (`'1'`, `'nombre'`, `'button.0'`).
  */
 export const buildContactParameters = (template, config, contact) => {
-    const fallbacks = [];
+    const values = resolveContactValues(template, config, contact);
     const keys = extractTemplateVariables(template.bodyText);
-    const valueOf = (key) => {
-        const entry = config.variables.find(v => String(v.key) === key);
-        const { value, usedFallback } = resolveVariableValue(entry, contact);
-        if (usedFallback) fallbacks.push(key);
-        return value;
-    };
 
     let parameters;
     if (resolveParameterFormat(template) === 'POSITIONAL') {
         // Meta espera {{1}}..{{n}} seguidos: el array va por posición.
         parameters = keys.map(Number).reduce((list, n) => {
-            list[n - 1] = valueOf(String(n));
+            list[n - 1] = values[String(n)].value;
             return list;
         }, []);
     } else {
-        parameters = keys.map(key => ({ name: key, value: valueOf(key) }));
+        parameters = keys.map(key => ({ name: key, value: values[key].value }));
     }
 
-    const buttons = buttonsNeedingValue(template.buttons).map(index => {
-        const entry = (config.buttons ?? []).find(b => Number(b.index) === index);
-        const { value, usedFallback } = resolveVariableValue(entry, contact);
-        if (usedFallback) fallbacks.push(`button.${index}`);
-        return { index, parameters: [value] };
-    });
+    const buttons = buttonsNeedingValue(template.buttons)
+        .map(index => ({ index, parameters: [values[buttonKey(index)].value] }));
 
-    return { parameters, buttons, fallbacks };
+    const fallbacks = Object.keys(values).filter(key => values[key].usedFallback);
+    return { parameters, buttons, fallbacks, values };
 };

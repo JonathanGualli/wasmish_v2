@@ -1,14 +1,27 @@
-import { useState, type ReactNode } from "react";
-import { AlertCircle, Plus, RefreshCw, Search, Users } from "lucide-react";
+import { useState } from "react";
+import { SearchInput } from "../../../components/SearchInput/SearchInput";
+import { useLocation, useNavigate } from "react-router-dom";
+import { AlertCircle, ArrowRight, Plus, RefreshCw, Search, Send, Users } from "lucide-react";
 import { PageShell, PageHeader } from "../../../components/Page/PageShell";
 import { DataTable } from "../../../components/DataTable/DataTable";
+import { BlankState } from "../../../components/BlankState/BlankState";
 import { CustomButton } from "../../../components/Button/Button";
 import { useContacts } from "../../../hooks/useContacts";
 import { useDebouncedValue } from "../../../hooks/useDebouncedValue";
-import type { Contact, ContactFilter } from "../../../models/contact.model";
+import { useContactSelection } from "../../../hooks/useContactSelection";
+import { useCampaignDraft } from "../../../hooks/useCampaignDraft";
+import { useNewCampaign } from "../../../hooks/useNewCampaign";
+import { Callout } from "../../../components/Callout/Callout";
+import { ConfirmDialog } from "../../../components/Dialog/ConfirmDialog";
+import { CampaignPaths } from "../../../models/routes.models";
+import type { Contact, ContactFilter, ContactsNavigationState } from "../../../models/contact.model";
+import { newCampaignDraft } from "../../../utils/campaignDraft";
+import { pluralize } from "../../../utils/campaignDisplay";
+import { DraftConflictDialog } from "../Campaigns/DraftConflictDialog";
 import { contactColumns } from "./ContactColumns";
 import { ContactMobileRow } from "./ContactRow";
 import { ContactPanel, type ContactPanelState } from "./ContactPanel";
+import { SelectionBar } from "./SelectionBar";
 
 const FILTERS: { value: ContactFilter; label: string }[] = [
     { value: 'all', label: 'Todos' },
@@ -19,24 +32,14 @@ const FILTERS: { value: ContactFilter; label: string }[] = [
 
 const FIRST_PAGE = { pageIndex: 0, pageSize: 20 };
 
-/** Estado a pantalla completa (lista vacía, error…): icono, título, texto y una acción. */
-const BlankState = ({ icon, tone = 'neutral', title, children, action }: {
-    icon: ReactNode;
-    tone?: 'neutral' | 'danger';
-    title: string;
-    children: ReactNode;
-    action?: ReactNode;
-}) => (
-    <div className="border border-brand-border rounded-xl px-8 py-16 grid justify-items-center gap-2.5 text-center">
-        <div className={`w-12 h-12 rounded-xl flex items-center justify-center
-            ${tone === 'danger' ? 'bg-brand-danger-soft text-brand-danger' : 'bg-brand-bg text-brand-muted'}`}>
-            {icon}
-        </div>
-        <div className="text-[17px] font-semibold text-brand-text">{title}</div>
-        <div className="max-w-[420px] text-sm leading-[1.6] text-brand-muted">{children}</div>
-        {action && <div className="mt-2 h-10">{action}</div>}
-    </div>
-);
+/** Lo que dice el aviso de arriba cuando Envíos pide elegir contactos. */
+const PICK_MODE_COPY = {
+    new: { title: 'Nuevo envío:', text: 'elige los contactos que lo recibirán y pulsa «Continuar».', back: 'Cancelar' },
+    edit: { title: 'Cambiando la selección del envío.', text: 'Cuando termines, pulsa «Volver al envío».', back: 'Volver sin cambios' },
+};
+
+/** Un cambio de búsqueda o de filtro que espera confirmación. */
+type PendingQueryChange = { query?: string; filter?: ContactFilter };
 
 /**
  * Contactos: la agenda de las personas con las que habla el negocio. Se crean
@@ -44,30 +47,105 @@ const BlankState = ({ icon, tone = 'neutral', title, children, action }: {
  * panel lateral sobre la lista (`ContactPanel`).
  */
 export const ContactsPage = () => {
+    const navigate = useNavigate();
+    const pickMode = (useLocation().state as ContactsNavigationState | null)?.campaignPick ?? null;
+    const draftStore = useCampaignDraft();
+    const { draft, save: saveDraft } = draftStore;
+    const newCampaign = useNewCampaign(draftStore);
+
+    // Al volver a cambiar la selección de un borrador, se parte de la que tenía
+    // (y de su búsqueda, si era «todos los que coinciden»).
+    const editing = pickMode === 'edit' ? draft?.recipients : undefined;
+    const initialSearch = editing?.mode === 'query' ? editing.search ?? '' : '';
+    const initialFilter = editing?.mode === 'query' ? editing.filter ?? 'all' : 'all';
+
     const [pagination, setPagination] = useState(FIRST_PAGE);
-    const [query, setQuery] = useState('');
-    const [filter, setFilter] = useState<ContactFilter>('all');
+    const [query, setQuery] = useState(initialSearch);
+    const [filter, setFilter] = useState<ContactFilter>(initialFilter);
     const [panel, setPanel] = useState<ContactPanelState | null>(null);
+    const [pendingChange, setPendingChange] = useState<PendingQueryChange | null>(null);
+    const selection = useContactSelection(editing);
 
     const search = useDebouncedValue(query.trim(), 300);
     const { data, isLoading, isError, isPlaceholderData, refetch } =
         useContacts(pagination.pageIndex, pagination.pageSize, search, filter);
 
     // Otra búsqueda u otro filtro empiezan desde la primera página.
-    const changeQuery = (value: string) => {
-        setQuery(value);
+    const applyChange = ({ query: nextQuery, filter: nextFilter }: PendingQueryChange) => {
+        if (nextQuery !== undefined) setQuery(nextQuery);
+        if (nextFilter !== undefined) setFilter(nextFilter);
         setPagination(p => ({ ...p, pageIndex: 0 }));
     };
-    const changeFilter = (value: ContactFilter) => {
-        setFilter(value);
-        setPagination(p => ({ ...p, pageIndex: 0 }));
+    // «Todos los que coinciden» va atado a la búsqueda y al filtro: cambiarlos
+    // cambiaría quiénes son, así que antes se pregunta.
+    const requestChange = (change: PendingQueryChange) => {
+        if (selection.isAllMatching) setPendingChange(change);
+        else applyChange(change);
+    };
+    const changeQuery = (value: string) => requestChange({ query: value });
+    const changeFilter = (value: ContactFilter) => requestChange({ filter: value });
+    const confirmPendingChange = () => {
+        selection.clear();
+        if (pendingChange) applyChange(pendingChange);
+        setPendingChange(null);
     };
 
     const totalCount = data?.totalCount ?? 0;
+    const pageIds = data?.contacts.map(c => c.id) ?? [];
+    const pageState = selection.pageState(pageIds);
+    const selectedCount = selection.count(totalCount);
     const filtering = Boolean(search) || filter !== 'all';
     const isEmpty = data && totalCount === 0 && !filtering;
     const filterLabel = FILTERS.find(f => f.value === filter)?.label;
     const openContact = (contact: Contact) => setPanel({ mode: 'view', id: contact.id });
+
+    const goToWizard = (recipients = selection.recipientsInput) => {
+        const base = pickMode === 'edit' && draft ? draft : newCampaignDraft(recipients, selectedCount);
+        saveDraft({ ...base, recipients, selectedCount, step: 1 });
+        navigate(CampaignPaths.create);
+    };
+    // Desde Contactos sin más: si ya había un borrador, se pregunta primero.
+    const handleSelectionAction = () => {
+        if (pickMode) goToWizard();
+        else newCampaign.start(() => goToWizard());
+    };
+    const leavePickMode = () => navigate(pickMode === 'edit' ? CampaignPaths.create : CampaignPaths.list);
+
+    const selectionBanner = () => {
+        if (selection.isAllMatching) {
+            return (
+                <>
+                    Están seleccionados los <b className="font-mono tabular-nums">{selectedCount}</b> que coinciden
+                    {filterLabel && filter !== 'all' ? ` con «${filterLabel}»` : ''}
+                    {selection.excludedCount > 0 && <>, menos <b className="font-mono">{selection.excludedCount}</b> que desmarcaste</>}.{' '}
+                    <button type="button" onClick={selection.clear} className="font-semibold text-brand-accent-strong underline cursor-pointer">
+                        Quitar selección
+                    </button>
+                </>
+            );
+        }
+        if (pageState === 'all' && totalCount > pageIds.length) {
+            return (
+                <>
+                    Seleccionaste los <b className="font-mono">{pageIds.length}</b> de esta página.{' '}
+                    <button
+                        type="button"
+                        onClick={() => selection.selectAllMatching(search, filter)}
+                        className="font-semibold text-brand-accent-strong underline cursor-pointer"
+                    >
+                        Seleccionar los {pluralize(totalCount, 'contacto', 'contactos')} que coinciden
+                    </button>
+                </>
+            );
+        }
+        return null;
+    };
+
+    const selectionActionLabel = () => {
+        if (pickMode === 'new') return <>Continuar ({selectedCount})<ArrowRight size={15} /></>;
+        if (pickMode === 'edit') return <>Volver al envío ({selectedCount})<ArrowRight size={15} /></>;
+        return <><Send size={16} />Enviar plantilla<span className="md:hidden">({selectedCount})</span></>;
+    };
 
     const renderBody = () => {
         if (isError && !data) {
@@ -128,6 +206,13 @@ export const ContactsPage = () => {
                 onRowClick={openContact}
                 activeRowId={panel && panel.mode !== 'create' ? panel.id : null}
                 renderMobileRow={contact => <ContactMobileRow contact={contact} />}
+                selection={{
+                    isSelected: contact => selection.isSelected(contact.id),
+                    onToggle: contact => selection.toggle(contact.id),
+                    pageState,
+                    onTogglePage: () => selection.setPage(pageIds, pageState !== 'all'),
+                    banner: selectionBanner(),
+                }}
             />
         );
     };
@@ -147,21 +232,26 @@ export const ContactsPage = () => {
                 }
             />
 
+            {pickMode && (
+                <div className="mb-4">
+                    <Callout
+                        icon={<Send size={16} />}
+                        title={PICK_MODE_COPY[pickMode].title}
+                        action={
+                            <button type="button" onClick={leavePickMode}
+                                className="text-[13px] font-semibold text-brand-accent-strong cursor-pointer hover:underline">
+                                {PICK_MODE_COPY[pickMode].back}
+                            </button>
+                        }
+                    >
+                        {PICK_MODE_COPY[pickMode].text}
+                    </Callout>
+                </div>
+            )}
+
             {!isEmpty && !(isError && !data) && (
                 <div className="mb-4 flex flex-col md:flex-row md:items-center gap-3">
-                    <div className="relative flex items-center md:w-[340px]">
-                        <Search size={16} className="absolute left-[11px] text-brand-subtle pointer-events-none" />
-                        <input
-                            value={query}
-                            onChange={e => changeQuery(e.target.value)}
-                            placeholder="Buscar por nombre, teléfono, usuario, email o empresa"
-                            className="w-full box-border text-[13px] text-brand-text bg-brand-bg
-                                border border-brand-border rounded-lg py-2.5 pl-[34px] pr-3
-                                placeholder:text-brand-subtle
-                                focus:outline-none focus:bg-brand-surface focus:border-brand-success
-                                focus:ring-[3px] focus:ring-brand-accent-soft transition-colors"
-                        />
-                    </div>
+                    <SearchInput value={query} onChange={changeQuery} placeholder="Buscar por nombre, teléfono, usuario, email o empresa" className="md:w-[340px]" />
                     <div className="flex flex-wrap gap-1.5">
                         {FILTERS.map(f => (
                             // El filtro activo en tinte, no en menta sólida: la menta de
@@ -189,7 +279,32 @@ export const ContactsPage = () => {
 
             {renderBody()}
 
+            {/* Hueco para que la barra de selección no tape la paginación. */}
+            {selectedCount > 0 && <div className="h-24" />}
+
+            {selectedCount > 0 && (
+                <SelectionBar
+                    count={selectedCount}
+                    note={selection.excludedCount > 0 ? pluralize(selection.excludedCount, 'excluido', 'excluidos') : undefined}
+                    actionLabel={selectionActionLabel()}
+                    onAction={handleSelectionAction}
+                    onClear={selection.clear}
+                />
+            )}
+
             <ContactPanel state={panel} onChange={setPanel} />
+
+            <ConfirmDialog
+                open={Boolean(pendingChange)}
+                title={pendingChange?.filter ? '¿Cambiar el filtro?' : '¿Cambiar la búsqueda?'}
+                description={`Tienes ${pluralize(selectedCount, 'contacto seleccionado', 'contactos seleccionados')} de la búsqueda actual. Si la cambias, la selección empieza de cero.`}
+                cancelLabel="Mantener selección"
+                confirmLabel="Cambiar y quitar selección"
+                onConfirm={confirmPendingChange}
+                onCancel={() => setPendingChange(null)}
+            />
+
+            <DraftConflictDialog {...newCampaign.conflictDialog} />
         </PageShell>
     );
 };

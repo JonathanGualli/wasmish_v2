@@ -38,9 +38,22 @@ const templateSchema = new mongoose.Schema({
     },
     // 'POSITIONAL' ({{1}} o 'NAMED' ({{nombre}}))
     parameterFormat: {
-        type: String, 
-    }
-    
+        type: String,
+    },
+    // `{ format, text }` o null si no tiene (ver utils/template.header.js).
+    // Sin default a propósito: `undefined` distingue una plantilla sincronizada
+    // antes de guardar la cabecera, que se vuelve a sincronizar.
+    header: {
+        type: mongoose.Schema.Types.Mixed,
+    },
+    // El archivo que se envía en la cabecera (imagen, vídeo o documento). Lo
+    // pone quien usa Wasmish en Plantillas; la sincronización no lo toca.
+    headerMedia: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'TemplateMedia',
+        default: null,
+    },
+
 }, {timestamps: true});
 
 templateSchema.index({ templateId: 1, timestamps: 1 });

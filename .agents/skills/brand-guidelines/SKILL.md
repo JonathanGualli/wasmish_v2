@@ -77,6 +77,7 @@ Tailwind genéricos (`gray-800`, `blue-500`, `green-500`…).
 --color-brand-warning-soft:  #fdf7f0   /* Fondo de nota interna / pendiente */
 --color-brand-danger-soft:   #fdf6f5   /* Fondo de error / rechazada */
 --color-brand-danger-border: #f0d5d2
+--color-brand-info-soft:     #edf3fa   /* Fondo de lo que está en curso (enviando, entregado) */
 ```
 
 **Nunca uses opacidades para tintar** (`bg-brand-accent/10`, `bg-brand-danger/10`).
@@ -210,6 +211,7 @@ con el par tinte/texto que corresponda:
 | Estado | Clases |
 |---|---|
 | Positivo (aprobada, activa, conectado) | `bg-brand-accent-soft text-brand-accent-strong` |
+| En curso (enviando, entregado) | `bg-brand-info-soft text-brand-info` |
 | En espera (pendiente) | `bg-brand-warning-soft text-brand-warning` |
 | Negativo (rechazada, inactiva) | `bg-brand-danger-soft text-brand-danger` |
 | Neutro (sin conectar, cerrada) | `bg-brand-raised text-brand-muted` |

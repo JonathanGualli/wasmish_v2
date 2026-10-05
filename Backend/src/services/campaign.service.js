@@ -3,6 +3,7 @@ import CampaignRecipient from "../models/campaign.recipient.model.js";
 import Message from "../models/message.model.js";
 import { sendUser } from "../controllers/stream.controller.js";
 import { buildCampaignStats } from "../utils/campaign.status.js";
+import { CAMPAIGN_RATE_PER_SECOND } from "../config.js";
 
 // Lo que comparten el controller y el worker de los envíos masivos: las
 // estadísticas, la forma en que la API devuelve una campaña y el aviso por SSE.
@@ -39,8 +40,45 @@ export const getCampaignsStats = async (campaignIds) => {
 export const getCampaignStats = async (campaignId) =>
     (await getCampaignsStats([campaignId])).get(String(campaignId));
 
+const ACTIVE_STATUSES = ['queued', 'sending'];
+
+/**
+ * Cuánto falta, a ojo: los pendientes al ritmo del worker. Es un mínimo, porque
+ * el ritmo se reparte entre las cuentas que estén enviando a la vez. `null` si
+ * no avanza (pausada, terminada).
+ */
+const estimateSecondsLeft = (status, stats) =>
+    ACTIVE_STATUSES.includes(status) && stats.pending > 0
+        ? Math.ceil(stats.pending / CAMPAIGN_RATE_PER_SECOND)
+        : null;
+
+/**
+ * Los fallidos de una campaña agrupados por código de error, del más frecuente
+ * al menos: `[{ code, detail, count }]`. Junta los dos sitios donde se apunta un
+ * fallo: el `Message` que rechazó Meta y el destinatario que falló antes de
+ * llegar a Meta (sin `Message`). `detail` es el texto de uno de ellos, para los
+ * códigos que la UI no sabe traducir.
+ */
+export const getCampaignFailureReasons = async (campaignId) => {
+    const groupByCode = [
+        { $group: { _id: '$errorCode', detail: { $first: '$errorDetail' }, count: { $sum: 1 } } },
+    ];
+    const [fromMessages, fromRecipients] = await Promise.all([
+        Message.aggregate([{ $match: { campaignId, status: 'failed' } }, ...groupByCode]),
+        CampaignRecipient.aggregate([{ $match: { campaignId, status: 'failed' } }, ...groupByCode]),
+    ]);
+
+    const byCode = new Map();
+    [...fromMessages, ...fromRecipients].forEach(({ _id, detail, count }) => {
+        const code = _id ?? null;
+        const current = byCode.get(code);
+        byCode.set(code, { code, detail: current?.detail ?? detail ?? null, count: (current?.count ?? 0) + count });
+    });
+    return [...byCode.values()].sort((a, b) => b.count - a.count);
+};
+
 // La forma en que la API (y el SSE) devuelven una campaña.
-export const serializeCampaign = (campaign, stats) => ({
+export const serializeCampaign = (campaign, stats = buildCampaignStats()) => ({
     id: String(campaign._id),
     name: campaign.name,
     status: campaign.status,
@@ -55,8 +93,10 @@ export const serializeCampaign = (campaign, stats) => ({
     variables: campaign.variables ?? [],
     buttons: campaign.buttons ?? [],
     excludeOptedOut: Boolean(campaign.excludeOptedOut),
+    dryRun: Boolean(campaign.dryRun),
     totalRecipients: campaign.totalRecipients ?? 0,
-    stats: stats ?? buildCampaignStats(),
+    stats,
+    estimatedSecondsLeft: estimateSecondsLeft(campaign.status, stats),
     createdAt: toIso(campaign.createdAt),
     startedAt: toIso(campaign.startedAt),
     finishedAt: toIso(campaign.finishedAt),

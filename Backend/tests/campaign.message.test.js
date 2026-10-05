@@ -9,6 +9,7 @@ import {
     cleanValue,
     resolveVariableValue,
     buildContactParameters,
+    resolveContactValues,
 } from '../src/utils/campaign.message.js';
 
 const PROMO = {
@@ -135,4 +136,14 @@ test('parámetros con nombre como [{ name, value }]', () => {
     }, ANA);
     assert.deepEqual(built.parameters, [{ name: 'nombre', value: 'Ana Pérez' }, { name: 'empresa', value: 'Ferretería Sur' }]);
     assert.deepEqual(built.fallbacks, []);
+});
+
+test('resolveContactValues da el valor de cada variable y botón y si usó la reserva', () => {
+    // La vista previa resalta cada dato dentro del mensaje con esto: si una
+    // clave faltara, el dato se pintaría como texto normal.
+    assert.deepEqual(resolveContactValues(PROMO, CONFIG, SIN_DATOS), {
+        1: { value: 'cliente', usedFallback: true },
+        2: { value: 'toda la tienda', usedFallback: false },
+        'button.0': { value: 'octubre', usedFallback: false },
+    });
 });

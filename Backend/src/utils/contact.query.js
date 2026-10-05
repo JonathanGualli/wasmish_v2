@@ -26,6 +26,17 @@ export const CONTACT_FILTERS = ['all', 'with_conversation', 'without_conversatio
 // regular: «+593» rompería la consulta y un patrón malicioso podría colgarla.
 export const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+const SEARCH_FIELDS = ['name', 'profileName', 'username', 'email', 'company'];
+
+// Lo que se busca, como expresiones: el texto en los campos de SEARCH_FIELDS
+// y, si trae dígitos, el teléfono. null si no hay nada que buscar.
+const searchPatterns = (search) => {
+    const text = typeof search === 'string' ? search.trim().replace(/^@/, '') : '';
+    if (!text) return null;
+    const digits = text.replace(/\D/g, '');
+    return { text: new RegExp(escapeRegex(text), 'i'), phone: digits ? new RegExp(digits) : null };
+};
+
 /**
  * Condición de búsqueda por nombre, nombre de WhatsApp, usuario, email,
  * empresa o teléfono. Devuelve null si no hay nada que buscar.
@@ -34,14 +45,22 @@ export const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
  * «+593 99 123 4567», pero se guarda como «593991234567».
  */
 export const buildContactSearch = (search) => {
-    const text = typeof search === 'string' ? search.trim().replace(/^@/, '') : '';
-    if (!text) return null;
+    const patterns = searchPatterns(search);
+    if (!patterns) return null;
 
-    const pattern = new RegExp(escapeRegex(text), 'i');
-    const conditions = ['name', 'profileName', 'username', 'email', 'company'].map(field => ({ [field]: pattern }));
-
-    const digits = text.replace(/\D/g, '');
-    if (digits) conditions.push({ phone: new RegExp(digits) });
-
+    const conditions = SEARCH_FIELDS.map(field => ({ [field]: patterns.text }));
+    if (patterns.phone) conditions.push({ phone: patterns.phone });
     return { $or: conditions };
+};
+
+/**
+ * La misma búsqueda que `buildContactSearch`, sobre un contacto ya cargado:
+ * para filtrar una lista que ya está en memoria (los destinatarios de un
+ * envío) sin volver a consultar. Sin búsqueda, todos coinciden.
+ */
+export const matchesContactSearch = (contact, search) => {
+    const patterns = searchPatterns(search);
+    if (!patterns) return true;
+    return SEARCH_FIELDS.some(field => typeof contact[field] === 'string' && patterns.text.test(contact[field]))
+        || Boolean(patterns.phone && typeof contact.phone === 'string' && patterns.phone.test(contact.phone));
 };

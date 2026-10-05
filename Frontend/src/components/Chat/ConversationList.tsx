@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { Plus, Search } from "lucide-react";
+import { SearchInput } from "../SearchInput/SearchInput";
+import { Plus } from "lucide-react";
 import { useConversations } from "../../hooks/useConversations";
 import { useTemplates } from "../../hooks/useTemplates";
 import { renderLegacyTemplateText } from "../../utils/legacyTemplate";
@@ -131,19 +132,7 @@ export const ChatconversationList = ({ onSelect, selectedId, onNewConversation, 
                     </button>
                 </div>
 
-                <div className="mt-3 relative flex items-center">
-                    <Search size={16} className="absolute left-[11px] text-brand-subtle pointer-events-none" />
-                    <input
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                        placeholder="Buscar conversación o número"
-                        className="w-full box-border text-[13px] text-brand-text bg-brand-bg
-                            border border-brand-border rounded-lg py-2.5 pl-[34px] pr-3
-                            placeholder:text-brand-subtle
-                            focus:outline-none focus:bg-brand-surface focus:border-brand-success
-                            focus:ring-[3px] focus:ring-brand-accent-soft transition-colors"
-                    />
-                </div>
+                <SearchInput value={query} onChange={setQuery} placeholder="Buscar conversación o número" className="mt-3" />
             </div>
 
             <div className="flex-1 overflow-y-auto min-h-0 flex flex-col">

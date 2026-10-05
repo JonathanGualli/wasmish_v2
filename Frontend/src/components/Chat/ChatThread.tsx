@@ -197,7 +197,10 @@ export const ChatThread = ({ conversationId, onBack }: Props) => {
                         {conArchivo ? (
                             <span className="flex flex-col gap-2">
                                 <MessageMedia msg={msg} />
-                                {msg.caption && <span className="min-w-0">{msg.caption}</span>}
+                                {/* Una plantilla con archivo en la cabecera: debajo va su cuerpo. */}
+                                {msg.templateName
+                                    ? <span className="min-w-0">{renderLegacyTemplateText(msg.text, templates)}</span>
+                                    : msg.caption && <span className="min-w-0">{msg.caption}</span>}
                             </span>
                         ) : esAdjunto ? (
                             <span className="flex items-start gap-2">

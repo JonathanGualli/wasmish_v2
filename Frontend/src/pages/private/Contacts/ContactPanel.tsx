@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
+import { ConfirmDialog } from '../../../components/Dialog/ConfirmDialog';
 import {
     AlertTriangle, ChevronLeft, ExternalLink, LoaderCircle, Lock, Megaphone, MessageSquare, Pencil, Send, Trash2, X,
 } from 'lucide-react';
@@ -382,11 +383,7 @@ const DeleteContactDialog = ({ contact, open, onCancel, onDeleted }: {
     onDeleted: () => void;
 }) => {
     const { remove } = useContactMutations();
-    const { state: errorVisible, setState, setContent } = useModalContext();
-
-    const handleClose = () => {
-        if (!remove.isPending && !errorVisible) onCancel();
-    };
+    const { setState, setContent } = useModalContext();
 
     const handleDelete = async () => {
         try {
@@ -400,28 +397,16 @@ const DeleteContactDialog = ({ contact, open, onCancel, onDeleted }: {
     };
 
     return (
-        <Dialog open={open} onClose={handleClose} className="relative z-[60]">
-            <DialogBackdrop className="fixed inset-0 bg-brand-ink/50" />
-            <div className="fixed inset-0 flex items-center justify-center p-4">
-                <DialogPanel className="w-full max-w-[440px] bg-brand-surface border border-brand-border rounded-2xl
-                    shadow-[0_18px_40px_rgba(14,17,22,0.12)] p-6 grid gap-3.5">
-                    <div className="w-10 h-10 rounded-[10px] bg-brand-danger-soft text-brand-danger flex items-center justify-center">
-                        <Trash2 size={19} />
-                    </div>
-                    <div>
-                        <DialogTitle className="text-lg font-bold tracking-[-0.015em] text-brand-text">
-                            ¿Eliminar a {contactTitle(contact)}?
-                        </DialogTitle>
-                        <p className="mt-1.5 text-sm leading-[1.55] text-brand-strong">
-                            No tiene conversaciones; se borran solo sus datos.
-                        </p>
-                    </div>
-                    <div className="mt-1.5 flex justify-end gap-2">
-                        <div className="h-10"><CustomButton variant="outline" onClick={handleClose}>Cancelar</CustomButton></div>
-                        <div className="h-10"><CustomButton variant="danger" onClick={handleDelete} isLoading={remove.isPending}>Eliminar</CustomButton></div>
-                    </div>
-                </DialogPanel>
-            </div>
-        </Dialog>
+        <ConfirmDialog
+            open={open}
+            tone="danger"
+            icon={<Trash2 size={19} />}
+            title={`¿Eliminar a ${contactTitle(contact)}?`}
+            description="No tiene conversaciones; se borran solo sus datos."
+            confirmLabel="Eliminar"
+            isLoading={remove.isPending}
+            onConfirm={handleDelete}
+            onCancel={onCancel}
+        />
     );
 };

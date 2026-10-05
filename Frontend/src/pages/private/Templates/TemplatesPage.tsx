@@ -1,15 +1,17 @@
 import { useState } from "react";
-import { AlertTriangle, LayoutTemplate, RefreshCw } from "lucide-react";
+import { AlertTriangle, ImageUp, LayoutTemplate, RefreshCw } from "lucide-react";
 import { useTemplates } from "../../../hooks/useTemplates";
 import { DataTable } from "../../../components/DataTable/DataTable";
 import { CustomButton } from "../../../components/Button/Button";
 import { PageShell, PageHeader } from "../../../components/Page/PageShell";
 import { templateColumns } from "./TemplateColumns";
 import { Callout } from "../../../components/Callout/Callout"
+import { headerMediaRule } from "../../../utils/templateHeader";
 
 export const TemplatesPage = () => {
     const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 });
     const { templates, isLoading, isSyncing, sync, syncError } = useTemplates();
+    const missingMedia = templates.filter(t => headerMediaRule(t) && !t.headerMedia).length;
 
     return (
         <PageShell width="wide">
@@ -32,6 +34,17 @@ export const TemplatesPage = () => {
                     </Callout>
                 </div>
             )}  
+            {missingMedia > 0 && (
+                <div className="mb-6">
+                    <Callout tone="warning" icon={<ImageUp size={16} />}
+                        title={missingMedia === 1
+                            ? 'Una plantilla no se puede enviar hasta que subas el archivo de su cabecera.'
+                            : `${missingMedia} plantillas no se pueden enviar hasta que subas el archivo de su cabecera.`}>
+                        WhatsApp aprueba que la cabecera lleve una imagen (o un vídeo, o un documento), pero no cuál:
+                        el archivo va en cada envío. Sube el que quieras usar en la columna «Cabecera»; puedes cambiarlo cuando quieras.
+                    </Callout>
+                </div>
+            )}
             <DataTable
                 data={templates}
                 columns={templateColumns}

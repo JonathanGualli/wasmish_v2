@@ -1,39 +1,58 @@
 import { Listbox, ListboxButton, ListboxOption, ListboxOptions } from '@headlessui/react';
-import { Check, ChevronDown } from 'lucide-react';
+import { Check, ChevronDown, Lock } from 'lucide-react';
+import { Pill, type PillTone } from '../Pill/Pill';
 import { AuthField } from '../Auth/AuthField';
 import { isPositional, buttonFieldLabel } from '../../utils/templatePlaceholders';
 import type { TemplateForm } from '../../hooks/useTemplateForm';
+import type { Template } from '../../models/template.model';
 
-/** Categoría de Meta (MARKETING, UTILITY, AUTHENTICATION): píldora neutra. */
-const CategoryPill = ({ category }: { category?: string }) => category ? (
-  <span className="rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.05em]
-    bg-brand-raised text-brand-muted flex-none">
-    {category}
-  </span>
-) : null;
+const CATEGORY: Record<string, { label: string; tone: PillTone }> = {
+  // La de marketing en ámbar: es la que se cobra como publicidad.
+  MARKETING: { label: 'Marketing', tone: 'warning' },
+  UTILITY: { label: 'Utilidad', tone: 'neutral' },
+  AUTHENTICATION: { label: 'Autenticación', tone: 'neutral' },
+};
+
+/** Categoría de Meta (MARKETING, UTILITY, AUTHENTICATION) como píldora. */
+export const CategoryPill = ({ category }: { category?: string | null }) => {
+  if (!category) return null;
+  const { label, tone } = CATEGORY[category] ?? { label: category, tone: 'neutral' as PillTone };
+  return <Pill tone={tone}>{label}</Pill>;
+};
+
+interface TemplatePickerProps {
+  templates: Template[];
+  selected?: Template;
+  onSelect: (template: Template) => void;
+  hint?: string;
+  /** Por qué no se puede elegir una plantilla (`null` = sí se puede). Se ve deshabilitada, con el motivo. */
+  disabledReason?: (template: Template) => string | null;
+}
 
 /**
  * Selector de plantilla aprobada. Listbox en vez de <select> para poder
  * enseñar, junto al nombre, el idioma y la categoría — dos plantillas pueden
  * llamarse parecido y distinguirse solo por eso.
  */
-export const TemplatePicker = ({ form }: { form: TemplateForm }) => (
+export const TemplatePicker = ({
+  templates, selected, onSelect, hint = 'Solo aparecen las aprobadas', disabledReason,
+}: TemplatePickerProps) => (
   <div className="grid gap-[7px]">
     <span className="flex items-baseline text-[13px] font-semibold text-brand-strong">
       Plantilla
-      <span className="ml-auto text-xs font-normal text-brand-muted">Solo aparecen las aprobadas</span>
+      <span className="ml-auto text-xs font-normal text-brand-muted">{hint}</span>
     </span>
 
-    <Listbox value={form.selected?.name ?? ''} onChange={form.selectTemplate}>
+    <Listbox value={selected ?? null} by="templateId" onChange={(t: Template | null) => t && onSelect(t)}>
       <ListboxButton className="group w-full flex items-center gap-2.5 text-left cursor-pointer
         bg-brand-surface border border-brand-border-strong rounded-[8px] px-[14px] py-[11px]
         focus:outline-none data-[open]:border-brand-success data-[open]:ring-[3px] data-[open]:ring-brand-accent-soft
         transition-colors">
-        {form.selected ? (
+        {selected ? (
           <>
-            <span className="font-mono text-sm text-brand-text truncate">{form.selected.name}</span>
-            <span className="font-mono text-[11px] text-brand-subtle flex-none">{form.selected.language}</span>
-            <CategoryPill category={form.selected.category} />
+            <span className="font-mono text-sm text-brand-text truncate">{selected.name}</span>
+            <span className="font-mono text-[11px] text-brand-subtle flex-none">{selected.language}</span>
+            <CategoryPill category={selected.category} />
           </>
         ) : (
           <span className="text-[15px] text-brand-subtle">Elige una plantilla…</span>
@@ -48,27 +67,34 @@ export const TemplatePicker = ({ form }: { form: TemplateForm }) => (
           bg-brand-surface border border-brand-border rounded-xl
           shadow-[0_18px_40px_rgba(14,17,22,0.12)] focus:outline-none"
       >
-        {form.approved.map(t => (
-          <ListboxOption
-            key={t.templateId}
-            value={t.name}
-            className="group flex items-start gap-2.5 px-3 py-2.5 rounded-[8px] cursor-pointer
-              data-[focus]:bg-brand-bg"
-          >
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-sm text-brand-text truncate">{t.name}</span>
-                <span className="font-mono text-[11px] text-brand-subtle flex-none">{t.language}</span>
-                <CategoryPill category={t.category} />
+        {templates.map(t => {
+          const reason = disabledReason?.(t) ?? null;
+          return (
+            <ListboxOption
+              key={t.templateId}
+              value={t}
+              disabled={Boolean(reason)}
+              className="group flex items-start gap-2.5 px-3 py-2.5 rounded-[8px] cursor-pointer
+                data-[focus]:bg-brand-bg data-[disabled]:cursor-not-allowed"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 group-data-[disabled]:opacity-50">
+                  <span className="font-mono text-sm text-brand-text truncate">{t.name}</span>
+                  <span className="font-mono text-[11px] text-brand-subtle flex-none">{t.language}</span>
+                  <CategoryPill category={t.category} />
+                </div>
+                {t.bodyText && (
+                  <p className="text-[13px] text-brand-muted truncate mt-0.5 group-data-[disabled]:opacity-50">{t.bodyText}</p>
+                )}
+                {reason && (
+                  <p className="flex items-center gap-1.5 text-[12.5px] text-brand-strong mt-1"><Lock size={13} />{reason}</p>
+                )}
               </div>
-              {t.bodyText && (
-                <p className="text-[13px] text-brand-muted truncate mt-0.5">{t.bodyText}</p>
-              )}
-            </div>
-            <Check size={16} className="mt-0.5 flex-none text-brand-accent-strong invisible
-              group-data-[selected]:visible" />
-          </ListboxOption>
-        ))}
+              <Check size={16} className="mt-0.5 flex-none text-brand-accent-strong invisible
+                group-data-[selected]:visible" />
+            </ListboxOption>
+          );
+        })}
       </ListboxOptions>
     </Listbox>
   </div>

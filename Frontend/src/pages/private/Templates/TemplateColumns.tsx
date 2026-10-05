@@ -1,5 +1,6 @@
 import { type ColumnDef } from "@tanstack/react-table";
 import type { Template } from "../../../models/template.model";
+import { TemplateHeaderCell } from "./TemplateHeaderCell";
 
 /** Píldora de estado. Tintes sólidos del manual, no opacidades. */
 const STATUS: Record<string, { label: string; className: string }> = {
@@ -44,10 +45,15 @@ export const templateColumns: ColumnDef<Template>[] = [
         accessorKey: "bodyText",
         header: "Cuerpo del mensaje",
         cell: ({ row }) => (
-            <div className="max-w-[340px] truncate text-brand-muted" title={row.original.bodyText}>
+            <div className="max-w-[260px] truncate text-brand-muted" title={row.original.bodyText}>
                 {row.original.bodyText}
             </div>
         ),
+    },
+    {
+        id: "header",
+        header: "Cabecera",
+        cell: ({ row }) => <TemplateHeaderCell template={row.original} />,
     },
     {
         accessorKey: "language",

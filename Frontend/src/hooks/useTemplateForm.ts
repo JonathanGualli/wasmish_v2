@@ -3,6 +3,7 @@ import type { AxiosError } from "axios";
 import { useTemplates } from "./useTemplates";
 import { extractPlaceholders, isPositional, buttonsNeedingValue } from "../utils/templatePlaceholders";
 import type { Template, TemplateButtonParam } from "../models/template.model";
+import { templateHeaderIssue } from "../utils/templateHeader";
 
 interface ErrorItem { message: string; errorCode?: string | null; errorDetail?: string | null }
 
@@ -76,6 +77,10 @@ export const useTemplateForm = (initial?: InitialValues) => {
         return { templateName: selected!.name, language: selected!.language, parameters, buttons };
     };
 
+    // Una plantilla con la cabecera sin archivo no sale en los selectores, pero
+    // puede venir elegida de un borrador anterior.
+    const headerIssue = selected ? templateHeaderIssue(selected) : null;
+
     return {
         // `selectedName` es lo elegido aunque la plantilla aún no haya cargado
         // (o ya no esté aprobada); `selected` solo existe cuando sí. El borrador
@@ -84,7 +89,7 @@ export const useTemplateForm = (initial?: InitialValues) => {
         selectedName,
         approved, isLoading, selected, placeholders, buttonFields,
         values, setValues, buttonValues, setButtonValues,
-        selectTemplate, missing,
+        selectTemplate, missing, headerIssue,
         reset: () => selectTemplate(''),
         buildPayload,
     };

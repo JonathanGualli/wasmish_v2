@@ -7,6 +7,7 @@ import { useSendTemplate } from '../../hooks/useSendTemplate';
 import { useTemplateForm, templateSendError } from '../../hooks/useTemplateForm';
 import { TemplatePicker, TemplateFields } from './TemplateFields';
 import { TemplateBubble, TemplateButtons } from './TemplatePreview';
+import { templateHeaderIssue } from '../../utils/templateHeader';
 
 interface Props {
   open: boolean;
@@ -40,7 +41,7 @@ export const SendTemplateDialog = ({ open, onClose, conversationId, contactName 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.selected || form.missing > 0) return;
+    if (!form.selected || form.missing > 0 || form.headerIssue) return;
 
     try {
       await sendTemplate.mutateAsync({ conversationId, ...form.buildPayload() });
@@ -90,19 +91,18 @@ export const SendTemplateDialog = ({ open, onClose, conversationId, contactName 
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="grid gap-[18px] mt-6">
-              <TemplatePicker form={form} />
+              <TemplatePicker templates={form.approved} selected={form.selected} onSelect={t => form.selectTemplate(t.name)}
+                disabledReason={templateHeaderIssue} />
+              {form.headerIssue && <p className="text-xs text-brand-danger -mt-2.5">{form.headerIssue}</p>}
               <TemplateFields form={form} />
 
               {form.selected && (
                 <div className="grid gap-[7px]">
                   <span className="text-[13px] font-semibold text-brand-strong">Vista previa</span>
                   <div>
-                    <TemplateBubble bodyText={form.selected.bodyText ?? ''} values={form.values} />
+                    <TemplateBubble bodyText={form.selected.bodyText ?? ''} values={form.values} template={form.selected} />
                     <TemplateButtons buttons={form.selected.buttons} />
                   </div>
-                  <span className="text-[13px] text-brand-muted">
-                    Si la plantilla tiene encabezado, no se ve aquí — pero sí se envía.
-                  </span>
                 </div>
               )}
 
@@ -111,7 +111,7 @@ export const SendTemplateDialog = ({ open, onClose, conversationId, contactName 
                   <CustomButton variant="outline" onClick={handleClose}>Cancelar</CustomButton>
                 </div>
                 <div className="h-10">
-                  <CustomButton type="submit" isLoading={sendTemplate.isPending} disabled={!form.selected || form.missing > 0}>
+                  <CustomButton type="submit" isLoading={sendTemplate.isPending} disabled={!form.selected || form.missing > 0 || Boolean(form.headerIssue)}>
                     {sendTemplate.isPending ? 'Enviando…' : 'Enviar'}
                   </CustomButton>
                 </div>

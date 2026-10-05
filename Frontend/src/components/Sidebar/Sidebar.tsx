@@ -1,4 +1,4 @@
-import { Menu, Rocket, Settings, MessageSquare, Users, LayoutTemplate, BookOpen, X, ShieldCheck, LogOut } from 'lucide-react';
+import { Menu, Rocket, Settings, MessageSquare, Users, Send, LayoutTemplate, BookOpen, X, ShieldCheck, LogOut } from 'lucide-react';
 import { SidebarItem } from './SidebarItem';
 import { useAuthContext } from '../../context/auth.context';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -39,6 +39,7 @@ export const Sidebar = ({ collapsed, toggle, isMobile }: Props) => {
       { icon: <Rocket size={18} />,         text: 'Inicio rápido',  value: 'quickStart', path: `${AppRoutes.private.root}/${AppRoutes.private.quickStart}`, badge: undefined as number | undefined },
       { icon: <MessageSquare size={18} />,  text: 'Chats',          value: 'chats',      path: `${AppRoutes.private.root}/${AppRoutes.private.chats}`,      badge: unread },
       { icon: <Users size={18} />,          text: 'Contactos',      value: 'contacts',   path: `${AppRoutes.private.root}/${AppRoutes.private.contacts}`,   badge: undefined },
+      { icon: <Send size={18} />,           text: 'Envíos',         value: 'campaigns',  path: `${AppRoutes.private.root}/${AppRoutes.private.campaigns}`,  badge: undefined },
       { icon: <LayoutTemplate size={18} />, text: 'Plantillas',     value: 'templates',  path: `${AppRoutes.private.root}/${AppRoutes.private.templates}`,  badge: undefined },
       { icon: <BookOpen size={18} />,       text: 'Documentación',  value: 'docs',       path: `${AppRoutes.private.root}/${AppRoutes.private.docs}`,       badge: undefined },
     ];
@@ -64,7 +65,8 @@ export const Sidebar = ({ collapsed, toggle, isMobile }: Props) => {
   };
 
   useEffect(() => {
-    const current = allItems.find(item => location.pathname === item.path);
+    // También en las subrutas: el detalle de un envío sigue siendo «Envíos».
+    const current = allItems.find(item => location.pathname === item.path || location.pathname.startsWith(`${item.path}/`));
     if (current) setValueSelected(current.value);
   }, [location.pathname, allItems]);
 

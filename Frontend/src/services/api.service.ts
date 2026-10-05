@@ -1,8 +1,8 @@
 import type { QueryFunctionContext } from '@tanstack/react-query';
 import axios from 'axios';
-import type { TemplateButtonParam } from '../models/template.model';
+import type { Template, TemplateButtonParam } from '../models/template.model';
 import type { ContactFilter, ContactInput } from '../models/contact.model';
-import type { CampaignDraftInput, CreateCampaignInput, RecipientState } from '../models/campaign.model';
+import type { CampaignAudienceInput, CampaignDraftInput, CreateCampaignInput, RecipientState } from '../models/campaign.model';
 
 const API_URL = '/api'; // configuracion puesta en vite.config.ts
 // const API_URL = 'https://wasmish-api.solventyc.com/api';
@@ -14,6 +14,14 @@ interface SSEHandlers {
     onContactUpdated?: (event: MessageEvent) => void;
     onCampaignProgress?: (event: MessageEvent) => void;
     onError?: (err: ErrorEvent) => void;
+    /** La conexión se abrió (también al reconectar). */
+    onOpen?: () => void;
+    /**
+     * El navegador dejó de reintentar: pasa cuando el servidor responde con
+     * error (p. ej. el proxy de Vite mientras el backend reinicia). Volver a
+     * conectar queda en manos de quien llama.
+     */
+    onClosed?: () => void;
 }
 
 // Servicio para iniciar sesión
@@ -113,9 +121,12 @@ export const createSSEConnection = (
         console.debug("📨 Default message:", event.data);
     };
 
+    source.onopen = () => handlers.onOpen?.();
+
     source.onerror = (err) => {
         console.error("SSE Error:", err);
         handlers.onError?.(err as ErrorEvent);
+        if (source.readyState === EventSource.CLOSED) handlers.onClosed?.();
     };
 
     return {
@@ -133,8 +144,24 @@ export const syncTemplatesService = async () => {
 }
 
 // Servicio para obtener las plantillas
-export const getTemplatesService = async () => {
+export const getTemplatesService = async (): Promise<Template[]> => {
     const { data } = await axios.get(`${API_URL}/templates`, { withCredentials: true });
+    return data;
+}
+
+// El archivo de la cabecera de una plantilla: va crudo, con su tipo en el
+// Content-Type y el nombre en X-Filename (codificado: una cabecera HTTP no
+// admite tildes). Devuelve la plantilla actualizada.
+export const uploadTemplateHeaderMediaService = async (templateId: string, file: File): Promise<Template> => {
+    const { data } = await axios.put(`${API_URL}/templates/${templateId}/header-media`, file, {
+        withCredentials: true,
+        headers: { 'Content-Type': file.type || 'application/octet-stream', 'X-Filename': encodeURIComponent(file.name) },
+    });
+    return data;
+}
+
+export const removeTemplateHeaderMediaService = async (templateId: string): Promise<Template> => {
+    const { data } = await axios.delete(`${API_URL}/templates/${templateId}/header-media`, { withCredentials: true });
     return data;
 }
 
@@ -244,6 +271,14 @@ export const previewCampaignService = async (input: CampaignDraftInput) => {
     return data;
 }
 
+export const previewCampaignAudienceService = async (input: CampaignAudienceInput, page: number, limit: number, search: string) => {
+    const { data } = await axios.post(`${API_URL}/campaigns/preview/recipients`, input, {
+        params: { page, limit, search: search || undefined },
+        withCredentials: true,
+    });
+    return data;
+}
+
 export const createCampaignService = async (input: CreateCampaignInput) => {
     const { data } = await axios.post(`${API_URL}/campaigns`, input, { withCredentials: true });
     return data;
@@ -264,6 +299,11 @@ export const getCampaignRecipientsService = async (id: string, page: number, lim
         params: { page, limit, state: state ?? undefined },
         withCredentials: true,
     });
+    return data;
+}
+
+export const getCampaignFailuresService = async (id: string) => {
+    const { data } = await axios.get(`${API_URL}/campaigns/${id}/failures`, { withCredentials: true });
     return data;
 }
 

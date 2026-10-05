@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { recipientSkipReason, stoppingErrorMessage, buildCampaignStats } from '../src/utils/campaign.status.js';
+import { recipientSkipReason, shouldExcludeOptedOut, stoppingErrorMessage, buildCampaignStats } from '../src/utils/campaign.status.js';
 
 // --- a quién no se le envía ----------------------------------------------------
 
@@ -15,6 +15,15 @@ test('los dados de baja solo se omiten si se pidió excluirlos', () => {
     const optedOut = { phone: '593991112223', marketingOptOut: true };
     assert.equal(recipientSkipReason(optedOut), null);
     assert.equal(recipientSkipReason(optedOut, { excludeOptedOut: true }), 'opted_out');
+});
+
+// La baja es de publicidad: un aviso de utilidad le llega igual, y excluirlo
+// le quitaría un mensaje que sí quiere.
+test('la baja de publicidad solo excluye con plantillas de marketing', () => {
+    assert.equal(shouldExcludeOptedOut({ category: 'MARKETING' }, true), true);
+    assert.equal(shouldExcludeOptedOut({ category: 'MARKETING' }, false), false);
+    assert.equal(shouldExcludeOptedOut({ category: 'UTILITY' }, true), false);
+    assert.equal(shouldExcludeOptedOut(null, true), false);
 });
 
 test('borrado o sin identidad se omite', () => {

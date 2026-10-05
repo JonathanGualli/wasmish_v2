@@ -71,8 +71,12 @@ export interface Campaign {
     variables: CampaignVariable[];
     buttons: CampaignButton[];
     excludeOptedOut: boolean;
+    /** Creado en modo de prueba (CAMPAIGN_DRY_RUN): no se llamó a Meta. */
+    dryRun: boolean;
     totalRecipients: number;
     stats: CampaignStats;
+    /** Segundos que faltan, a ojo. `null` si no avanza (pausado, terminado). */
+    estimatedSecondsLeft: number | null;
     createdAt: string;
     startedAt: string | null;
     finishedAt: string | null;
@@ -108,11 +112,59 @@ export interface CampaignPreview {
         duplicates: number;
         notFound: number;
     };
+    /** Lo que tardaría si no hay otro envío a la vez. */
+    estimatedSeconds: number;
+    /** El servidor está en modo de prueba: el envío no llegará a WhatsApp. */
+    dryRun: boolean;
     /** Cuántos usarán la reserva, por clave: '1', 'nombre', 'button.0'. */
     fallbacks: Record<string, number>;
     /** El mensaje ya relleno para los primeros contactos. */
-    samples: { contactId: string; displayName: string; text: string; fallbacks: string[] }[];
+    samples: CampaignSample[];
     errors: CampaignFieldError[];
+}
+
+/** Lo que recibe un contacto en una variable o un botón. */
+export interface ResolvedValue { value: string; usedFallback: boolean }
+
+export interface CampaignSample {
+    contactId: string;
+    displayName: string;
+    text: string;
+    fallbacks: string[];
+    /** Por clave ('1', 'nombre', 'button.0'): para resaltar cada dato en el mensaje. */
+    values: Record<string, ResolvedValue>;
+}
+
+/** Por qué no se le enviará a un contacto. */
+export type SkipReason = 'opted_out' | 'contact_deleted' | 'no_identity';
+
+/** Un contacto del borrador, en la lista del primer paso. */
+export interface AudienceMember {
+    contactId: string;
+    displayName: string;
+    phone: string | null;
+    username: string | null;
+    optedOut: boolean;
+    /** `null` = se le envía. */
+    skipReason: SkipReason | null;
+}
+
+export interface AudiencePage {
+    recipients: AudienceMember[];
+    totalCount: number;
+    page: number;
+    limit: number;
+}
+
+/** Lo que pide la lista del primer paso: a quién, sin el mensaje. */
+export type CampaignAudienceInput = Pick<CampaignDraftInput, 'recipients' | 'excludeOptedOut' | 'templateId'>;
+
+/** Fallidos de un envío con el mismo código de error. */
+export interface FailureReason {
+    /** Código de Meta ('131026') o de antes de llamarla ('409'); `null` si no lo hubo. */
+    code: string | null;
+    detail: string | null;
+    count: number;
 }
 
 /** Estado de un destinatario tal como lo ve el usuario. */
@@ -125,8 +177,8 @@ export interface CampaignRecipient {
     phone: string | null;
     username: string | null;
     state: RecipientState;
-    /** Solo en omitidos: 'opted_out' | 'contact_deleted' | 'no_identity'. */
-    skipReason: string | null;
+    /** Solo en omitidos. */
+    skipReason: SkipReason | null;
     errorCode: string | null;
     errorDetail: string | null;
     conversationId: string | null;

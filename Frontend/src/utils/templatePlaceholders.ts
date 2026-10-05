@@ -36,3 +36,28 @@ export const buttonFieldLabel = (button: TemplateButton) => {
     if (button.type === 'COPY_CODE') return `Código a copiar del botón ${nombre}`;
     return `Valor de la URL del botón ${nombre}`;
 };
+
+/** Las variables en el orden en que se rellenan: {{1}} antes que {{2}}; las nombradas, como aparecen. */
+export const orderedPlaceholders = (bodyText?: string) => {
+    const keys = extractPlaceholders(bodyText);
+    return isPositional(keys) ? [...keys].sort((a, b) => Number(a) - Number(b)) : keys;
+};
+
+const CONTEXT_CHARS = 36;
+
+/**
+ * El texto que rodea a la primera aparición de una variable, para saber cuál
+ * es cuál: «…20% de descuento en » + {{2}} + «. Te esperamos.».
+ */
+export const placeholderContext = (bodyText: string, key: string) => {
+    const match = new RegExp(`\\{\\{\\s*${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\}\\}`).exec(bodyText);
+    if (!match) return { before: '', after: '' };
+    const start = match.index;
+    const end = start + match[0].length;
+    const before = bodyText.slice(Math.max(0, start - CONTEXT_CHARS), start);
+    const after = bodyText.slice(end, end + CONTEXT_CHARS);
+    return {
+        before: start > CONTEXT_CHARS ? `…${before}` : before,
+        after: end + CONTEXT_CHARS < bodyText.length ? `${after}…` : after,
+    };
+};

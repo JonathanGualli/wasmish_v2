@@ -8,14 +8,16 @@ import Message from "../models/message.model.js";
 import { contactSelectionStages } from "./contact.controller.js";
 import { renderTemplateBody } from "./template.controller.js";
 import { wakeCampaignWorker } from "../workers/campaign.worker.js";
-import { getCampaignsStats, getCampaignStats, serializeCampaign, emitCampaignProgress } from "../services/campaign.service.js";
+import {
+    getCampaignsStats, getCampaignStats, getCampaignFailureReasons, serializeCampaign, emitCampaignProgress,
+} from "../services/campaign.service.js";
 import {
     validateCampaignMessage, buildContactParameters, extractTemplateVariables, buttonsNeedingValue,
 } from "../utils/campaign.message.js";
-import { recipientSkipReason } from "../utils/campaign.status.js";
+import { recipientSkipReason, shouldExcludeOptedOut } from "../utils/campaign.status.js";
 import { contactDisplayName } from "../utils/contact.identity.js";
-import { CONTACT_FILTERS } from "../utils/contact.query.js";
-import { CAMPAIGN_MAX_RECIPIENTS } from "../config.js";
+import { CONTACT_FILTERS, matchesContactSearch } from "../utils/contact.query.js";
+import { CAMPAIGN_DRY_RUN, CAMPAIGN_MAX_RECIPIENTS, CAMPAIGN_RATE_PER_SECOND } from "../config.js";
 
 const PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 50;
@@ -65,12 +67,23 @@ const selectContacts = async (userId, recipients) => {
     return { contacts, duplicates: 0, notFound: 0 };
 };
 
+// A quién llega un borrador: cada contacto elegido con su motivo para no
+// enviarle (`null` = se le envía).
+const planAudience = (contacts, excludeOptedOut) =>
+    contacts.map(contact => ({ contact, skipReason: recipientSkipReason(contact, { excludeOptedOut }) }));
+
+const parsePage = (query) => ({
+    page: Math.max(parseInt(query.page) || 1, 1),
+    limit: Math.min(Math.max(parseInt(query.limit) || PAGE_SIZE, 1), MAX_PAGE_SIZE),
+});
+
 const buildDraft = async (userId, body) => {
     // Sin plantilla (vista previa del paso de destinatarios) solo se cuentan
     // los contactos: no hay mensaje que validar todavía.
     const template = body.templateId ? await Template.findOne({ userId, templateId: body.templateId }).lean() : null;
     const config = { variables: body.variables ?? [], buttons: body.buttons ?? [] };
-    const excludeOptedOut = Boolean(body.excludeOptedOut);
+    // El que vale, no el que se pidió: es el que se guarda en la campaña.
+    const excludeOptedOut = shouldExcludeOptedOut(template, body.excludeOptedOut);
 
     const errors = body.templateId ? validateCampaignMessage(template, config) : [];
     const { contacts, duplicates, notFound } = await selectContacts(userId, body.recipients);
@@ -79,7 +92,7 @@ const buildDraft = async (userId, body) => {
         errors.push({ field: 'recipients', message: `Un envío admite como mucho ${CAMPAIGN_MAX_RECIPIENTS} contactos. Acota la búsqueda o divídelo en varios.` });
     }
 
-    const plan = contacts.map(contact => ({ contact, skipReason: recipientSkipReason(contact, { excludeOptedOut }) }));
+    const plan = planAudience(contacts, excludeOptedOut);
     const sendable = plan.filter(p => !p.skipReason);
     if (errors.length === 0 && sendable.length === 0) {
         errors.push({ field: 'recipients', message: 'No queda ningún contacto al que enviar.' });
@@ -104,6 +117,8 @@ const previewMessages = (draft) => {
                 displayName: contactDisplayName(contact),
                 text: renderTemplateBody(draft.template.bodyText, built.parameters) ?? '',
                 fallbacks: built.fallbacks,
+                // Valor por clave: la UI resalta cada dato dentro del mensaje.
+                values: built.values,
             });
         }
     }
@@ -136,6 +151,10 @@ const summarizeDraft = (draft) => {
             duplicates: draft.duplicates,
             notFound: draft.notFound,
         },
+        // A ojo, al ritmo del worker: lo que tarda si no hay otro envío a la vez.
+        estimatedSeconds: Math.ceil(draft.sendable.length / CAMPAIGN_RATE_PER_SECOND),
+        // Se creará en modo de prueba: la UI lo avisa antes de enviar.
+        dryRun: CAMPAIGN_DRY_RUN,
         fallbacks,
         samples,
         errors: draft.errors,
@@ -156,6 +175,43 @@ export const previewCampaign = async (req, res) => {
     try {
         const draft = await buildDraft(req.user.id, req.body);
         return res.json(summarizeDraft(draft));
+    } catch (error) {
+        return sendError(res, 500, error.message);
+    }
+};
+
+/**
+ * POST /campaigns/preview/recipients?page=&limit=&search= — quién recibiría el
+ * borrador, por orden alfabético y paginado, con el motivo de los que se
+ * omitirán. Es el «¿es la gente correcta?» del primer paso.
+ */
+export const previewCampaignRecipients = async (req, res) => {
+    try {
+        const { page, limit } = parsePage(req.query);
+        const { contacts } = await selectContacts(req.user.id, req.body.recipients);
+        // Como mucho CAMPAIGN_MAX_RECIPIENTS ya cargados: buscar en memoria es
+        // más simple que repetir la selección con otra condición.
+        const matching = contacts.filter(contact => matchesContactSearch(contact, req.query.search));
+        const template = req.body.templateId
+            ? await Template.findOne({ userId: req.user.id, templateId: req.body.templateId }).select('category').lean()
+            : null;
+        const plan = planAudience(matching, shouldExcludeOptedOut(template, req.body.excludeOptedOut))
+            .map(({ contact, skipReason }) => ({
+                contactId: String(contact._id),
+                displayName: contactDisplayName(contact),
+                phone: contact.phone ?? null,
+                username: contact.username ?? null,
+                optedOut: Boolean(contact.marketingOptOut),
+                skipReason,
+            }))
+            .sort((a, b) => a.displayName.localeCompare(b.displayName, 'es'));
+
+        return res.json({
+            recipients: plan.slice((page - 1) * limit, page * limit),
+            totalCount: plan.length,
+            page,
+            limit,
+        });
     } catch (error) {
         return sendError(res, 500, error.message);
     }
@@ -188,10 +244,13 @@ export const createCampaign = async (req, res) => {
                 bodyText: template.bodyText ?? '',
                 parameterFormat: template.parameterFormat,
                 buttons: template.buttons ?? [],
+                header: template.header ?? null,
+                headerMedia: template.headerMedia ?? null,
             },
             variables: draft.config.variables,
             buttons: draft.config.buttons,
             excludeOptedOut: draft.excludeOptedOut,
+            dryRun: CAMPAIGN_DRY_RUN,
             totalRecipients: draft.plan.length,
         });
 
@@ -221,8 +280,7 @@ export const createCampaign = async (req, res) => {
 export const listCampaigns = async (req, res) => {
     try {
         const userId = req.user.id;
-        const page = Math.max(parseInt(req.query.page) || 1, 1);
-        const limit = Math.min(Math.max(parseInt(req.query.limit) || PAGE_SIZE, 1), MAX_PAGE_SIZE);
+        const { page, limit } = parsePage(req.query);
 
         const [campaigns, totalCount] = await Promise.all([
             Campaign.find({ userId }).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
@@ -252,6 +310,20 @@ export const getCampaign = async (req, res) => {
     }
 };
 
+/**
+ * GET /campaigns/:id/failures — por qué fallaron, agrupado por código de
+ * error: `{ reasons: [{ code, detail, count }] }`.
+ */
+export const getCampaignFailures = async (req, res) => {
+    try {
+        const campaign = await findOwnedCampaign(req.user.id, req.params.id);
+        if (!campaign) return sendError(res, 404, 'Envío no encontrado');
+        return res.json({ reasons: await getCampaignFailureReasons(campaign._id) });
+    } catch (error) {
+        return sendError(res, 500, error.message);
+    }
+};
+
 // Estado de un destinatario tal como lo ve el usuario: el de su mensaje en
 // WhatsApp si llegó a crearse, y si no, el de la cola. `sending` es «pendiente».
 const RECIPIENT_STATES = ['pending', 'sent', 'delivered', 'read', 'failed', 'skipped', 'cancelled', 'interrupted'];
@@ -266,8 +338,7 @@ export const listCampaignRecipients = async (req, res) => {
         const campaign = await findOwnedCampaign(req.user.id, req.params.id);
         if (!campaign) return sendError(res, 404, 'Envío no encontrado');
 
-        const page = Math.max(parseInt(req.query.page) || 1, 1);
-        const limit = Math.min(Math.max(parseInt(req.query.limit) || PAGE_SIZE, 1), MAX_PAGE_SIZE);
+        const { page, limit } = parsePage(req.query);
         const state = RECIPIENT_STATES.includes(req.query.state) ? req.query.state : null;
 
         const [result] = await CampaignRecipient.aggregate([

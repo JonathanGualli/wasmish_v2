@@ -1,5 +1,20 @@
 import type { ReactNode } from "react";
 import { getCoreRowModel, useReactTable, flexRender, type ColumnDef, type OnChangeFn, type PaginationState } from "@tanstack/react-table";
+import { Checkbox } from "../Checkbox/Checkbox";
+
+/**
+ * Casillas para elegir filas. La tabla solo pinta: qué está elegido lo decide
+ * quien la usa, porque la selección puede ir más allá de la página visible.
+ */
+export interface TableSelection<T> {
+    isSelected: (row: T) => boolean;
+    onToggle: (row: T) => void;
+    /** Cómo se ve la casilla de la cabecera, que marca o desmarca la página. */
+    pageState: 'none' | 'some' | 'all';
+    onTogglePage: () => void;
+    /** Encima de las filas: «Seleccionar los 455 que coinciden». */
+    banner?: ReactNode;
+}
 
 interface Props<T> {
     data: T[];
@@ -20,6 +35,7 @@ interface Props<T> {
      * desplazarse en horizontal). La paginación es la misma.
      */
     renderMobileRow?: (row: T) => ReactNode;
+    selection?: TableSelection<T>;
 }
 
 export function DataTable<T>({
@@ -33,6 +49,7 @@ export function DataTable<T>({
     getRowId,
     activeRowId,
     renderMobileRow,
+    selection,
 }: Props<T>) {
 
     const pageCount = Math.ceil(totalCount / pagination.pageSize);
@@ -49,6 +66,19 @@ export function DataTable<T>({
     });
 
     const rows = table.getRowModel().rows;
+    const columnCount = columns.length + (selection ? 1 : 0);
+    const rowBackground = (row: T, id: string) => {
+      if (selection?.isSelected(row)) return 'bg-brand-green-50';
+      return id === activeRowId ? 'bg-brand-bg' : '';
+    };
+    const rowCheckbox = (row: T, touch = false) => selection && (
+      <Checkbox
+        checked={selection.isSelected(row)}
+        onChange={() => selection.onToggle(row)}
+        label="Seleccionar fila"
+        touch={touch}
+      />
+    );
 
 return (
     <div className="rounded-xl border border-brand-border bg-brand-surface relative overflow-hidden">
@@ -60,15 +90,22 @@ return (
           </div>
         </div>
       )}
+      {selection?.banner && (
+        <div className="px-4 py-3 bg-brand-green-50 border-b border-brand-accent-soft text-[13px] text-brand-strong text-center">
+          {selection.banner}
+        </div>
+      )}
       {renderMobileRow && (
         <div className="md:hidden divide-y divide-brand-border">
           {rows.length > 0 ? rows.map(row => (
             <div
               key={row.id}
               onClick={onRowClick ? () => onRowClick(row.original) : undefined}
-              className={`${onRowClick ? 'cursor-pointer' : ''} ${row.id === activeRowId ? 'bg-brand-bg' : ''}`}
+              className={`${onRowClick ? 'cursor-pointer' : ''} ${rowBackground(row.original, row.id)}
+                ${selection ? 'flex items-center pl-4' : ''}`}
             >
-              {renderMobileRow(row.original)}
+              {rowCheckbox(row.original, true)}
+              <div className="flex-1 min-w-0">{renderMobileRow(row.original)}</div>
             </div>
           )) : (
             <div className="p-12 text-center text-sm text-brand-muted">No se encontraron registros.</div>
@@ -81,6 +118,16 @@ return (
           <thead className="bg-brand-bg border-b border-brand-border">
             {table.getHeaderGroups().map(group => (
               <tr key={group.id}>
+                {selection && (
+                  <th className="w-[1%] pl-4 pr-0 py-3">
+                    <Checkbox
+                      checked={selection.pageState === 'all'}
+                      indeterminate={selection.pageState === 'some'}
+                      onChange={selection.onTogglePage}
+                      label="Seleccionar la página"
+                    />
+                  </th>
+                )}
                 {group.headers.map(header => (
                   <th key={header.id} className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.1em] text-brand-muted whitespace-nowrap">
                     {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
@@ -99,8 +146,9 @@ return (
                   key={row.id}
                   onClick={onRowClick ? () => onRowClick(row.original) : undefined}
                   className={`hover:bg-brand-bg transition-colors
-                    ${onRowClick ? 'cursor-pointer' : ''} ${isActive ? 'bg-brand-bg' : ''}`}
+                    ${onRowClick ? 'cursor-pointer' : ''} ${rowBackground(row.original, row.id)}`}
                 >
+                  {selection && <td className="w-[1%] pl-4 pr-0 py-3.5 align-top"><div className="min-h-[34px] flex items-center">{rowCheckbox(row.original)}</div></td>}
                   {row.getVisibleCells().map((cell, i) => (
                     <td
                       key={cell.id}
@@ -117,7 +165,7 @@ return (
               })
             ) : (
               <tr>
-                <td colSpan={columns.length} className="p-12 text-center text-sm text-brand-muted">
+                <td colSpan={columnCount} className="p-12 text-center text-sm text-brand-muted">
                   No se encontraron registros.
                 </td>
               </tr>

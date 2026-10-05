@@ -1,16 +1,16 @@
 import { useEffect } from "react";
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AxiosError } from "axios";
 import { useSSE } from "../context/sse.context";
 import { useDebouncedValue } from "./useDebouncedValue";
 import { useThrottledInvalidate } from "./useThrottledInvalidate";
 import {
-    campaignActionService, createCampaignService, getCampaignRecipientsService, getCampaignService,
-    getCampaignsService, previewCampaignService,
+    campaignActionService, createCampaignService, getCampaignFailuresService, getCampaignRecipientsService,
+    getCampaignService, getCampaignsService, previewCampaignAudienceService, previewCampaignService,
 } from "../services/api.service";
 import type {
-    Campaign, CampaignDraftInput, CampaignFieldError, CampaignPreview, CampaignRecipientsPage, CampaignsPage,
-    CreateCampaignInput, RecipientState,
+    AudiencePage, Campaign, CampaignAudienceInput, CampaignDraftInput, CampaignFieldError, CampaignPreview,
+    CampaignRecipientsPage, CampaignsPage, CreateCampaignInput, FailureReason, RecipientState,
 } from "../models/campaign.model";
 
 /**
@@ -47,6 +47,7 @@ export const useCampaign = (id: string | null) => {
     const { subscribe } = useSSE();
     const refreshDetail = useThrottledInvalidate(['campaigns', 'detail', id], 2000);
     const refreshRecipients = useThrottledInvalidate(['campaigns', 'recipients', id], 2000);
+    const refreshFailures = useThrottledInvalidate(['campaigns', 'failures', id], 2000);
 
     useEffect(() => {
         if (!id) return;
@@ -54,17 +55,19 @@ export const useCampaign = (id: string | null) => {
             if (campaign.id !== id) return;
             queryClient.setQueryData(['campaigns', 'detail', id], campaign);
             refreshRecipients();
+            refreshFailures();
         });
         const unsubStatus = subscribe("message_status", (payload: { campaignId?: string }) => {
             if (payload.campaignId !== id) return;
             refreshDetail();
             refreshRecipients();
+            refreshFailures();
         });
         return () => {
             unsubProgress();
             unsubStatus();
         };
-    }, [id, subscribe, queryClient, refreshDetail, refreshRecipients]);
+    }, [id, subscribe, queryClient, refreshDetail, refreshRecipients, refreshFailures]);
 
     return useQuery<Campaign>({
         queryKey: ['campaigns', 'detail', id],
@@ -83,21 +86,52 @@ export const useCampaignRecipients = (id: string | null, state: RecipientState |
     });
 
 /**
+ * Los fallidos de un envío agrupados por motivo. Se refresca con el detalle
+ * (`useCampaign`), que es quien escucha el SSE.
+ */
+export const useCampaignFailures = (id: string | null, enabled: boolean) =>
+    useQuery<FailureReason[]>({
+        queryKey: ['campaigns', 'failures', id],
+        queryFn: async () => (await getCampaignFailuresService(id!)).reasons,
+        enabled: Boolean(id) && enabled,
+    });
+
+/**
  * La vista previa del asistente: conteos de destinatarios, reservas que se
  * usarán y el mensaje de ejemplo. Espera a que se deje de escribir (los
  * valores fijos y las reservas se teclean) y mientras recalcula enseña la
  * anterior, para que la pantalla no parpadee. `null` = no pedir.
+ *
+ * `isUpdating` dice si lo que se ve todavía no corresponde a lo escrito: con
+ * él, «Siguiente» no avanza sobre una validación vieja.
  */
 export const useCampaignPreview = (input: CampaignDraftInput | null) => {
     const debounced = useDebouncedValue(input, 400);
-    return useQuery<CampaignPreview>({
+    const query = useQuery<CampaignPreview>({
         queryKey: ['campaigns', 'preview', debounced],
         queryFn: () => previewCampaignService(debounced!),
         enabled: Boolean(debounced),
         placeholderData: keepPreviousData,
         staleTime: 10_000,
     });
+    const isUpdating = JSON.stringify(input) !== JSON.stringify(debounced) || query.isFetching;
+    return { ...query, isUpdating };
 };
+
+/**
+ * Quién recibiría el borrador, por orden alfabético y de `pageSize` en
+ * `pageSize` (scroll infinito), filtrado por `search`. `null` = no pedir.
+ */
+export const useCampaignAudience = (input: CampaignAudienceInput | null, search: string, pageSize: number) =>
+    useInfiniteQuery<AudiencePage>({
+        queryKey: ['campaigns', 'audience', input, search, pageSize],
+        queryFn: ({ pageParam }) => previewCampaignAudienceService(input!, pageParam as number, pageSize, search),
+        initialPageParam: 1,
+        getNextPageParam: (last) => (last.page * last.limit < last.totalCount ? last.page + 1 : undefined),
+        enabled: Boolean(input),
+        placeholderData: keepPreviousData,
+        staleTime: 10_000,
+    });
 
 /** Crear, pausar, reanudar y cancelar. */
 export const useCampaignMutations = () => {

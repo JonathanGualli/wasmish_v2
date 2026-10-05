@@ -32,10 +32,21 @@ const campaignSchema = new mongoose.Schema({
         bodyText: String,
         parameterFormat: String,
         buttons: { type: [mongoose.Schema.Types.Mixed], default: [] },
+        header: { type: mongoose.Schema.Types.Mixed, default: null },
+        // El archivo de la cabecera al crearlo: cambiarlo después en
+        // Plantillas no cambia lo que recibe este envío.
+        headerMedia: { type: mongoose.Schema.Types.ObjectId, ref: 'TemplateMedia', default: null },
     },
     variables: { type: [fillSchema], default: [] },
     buttons: { type: [fillSchema], default: [] },
     excludeOptedOut: {
+        type: Boolean,
+        default: false,
+    },
+    // Creado con CAMPAIGN_DRY_RUN: no llama a Meta, ni aunque el servidor
+    // vuelva a arrancar sin el modo de prueba. Lo que se creó como prueba no
+    // puede acabar mandando WhatsApps de verdad.
+    dryRun: {
         type: Boolean,
         default: false,
     },

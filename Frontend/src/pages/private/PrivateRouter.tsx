@@ -6,6 +6,9 @@ import { QuickStart } from "./QuickStart/QuickStart";
 import { SettingsPage } from "./Settings/SettingsPage";
 import { ChatPage } from "./Chats/ChatPage";
 import { ContactsPage } from "./Contacts/ContactsPage";
+import { CampaignsPage } from "./Campaigns/CampaignsPage";
+import { NewCampaignPage } from "./Campaigns/NewCampaign/NewCampaignPage";
+import { CampaignDetailPage } from "./Campaigns/Detail/CampaignDetailPage";
 import { TemplatesPage } from "./Templates/TemplatesPage";
 import { DocsPage } from "./Docs/DocsPage";
 import { AdminPage } from "./Admin/AdminPage";
@@ -25,6 +28,9 @@ export const PrivateRouter = () => {
                 <Route path={AppRoutes.private.settings} element={<SettingsPage />} />
                 <Route path={AppRoutes.private.chats} element={<ChatPage />} />
                 <Route path={AppRoutes.private.contacts} element={<ContactsPage />} />
+                <Route path={AppRoutes.private.campaigns} element={<CampaignsPage />} />
+                <Route path={`${AppRoutes.private.campaigns}/new`} element={<NewCampaignPage />} />
+                <Route path={`${AppRoutes.private.campaigns}/:id`} element={<CampaignDetailPage />} />
                 <Route path={AppRoutes.private.templates} element={<TemplatesPage />} />
                 <Route path={AppRoutes.private.docs} element={<DocsPage />} />
             </RoutesWithNotFound>

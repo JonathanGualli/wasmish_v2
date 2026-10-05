@@ -6,8 +6,9 @@
  * crear la campaña y otra vez justo antes de enviar, porque entre medias el
  * contacto puede haberse dado de baja o haber sido borrado.
  *
- * Los dados de baja solo se omiten si quien crea el envío lo pidió: por
- * defecto se envían y Meta los rechaza (131050), lo que deja registro.
+ * Los dados de baja solo se omiten si `excludeOptedOut`, que ya llega
+ * resuelto por `shouldExcludeOptedOut` (solo cuenta con marketing). Sin
+ * excluirlos se envían y Meta los rechaza (131050), lo que deja registro.
  */
 export const recipientSkipReason = (contact, { excludeOptedOut = false } = {}) => {
     if (!contact) return 'contact_deleted';
@@ -15,6 +16,15 @@ export const recipientSkipReason = (contact, { excludeOptedOut = false } = {}) =
     if (excludeOptedOut && contact.marketingOptOut) return 'opted_out';
     return null;
 };
+
+/**
+ * Si la baja de publicidad cuenta en este envío: solo con plantillas de
+ * marketing. A quien la pidió le siguen llegando los avisos de utilidad, así
+ * que excluirlo de uno sería quitarle un mensaje que sí quiere. Sin plantilla
+ * (el primer paso del asistente) todavía no se sabe, y no se excluye a nadie.
+ */
+export const shouldExcludeOptedOut = (template, excludeOptedOut) =>
+    Boolean(excludeOptedOut) && template?.category === 'MARKETING';
 
 /**
  * Errores de Meta que no son de un contacto sino de la cuenta o de la
@@ -29,6 +39,7 @@ export const CAMPAIGN_STOPPING_ERRORS = {
     '131048': 'WhatsApp frenó los envíos: demasiados reportes de spam.',
     '132000': 'La plantilla pide un número de datos distinto del que se le envía.',
     '132001': 'La plantilla ya no existe en WhatsApp o no está en ese idioma.',
+    '132012': 'Lo que se envía no coincide con el formato de la plantilla (por ejemplo, su cabecera pide otro tipo de archivo). Revisa la plantilla en Plantillas.',
     '132015': 'WhatsApp pausó la plantilla por su baja calidad.',
     '132016': 'WhatsApp desactivó la plantilla.',
 };
