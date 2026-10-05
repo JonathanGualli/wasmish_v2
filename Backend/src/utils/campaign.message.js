@@ -1,4 +1,4 @@
-// El mensaje de un envío masivo: qué variables y botones pide la plantilla, y
+// El mensaje de una campaña: qué variables y botones pide la plantilla, y
 // con qué valor se rellena cada uno para cada contacto. Todo puro: lo usan la
 // vista previa, la creación de la campaña y el worker que la envía.
 
@@ -47,7 +47,7 @@ export const buttonsNeedingValue = (buttons = []) =>
         .map(({ index }) => index);
 
 /**
- * Errores de la configuración de un envío (plantilla + cómo se rellena), como
+ * Errores de la configuración de una campaña (plantilla + cómo se rellena), como
  * `[{ field, message }]`, el formato de los 400 de la API. Vacío = válida.
  *
  * `config` es `{ variables: [{ key, source, value, fallback }], buttons: [{ index, … }] }`.

@@ -22,7 +22,7 @@ interface FillFieldProps {
 }
 
 /**
- * Una variable o un botón del envío: de dónde sale el valor y, si sale del
+ * Una variable o un botón de la campaña: de dónde sale el valor y, si sale del
  * contacto, qué se pone cuando no lo tiene (Meta rechaza una variable vacía).
  */
 export const FillField = ({ tag, context, fill, onChange, fixedLabel, fallbackCount = 0, error }: FillFieldProps) => {

@@ -9,12 +9,12 @@ import { recipientSkipReason, stoppingErrorMessage, THROTTLE_ERROR } from "../ut
 import { CAMPAIGN_DRY_RUN, CAMPAIGN_RATE_PER_SECOND } from "../config.js";
 
 // ---------------------------------------------------------------------------
-// Worker de los envíos masivos. Corre dentro del proceso de la API: la cola es
+// Worker de las campañas. Corre dentro del proceso de la API: la cola es
 // la colección CampaignRecipient, así que no hace falta Redis ni otro servicio.
 //
 // En cada vuelta toma UNA campaña activa por cuenta y le envía UN mensaje a
-// cada una, con una pausa entre envíos que fija el ritmo total. Así un envío
-// grande de una cuenta no deja esperando al de otra.
+// cada una, con una pausa entre envíos que fija el ritmo total. Así una campaña
+// grande de una cuenta no deja esperando a la de otra.
 //
 // Supone UNA sola instancia de la API (como hoy en el compose): al arrancar da
 // por muertos los envíos a medias. Con dos réplicas, una marcaría como
@@ -58,7 +58,7 @@ const autoPause = async (campaign, code, message) => {
         { $set: { status: 'paused', pauseReason: { code: String(code), message } } },
     );
     if (paused.modifiedCount > 0) {
-        console.warn('Envío masivo pausado por un error de la cuenta o la plantilla:', { campaignId: String(campaign._id), code });
+        console.warn('Campaña pausada por un error de la cuenta o la plantilla:', { campaignId: String(campaign._id), code });
         await emitCampaignProgress(campaign._id, { force: true });
     }
 };
@@ -131,7 +131,7 @@ const processNext = async (campaign) => {
             buttons,
             template: campaign.template,
             campaignId: campaign._id,
-            // Con el modo de prueba encendido no sale nada, aunque el envío
+            // Con el modo de prueba encendido no sale nada, aunque la campaña
             // se hubiera creado sin él.
             dryRun: CAMPAIGN_DRY_RUN || campaign.dryRun,
         });
@@ -156,7 +156,7 @@ const processNext = async (campaign) => {
             errorCode: error.statusCode ? String(error.statusCode) : null,
             errorDetail: error.message,
         });
-        console.error('Envío masivo: destinatario fallido antes de Meta:', {
+        console.error('Campaña: destinatario fallido antes de Meta:', {
             campaignId: String(campaign._id), recipientId: String(recipient._id), error: error.message,
         });
 
@@ -191,7 +191,7 @@ const loop = async () => {
             if (!worked && running) await idle(IDLE_MS);
         } catch (error) {
             // Un fallo de la BD no puede matar el worker: se reintenta en la vuelta siguiente.
-            console.error('Worker de envíos masivos:', error.message);
+            console.error('Worker de campañas:', error.message);
             if (running) await idle(IDLE_MS);
         }
     }
@@ -211,10 +211,10 @@ export const startCampaignWorker = async () => {
         { status: 'sending' },
         { $set: { status: 'interrupted', errorDetail: 'El servidor se reinició mientras se enviaba', processedAt: new Date() } },
     );
-    if (modifiedCount > 0) console.warn(`Envíos masivos: ${modifiedCount} destinatario(s) interrumpidos por un reinicio.`);
+    if (modifiedCount > 0) console.warn(`Campañas: ${modifiedCount} destinatario(s) interrumpidos por un reinicio.`);
 
     if (CAMPAIGN_DRY_RUN) {
-        console.warn('Envíos masivos en MODO DE PRUEBA (CAMPAIGN_DRY_RUN): no se llama a Meta.');
+        console.warn('Campañas en MODO DE PRUEBA (CAMPAIGN_DRY_RUN): no se llama a Meta.');
     }
 
     loopPromise = loop();

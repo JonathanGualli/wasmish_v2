@@ -20,10 +20,10 @@ export const bulkDisabledReason = (template: Template) =>
         : templateHeaderIssue(template);
 
 /**
- * El estado del asistente de «Nuevo envío». Todo vive en el borrador (y por
+ * El estado del asistente de «Nueva campaña». Todo vive en el borrador (y por
  * tanto en el navegador): cada cambio se guarda al momento, así que salir y
  * volver deja todo donde estaba. La validación la hace el backend en la
- * vista previa, que es la misma que se aplica al crear el envío.
+ * vista previa, que es la misma que se aplica al crear la campaña.
  */
 export const useCampaignWizard = () => {
     const { draft, save, discard } = useCampaignDraft();
@@ -76,7 +76,7 @@ export const useCampaignWizard = () => {
     /** El error de un campo (`variables.1`, `buttons.0`, `name`…), solo si ya toca enseñarlo. */
     const fieldError = (field: string) => {
         if (!showErrors) return undefined;
-        if (field === 'name') return nameMissing ? 'Ponle un nombre al envío.' : undefined;
+        if (field === 'name') return nameMissing ? 'Ponle un nombre a la campaña.' : undefined;
         return errors.find(e => e.field === field)?.message;
     };
 

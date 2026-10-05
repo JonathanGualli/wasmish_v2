@@ -8,7 +8,7 @@ type SearchInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'onChange' |
     className?: string;
 };
 
-/** Caja de búsqueda con la lupa: la de la bandeja, Contactos y los destinatarios de un envío. */
+/** Caja de búsqueda con la lupa: la de la bandeja, Contactos y los destinatarios de una campaña. */
 export const SearchInput = ({ value, onChange, className = '', ...props }: SearchInputProps) => (
     <div className={`relative flex items-center ${className}`}>
         <Search size={16} className="absolute left-[11px] text-brand-subtle pointer-events-none" />

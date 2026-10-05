@@ -1,6 +1,6 @@
 // La cabecera de una plantilla: qué pide Meta al enviarla y cómo se le manda.
 // Todo puro. Lo usan la sincronización, el envío (`processTemplateSending`), la
-// validación de los envíos masivos y la subida de la imagen en Plantillas.
+// validación de las campañas y la subida de la imagen en Plantillas.
 //
 // Meta aprueba el FORMATO de la cabecera (imagen, vídeo, documento, texto), no
 // su contenido: la imagen es un parámetro que va en cada envío, igual que las
@@ -22,7 +22,7 @@ export const HEADER_MEDIA_RULES = {
 };
 
 // El id de un archivo subido a Meta dura 30 días. Se vuelve a subir antes, para
-// no descubrir que caducó a mitad de un envío masivo.
+// no descubrir que caducó a mitad de una campaña.
 export const META_MEDIA_TTL_MS = 25 * 24 * 60 * 60 * 1000;
 
 const HAS_VARIABLE = /\{\{\s*[^}]+?\s*\}\}/;

@@ -83,7 +83,7 @@ test('headerMediaFileIssue: tipo, tamaño y contenido de verdad', () => {
     assert.match(headerMediaFileIssue({ header: null }, { mimeType: 'image/jpeg', size: 4, buffer: JPEG }), /no lleva ningún archivo/);
 });
 
-test('validateCampaignMessage: un envío masivo no se crea sin el archivo de la cabecera', () => {
+test('validateCampaignMessage: una campaña no se crea sin el archivo de la cabecera', () => {
     const template = { status: 'APPROVED', category: 'MARKETING', bodyText: 'Hola', buttons: [], ...CON_IMAGEN };
     assert.deepEqual(validateCampaignMessage(template, {}).map(e => e.field), ['templateId']);
     assert.deepEqual(validateCampaignMessage({ ...template, headerMedia: 'media-id' }, {}), []);

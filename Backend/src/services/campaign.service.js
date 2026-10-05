@@ -5,7 +5,7 @@ import { sendUser } from "../controllers/stream.controller.js";
 import { buildCampaignStats } from "../utils/campaign.status.js";
 import { CAMPAIGN_RATE_PER_SECOND } from "../config.js";
 
-// Lo que comparten el controller y el worker de los envíos masivos: las
+// Lo que comparten el controller y el worker de las campañas: las
 // estadísticas, la forma en que la API devuelve una campaña y el aviso por SSE.
 
 const toIso = (date) => (date ? new Date(date).toISOString() : null);

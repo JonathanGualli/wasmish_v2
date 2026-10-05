@@ -13,8 +13,8 @@ export const useContacts = (pageIndex: number, pageSize: number, search: string,
 
     // Un mensaje cambia la «última interacción», abre la ventana o trae un
     // contacto nuevo, y `contact_updated` es una baja o un alta de publicidad:
-    // la lista y la ficha se refrescan, como la bandeja. Agrupado: un envío
-    // masivo dispara cientos de `message_created` seguidos.
+    // la lista y la ficha se refrescan, como la bandeja. Agrupado: una campaña
+    // dispara cientos de `message_created` seguidos.
     const refresh = useThrottledInvalidate(['contacts']);
     useEffect(() => {
         const unsubMessage = subscribe("message_created", refresh);

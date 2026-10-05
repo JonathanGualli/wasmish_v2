@@ -6,7 +6,7 @@ import { useQueryClient, type QueryKey } from "@tanstack/react-query";
  * momento y, si llegan más mientras tanto, una sola al final del intervalo, así
  * el último cambio nunca se pierde.
  *
- * Un envío masivo dispara cientos de eventos SSE seguidos (unos 10 por segundo).
+ * Una campaña dispara cientos de eventos SSE seguidos (unos 10 por segundo).
  * Sin esto, cada uno pedía la lista entera otra vez, y como invalidar cancela la
  * petición en curso, la lista podía no llegar a pintarse hasta el final.
  */

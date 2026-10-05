@@ -3,7 +3,7 @@ import { useAuthContext } from "../context/auth.context";
 import { clearCampaignDraft, loadCampaignDraft, saveCampaignDraft, type CampaignDraft } from "../utils/campaignDraft";
 
 /**
- * El borrador de «Nuevo envío» del usuario con sesión: el que hay al montar,
+ * El borrador de «Nueva campaña» del usuario con sesión: el que hay al montar,
  * y cómo guardarlo o descartarlo. Cada página que lo usa lee el suyo al
  * entrar; entre páginas viaja por el storage, no por memoria.
  */

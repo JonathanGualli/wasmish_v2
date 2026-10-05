@@ -16,7 +16,7 @@ const PROGRESS_NOTE: Partial<Record<CampaignStatus, string>> = {
     cancelled: ' · el resto no se envió',
 };
 
-/** «230 de 441», con la barra si el envío todavía avanza. */
+/** «230 de 441», con la barra si la campaña todavía avanza. */
 export const CampaignProgressCell = ({ campaign }: { campaign: Campaign }) => {
     const { done, total, percent } = campaignProgress(campaign.stats);
     const active = isCampaignActive(campaign.status);
@@ -41,7 +41,7 @@ export const CampaignResults = ({ campaign }: { campaign: Campaign }) => (
     </div>
 );
 
-/** Un punto que late: el envío está saliendo ahora mismo. */
+/** Un punto que late: la campaña está saliendo ahora mismo. */
 const LiveDot = () => (
     <span className="relative flex w-1.5 h-1.5" aria-hidden>
         <span className="absolute inset-0 rounded-full bg-brand-info animate-ping" />

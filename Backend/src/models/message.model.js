@@ -106,7 +106,7 @@ const messageSchema = new mongoose.Schema({
         type: String,
         default: null,
     },
-    // El envío masivo del que salió, si salió de uno. Con él se cuentan los
+    // La campaña de la que salió, si salió de una. Con él se cuentan los
     // entregados y leídos de la campaña, que el webhook va actualizando aquí.
     campaignId: {
         type: mongoose.Schema.Types.ObjectId,

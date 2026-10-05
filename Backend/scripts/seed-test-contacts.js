@@ -1,4 +1,4 @@
-// Contactos de prueba para probar los envíos masivos en LOCAL, con los casos
+// Contactos de prueba para probar las campañas en LOCAL, con los casos
 // que importan: sin nombre, solo con el nombre de WhatsApp, sin teléfono (solo
 // usuario), sin empresa, dados de baja de la publicidad, con conversación y
 // ventana abierta o cerrada, y sin conversación.
@@ -16,9 +16,9 @@
 // no sea local: estos contactos no deben llegar nunca a producción.
 //
 // --acks manda por el webhook LOCAL (firmado como Meta) los acuses de los
-// mensajes de envíos masivos a estos contactos. En modo de prueba
+// mensajes de campañas a estos contactos. En modo de prueba
 // (CAMPAIGN_DRY_RUN) se quedan en «Enviado» para siempre, porque Meta no
-// contesta; con esto el detalle de un envío se mueve en vivo, por SSE.
+// contesta; con esto el detalle de una campaña se mueve en vivo, por SSE.
 import 'dotenv/config';
 import crypto from 'node:crypto';
 import mongoose from 'mongoose';
@@ -176,7 +176,7 @@ const signedPost = async (body) => {
 };
 
 /**
- * Para cada mensaje de envío masivo a un contacto de prueba que siga en
+ * Para cada mensaje de campaña a un contacto de prueba que siga en
  * «Enviado»: 6 de cada 10 leídos, 3 entregados y 1 fallido (131026, el de
  * «no se pudo entregar»). Va por el webhook, así que pasa por la misma lógica
  * y el mismo SSE que un acuse real.
@@ -194,7 +194,7 @@ const simulateAcks = async (user) => {
     }).select('waMessageId').lean();
 
     if (messages.length === 0) {
-        console.log('No hay mensajes de envíos masivos en «Enviado» para los contactos de prueba. Lanza un envío primero.');
+        console.log('No hay mensajes de campañas en «Enviado» para los contactos de prueba. Lanza una campaña primero.');
         return;
     }
 
@@ -226,7 +226,7 @@ const simulateAcks = async (user) => {
 
 /**
  * Borra los contactos de prueba, sus conversaciones y mensajes, sus filas en
- * los envíos y los envíos que se quedan sin destinatarios. Un envío que
+ * las campañas y las campañas que se quedan sin destinatarios. Una campaña que
  * también tenía contactos reales se conserva.
  */
 const clean = async (user) => {
@@ -249,7 +249,7 @@ const clean = async (user) => {
     const campaigns = await Campaign.deleteMany({ _id: { $in: emptyCampaigns }, userId: user._id });
 
     console.log(`Borrados: ${contacts.deletedCount} contactos, ${conversations.deletedCount} conversaciones, `
-        + `${messages.deletedCount} mensajes y ${campaigns.deletedCount} envíos.`);
+        + `${messages.deletedCount} mensajes y ${campaigns.deletedCount} campañas.`);
 };
 
 // --- Arranque ----------------------------------------------------------------
@@ -303,9 +303,9 @@ const main = async () => {
         }
         await seed(user, count);
         if (!CAMPAIGN_DRY_RUN) {
-            console.warn('\n⚠ CAMPAIGN_DRY_RUN está apagado: un envío a estos contactos llamaría a Meta con números inventados.');
+            console.warn('\n⚠ CAMPAIGN_DRY_RUN está apagado: una campaña a estos contactos llamaría a Meta con números inventados.');
         }
-        console.log('\nPara simular entregas y lecturas tras un envío:  npm run seed:contacts -- --acks');
+        console.log('\nPara simular entregas y lecturas tras una campaña:  npm run seed:contacts -- --acks');
         console.log('Para borrarlos:                                  npm run seed:contacts -- --clean');
     }
 

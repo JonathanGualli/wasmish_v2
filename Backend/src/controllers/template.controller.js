@@ -186,11 +186,11 @@ export const buildButtonComponents = (buttons = [], templateButtons = []) => {
 
 
 // ---------------------------------------------------------------------------
-// Modo de prueba de los envíos masivos (CAMPAIGN_DRY_RUN)
+// Modo de prueba de las campañas (CAMPAIGN_DRY_RUN)
 // ---------------------------------------------------------------------------
 
 /**
- * Lo que respondería Meta, sin llamarla: en local, probar un envío masivo de
+ * Lo que respondería Meta, sin llamarla: en local, probar una campaña de
  * verdad mandaría WhatsApps reales a los contactos de la BD. Imita el único
  * rechazo que se puede prever, el de un contacto dado de baja que recibe
  * marketing (131050), para que ese camino también se pueda ver.
@@ -302,7 +302,7 @@ export const uploadHeaderMediaController = async (req, res) => {
 
 /**
  * DELETE /templates/:templateId/header-media — la plantilla se queda sin
- * archivo (y sin poder enviarse). El archivo no se borra: un envío masivo
+ * archivo (y sin poder enviarse). El archivo no se borra: una campaña
  * creado antes puede estar usándolo.
  */
 export const removeHeaderMediaController = async (req, res) => {
@@ -347,11 +347,11 @@ export const getHeaderMediaFileController = async (req, res) => {
  * `statusCode`, y quien la llama decide cómo responder.
  *
  * El destinatario es `conversation` (se le escribe a su contacto), `contact`
- * (envío masivo: se usa o se crea su conversación) o, para iniciar una
+ * (campaña: se usa o se crea su conversación) o, para iniciar una
  * conversación, `destinationNumber`. `contactName` y `source` solo se usan si
  * ese número todavía no es un contacto.
  *
- * Solo para envíos masivos: `template` llega ya resuelta (la copia guardada en
+ * Solo para campañas: `template` llega ya resuelta (la copia guardada en
  * la campaña; así no se busca ni se sincroniza en cada destinatario),
  * `campaignId` queda en el Message, y `dryRun` no llama a Meta (ver
  * `fakeTemplateSend`).
@@ -517,7 +517,7 @@ export const processTemplateSending = async ({
     });
 
     // 7. SSE en vivo → aparece en la UI de wasmish. `campaignId` deja al
-    //    frontend agrupar los cientos de eventos de un envío masivo.
+    //    frontend agrupar los cientos de eventos de una campaña.
     sendUser(String(user._id), 'message_created', {
         id: String(msg._id), conversationId: String(targetConversation._id), sender: 'me',
         text: storedText, timestamp: msg.timestamp.toISOString(),

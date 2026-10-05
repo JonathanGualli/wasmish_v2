@@ -14,7 +14,7 @@ import type {
 } from "../models/campaign.model";
 
 /**
- * Lista de envíos. `campaign_progress` (máx. uno por segundo y envío) trae la
+ * Lista de campañas. `campaign_progress` (máx. uno por segundo y campaña) trae la
  * campaña entera con sus estadísticas: se cambia en su sitio, sin pedir nada.
  */
 export const useCampaigns = (pageIndex: number, pageSize: number) => {
@@ -38,7 +38,7 @@ export const useCampaigns = (pageIndex: number, pageSize: number) => {
 };
 
 /**
- * Un envío. Además del progreso, escucha los acuses de sus mensajes
+ * Una campaña. Además del progreso, escucha los acuses de sus mensajes
  * (`message_status` con su `campaignId`): las entregas y lecturas llegan
  * durante horas después de terminar, y cambian las estadísticas.
  */
@@ -76,7 +76,7 @@ export const useCampaign = (id: string | null) => {
     });
 };
 
-/** Destinatarios de un envío, filtrables por estado (`null` = todos). */
+/** Destinatarios de una campaña, filtrables por estado (`null` = todos). */
 export const useCampaignRecipients = (id: string | null, state: RecipientState | null, pageIndex: number, pageSize: number) =>
     useQuery<CampaignRecipientsPage>({
         queryKey: ['campaigns', 'recipients', id, state, pageIndex, pageSize],
@@ -86,7 +86,7 @@ export const useCampaignRecipients = (id: string | null, state: RecipientState |
     });
 
 /**
- * Los fallidos de un envío agrupados por motivo. Se refresca con el detalle
+ * Los fallidos de una campaña agrupados por motivo. Se refresca con el detalle
  * (`useCampaign`), que es quien escucha el SSE.
  */
 export const useCampaignFailures = (id: string | null, enabled: boolean) =>
@@ -168,7 +168,7 @@ export const useCampaignMutations = () => {
 };
 
 /**
- * Los errores de una petición de envíos en una forma útil para la UI. Los 400
+ * Los errores de una petición de campañas en una forma útil para la UI. Los 400
  * de validación traen varios `{ field, message }` (uno por variable que falta,
  * por ejemplo); el resto, uno solo.
  */

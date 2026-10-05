@@ -21,7 +21,7 @@ import { CampaignProgressCell, CampaignResults, CampaignStatusPill } from "./Cam
 
 const FIRST_PAGE = { pageIndex: 0, pageSize: 20 };
 
-/** El envío sin terminar, encima de la lista: se continúa o se descarta. */
+/** La campaña sin terminar, encima de la lista: se continúa o se descarta. */
 const DraftCard = ({ draft, onContinue, onDiscard }: {
     draft: CampaignDraft;
     onContinue: () => void;
@@ -57,8 +57,8 @@ const CampaignMobileRow = ({ campaign }: { campaign: Campaign }) => (
 );
 
 /**
- * Envíos: las plantillas mandadas a muchos contactos a la vez. Un envío
- * nuevo empieza eligiendo a quién en Contactos; el que se dejó a medias
+ * Campañas: las plantillas mandadas a muchos contactos a la vez. Una campaña
+ * nueva empieza eligiendo a quién en Contactos; el que se dejó a medias
  * queda como borrador en el navegador, encima de la lista.
  */
 export const CampaignsPage = () => {
@@ -81,7 +81,7 @@ export const CampaignsPage = () => {
 
     const newCampaignButton = (
         <CustomButton onClick={startNewCampaign}>
-            <span className="flex items-center justify-center gap-2"><Plus size={16} />Nuevo envío</span>
+            <span className="flex items-center justify-center gap-2"><Plus size={16} />Nueva campaña</span>
         </CustomButton>
     );
 
@@ -91,21 +91,21 @@ export const CampaignsPage = () => {
                 <BlankState
                     tone="danger"
                     icon={<AlertCircle size={22} />}
-                    title="No pudimos cargar los envíos"
+                    title="No pudimos cargar las campañas"
                     action={
                         <CustomButton variant="outline" onClick={() => refetch()}>
                             <span className="flex items-center gap-2"><RefreshCw size={15} />Reintentar</span>
                         </CustomButton>
                     }
                 >
-                    Revisa tu conexión e inténtalo de nuevo. Los envíos en curso siguen avanzando.
+                    Revisa tu conexión e inténtalo de nuevo. Las campañas en curso siguen avanzando.
                 </BlankState>
             );
         }
         if (isEmpty) {
             return (
-                <BlankState icon={<Send size={22} />} title="Todavía no hiciste ningún envío" action={newCampaignButton}>
-                    Un envío masivo manda una plantilla aprobada a muchos contactos a la vez, con el nombre de cada uno.
+                <BlankState icon={<Send size={22} />} title="Todavía no creaste ninguna campaña" action={newCampaignButton}>
+                    Una campaña manda una plantilla aprobada a muchos contactos a la vez, con el nombre de cada uno.
                     Primero eliges a quién en Contactos; después, el mensaje.
                 </BlankState>
             );
@@ -140,7 +140,7 @@ export const CampaignsPage = () => {
         <PageShell width="wide">
             <PageHeader
                 icon={<Send size={20} />}
-                title="Envíos"
+                title="Campañas"
                 description="Plantillas enviadas a muchos contactos a la vez."
                 actions={!isEmpty && <div className="w-full sm:w-auto h-10">{newCampaignButton}</div>}
             />

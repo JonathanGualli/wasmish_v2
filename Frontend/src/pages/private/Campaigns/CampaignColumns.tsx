@@ -6,7 +6,7 @@ import { CampaignProgressCell, CampaignResults, CampaignStatusPill } from "./Cam
 export const campaignColumns: ColumnDef<Campaign>[] = [
     {
         id: 'name',
-        header: 'Envío',
+        header: 'Campaña',
         cell: ({ row }) => (
             <div className="min-w-0">
                 <div className="max-w-[280px] truncate text-sm font-semibold text-brand-text">{row.original.name}</div>

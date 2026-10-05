@@ -35,7 +35,7 @@ const OptOutNotice = ({ wizard }: { wizard: CampaignWizard }) => {
             title={`${pluralize(counts.optedOut, 'contacto pidió', 'contactos pidieron')} no recibir publicidad.`}
         >
             {nobodyLeft
-                ? 'Son todos los seleccionados: así nadie recibiría este envío. Elige una plantilla de utilidad o cambia la selección.'
+                ? 'Son todos los seleccionados: así nadie recibiría esta campaña. Elige una plantilla de utilidad o cambia la selección.'
                 : draft.excludeOptedOut
                     ? 'No se les enviará esta plantilla de marketing.'
                     : 'WhatsApp rechazará el mensaje y quedarán como fallidos.'}
@@ -43,9 +43,9 @@ const OptOutNotice = ({ wizard }: { wizard: CampaignWizard }) => {
                 <Checkbox
                     checked={draft.excludeOptedOut}
                     onChange={() => update({ excludeOptedOut: !draft.excludeOptedOut })}
-                    label="Excluirlos de este envío"
+                    label="Excluirlos de esta campaña"
                 />
-                <span className="text-sm font-semibold text-brand-text">Excluirlos de este envío</span>
+                <span className="text-sm font-semibold text-brand-text">Excluirlos de esta campaña</span>
             </label>
         </Callout>
     );

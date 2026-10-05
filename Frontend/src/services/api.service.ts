@@ -264,7 +264,7 @@ export const deleteContactService = async (id: string) => {
     await axios.delete(`${API_URL}/contacts/${id}`, { withCredentials: true });
 }
 
-// --- Envíos masivos ----------------------------------------------------------
+// --- Campañas ---------------------------------------------------------------
 
 export const previewCampaignService = async (input: CampaignDraftInput) => {
     const { data } = await axios.post(`${API_URL}/campaigns/preview`, input, { withCredentials: true });

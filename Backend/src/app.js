@@ -33,7 +33,7 @@ app.use(express.json({
     strict: true, 
     verify: (req, res, buf) => {
         req.rawBody = buf;
-        // Un POST sin cuerpo (pausar un envío, p. ej.) con Content-Type JSON no
+        // Un POST sin cuerpo (pausar una campaña, p. ej.) con Content-Type JSON no
         // es un JSON inválido: JSON.parse('') fallaría y respondería un 400 HTML.
         if (buf.length === 0) return;
         try {

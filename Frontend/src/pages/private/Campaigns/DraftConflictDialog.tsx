@@ -11,12 +11,12 @@ interface DraftConflictDialogProps {
     onClose: () => void;
 }
 
-/** Hay un envío sin terminar y se pide otro: continuarlo o empezar de cero. */
+/** Hay una campaña sin terminar y se pide otra: continuarlo o empezar de cero. */
 export const DraftConflictDialog = ({ draft, open, onContinueDraft, onStartOver, onClose }: DraftConflictDialogProps) => (
     <ConfirmDialog
         open={open}
         icon={<FileClock size={19} />}
-        title="Tienes un envío sin terminar"
+        title="Tienes una campaña sin terminar"
         description="Solo se guarda un borrador a la vez. Si empiezas uno nuevo, este se descarta."
         cancelLabel="Empezar uno nuevo"
         confirmLabel="Continuar el borrador"

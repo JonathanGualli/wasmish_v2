@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-// Un destinatario de un envío masivo, y a la vez un trabajo de la cola: el
+// Un destinatario de una campaña, y a la vez un trabajo de la cola: el
 // worker toma los `pending` de uno en uno y los pasa a `sending` de forma
 // atómica, así ninguno se manda dos veces.
 const campaignRecipientSchema = new mongoose.Schema({

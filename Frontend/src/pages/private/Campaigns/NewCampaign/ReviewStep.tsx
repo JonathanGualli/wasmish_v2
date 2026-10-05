@@ -20,7 +20,7 @@ const SummaryRow = ({ label, children }: { label: string; children: React.ReactN
     </>
 );
 
-/** Paso 3: el nombre del envío y lo que se va a mandar, antes de mandarlo. */
+/** Paso 3: el nombre de la campaña y lo que se va a mandar, antes de mandarlo. */
 export const ReviewStep = ({ wizard }: { wizard: CampaignWizard }) => {
     const { draft, template, preview, update, fieldError } = wizard;
     if (!draft || !template || !preview) return null;
@@ -32,12 +32,12 @@ export const ReviewStep = ({ wizard }: { wizard: CampaignWizard }) => {
         <div className="grid lg:grid-cols-[minmax(0,1fr)_340px] gap-8">
             <div className="grid gap-6 content-start">
                 <AuthField
-                    label="Nombre del envío"
+                    label="Nombre de la campaña"
                     value={draft.name}
                     onChange={e => update({ name: e.target.value })}
                     maxLength={80}
                     error={fieldError('name')}
-                    hint="Solo lo ves tú, en «Envíos». Los contactos no lo reciben."
+                    hint="Solo lo ves tú, en «Campañas». Los contactos no lo reciben."
                 />
 
                 <dl className="grid grid-cols-[110px_minmax(0,1fr)] sm:grid-cols-[130px_minmax(0,1fr)] gap-x-4 gap-y-3.5
@@ -79,7 +79,7 @@ export const ReviewStep = ({ wizard }: { wizard: CampaignWizard }) => {
                 </dl>
 
                 {preview.dryRun && (
-                    <Callout icon={<FlaskConical size={16} />} title="Modo de prueba: este envío no llegará a WhatsApp.">
+                    <Callout icon={<FlaskConical size={16} />} title="Modo de prueba: esta campaña no llegará a WhatsApp.">
                         El servidor tiene <span className="font-mono">CAMPAIGN_DRY_RUN</span> encendido y no llama a Meta. Sirve para
                         ver el recorrido completo, pero no comprueba la conexión de WhatsApp.
                     </Callout>

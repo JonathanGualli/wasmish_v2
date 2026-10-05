@@ -4,13 +4,13 @@ import type {
     CampaignRecipient, CampaignStats, CampaignStatus, RecipientState, SkipReason, VariableSource,
 } from "../models/campaign.model";
 
-/** Estado de un envío como píldora. */
+/** Estado de una campaña como píldora. */
 export const CAMPAIGN_STATUS: Record<CampaignStatus, { label: string; tone: PillTone }> = {
     queued: { label: 'En cola', tone: 'outline' },
     sending: { label: 'Enviando', tone: 'info' },
-    paused: { label: 'Pausado', tone: 'warning' },
-    completed: { label: 'Completado', tone: 'positive' },
-    cancelled: { label: 'Cancelado', tone: 'neutral' },
+    paused: { label: 'Pausada', tone: 'warning' },
+    completed: { label: 'Completada', tone: 'positive' },
+    cancelled: { label: 'Cancelada', tone: 'neutral' },
 };
 
 /** Los que todavía pueden avanzar: muestran barra de progreso y se pueden cancelar. */
@@ -18,7 +18,7 @@ export const isCampaignActive = (status: CampaignStatus) =>
     status === 'queued' || status === 'sending' || status === 'paused';
 
 /**
- * Progreso de un envío sobre los que se iban a enviar (sin los omitidos):
+ * Progreso de una campaña sobre los que se iban a enviar (sin los omitidos):
  * procesado es todo lo que ya no está pendiente ni se canceló.
  */
 export const campaignProgress = (stats: CampaignStats) => {
@@ -62,7 +62,7 @@ export const SKIP_REASON_LABEL: Record<SkipReason, string> = {
 };
 
 /**
- * Los errores de Meta más comunes en un envío masivo, en palabras. El resto se
+ * Los errores de Meta más comunes en una campaña, en palabras. El resto se
  * enseña con el detalle que mandó Meta, que viene en inglés.
  */
 const WHATSAPP_ERROR_LABEL: Record<string, string> = {
@@ -96,7 +96,7 @@ export const recipientTime = (r: CampaignRecipient) => {
 };
 
 /**
- * Qué arreglar cuando el envío se pausó solo, según el código: a dónde ir.
+ * Qué arreglar cuando la campaña se pausó sola, según el código: a dónde ir.
  * Los de plantilla se arreglan en Plantillas; los de la cuenta, en Ajustes.
  */
 export const pauseReasonTarget = (code: string | null): 'settings' | 'templates' | null => {
@@ -150,7 +150,7 @@ export const formatDateTime = (iso: string) =>
         day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
     }).replace(',', '');
 
-/** «Promo octubre · 4 oct»: el nombre que se propone para un envío nuevo. */
+/** «Promo octubre · 4 oct»: el nombre que se propone para una campaña nueva. */
 export const suggestCampaignName = (templateName: string, date = new Date()) => {
     const day = date.toLocaleDateString('es-EC', { day: 'numeric', month: 'short' }).replace('.', '');
     const readable = templateName.replace(/_/g, ' ');

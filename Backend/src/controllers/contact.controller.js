@@ -157,7 +157,7 @@ export const getSendingRecipient = (conversation, destinationNumber) =>
     conversation ? getConversationContact(conversation) : { phone: destinationNumber };
 
 // La conversación donde se guarda un envío ya hecho (haya salido o no). Con
-// `contact` (envío masivo) el contacto ya existe: no hay que resolverlo.
+// `contact` (campaña) el contacto ya existe: no hay que resolverlo.
 export const getSendingConversation = async ({ userId, conversation, contact = null, recipient, phoneNumberId, contactName, source }) => {
     if (conversation) return conversation;
     const target = contact ?? await resolveContact(userId, recipient, { name: contactName, source });
@@ -241,8 +241,8 @@ const sendDuplicatePhone = async (res, userId, phone) => {
 
 /**
  * Las etapas de aggregate que dejan los contactos de una búsqueda y un filtro,
- * cada uno con su `conversation` (o null). Las comparten la lista y el envío
- * masivo: «todos los que coinciden» tiene que ser exactamente lo que se ve.
+ * cada uno con su `conversation` (o null). Las comparten la lista y las
+ * campañas: «todos los que coinciden» tiene que ser exactamente lo que se ve.
  *
  * `userId` como ObjectId: aggregate no convierte tipos como find.
  */

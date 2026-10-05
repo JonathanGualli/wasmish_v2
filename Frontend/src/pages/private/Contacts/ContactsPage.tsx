@@ -32,10 +32,10 @@ const FILTERS: { value: ContactFilter; label: string }[] = [
 
 const FIRST_PAGE = { pageIndex: 0, pageSize: 20 };
 
-/** Lo que dice el aviso de arriba cuando Envíos pide elegir contactos. */
+/** Lo que dice el aviso de arriba cuando Campañas pide elegir contactos. */
 const PICK_MODE_COPY = {
-    new: { title: 'Nuevo envío:', text: 'elige los contactos que lo recibirán y pulsa «Continuar».', back: 'Cancelar' },
-    edit: { title: 'Cambiando la selección del envío.', text: 'Cuando termines, pulsa «Volver al envío».', back: 'Volver sin cambios' },
+    new: { title: 'Nueva campaña:', text: 'elige los contactos que la recibirán y pulsa «Continuar».', back: 'Cancelar' },
+    edit: { title: 'Cambiando la selección de la campaña.', text: 'Cuando termines, pulsa «Volver a la campaña».', back: 'Volver sin cambios' },
 };
 
 /** Un cambio de búsqueda o de filtro que espera confirmación. */
@@ -143,7 +143,7 @@ export const ContactsPage = () => {
 
     const selectionActionLabel = () => {
         if (pickMode === 'new') return <>Continuar ({selectedCount})<ArrowRight size={15} /></>;
-        if (pickMode === 'edit') return <>Volver al envío ({selectedCount})<ArrowRight size={15} /></>;
+        if (pickMode === 'edit') return <>Volver a la campaña ({selectedCount})<ArrowRight size={15} /></>;
         return <><Send size={16} />Enviar plantilla<span className="md:hidden">({selectedCount})</span></>;
     };
 

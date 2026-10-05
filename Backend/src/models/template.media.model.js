@@ -1,9 +1,9 @@
 import mongoose from "mongoose";
 
 // El archivo de la cabecera de una plantilla (imagen, vídeo o documento). La
-// plantilla apunta al suyo (`Template.headerMedia`) y un envío masivo guarda el
+// plantilla apunta al suyo (`Template.headerMedia`) y una campaña guarda el
 // que tenía al crearse (`Campaign.template.headerMedia`): por eso cambiar la
-// imagen crea un documento nuevo y nunca borra el anterior, que un envío en
+// imagen crea un documento nuevo y nunca borra el anterior, que una campaña en
 // curso puede seguir usando.
 const templateMediaSchema = new mongoose.Schema({
     userId: {

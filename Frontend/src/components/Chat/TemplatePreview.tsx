@@ -33,7 +33,7 @@ export const TemplateButtons = ({ buttons }: { buttons?: TemplateButton[] }) => 
   );
 };
 
-/** Cómo se marca un valor dentro de la burbuja (la vista previa de un envío masivo). */
+/** Cómo se marca un valor dentro de la burbuja (la vista previa de una campaña). */
 export type ValueHighlight = 'value' | 'fallback';
 
 const HIGHLIGHT_CLASS: Record<ValueHighlight, string> = {

@@ -72,13 +72,13 @@ const footerHint = (wizard: CampaignWizard) => {
         }
         return 'Todo completo: cada variable tiene de dónde salir.';
     }
-    return `Tarda ${formatDuration(preview.estimatedSeconds)}; puedes cerrar la pantalla, el envío sigue.`;
+    return `Tarda ${formatDuration(preview.estimatedSeconds)}; puedes cerrar la pantalla, la campaña sigue.`;
 };
 
 /**
- * «Nuevo envío»: un asistente de tres pasos sobre el borrador del navegador.
+ * «Nueva campaña»: un asistente de tres pasos sobre el borrador del navegador.
  * Se llega desde Contactos (con la selección hecha) o desde la lista de
- * Envíos (para continuar el borrador). Sin borrador no hay nada que hacer aquí.
+ * Campañas (para continuar el borrador). Sin borrador no hay nada que hacer aquí.
  */
 export const NewCampaignPage = () => {
     const navigate = useNavigate();
@@ -86,7 +86,7 @@ export const NewCampaignPage = () => {
     const { create } = useCampaignMutations();
     const { setState: showNotice, setContent: setNoticeContent } = useModalContext();
     const { draft, preview, template, update, isPreviewUpdating } = wizard;
-    // El envío recién creado. Redirigir desde aquí y no con navigate(): React
+    // La campaña recién creada. Redirigir desde aquí y no con navigate(): React
     // Router 7 navega dentro de una transición, el borrador se borra antes y
     // la página, al quedarse sin él, mandaba a la lista en vez de al detalle.
     const [createdId, setCreatedId] = useState<string | null>(null);
@@ -114,7 +114,7 @@ export const NewCampaignPage = () => {
                     wizard.discard();
                     notify(
                         <div className="text-sm">
-                            <p className="font-semibold text-brand-text">Envío iniciado.</p>
+                            <p className="font-semibold text-brand-text">Campaña iniciada.</p>
                             <p className="text-brand-muted mt-0.5">Avanza en segundo plano: puedes seguir trabajando o cerrar la pantalla.</p>
                         </div>,
                     );
@@ -159,9 +159,9 @@ export const NewCampaignPage = () => {
         <div className="min-h-full flex flex-col">
             <div className="flex-1 mx-auto w-full max-w-6xl px-5 sm:px-8 pt-6 sm:pt-8 pb-10">
                 <nav className="flex items-center gap-1.5 text-[13px]">
-                    <Link to={CampaignPaths.list} className="font-semibold text-brand-accent-strong hover:underline">Envíos</Link>
+                    <Link to={CampaignPaths.list} className="font-semibold text-brand-accent-strong hover:underline">Campañas</Link>
                     <span className="text-brand-subtle">›</span>
-                    <span className="text-brand-gray-600">Nuevo envío</span>
+                    <span className="text-brand-gray-600">Nueva campaña</span>
                 </nav>
 
                 <header className="mt-3 flex items-center gap-4">
@@ -169,7 +169,7 @@ export const NewCampaignPage = () => {
                         <Send size={20} />
                     </div>
                     <div className="min-w-0">
-                        <h1 className="text-[30px] font-bold tracking-[-0.03em] leading-none text-brand-text">Nuevo envío</h1>
+                        <h1 className="text-[30px] font-bold tracking-[-0.03em] leading-none text-brand-text">Nueva campaña</h1>
                         <p className="hidden sm:block text-[15px] text-brand-muted mt-2">Una plantilla aprobada para muchos contactos a la vez.</p>
                     </div>
                 </header>

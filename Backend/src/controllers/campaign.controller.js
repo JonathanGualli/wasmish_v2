@@ -89,7 +89,7 @@ const buildDraft = async (userId, body) => {
     const { contacts, duplicates, notFound } = await selectContacts(userId, body.recipients);
 
     if (contacts.length > CAMPAIGN_MAX_RECIPIENTS) {
-        errors.push({ field: 'recipients', message: `Un envío admite como mucho ${CAMPAIGN_MAX_RECIPIENTS} contactos. Acota la búsqueda o divídelo en varios.` });
+        errors.push({ field: 'recipients', message: `Una campaña admite como mucho ${CAMPAIGN_MAX_RECIPIENTS} contactos. Acota la búsqueda o divídela en varias.` });
     }
 
     const plan = planAudience(contacts, excludeOptedOut);
@@ -151,7 +151,7 @@ const summarizeDraft = (draft) => {
             duplicates: draft.duplicates,
             notFound: draft.notFound,
         },
-        // A ojo, al ritmo del worker: lo que tarda si no hay otro envío a la vez.
+        // A ojo, al ritmo del worker: lo que tarda si no hay otra campaña a la vez.
         estimatedSeconds: Math.ceil(draft.sendable.length / CAMPAIGN_RATE_PER_SECOND),
         // Se creará en modo de prueba: la UI lo avisa antes de enviar.
         dryRun: CAMPAIGN_DRY_RUN,
@@ -218,7 +218,7 @@ export const previewCampaignRecipients = async (req, res) => {
 };
 
 /**
- * POST /campaigns — crea el envío y congela la lista de destinatarios. No
+ * POST /campaigns — crea la campaña y congela la lista de destinatarios. No
  * envía nada aquí: lo hace el worker, a su ritmo, aunque se cierre la página.
  */
 export const createCampaign = async (req, res) => {
@@ -266,7 +266,7 @@ export const createCampaign = async (req, res) => {
         })), { ordered: false });
 
         wakeCampaignWorker();
-        console.log('Envío masivo creado:', {
+        console.log('Campaña creada:', {
             campaignId: String(campaign._id), template: template.name, destinatarios: draft.sendable.length,
         });
 
@@ -276,7 +276,7 @@ export const createCampaign = async (req, res) => {
     }
 };
 
-// GET /campaigns?page=&limit= — los envíos de la cuenta, del más reciente al más antiguo.
+// GET /campaigns?page=&limit= — las campañas de la cuenta, del más reciente al más antiguo.
 export const listCampaigns = async (req, res) => {
     try {
         const userId = req.user.id;
@@ -303,7 +303,7 @@ export const listCampaigns = async (req, res) => {
 export const getCampaign = async (req, res) => {
     try {
         const campaign = await findOwnedCampaign(req.user.id, req.params.id);
-        if (!campaign) return sendError(res, 404, 'Envío no encontrado');
+        if (!campaign) return sendError(res, 404, 'Campaña no encontrada');
         return res.json(serializeCampaign(campaign, await getCampaignStats(campaign._id)));
     } catch (error) {
         return sendError(res, 500, error.message);
@@ -317,7 +317,7 @@ export const getCampaign = async (req, res) => {
 export const getCampaignFailures = async (req, res) => {
     try {
         const campaign = await findOwnedCampaign(req.user.id, req.params.id);
-        if (!campaign) return sendError(res, 404, 'Envío no encontrado');
+        if (!campaign) return sendError(res, 404, 'Campaña no encontrada');
         return res.json({ reasons: await getCampaignFailureReasons(campaign._id) });
     } catch (error) {
         return sendError(res, 500, error.message);
@@ -336,7 +336,7 @@ const RECIPIENT_STATES = ['pending', 'sent', 'delivered', 'read', 'failed', 'ski
 export const listCampaignRecipients = async (req, res) => {
     try {
         const campaign = await findOwnedCampaign(req.user.id, req.params.id);
-        if (!campaign) return sendError(res, 404, 'Envío no encontrado');
+        if (!campaign) return sendError(res, 404, 'Campaña no encontrada');
 
         const { page, limit } = parsePage(req.query);
         const state = RECIPIENT_STATES.includes(req.query.state) ? req.query.state : null;
@@ -369,7 +369,7 @@ export const listCampaignRecipients = async (req, res) => {
             recipients: result.items.map(row => ({
                 id: String(row._id),
                 contactId: String(row.contactId),
-                // Un contacto borrado después de crear el envío ya no tiene ficha.
+                // Un contacto borrado después de crear la campaña ya no tiene ficha.
                 displayName: row.contact ? contactDisplayName(row.contact) : 'Contacto borrado',
                 phone: row.contact?.phone ?? null,
                 username: row.contact?.username ?? null,
@@ -398,7 +398,7 @@ export const listCampaignRecipients = async (req, res) => {
 const transition = async (req, res, { from, set, conflict, after }) => {
     try {
         const { id } = req.params;
-        if (!mongoose.isValidObjectId(id)) return sendError(res, 404, 'Envío no encontrado');
+        if (!mongoose.isValidObjectId(id)) return sendError(res, 404, 'Campaña no encontrada');
 
         const campaign = await Campaign.findOneAndUpdate(
             { _id: id, userId: req.user.id, status: { $in: from } },
@@ -407,7 +407,7 @@ const transition = async (req, res, { from, set, conflict, after }) => {
         );
         if (!campaign) {
             const exists = await Campaign.exists({ _id: id, userId: req.user.id });
-            return exists ? sendError(res, 409, conflict) : sendError(res, 404, 'Envío no encontrado');
+            return exists ? sendError(res, 409, conflict) : sendError(res, 404, 'Campaña no encontrada');
         }
 
         await after?.(campaign);
@@ -418,11 +418,11 @@ const transition = async (req, res, { from, set, conflict, after }) => {
     }
 };
 
-// POST /campaigns/:id/pause — el envío en curso termina; el resto espera.
+// POST /campaigns/:id/pause — el mensaje en curso termina; el resto espera.
 export const pauseCampaign = (req, res) => transition(req, res, {
     from: ['queued', 'sending'],
     set: () => ({ status: 'paused', pauseReason: { code: null, message: null } }),
-    conflict: 'Este envío ya no se puede pausar.',
+    conflict: 'Esta campaña ya no se puede pausar.',
 });
 
 // POST /campaigns/:id/resume — vuelve a la cola; si la cuenta tiene otro
@@ -430,7 +430,7 @@ export const pauseCampaign = (req, res) => transition(req, res, {
 export const resumeCampaign = (req, res) => transition(req, res, {
     from: ['paused'],
     set: () => ({ status: 'queued', pauseReason: { code: null, message: null } }),
-    conflict: 'Solo se puede reanudar un envío pausado.',
+    conflict: 'Solo se puede reanudar una campaña pausada.',
     after: () => wakeCampaignWorker(),
 });
 
@@ -439,7 +439,7 @@ export const resumeCampaign = (req, res) => transition(req, res, {
 export const cancelCampaign = (req, res) => transition(req, res, {
     from: ['queued', 'sending', 'paused'],
     set: () => ({ status: 'cancelled', finishedAt: new Date() }),
-    conflict: 'Este envío ya terminó.',
+    conflict: 'Esta campaña ya terminó.',
     after: (campaign) => CampaignRecipient.updateMany(
         { campaignId: campaign._id, status: 'pending' },
         { $set: { status: 'cancelled', processedAt: new Date() } },

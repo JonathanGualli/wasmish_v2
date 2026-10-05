@@ -16,7 +16,7 @@ export const AppRoutes = {
 }
 const privatePath = (path: string) => `${AppRoutes.private.root}/${path}`;
 
-/** Rutas completas de Envíos, para navegar a ellas. */
+/** Rutas completas de Campañas, para navegar a ellas. */
 export const CampaignPaths = {
     list: privatePath(AppRoutes.private.campaigns),
     create: privatePath(`${AppRoutes.private.campaigns}/new`),

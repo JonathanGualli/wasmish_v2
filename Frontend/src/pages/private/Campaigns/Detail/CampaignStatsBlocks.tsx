@@ -11,17 +11,17 @@ const formatCount = (n: number) => n.toLocaleString('es-EC');
 const progressNote = (campaign: Campaign) => {
     switch (campaign.status) {
         case 'queued':
-            return 'Empieza cuando termine el envío anterior de tu cuenta.';
+            return 'Empieza cuando termine la campaña anterior de tu cuenta.';
         case 'paused':
             return `Los ${formatCount(campaign.stats.pending)} pendientes esperan; al reanudar sigue donde quedó.`;
         default:
             return campaign.estimatedSecondsLeft
-                ? `Faltan ${formatDuration(campaign.estimatedSecondsLeft)} · puedes cerrar la pantalla, el envío sigue.`
-                : 'Puedes cerrar la pantalla, el envío sigue.';
+                ? `Faltan ${formatDuration(campaign.estimatedSecondsLeft)} · puedes cerrar la pantalla, la campaña sigue.`
+                : 'Puedes cerrar la pantalla, la campaña sigue.';
     }
 };
 
-/** Cuánto lleva un envío que todavía avanza, y qué esperar. */
+/** Cuánto lleva una campaña que todavía avanza, y qué esperar. */
 export const CampaignProgressCard = ({ campaign }: { campaign: Campaign }) => {
     const { done, total, percent } = campaignProgress(campaign.stats);
     const note = progressNote(campaign);
@@ -50,7 +50,7 @@ interface Metric {
 // Los mismos colores que las píldoras de cada estado.
 const METRIC_TONE = { success: 'text-brand-success', info: 'text-brand-info', danger: 'text-brand-danger', muted: 'text-brand-muted' };
 
-/** Las cifras del envío. Cada una con su aclaración, porque «enviado» y «entregado» no son lo mismo. */
+/** Las cifras de la campaña. Cada una con su aclaración, porque «enviado» y «entregado» no son lo mismo. */
 export const CampaignMetrics = ({ campaign }: { campaign: Campaign }) => {
     const { stats } = campaign;
     const metrics: Metric[] = [

@@ -62,7 +62,7 @@ test('«@usuario» busca el usuario sin la arroba', () => {
     assert.equal(username.test('ana.p'), true);
 });
 
-// La lista de destinatarios de un envío se filtra en memoria: tiene que
+// La lista de destinatarios de una campaña se filtra en memoria: tiene que
 // encontrar lo mismo que la búsqueda de Contactos.
 test('matchesContactSearch busca lo mismo que la consulta', () => {
     const contact = { name: 'Ana Pérez', username: 'ana.p', phone: '593991234567', company: null };

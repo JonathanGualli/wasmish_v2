@@ -1,11 +1,11 @@
 import type { CampaignButton, CampaignRecipientsInput, CampaignVariable } from "../models/campaign.model";
 
 /**
- * Borrador de «Nuevo envío»: el que se empezó y no se terminó. Hay uno a la
+ * Borrador de «Nueva campaña»: el que se empezó y no se terminó. Hay uno a la
  * vez, y vive en el navegador, nunca en la BD.
  *
  * Por qué localStorage y no sessionStorage (como el borrador de Chats): un
- * envío masivo se prepara con calma y se retoma otro día, así que tiene que
+ * campaña se prepara con calma y se retoma otro día, así que tiene que
  * sobrevivir a cerrar la pestaña. A cambio se borra al cerrar sesión, para no
  * dejar la lista de destinatarios en un equipo compartido.
  *
@@ -22,7 +22,7 @@ export interface CampaignDraft {
      */
     selectedCount: number;
     templateId: string | null;
-    /** Para la lista de Envíos, que no carga las plantillas. */
+    /** Para la lista de Campañas, que no carga las plantillas. */
     templateName: string | null;
     variables: CampaignVariable[];
     buttons: CampaignButton[];
@@ -77,7 +77,7 @@ export const clearCampaignDraft = (userId: string) => {
     } catch { /* nada que borrar */ }
 };
 
-/** Al cerrar sesión: todos los borradores de envío del navegador, sea de quien sea. */
+/** Al cerrar sesión: todos los borradores de campaña del navegador, sea de quien sea. */
 export const clearAllCampaignDrafts = () => {
     try {
         Object.keys(localStorage)
@@ -89,5 +89,5 @@ export const clearAllCampaignDrafts = () => {
 /** Los pasos del asistente, para «se quedó en el paso 2 · Mensaje». */
 export const CAMPAIGN_STEPS = ['Destinatarios', 'Mensaje', 'Revisar y enviar'] as const;
 
-/** Título del borrador en la lista de Envíos. */
+/** Título del borrador en la lista de Campañas. */
 export const campaignDraftTitle = (draft: CampaignDraft) => draft.name.trim() || 'Sin nombre';

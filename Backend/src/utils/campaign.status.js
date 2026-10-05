@@ -1,4 +1,4 @@
-// Reglas de un envío masivo que no dependen de la BD: a quién no se le manda,
+// Reglas de una campaña que no dependen de la BD: a quién no se le manda,
 // qué error de Meta obliga a parar y cómo se resumen los resultados.
 
 /**
@@ -18,7 +18,7 @@ export const recipientSkipReason = (contact, { excludeOptedOut = false } = {}) =
 };
 
 /**
- * Si la baja de publicidad cuenta en este envío: solo con plantillas de
+ * Si la baja de publicidad cuenta en esta campaña: solo con plantillas de
  * marketing. A quien la pidió le siguen llegando los avisos de utilidad, así
  * que excluirlo de uno sería quitarle un mensaje que sí quiere. Sin plantilla
  * (el primer paso del asistente) todavía no se sabe, y no se excluye a nadie.

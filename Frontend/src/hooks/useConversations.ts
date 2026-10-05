@@ -14,7 +14,7 @@ export const useConversations = () => {
     queryFn: getConversationsService,
   });
 
-  // Agrupado: un envío masivo estrena cientos de conversaciones seguidas, y
+  // Agrupado: una campaña estrena cientos de conversaciones seguidas, y
   // cada una pedía la bandeja entera otra vez.
   const refreshList = useThrottledInvalidate(["conversations"]);
 

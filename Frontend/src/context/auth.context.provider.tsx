@@ -91,7 +91,7 @@ export const AuthProvider = ({ children }: AuthProps) => {
     };
  
     const logOut = () => {
-        // Los borradores (conversación nueva, envío masivo) son de esta sesión:
+        // Los borradores (conversación nueva, campaña) son de esta sesión:
         // no debe verlos quien entre después en el mismo navegador.
         clearAllDrafts();
         clearAllCampaignDrafts();

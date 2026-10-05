@@ -112,9 +112,9 @@ export interface CampaignPreview {
         duplicates: number;
         notFound: number;
     };
-    /** Lo que tardaría si no hay otro envío a la vez. */
+    /** Lo que tardaría si no hay otra campaña a la vez. */
     estimatedSeconds: number;
-    /** El servidor está en modo de prueba: el envío no llegará a WhatsApp. */
+    /** El servidor está en modo de prueba: la campaña no llegará a WhatsApp. */
     dryRun: boolean;
     /** Cuántos usarán la reserva, por clave: '1', 'nombre', 'button.0'. */
     fallbacks: Record<string, number>;
@@ -159,7 +159,7 @@ export interface AudiencePage {
 /** Lo que pide la lista del primer paso: a quién, sin el mensaje. */
 export type CampaignAudienceInput = Pick<CampaignDraftInput, 'recipients' | 'excludeOptedOut' | 'templateId'>;
 
-/** Fallidos de un envío con el mismo código de error. */
+/** Fallidos de una campaña con el mismo código de error. */
 export interface FailureReason {
     /** Código de Meta ('131026') o de antes de llamarla ('409'); `null` si no lo hubo. */
     code: string | null;

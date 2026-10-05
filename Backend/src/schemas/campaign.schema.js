@@ -41,7 +41,7 @@ export const campaignDraftSchema = z.object({
 
 export const createCampaignSchema = campaignDraftSchema.extend({
     templateId: z.string({ error: 'Elige una plantilla' }).min(1, 'Elige una plantilla'),
-    name: z.string({ error: 'Ponle un nombre al envío' }).trim().min(1, 'Ponle un nombre al envío').max(80),
+    name: z.string({ error: 'Ponle un nombre a la campaña' }).trim().min(1, 'Ponle un nombre a la campaña').max(80),
 });
 
 // A quién llega un borrador, sin el mensaje: la lista del primer paso. La

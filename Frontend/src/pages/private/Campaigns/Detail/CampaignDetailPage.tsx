@@ -40,7 +40,7 @@ const STATE_ORDER: RecipientState[] = ['pending', 'sent', 'delivered', 'read', '
 
 /** Creado en modo de prueba: que nadie lea «Enviado» como «llegó». */
 const DryRunNotice = () => (
-    <Callout icon={<FlaskConical size={16} />} title="Envío de prueba: nada llegó a WhatsApp.">
+    <Callout icon={<FlaskConical size={16} />} title="Campaña de prueba: nada llegó a WhatsApp.">
         Se creó con el modo de prueba del servidor (<span className="font-mono">CAMPAIGN_DRY_RUN</span>), que no llama a Meta:
         los mensajes quedan como enviados y solo se simula el rechazo de quien pidió no recibir publicidad.
     </Callout>
@@ -56,17 +56,17 @@ const StatusNotice = ({ campaign }: { campaign: Campaign }) => {
             </Link>
         );
         return (
-            <Callout tone="warning" icon={<AlertTriangle size={16} />} title="Se pausó solo." action={link}>
+            <Callout tone="warning" icon={<AlertTriangle size={16} />} title="Se pausó sola." action={link}>
                 {campaign.pauseReason.message} Cuando esté arreglado, pulsa «Reanudar»: ningún pendiente se perdió.
             </Callout>
         );
     }
     if (campaign.status === 'paused') {
-        return <Callout icon={<Info size={16} />} title="Pausado por ti." />;
+        return <Callout icon={<Info size={16} />} title="Pausada por ti." />;
     }
     if (campaign.status === 'cancelled' && campaign.finishedAt) {
         return (
-            <Callout icon={<Info size={16} />} title={`Lo cancelaste el ${formatDateTime(campaign.finishedAt)}.`}>
+            <Callout icon={<Info size={16} />} title={`La cancelaste el ${formatDateTime(campaign.finishedAt)}.`}>
                 {campaign.stats.cancelled > 0 && `Los ${pluralize(campaign.stats.cancelled, 'destinatario', 'destinatarios')} que faltaban no se enviaron.`}
             </Callout>
         );
@@ -75,7 +75,7 @@ const StatusNotice = ({ campaign }: { campaign: Campaign }) => {
 };
 
 /**
- * El detalle de un envío: cómo va, qué pasó con cada destinatario y por qué
+ * El detalle de una campaña: cómo va, qué pasó con cada destinatario y por qué
  * falló lo que falló. Se actualiza solo por SSE mientras avanza, y también
  * después: las entregas y lecturas llegan durante horas.
  */
@@ -103,8 +103,8 @@ export const CampaignDetailPage = () => {
                 <BlankState
                     tone="danger"
                     icon={<AlertCircle size={22} />}
-                    title="No encontramos este envío"
-                    action={<CustomButton variant="outline" onClick={() => navigate(CampaignPaths.list)}>Volver a Envíos</CustomButton>}
+                    title="No encontramos esta campaña"
+                    action={<CustomButton variant="outline" onClick={() => navigate(CampaignPaths.list)}>Volver a Campañas</CustomButton>}
                 >
                     Puede que la dirección esté mal o que no sea de tu cuenta.
                 </BlankState>
@@ -148,7 +148,7 @@ export const CampaignDetailPage = () => {
     return (
         <PageShell width="wide">
             <Link to={CampaignPaths.list} className="inline-flex items-center gap-1 text-[13px] font-semibold text-brand-accent-strong hover:underline">
-                <ChevronLeft size={15} />Envíos
+                <ChevronLeft size={15} />Campañas
             </Link>
 
             <header className="mt-3.5 mb-6 flex flex-col md:flex-row md:items-start gap-4">

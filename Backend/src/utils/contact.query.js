@@ -56,7 +56,7 @@ export const buildContactSearch = (search) => {
 /**
  * La misma búsqueda que `buildContactSearch`, sobre un contacto ya cargado:
  * para filtrar una lista que ya está en memoria (los destinatarios de un
- * envío) sin volver a consultar. Sin búsqueda, todos coinciden.
+ * campaña) sin volver a consultar. Sin búsqueda, todos coinciden.
  */
 export const matchesContactSearch = (contact, search) => {
     const patterns = searchPatterns(search);

@@ -75,7 +75,7 @@ export const RecipientsStep = ({ wizard }: { wizard: CampaignWizard }) => {
                 )}
 
                 {recipientsError && (
-                    <Callout tone="danger" icon={<XCircle size={16} />} title="Nadie recibiría este envío">
+                    <Callout tone="danger" icon={<XCircle size={16} />} title="Nadie recibiría esta campaña">
                         {recipientsError.message}
                     </Callout>
                 )}

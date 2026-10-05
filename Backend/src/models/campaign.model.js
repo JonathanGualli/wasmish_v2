@@ -9,7 +9,7 @@ const fillSchema = new mongoose.Schema({
     fallback: String,     // si el contacto no tiene el dato
 }, { _id: false });
 
-// Un envío masivo: una plantilla a una lista de contactos congelada al crearlo.
+// Una campaña: una plantilla a una lista de contactos congelada al crearlo.
 // Los destinatarios viven en CampaignRecipient, que además es la cola del worker.
 const campaignSchema = new mongoose.Schema({
     userId: {
@@ -23,7 +23,7 @@ const campaignSchema = new mongoose.Schema({
         trim: true,
     },
     // Copia de la plantilla al crearlo: si después se re-sincroniza o cambia en
-    // Meta, el envío sigue con lo que se revisó y confirmó.
+    // Meta, la campaña sigue con lo que se revisó y confirmó.
     template: {
         templateId: String,
         name: String,
@@ -34,7 +34,7 @@ const campaignSchema = new mongoose.Schema({
         buttons: { type: [mongoose.Schema.Types.Mixed], default: [] },
         header: { type: mongoose.Schema.Types.Mixed, default: null },
         // El archivo de la cabecera al crearlo: cambiarlo después en
-        // Plantillas no cambia lo que recibe este envío.
+        // Plantillas no cambia lo que recibe esta campaña.
         headerMedia: { type: mongoose.Schema.Types.ObjectId, ref: 'TemplateMedia', default: null },
     },
     variables: { type: [fillSchema], default: [] },
