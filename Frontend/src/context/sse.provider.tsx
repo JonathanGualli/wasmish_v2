@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { createSSEConnection } from "../services/api.service";
-import { SSEContext, type SSEEventType, type SSEHandler } from "./sse.context";
+import { SSEContext, type SSEEventMap, type SSEEventType, type SSEHandler } from "./sse.context";
 import { useAuthContext } from "./auth.context";
 
 // Espera antes de reconectar: 1 s, 2 s, 4 s… hasta 30 s.
@@ -14,7 +14,7 @@ export const SSEProvider = ({ children }: { children: ReactNode }) => {
 
     // Registro de suscriptores por tipo de evento. useRef para que NO se
     // recree en cada render y persista de forma estable.
-    const subscribers = useRef<Record<SSEEventType, Set<SSEHandler>>>({
+    const subscribers = useRef<{ [E in SSEEventType]: Set<SSEHandler<E>> }>({
         message_created: new Set(),
         message_status: new Set(),
         conversation_updated: new Set(),
@@ -27,8 +27,8 @@ export const SSEProvider = ({ children }: { children: ReactNode }) => {
         if (!user?.id) return; // sin sesión no conectamos (/api/stream requiere auth)
 
         // Crea un despachador para un tipo de evento: parsea y reparte.
-        const dispatch = (event: SSEEventType) => (e: MessageEvent) => {
-            let data;
+        const dispatch = <E extends SSEEventType>(event: E) => (e: MessageEvent) => {
+            let data: SSEEventMap[E];
             try {
                 data = JSON.parse(e.data);
             } catch {
@@ -79,7 +79,7 @@ export const SSEProvider = ({ children }: { children: ReactNode }) => {
     }, [user?.id, queryClient]);
 
     // Función estable para suscribirse. Devuelve el "des-suscribir".
-    const subscribe = useCallback((event: SSEEventType, handler: SSEHandler) => {
+    const subscribe = useCallback(<E extends SSEEventType>(event: E, handler: SSEHandler<E>) => {
         subscribers.current[event].add(handler);
         return () => {
             subscribers.current[event].delete(handler);

@@ -98,14 +98,14 @@ export const SettingsPage = () => {
             setContent(<div className="text-brand-accent-strong"><p>WhatsApp conectado correctamente.</p></div>);
             setState(true);
         }
-    }, [connectWhatsapp.isSuccess]);
+    }, [connectWhatsapp.isSuccess, setContent, setState]);
 
     useEffect(() => {
         if (connectWhatsapp.isError) {
             setContent(<div className="text-brand-danger"><p>No se pudo conectar WhatsApp. Intenta de nuevo.</p></div>);
             setState(true);
         }
-    }, [connectWhatsapp.isError]);
+    }, [connectWhatsapp.isError, setContent, setState]);
 
     return (
         <PageShell>

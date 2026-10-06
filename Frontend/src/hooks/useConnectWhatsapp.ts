@@ -34,7 +34,7 @@ export const useConnectWhatsapp = () => {
 
         // 3. Abrimos el popup de Facebook con tu configuración de Embedded Signup.
         window.FB.login(
-            (response: any) => {
+            (response) => {
                 window.removeEventListener("message", messageListener);
                 const code = response?.authResponse?.code;
 
