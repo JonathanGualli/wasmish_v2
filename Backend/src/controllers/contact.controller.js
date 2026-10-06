@@ -472,13 +472,43 @@ export const deleteContact = async (req, res) => {
     }
 };
 
-/** Los ids de los contactos de una selección (ver `contactSelectionSchema`). */
-const selectedContactIds = async (userId, selection) => {
-    const stages = selection.mode === 'ids'
+/** Las etapas que dejan solo los contactos de una selección (ver `contactSelectionSchema`). */
+const selectionStages = (userId, selection) => (
+    selection.mode === 'ids'
         ? [{ $match: { userId: new mongoose.Types.ObjectId(userId), _id: { $in: toObjectIds(selection.contactIds) } } }]
-        : selectionQueryStages(userId, selection);
-    const rows = await Contact.aggregate([...stages, { $project: { _id: 1 } }]);
+        : selectionQueryStages(userId, selection)
+);
+
+/** Los ids de los contactos de una selección. */
+const selectedContactIds = async (userId, selection) => {
+    const rows = await Contact.aggregate([...selectionStages(userId, selection), { $project: { _id: 1 } }]);
     return rows.map(row => row._id);
+};
+
+/**
+ * POST /contacts/tags/summary — cuántos de una selección tienen cada etiqueta,
+ * antes de etiquetar: «17 ya la tienen» al añadir, «2 de 3» al quitar. Con
+ * «todos los que coinciden» el front no tiene esos contactos cargados. Las
+ * etiquetas que no tiene nadie de la selección no salen.
+ */
+export const summarizeSelectionTags = async (req, res) => {
+    try {
+        const [result] = await Contact.aggregate([
+            ...selectionStages(req.user.id, req.body.selection),
+            {
+                $facet: {
+                    total: [{ $count: 'count' }],
+                    tags: [{ $unwind: '$tags' }, { $group: { _id: '$tags', count: { $sum: 1 } } }],
+                },
+            },
+        ]);
+        return res.json({
+            total: result.total[0]?.count ?? 0,
+            tags: result.tags.map(tag => ({ id: String(tag._id), count: tag.count })),
+        });
+    } catch (error) {
+        return sendContactError(res, 500, error.message);
+    }
 };
 
 /**

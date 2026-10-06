@@ -1,10 +1,17 @@
 import { type ColumnDef } from "@tanstack/react-table";
 import type { Contact } from "../../../models/contact.model";
+import type { Tag } from "../../../models/tag.model";
 import { Pill } from "../../../components/Pill/Pill";
-import { contactStatus, contactSubtitle, contactTitle, lastInteractionLabel, sourceLabel } from "../../../utils/contactDisplay";
+import { TagChips } from "../../../components/Tag/TagChip";
+import { contactStatus, contactSubtitle, contactTitle, lastInteractionLabel } from "../../../utils/contactDisplay";
+import { tagsFromIds } from "../../../utils/tags";
 import { ContactAvatar, ContactCell as Cell } from "./ContactRow";
 
-export const contactColumns: ColumnDef<Contact>[] = [
+/**
+ * Las columnas de Contactos. Las etiquetas llegan como ids: los nombres salen
+ * de la lista de la cuenta, y las del filtro activo se marcan.
+ */
+export const contactColumns = (tags: Tag[], highlightIds: string[]): ColumnDef<Contact>[] => [
     {
         id: "contact",
         header: "Contacto",
@@ -34,10 +41,10 @@ export const contactColumns: ColumnDef<Contact>[] = [
         ),
     },
     {
-        id: "source",
-        header: "Origen",
+        id: "tags",
+        header: "Etiquetas",
         cell: ({ row }) => (
-            <Cell><span className="text-[13px] text-brand-muted whitespace-nowrap">{sourceLabel(row.original.source)}</span></Cell>
+            <Cell><TagChips tags={tagsFromIds(tags, row.original.tagIds)} highlightIds={highlightIds} /></Cell>
         ),
     },
     {

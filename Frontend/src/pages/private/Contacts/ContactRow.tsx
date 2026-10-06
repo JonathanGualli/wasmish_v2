@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import type { Contact } from "../../../models/contact.model";
+import type { Tag } from "../../../models/tag.model";
 import { Pill } from "../../../components/Pill/Pill";
+import { TagChips } from "../../../components/Tag/TagChip";
 import { initials } from "../../../utils/initials";
 import { avatarName, contactStatus, contactSubtitle, contactTitle, lastInteractionLabel } from "../../../utils/contactDisplay";
 
@@ -27,8 +29,8 @@ export const ContactCell = ({ children }: { children: ReactNode }) => (
     <div className="min-h-[34px] flex items-center">{children}</div>
 );
 
-/** La fila en móvil: la tabla no cabe a 375px. */
-export const ContactMobileRow = ({ contact }: { contact: Contact }) => {
+/** La fila en móvil: la tabla no cabe a 375px. `tags` son las del contacto, ya resueltas. */
+export const ContactMobileRow = ({ contact, tags, highlightIds }: { contact: Contact; tags: Tag[]; highlightIds: string[] }) => {
     const status = contactStatus(contact);
     const subtitle = contactSubtitle(contact);
     return (
@@ -42,7 +44,10 @@ export const ContactMobileRow = ({ contact }: { contact: Contact }) => {
                 <div className="font-mono text-[11.5px] text-brand-muted truncate mt-0.5">
                     {contact.company ? `${subtitle} · ${contact.company}` : subtitle}
                 </div>
-                <div className="mt-1.5"><Pill tone={status.tone}>{status.label}</Pill></div>
+                <div className="mt-1.5 flex flex-wrap items-center gap-[5px]">
+                    <Pill tone={status.tone}>{status.label}</Pill>
+                    {tags.length > 0 && <TagChips tags={tags} highlightIds={highlightIds} wrap />}
+                </div>
             </div>
         </div>
     );

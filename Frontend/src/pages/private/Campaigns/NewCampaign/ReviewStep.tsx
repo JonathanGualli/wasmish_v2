@@ -3,6 +3,9 @@ import { AuthField } from "../../../../components/Auth/AuthField";
 import { Callout } from "../../../../components/Callout/Callout";
 import { CategoryPill } from "../../../../components/Chat/TemplateFields";
 import { Pill } from "../../../../components/Pill/Pill";
+import { TagChip } from "../../../../components/Tag/TagChip";
+import { useTags } from "../../../../hooks/useTags";
+import { tagsFromIds } from "../../../../utils/tags";
 import type { CampaignFill } from "../../../../models/campaign.model";
 import { VARIABLE_SOURCE_LABEL, pluralize } from "../../../../utils/campaignDisplay";
 import { HEADER_SOURCE_LABEL, headerMediaRule } from "../../../../utils/templateHeader";
@@ -25,7 +28,11 @@ const SummaryRow = ({ label, children }: { label: string; children: React.ReactN
 /** Paso 3: el nombre de la campaña y lo que se va a mandar, antes de mandarlo. */
 export const ReviewStep = ({ wizard }: { wizard: CampaignWizard }) => {
     const { draft, template, preview, update, fieldError, headerMedia, headerSource } = wizard;
+    const { data: allTags = [] } = useTags();
     if (!draft || !template || !preview) return null;
+
+    // Solo si se eligió «todos los que coinciden» con un filtro de etiquetas; marcados uno a uno, no.
+    const selectedTags = draft.recipients.mode === 'query' ? tagsFromIds(allTags, draft.recipients.tagIds ?? []) : [];
 
     const { recipients } = preview;
     const isMarketing = template.category === 'MARKETING';
@@ -67,6 +74,21 @@ export const ReviewStep = ({ wizard }: { wizard: CampaignWizard }) => {
                             </span>
                         )}
                     </SummaryRow>
+                    {selectedTags.length > 0 && (
+                        <SummaryRow label="Etiquetas">
+                            <span className="flex flex-wrap items-center gap-1.5">
+                                {selectedTags.map((tag, i) => (
+                                    <span key={tag.id} className="flex items-center gap-1.5">
+                                        <TagChip name={tag.name} />
+                                        {i < selectedTags.length - 1 && <span className="text-[13px] text-brand-muted">o</span>}
+                                    </span>
+                                ))}
+                            </span>
+                            <span className="block mt-1.5 text-[12.5px] leading-[1.5] text-brand-muted">
+                                La lista se guarda al crear la campaña: si después cambias etiquetas, esta campaña no cambia.
+                            </span>
+                        </SummaryRow>
+                    )}
                     {headerRule && headerMedia && headerSource && (
                         <SummaryRow label={headerRule.title}>
                             <span className="inline-flex flex-wrap items-center gap-2">

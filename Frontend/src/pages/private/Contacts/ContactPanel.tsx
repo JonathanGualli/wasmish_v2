@@ -10,6 +10,9 @@ import { Callout } from '../../../components/Callout/Callout';
 import { Pill } from '../../../components/Pill/Pill';
 import { useNoticeContext } from '../../../components/Notice/context/UseNoticeContext';
 import { contactError, useContact, useContactMutations } from '../../../hooks/useContacts';
+import { useTags } from '../../../hooks/useTags';
+import { TagChip } from '../../../components/Tag/TagChip';
+import { tagsFromIds } from '../../../utils/tags';
 import { formatRemaining, useConversationWindow } from '../../../hooks/useConversationWindow';
 import type { ContactDetail } from '../../../models/contact.model';
 import type { ChatsNavigationState } from '../../../models/conversation.mode';
@@ -181,6 +184,8 @@ const ContactDetails = ({ contact, onClose, onEdit }: {
 }) => {
     const navigate = useNavigate();
     const window24 = useConversationWindow(contact.windowExpiresAt);
+    const { data: allTags = [] } = useTags();
+    const tags = tagsFromIds(allTags, contact.tagIds);
     const [confirmingDelete, setConfirmingDelete] = useState(false);
 
     const hasConversation = Boolean(contact.conversationId);
@@ -207,6 +212,15 @@ const ContactDetails = ({ contact, onClose, onEdit }: {
                 sub: 'Hasta que escriba, solo plantillas aprobadas.', box: 'bg-brand-bg border-brand-border', dot: 'bg-brand-border-strong' };
 
     const data: [string, ReactNode][] = [
+        ['Etiquetas', (
+            <span className="flex flex-wrap items-center gap-[5px]">
+                {tags.map(tag => <TagChip key={tag.id} name={tag.name} />)}
+                <button type="button" onClick={onEdit}
+                    className="px-1 text-[12.5px] font-semibold text-brand-accent-strong cursor-pointer hover:underline">
+                    {tags.length ? 'Cambiar' : 'Añadir'}
+                </button>
+            </span>
+        )],
         ['Email', contact.email],
         ['Empresa', contact.company],
         ['Notas', contact.notes && <span className="whitespace-pre-wrap">{contact.notes}</span>],

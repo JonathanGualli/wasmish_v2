@@ -20,11 +20,12 @@ export interface CampaignButton extends CampaignFill { index: number }
 
 /**
  * A quién: los marcados uno a uno, o «todos los que coinciden» con una
- * búsqueda y un filtro de Contactos, menos los desmarcados.
+ * búsqueda, un filtro y unas etiquetas de Contactos, menos los desmarcados.
+ * Es también la selección que etiqueta en bloque.
  */
 export type CampaignRecipientsInput =
     | { mode: 'ids'; contactIds: string[] }
-    | { mode: 'query'; search?: string; filter?: ContactFilter; excludeIds?: string[] };
+    | { mode: 'query'; search?: string; filter?: ContactFilter; tagIds?: string[]; excludeIds?: string[] };
 
 /** Lo que pide la vista previa. Sin `templateId` solo cuenta destinatarios. */
 export interface CampaignDraftInput {

@@ -8,7 +8,7 @@ import {
 } from "../services/api.service";
 import type { ContactDetail, ContactFilter, ContactInput, ContactsPage } from "../models/contact.model";
 
-export const useContacts = (pageIndex: number, pageSize: number, search: string, filter: ContactFilter) => {
+export const useContacts = (pageIndex: number, pageSize: number, search: string, filter: ContactFilter, tagIds: string[] = []) => {
     const { subscribe } = useSSE();
 
     // Un mensaje cambia la «última interacción», abre la ventana o trae un
@@ -27,8 +27,8 @@ export const useContacts = (pageIndex: number, pageSize: number, search: string,
 
     return useQuery<ContactsPage>({
         // pageIndex es 0-based (react-table); la API es 1-based
-        queryKey: ['contacts', 'list', pageIndex, pageSize, search, filter],
-        queryFn: () => getContactsService(pageIndex + 1, pageSize, search, filter),
+        queryKey: ['contacts', 'list', pageIndex, pageSize, search, filter, tagIds],
+        queryFn: () => getContactsService(pageIndex + 1, pageSize, search, filter, tagIds),
         placeholderData: keepPreviousData,
     });
 };
@@ -58,13 +58,15 @@ export const useContactByPhone = (phone: string) => {
 
 /**
  * Crear, editar y borrar. Todas refrescan la lista y la ficha, y también la
- * bandeja de Chats: el nombre del contacto es el título de su conversación.
+ * bandeja de Chats (el nombre del contacto es el título de su conversación) y
+ * las etiquetas (sus números cambian al ponerlas o quitarlas).
  */
 export const useContactMutations = () => {
     const queryClient = useQueryClient();
     const refresh = () => {
         queryClient.invalidateQueries({ queryKey: ['contacts'] });
         queryClient.invalidateQueries({ queryKey: ['conversations'] });
+        queryClient.invalidateQueries({ queryKey: ['tags'] });
     };
 
     const create = useMutation<ContactDetail, unknown, ContactInput>({
@@ -84,6 +86,7 @@ export const useContactMutations = () => {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['contacts', 'list'] });
             queryClient.invalidateQueries({ queryKey: ['contacts', 'by-phone'] });
+            queryClient.invalidateQueries({ queryKey: ['tags'] });
         },
     });
 

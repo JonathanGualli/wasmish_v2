@@ -56,3 +56,7 @@ export const bulkTagContactsSchema = z.object({
     add: tagIdsSchema.nullish(),
     remove: z.array(objectIdSchema).max(50).nullish(),
 }).refine(body => (body.add?.length ?? 0) + (body.remove?.length ?? 0) > 0, { message: 'Elige alguna etiqueta que añadir o quitar' });
+
+export const tagSelectionSummarySchema = z.object({
+    selection: contactSelectionSchema(CONTACT_BULK_MAX),
+});

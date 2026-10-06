@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { X } from "lucide-react";
 
 interface SelectionBarProps {
     count: number;
@@ -13,6 +14,8 @@ interface SelectionBarProps {
     actionLabel: ReactNode;
     onAction: () => void;
     onClear: () => void;
+    /** Otra acción con los elegidos, antes de la principal («Etiquetar»). */
+    extraAction?: ReactNode;
 }
 
 /**
@@ -20,7 +23,7 @@ interface SelectionBarProps {
  * pegada abajo, a todo el ancho, en móvil. Es verde profundo (estructura) con
  * la única acción menta de la vista.
  */
-export const SelectionBar = ({ count, note, emptyHint, actionLabel, onAction, onClear }: SelectionBarProps) => {
+export const SelectionBar = ({ count, note, emptyHint, actionLabel, onAction, onClear, extraAction }: SelectionBarProps) => {
     const empty = count === 0;
     return (
         <div className="fixed z-40 bottom-0 inset-x-0 md:bottom-6 md:inset-x-auto md:left-1/2 md:-translate-x-1/2
@@ -35,14 +38,18 @@ export const SelectionBar = ({ count, note, emptyHint, actionLabel, onAction, on
                         {note && <span className="text-[13px] text-brand-on-deep-muted"> · {note}</span>}
                     </span>
                     <span className="hidden md:block w-px h-6 bg-brand-deep-active" />
+                    {/* En móvil, una X: con «Etiquetar» al lado, el texto no cabe junto a la acción principal. */}
                     <button
                         type="button"
                         onClick={onClear}
-                        className="h-11 md:h-10 px-3 rounded-[9px] text-sm font-semibold text-brand-on-deep cursor-pointer
-                            hover:bg-brand-deep-hover transition-colors"
+                        aria-label="Quitar selección"
+                        className="flex-none flex items-center justify-center w-11 h-11 md:w-auto md:h-10 md:px-3 rounded-[9px]
+                            text-sm font-semibold text-brand-on-deep cursor-pointer hover:bg-brand-deep-hover transition-colors"
                     >
-                        Quitar selección
+                        <X size={20} className="md:hidden" />
+                        <span className="hidden md:inline">Quitar selección</span>
                     </button>
+                    {extraAction}
                 </>
             )}
             <button

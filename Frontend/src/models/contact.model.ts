@@ -37,6 +37,8 @@ export interface Contact {
     lastInteractionAt: string | null;
     /** ISO de cuándo cierra la ventana de 24 h. `null` = cerrada o nunca escribió. */
     windowExpiresAt: string | null;
+    /** Sus etiquetas; los nombres salen de `GET /tags`. */
+    tagIds: string[];
     createdAt: string;
 }
 
@@ -65,6 +67,7 @@ export interface ContactInput {
     email?: string;
     company?: string;
     notes?: string;
+    tagIds?: string[];
 }
 
 /**

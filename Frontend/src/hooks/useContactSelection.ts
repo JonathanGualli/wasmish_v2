@@ -6,12 +6,13 @@ import type { CampaignRecipientsInput } from "../models/campaign.model";
  * Qué contactos hay elegidos. Dos formas, las mismas que entiende el backend:
  *  - `ids`: los marcados uno a uno; sobreviven a cambiar de página, de
  *    búsqueda o de filtro, porque son ids concretos;
- *  - `query`: «todos los que coinciden» con una búsqueda y un filtro, menos los
- *    desmarcados. Va atado a esa búsqueda: si cambia, ya son otros contactos.
+ *  - `query`: «todos los que coinciden» con una búsqueda, un filtro y unas
+ *    etiquetas, menos los desmarcados. Va atado a esa búsqueda: si cambia, ya
+ *    son otros contactos.
  */
 type Selection =
     | { mode: 'ids'; ids: ReadonlySet<string> }
-    | { mode: 'query'; search: string; filter: ContactFilter; excludeIds: ReadonlySet<string> };
+    | { mode: 'query'; search: string; filter: ContactFilter; tagIds: string[]; excludeIds: ReadonlySet<string> };
 
 const EMPTY: Selection = { mode: 'ids', ids: new Set() };
 
@@ -28,6 +29,7 @@ const fromRecipientsInput = (input: CampaignRecipientsInput): Selection =>
             mode: 'query',
             search: input.search ?? '',
             filter: input.filter ?? 'all',
+            tagIds: input.tagIds ?? [],
             excludeIds: new Set(input.excludeIds ?? []),
         };
 
@@ -56,8 +58,8 @@ export const useContactSelection = (initial?: CampaignRecipientsInput) => {
         return { ...s, excludeIds };
     }), []);
 
-    const selectAllMatching = useCallback((search: string, filter: ContactFilter) => {
-        setSelection({ mode: 'query', search, filter, excludeIds: new Set() });
+    const selectAllMatching = useCallback((search: string, filter: ContactFilter, tagIds: string[]) => {
+        setSelection({ mode: 'query', search, filter, tagIds, excludeIds: new Set() });
     }, []);
 
     const clear = useCallback(() => setSelection(EMPTY), []);
@@ -83,6 +85,7 @@ export const useContactSelection = (initial?: CampaignRecipientsInput) => {
                 mode: 'query',
                 search: selection.search || undefined,
                 filter: selection.filter,
+                tagIds: selection.tagIds.length ? selection.tagIds : undefined,
                 excludeIds: [...selection.excludeIds],
             }
     ), [selection]);

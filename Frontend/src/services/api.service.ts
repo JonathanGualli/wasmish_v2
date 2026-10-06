@@ -2,7 +2,8 @@ import type { QueryFunctionContext } from '@tanstack/react-query';
 import axios from 'axios';
 import type { Template, TemplateButtonParam, TemplateHeaderMedia } from '../models/template.model';
 import type { ContactFilter, ContactInput } from '../models/contact.model';
-import type { CampaignAudienceInput, CampaignDraftInput, CreateCampaignInput, RecipientState } from '../models/campaign.model';
+import type { BulkTagResult, Tag, TagSelectionSummary } from '../models/tag.model';
+import type { CampaignAudienceInput, CampaignDraftInput, CampaignRecipientsInput, CreateCampaignInput, RecipientState } from '../models/campaign.model';
 
 const API_URL = '/api'; // configuracion puesta en vite.config.ts
 // const API_URL = 'https://wasmish-api.solventyc.com/api';
@@ -255,9 +256,9 @@ export const startConversationTemplateService = async (
 
 // --- Contactos ---------------------------------------------------------------
 
-export const getContactsService = async (page: number, limit: number, search: string, filter: ContactFilter) => {
+export const getContactsService = async (page: number, limit: number, search: string, filter: ContactFilter, tagIds: string[] = []) => {
     const { data } = await axios.get(`${API_URL}/contacts`, {
-        params: { page, limit, search: search || undefined, filter },
+        params: { page, limit, search: search || undefined, filter, tags: tagIds.length ? tagIds.join(',') : undefined },
         withCredentials: true,
     });
     return data;
@@ -280,6 +281,41 @@ export const updateContactService = async (id: string, input: ContactInput) => {
 
 export const deleteContactService = async (id: string) => {
     await axios.delete(`${API_URL}/contacts/${id}`, { withCredentials: true });
+}
+
+// --- Etiquetas ---------------------------------------------------------------
+
+export const getTagsService = async (): Promise<Tag[]> => {
+    const { data } = await axios.get(`${API_URL}/tags`, { withCredentials: true });
+    return data.tags;
+}
+
+/** Si ya hay una con ese nombre («vip» = «VIP»), devuelve esa. */
+export const createTagService = async (name: string): Promise<Tag> => {
+    const { data } = await axios.post(`${API_URL}/tags`, { name }, { withCredentials: true });
+    return data;
+}
+
+export const renameTagService = async (id: string, name: string): Promise<Tag> => {
+    const { data } = await axios.patch(`${API_URL}/tags/${id}`, { name }, { withCredentials: true });
+    return data;
+}
+
+export const deleteTagService = async (id: string): Promise<{ removedFrom: number }> => {
+    const { data } = await axios.delete(`${API_URL}/tags/${id}`, { withCredentials: true });
+    return data;
+}
+
+export const bulkTagContactsService = async (
+    selection: CampaignRecipientsInput, add: string[], remove: string[],
+): Promise<BulkTagResult> => {
+    const { data } = await axios.post(`${API_URL}/contacts/tags`, { selection, add, remove }, { withCredentials: true });
+    return data;
+}
+
+export const tagSelectionSummaryService = async (selection: CampaignRecipientsInput): Promise<TagSelectionSummary> => {
+    const { data } = await axios.post(`${API_URL}/contacts/tags/summary`, { selection }, { withCredentials: true });
+    return data;
 }
 
 // --- Campañas ---------------------------------------------------------------

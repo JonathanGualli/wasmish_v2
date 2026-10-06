@@ -5,6 +5,8 @@ import { CustomButton } from '../../../components/Button/Button';
 import { Callout } from '../../../components/Callout/Callout';
 import { useNoticeContext } from '../../../components/Notice/context/UseNoticeContext';
 import { contactError, useContactByPhone, useContactMutations } from '../../../hooks/useContacts';
+import { tagError, useTagMutations } from '../../../hooks/useTags';
+import { TagSelector, type TagSelection } from '../../../components/Tag/TagSelector';
 import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
 import type { ContactDetail, ContactInput } from '../../../models/contact.model';
 import { PHONE_RE, contactTitle } from '../../../utils/contactDisplay';
@@ -42,13 +44,15 @@ export const ContactForm = ({ contact, onCancel, onSaved, onViewContact }: Props
     const [email, setEmail] = useState(contact?.email ?? '');
     const [company, setCompany] = useState(contact?.company ?? '');
     const [notes, setNotes] = useState(contact?.notes ?? '');
+    const [tags, setTags] = useState<TagSelection>({ ids: contact?.tagIds ?? [], newNames: [] });
     const [touched, setTouched] = useState({ phone: false, email: false });
     // El 409 del backend, por si el aviso de duplicado no llegó a tiempo.
     const [serverDuplicateId, setServerDuplicateId] = useState<string | null>(null);
 
     const { create, update } = useContactMutations();
+    const { createMissing, create: createTag } = useTagMutations();
     const { setState, setContent } = useNoticeContext();
-    const isPending = create.isPending || update.isPending;
+    const isPending = create.isPending || update.isPending || createTag.isPending;
 
     const phoneLocked = Boolean(contact?.conversationId);
     const digits = phone.replace(/\D/g, '');
@@ -81,8 +85,21 @@ export const ContactForm = ({ contact, onCancel, onSaved, onViewContact }: Props
         setTouched({ phone: true, email: true });
         if (!canSubmit) return;
 
+        // Las etiquetas nuevas se crean ahora, al guardar: cancelar no deja etiquetas vacías.
+        let tagIds: string[];
+        try {
+            const created = await createMissing(tags.newNames);
+            tagIds = [...new Set([...tags.ids, ...created.map(tag => tag.id)])];
+        } catch (err) {
+            setContent(<div className="text-brand-danger text-sm"><p>{tagError(err, 'No se pudo crear la etiqueta. Inténtalo de nuevo.')}</p></div>);
+            setState(true);
+            return;
+        }
+        // Ya creadas: si falla el guardado y se reintenta, no se vuelven a pedir.
+        setTags({ ids: tagIds, newNames: [] });
+
         // El texto vacío borra el campo; el backend lo guarda como null.
-        const input: ContactInput = { name: name.trim(), email: email.trim(), company: company.trim(), notes: notes.trim() };
+        const input: ContactInput = { name: name.trim(), email: email.trim(), company: company.trim(), notes: notes.trim(), tagIds };
         if (!phoneLocked) input.phone = digits;
 
         try {
@@ -171,6 +188,7 @@ export const ContactForm = ({ contact, onCancel, onSaved, onViewContact }: Props
                     placeholder="Nombre de su negocio"
                     maxLength={NAME_MAX}
                 />
+                <TagSelector label={<Optional>Etiquetas</Optional>} value={tags} onChange={setTags} />
                 <AuthField
                     label={<Optional>Notas</Optional>}
                     labelAction={<Counter value={notes} max={NOTES_MAX} />}
