@@ -1,7 +1,8 @@
 // Contactos de prueba para probar las campañas en LOCAL, con los casos
 // que importan: sin nombre, solo con el nombre de WhatsApp, sin teléfono (solo
 // usuario), sin empresa, dados de baja de la publicidad, con conversación y
-// ventana abierta o cerrada, y sin conversación.
+// ventana abierta o cerrada, y sin conversación. Y con etiquetas (VIP,
+// ESTÁNDAR, Quito…): ninguna, una, varias, y uno con todas.
 //
 //   npm run seed:contacts                 ← crea 60 (o completa los que falten)
 //   npm run seed:contacts -- --count 300
@@ -12,7 +13,8 @@
 //           WhatsApp conectado)  --url <http://...> (backend, para --acks)
 //
 // Se reconocen por el teléfono (59300099xxxx) o el BSUID (EC.SEED.xxxx), así
-// que --clean nunca toca un contacto real. Se niega a correr contra una BD que
+// que --clean nunca toca un contacto real. Las etiquetas de prueba se borran
+// solo si ya no las tiene ningún contacto. Se niega a correr contra una BD que
 // no sea local: estos contactos no deben llegar nunca a producción.
 //
 // --acks manda por el webhook LOCAL (firmado como Meta) los acuses de los
@@ -28,6 +30,8 @@ import Contact from '../src/models/contact.model.js';
 import Conversation from '../src/models/conversation.model.js';
 import Message from '../src/models/message.model.js';
 import Campaign from '../src/models/campaign.model.js';
+import Tag from '../src/models/tag.model.js';
+import { tagKey } from '../src/utils/contact.tags.js';
 import CampaignRecipient from '../src/models/campaign.recipient.model.js';
 import { CAMPAIGN_DRY_RUN, CAMPAIGN_MAX_RECIPIENTS } from '../src/config.js';
 
@@ -45,6 +49,10 @@ const LAST_NAMES = ['Mena', 'Quishpe', 'Salazar', 'Chiriboga', 'Andrade', 'Guerr
 const COMPANIES = ['Distribuidora Cano', 'Ferretería El Clavo', 'Panadería Mena', 'Taller Salazar', 'Constructora Andrade',
     'Vidriería Yépez', 'Papelería Cevallos', 'Mercado Central', 'Farmacia La Salud', 'Imprenta Rápida'];
 const INBOUND_TEXTS = ['Hola, ¿tienen stock?', '¿A qué hora cierran?', 'Gracias por la información', '¿Hacen envíos a Quito?'];
+const SEED_TAGS = ['VIP', 'ESTÁNDAR', 'Mayorista', 'Distribuidor', 'Quito', 'Guayaquil', 'Cuenca', 'Feria octubre',
+    'Cliente nuevo', 'Recurrente'];
+// Uno con todas: la fila de la tabla enseña dos y «+8».
+const ALL_TAGS_N = 7;
 
 const args = process.argv.slice(2);
 const option = (name, fallback = null) => {
@@ -100,6 +108,66 @@ const buildContact = (userId, n) => {
 };
 
 /**
+ * Las etiquetas del contacto número `n`, para que cualquier filtro saque gente
+ * y haya combinaciones («VIP y Quito»):
+ *  - segmento: VIP 1 de cada 3, ESTÁNDAR otro 1 de cada 3, el resto ninguno;
+ *  - ciudad: Quito, Guayaquil o Cuenca, y 1 de cada 4 sin ciudad;
+ *  - sueltas: Mayorista (1/5), Distribuidor (1/7), Feria octubre (1/6),
+ *    Cliente nuevo (1/10) y Recurrente (1/8);
+ *  - 1 de cada 11 sin ninguna, y el número 7 con todas.
+ */
+const tagNamesFor = (n) => {
+    if (n === ALL_TAGS_N) return SEED_TAGS;
+    if (n % 11 === 5) return [];
+    return [
+        n % 3 === 0 && 'VIP',
+        n % 3 === 1 && 'ESTÁNDAR',
+        ['Quito', 'Guayaquil', 'Cuenca', null][n % 4],
+        n % 5 === 0 && 'Mayorista',
+        n % 7 === 0 && 'Distribuidor',
+        n % 6 === 1 && 'Feria octubre',
+        n % 10 === 2 && 'Cliente nuevo',
+        n % 8 === 3 && 'Recurrente',
+    ].filter(Boolean);
+};
+
+/** El número de un contacto de prueba, por el final de su teléfono o su BSUID. */
+const seedNumber = (contact) => Number((contact.phone ?? contact.waUserId ?? '').slice(-4));
+
+/** Las etiquetas de prueba de la cuenta, creando las que falten. Si ya hay una «VIP» (de verdad), se usa esa. */
+const ensureSeedTags = async (userId) => {
+    const idByName = new Map();
+    for (const name of SEED_TAGS) {
+        const key = tagKey(name);
+        const tag = await Tag.findOneAndUpdate(
+            { userId, key },
+            { $setOnInsert: { userId, name, key } },
+            { upsert: true, new: true },
+        ).lean();
+        idByName.set(name, tag._id);
+    }
+    return idByName;
+};
+
+/**
+ * Etiqueta los contactos de prueba que no tienen ninguna: los recién creados
+ * y los de una corrida anterior al cambio. Los que ya tienen no se tocan, así
+ * que lo que se etiquetó a mano probando se conserva.
+ */
+const tagSeedContacts = async (userId) => {
+    const idByName = await ensureSeedTags(userId);
+    const untagged = await Contact.find({ ...isSeedFilter(userId), 'tags.0': { $exists: false } }).select('phone waUserId').lean();
+    const ops = untagged
+        .map(contact => ({ contact, names: tagNamesFor(seedNumber(contact)) }))
+        .filter(({ names }) => names.length > 0)
+        .map(({ contact, names }) => ({
+            updateOne: { filter: { _id: contact._id }, update: { $set: { tags: names.map(name => idByName.get(name)) } } },
+        }));
+    if (ops.length) await Contact.bulkWrite(ops);
+    return ops.length;
+};
+
+/**
  * 3 de cada 4 tienen conversación, para el filtro «Con conversación»: la
  * mitad con la ventana de 24 h abierta (escribió hace unas horas) y la otra
  * mitad cerrada (hace días). Cada una con su mensaje entrante.
@@ -137,6 +205,8 @@ const seed = async (user, count) => {
     }
     if (toCreate.length === 0) {
         console.log(`Ya existen los ${count} contactos de prueba. Nada que crear.`);
+        const tagged = await tagSeedContacts(user._id);
+        if (tagged) console.log(`  Etiquetados ${tagged} que no tenían etiquetas.`);
         return;
     }
 
@@ -158,10 +228,12 @@ const seed = async (user, count) => {
         conversations++;
     }
 
+    const tagged = await tagSeedContacts(user._id);
     const optedOut = contacts.filter(c => c.marketingOptOut).length;
     const withoutPhone = contacts.filter(c => !c.phone).length;
     console.log(`Creados ${contacts.length} contactos de prueba (${existing.length} ya existían).`);
     console.log(`  ${conversations} con conversación · ${optedOut} de baja de publicidad · ${withoutPhone} sin teléfono`);
+    console.log(`  ${tagged} etiquetados con ${SEED_TAGS.length} etiquetas: ${SEED_TAGS.join(', ')}`);
 };
 
 const signedPost = async (body) => {
@@ -233,6 +305,8 @@ const clean = async (user) => {
     const contactIds = (await Contact.find(isSeedFilter(user._id)).select('_id').lean()).map(c => c._id);
     if (contactIds.length === 0) {
         console.log('No hay contactos de prueba que borrar.');
+        const tags = await cleanSeedTags(user._id);
+        if (tags) console.log(`Borradas ${tags} etiquetas de prueba sin contactos.`);
         return;
     }
 
@@ -248,9 +322,25 @@ const clean = async (user) => {
     const emptyCampaigns = campaignIds.filter(id => !stillUsed.some(used => used.equals(id)));
     const campaigns = await Campaign.deleteMany({ _id: { $in: emptyCampaigns }, userId: user._id });
 
+    const tags = await cleanSeedTags(user._id);
+
     console.log(`Borrados: ${contacts.deletedCount} contactos, ${conversations.deletedCount} conversaciones, `
-        + `${messages.deletedCount} mensajes y ${campaigns.deletedCount} campañas.`);
+        + `${messages.deletedCount} mensajes, ${campaigns.deletedCount} campañas y ${tags} etiquetas.`);
 };
+
+/**
+ * Las etiquetas de prueba que ya no tiene nadie. Una que también tiene un
+ * contacto real (porque se la pusiste probando) se conserva.
+ */
+async function cleanSeedTags(userId) {
+    const tags = await Tag.find({ userId, key: { $in: SEED_TAGS.map(tagKey) } }).select('_id').lean();
+    const unused = [];
+    for (const tag of tags) {
+        if (!(await Contact.exists({ userId, tags: tag._id }))) unused.push(tag._id);
+    }
+    const { deletedCount } = await Tag.deleteMany({ _id: { $in: unused }, userId });
+    return deletedCount;
+}
 
 // --- Arranque ----------------------------------------------------------------
 

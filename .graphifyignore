@@ -5,6 +5,9 @@
 Frontend/brand/**/*.dc.html
 Frontend/brand/**/support.js
 
+# Diseños exportados de Claude Design (páginas empaquetadas): referencia visual, no código
+Design/
+
 # Salida del propio grafo
 graphify-out/
 
