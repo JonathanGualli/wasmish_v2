@@ -23,6 +23,7 @@ const digitCount = (text) => text.replace(/\D/g, '').length;
  * `{ error }`. `country` es el país de los números que vienen sin código
  * («0991234567» con EC → 593991234567); los que lo traen se respetan.
  * `warning` avisa de un fijo: es válido, pero puede no tener WhatsApp.
+ * Los mensajes no repiten el valor: la pantalla lo enseña al lado.
  */
 export const normalizeImportPhone = (raw, country) => {
     const text = raw === null || raw === undefined ? '' : String(raw).trim();
@@ -30,7 +31,7 @@ export const normalizeImportPhone = (raw, country) => {
     // Excel guarda un número largo como «5,93991E+11» y pierde los últimos
     // dígitos: no hay forma de recuperarlo.
     if (/\d[.,]?\d*e\+\d+/i.test(text)) {
-        return { error: `«${text}»: Excel lo convirtió en notación científica y perdió dígitos. Pon la columna como texto y escríbelo otra vez.` };
+        return { error: 'Excel lo convirtió en notación científica y perdió dígitos. Pon la columna como texto y escríbelo otra vez.' };
     }
 
     const phone = parsePhoneNumberFromString(text, country);
@@ -38,15 +39,15 @@ export const normalizeImportPhone = (raw, country) => {
         const type = phone.getType();
         return {
             phone: phone.number.slice(1),
-            warning: type === 'FIXED_LINE' ? `«${text}» parece un teléfono fijo: puede que no tenga WhatsApp.` : null,
+            warning: type === 'FIXED_LINE' ? 'Parece un teléfono fijo: puede que no tenga WhatsApp.' : null,
         };
     }
 
     const reason = validatePhoneNumberLength(text, country);
-    if (reason === 'TOO_SHORT') return { error: `«${text}» tiene ${digitCount(text)} dígitos: le faltan.` };
-    if (reason === 'TOO_LONG') return { error: `«${text}» tiene ${digitCount(text)} dígitos: le sobran.` };
-    if (reason === 'NOT_A_NUMBER' || !digitCount(text)) return { error: `«${text}» no es un número de teléfono.` };
-    return { error: `«${text}» no es un número válido.` };
+    if (reason === 'TOO_SHORT') return { error: `Tiene ${digitCount(text)} dígitos: le faltan.` };
+    if (reason === 'TOO_LONG') return { error: `Tiene ${digitCount(text)} dígitos: le sobran.` };
+    if (reason === 'NOT_A_NUMBER' || !digitCount(text)) return { error: 'No es un número de teléfono.' };
+    return { error: 'No es un número válido.' };
 };
 
 const toText = (value) => (value === null || value === undefined ? '' : String(value));
@@ -62,6 +63,7 @@ const FIELD_LABEL = { name: 'El nombre', email: 'El email', company: 'La empresa
  * Una fila del archivo, limpia. Solo el teléfono impide importarla
  * (`errors`); lo demás se descarta o se recorta y queda como aviso
  * (`warnings`): perder un contacto por un email mal escrito sería peor.
+ * Cada problema lleva el campo (`field`), para enseñar el valor que lo causó.
  */
 export const cleanImportRow = (row, country) => {
     const errors = [];
@@ -69,8 +71,8 @@ export const cleanImportRow = (row, country) => {
     const fields = {};
 
     const phoneResult = normalizeImportPhone(row.phone, country);
-    if (phoneResult.error) errors.push(phoneResult.error);
-    if (phoneResult.warning) warnings.push(phoneResult.warning);
+    if (phoneResult.error) errors.push({ field: 'phone', message: phoneResult.error });
+    if (phoneResult.warning) warnings.push({ field: 'phone', message: phoneResult.warning });
 
     const values = {
         name: [cleanLine(row.name), cleanLine(row.lastName)].filter(Boolean).join(' '),
@@ -82,10 +84,10 @@ export const cleanImportRow = (row, country) => {
         const value = values[field];
         if (!value) continue;
         if (field === 'email' && !emailSchema.safeParse(value).success) {
-            warnings.push(`«${value}» no es un email válido: se importa sin email.`);
+            warnings.push({ field, message: 'No es un email válido: se importa sin email.' });
             continue;
         }
-        if (value.length > max) warnings.push(`${FIELD_LABEL[field]} pasa de ${max} caracteres: se recorta.`);
+        if (value.length > max) warnings.push({ field, message: `${FIELD_LABEL[field]} pasa de ${max} caracteres: se recorta.` });
         fields[field] = value.slice(0, max);
     }
 
@@ -130,15 +132,16 @@ const uniqueTagNames = (names) => {
  * no se toca nunca.
  *
  * Cada entrada: `{ action: 'create' | 'update' | 'unchanged', phone, rows,
- * fields, tagNames, contactId? }`. En `update`, `fields` y `tagNames` son solo
- * lo que se añade.
+ * fields, tagNames, ignored, contactId? }`. En `update`, `fields` y `tagNames`
+ * son solo lo que se añade; `ignored`, lo que el archivo trae distinto de lo
+ * que el contacto ya tiene, y por eso no se aplica.
  */
 export const planImportRows = (rows, { country, extraTagNames = [], existingByPhone = new Map() }) => {
     const cleanRows = rows.map(row => cleanImportRow(row, country));
     const issues = [];
     for (const row of cleanRows) {
-        row.errors.forEach(message => issues.push({ row: row.row, type: 'error', message }));
-        row.warnings.forEach(message => issues.push({ row: row.row, type: 'warning', message }));
+        row.errors.forEach(issue => issues.push({ row: row.row, type: 'error', ...issue }));
+        row.warnings.forEach(issue => issues.push({ row: row.row, type: 'warning', ...issue }));
     }
 
     const valid = cleanRows.filter(row => row.errors.length === 0);
@@ -152,21 +155,22 @@ export const planImportRows = (rows, { country, extraTagNames = [], existingByPh
         if (!existing) {
             const tagNames = [...wanted.values()];
             if (tagNames.length > MAX_TAGS_PER_CONTACT) {
-                issues.push({ row: entry.rows[0], type: 'warning', message: `Lleva más de ${MAX_TAGS_PER_CONTACT} etiquetas: se ponen las primeras.` });
+                issues.push({ row: entry.rows[0], type: 'warning', field: 'tags', message: `Lleva más de ${MAX_TAGS_PER_CONTACT} etiquetas: se ponen las primeras.` });
             }
-            return { action: 'create', phone: entry.phone, rows: entry.rows, fields: entry.fields, tagNames: tagNames.slice(0, MAX_TAGS_PER_CONTACT) };
+            return { action: 'create', phone: entry.phone, rows: entry.rows, fields: entry.fields, tagNames: tagNames.slice(0, MAX_TAGS_PER_CONTACT), ignored: {} };
         }
 
         if (existing.marketingOptOut) optedOutExisting += 1;
         const fields = Object.fromEntries(Object.entries(entry.fields).filter(([field]) => !existing[field]));
+        const ignored = Object.fromEntries(Object.entries(entry.fields).filter(([field, value]) => existing[field] && existing[field] !== value));
         const room = MAX_TAGS_PER_CONTACT - existing.tagKeys.length;
         const newTags = [...wanted].filter(([key]) => !existing.tagKeys.includes(key)).map(([, name]) => name);
         if (newTags.length > room) {
-            issues.push({ row: entry.rows[0], type: 'warning', message: `Ya tiene ${existing.tagKeys.length} etiquetas: no caben todas las del archivo.` });
+            issues.push({ row: entry.rows[0], type: 'warning', field: 'tags', message: `Ya tiene ${existing.tagKeys.length} etiquetas: no caben todas las del archivo.` });
         }
         const tagNames = newTags.slice(0, Math.max(room, 0));
         const changed = Object.keys(fields).length > 0 || tagNames.length > 0;
-        return { action: changed ? 'update' : 'unchanged', phone: entry.phone, rows: entry.rows, fields, tagNames, contactId: existing._id };
+        return { action: changed ? 'update' : 'unchanged', phone: entry.phone, rows: entry.rows, fields, tagNames, ignored, contactId: existing._id };
     });
 
     const count = (action) => entries.filter(e => e.action === action).length;
@@ -185,4 +189,29 @@ export const planImportRows = (rows, { country, extraTagNames = [], existingByPh
             optedOutExisting,
         },
     };
+};
+
+/**
+ * Unos pocos contactos de ejemplo, para «Así quedarán»: los que se crean o se
+ * completan (los sin cambios no enseñan nada). Si los hay, entra uno que se
+ * completa y uno con aviso, que es lo que más hay que revisar; el resto, por
+ * orden. A uno existente se le pone lo que ya tiene (`current`), porque la
+ * entrada solo trae lo que se añade.
+ */
+export const pickImportSample = (plan, existingByPhone, size) => {
+    const candidates = plan.entries.filter(entry => entry.action !== 'unchanged');
+    const warnedRows = new Set(plan.issues.filter(issue => issue.type === 'warning').map(issue => issue.row));
+    const firstUpdate = candidates.find(entry => entry.action === 'update');
+    const firstWarned = candidates.find(entry => entry.rows.some(row => warnedRows.has(row)));
+    const picked = [...new Set([firstUpdate, firstWarned, ...candidates].filter(Boolean))]
+        .slice(0, size)
+        .sort((a, b) => a.rows[0] - b.rows[0]);
+
+    return picked.map(({ action, phone, rows, fields, tagNames, ignored }) => {
+        const existing = existingByPhone.get(phone);
+        const current = existing
+            ? { name: existing.name ?? null, email: existing.email ?? null, company: existing.company ?? null, tagNames: existing.tagNames ?? [] }
+            : null;
+        return { action, phone, rows, fields, tagNames, ignored, current };
+    });
 };

@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import Contact from "../models/contact.model.js";
 import Tag from "../models/tag.model.js";
-import { normalizeImportPhone, planImportRows } from "../utils/contact.import.js";
+import { normalizeImportPhone, pickImportSample, planImportRows } from "../utils/contact.import.js";
 import { TAG_NAME_MAX, cleanTagName, tagKey } from "../utils/contact.tags.js";
 import { findOrCreateTags } from "../services/tag.service.js";
 
@@ -11,7 +11,7 @@ import { findOrCreateTags } from "../services/tag.service.js";
 // mismo plan (`planImportRows`): lo que se importa es lo que se revisó.
 // ---------------------------------------------------------------------------
 
-const SAMPLE_SIZE = 5;
+const SAMPLE_SIZE = 3;
 
 const sendImportError = (res, status, message) => res.status(status).json([{ message }]);
 
@@ -21,25 +21,31 @@ const cleanExtraTags = (names = []) =>
 
 /**
  * Los contactos de la cuenta con esos teléfonos, por teléfono, cada uno con
- * las claves de sus etiquetas (el plan compara etiquetas por clave, no por id).
+ * sus etiquetas: las claves (el plan compara por clave, no por id) y los
+ * nombres (la muestra los enseña).
  */
 const loadExistingByPhone = async (userId, phones) => {
     const [contacts, tags] = await Promise.all([
         Contact.find({ userId, phone: { $in: phones } })
             .select('phone name email company notes tags marketingOptOut').lean(),
-        Tag.find({ userId }).select('key').lean(),
+        Tag.find({ userId }).select('key name').lean(),
     ]);
-    const keyById = new Map(tags.map(tag => [String(tag._id), tag.key]));
-    return new Map(contacts.map(contact => [contact.phone, {
-        ...contact,
-        tagKeys: (contact.tags ?? []).map(id => keyById.get(String(id))).filter(Boolean),
-    }]));
+    const tagById = new Map(tags.map(tag => [String(tag._id), tag]));
+    return new Map(contacts.map(contact => {
+        const contactTags = (contact.tags ?? []).map(id => tagById.get(String(id))).filter(Boolean);
+        return [contact.phone, {
+            ...contact,
+            tagKeys: contactTags.map(tag => tag.key),
+            tagNames: contactTags.map(tag => tag.name),
+        }];
+    }));
 };
 
 const buildPlan = async (userId, { rows, country, extraTagNames }) => {
     const phones = [...new Set(rows.map(row => normalizeImportPhone(row.phone, country).phone).filter(Boolean))];
     const existingByPhone = await loadExistingByPhone(userId, phones);
-    return planImportRows(rows, { country, extraTagNames: cleanExtraTags(extraTagNames ?? []), existingByPhone });
+    const plan = planImportRows(rows, { country, extraTagNames: cleanExtraTags(extraTagNames ?? []), existingByPhone });
+    return { plan, existingByPhone };
 };
 
 // Un upsert de pipeline no pasa por Mongoose: lo que un contacto nuevo lleva
@@ -92,16 +98,22 @@ const runUpserts = async (operations) => {
 /**
  * POST /contacts/import/preview — qué pasaría con el archivo entero, sin
  * escribir nada: conteos, errores y avisos por fila, y una muestra.
+ *
+ * `rowGroups` son las filas de cada contacto (las de un mismo teléfono van
+ * juntas). El navegador arma las tandas con ellos: si un repetido cayera en
+ * dos tandas, la segunda lo contaría como completado y las cifras del final
+ * no cuadrarían con estas.
  */
 export const previewImport = async (req, res) => {
     try {
         const userId = new mongoose.Types.ObjectId(req.user.id);
-        const plan = await buildPlan(userId, req.body);
-        const sample = plan.entries
-            .filter(entry => entry.action !== 'unchanged')
-            .slice(0, SAMPLE_SIZE)
-            .map(({ action, phone, fields, tagNames }) => ({ action, phone, ...fields, tagNames }));
-        return res.json({ summary: plan.summary, issues: plan.issues, sample });
+        const { plan, existingByPhone } = await buildPlan(userId, req.body);
+        return res.json({
+            summary: plan.summary,
+            issues: plan.issues,
+            sample: pickImportSample(plan, existingByPhone, SAMPLE_SIZE),
+            rowGroups: plan.entries.map(entry => entry.rows),
+        });
     } catch (error) {
         return sendImportError(res, 500, error.message);
     }
@@ -116,7 +128,7 @@ export const previewImport = async (req, res) => {
 export const importContacts = async (req, res) => {
     try {
         const userId = new mongoose.Types.ObjectId(req.user.id);
-        const plan = await buildPlan(userId, req.body);
+        const { plan } = await buildPlan(userId, req.body);
 
         const toWrite = plan.entries.filter(entry => entry.action !== 'unchanged');
         const tagByKey = await findOrCreateTags(userId, toWrite.flatMap(entry => entry.tagNames));

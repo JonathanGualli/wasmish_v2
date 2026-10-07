@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { normalizeImportPhone, cleanImportRow, planImportRows } from '../src/utils/contact.import.js';
+import { normalizeImportPhone, cleanImportRow, planImportRows, pickImportSample } from '../src/utils/contact.import.js';
 
 test('los números locales toman el código del país elegido', () => {
     for (const raw of ['0991234567', '099-123-4567', '(099) 123 4567', '991234567']) {
@@ -25,7 +25,7 @@ test('un número que Excel guardó como número también vale', () => {
 
 test('el motivo del error se dice en palabras', () => {
     assert.match(normalizeImportPhone('099123', 'EC').error, /6 dígitos: le faltan/);
-    assert.match(normalizeImportPhone('099-ABC', 'EC').error, /no es un número/);
+    assert.match(normalizeImportPhone('099-ABC', 'EC').error, /no es un número/i);
     assert.equal(normalizeImportPhone('  ', 'EC').error, 'Sin teléfono.');
 });
 
@@ -34,6 +34,15 @@ test('el motivo del error se dice en palabras', () => {
 test('la notación científica de Excel es un error, no un número', () => {
     assert.match(normalizeImportPhone('5,93991E+11', 'EC').error, /notación científica/);
     assert.match(normalizeImportPhone('5.93991e+11', 'EC').error, /notación científica/);
+});
+
+// La pantalla enseña el valor en su propia columna, al lado del motivo:
+// repetirlo dentro del mensaje lo duplicaría.
+test('el mensaje no repite el valor que lo causó', () => {
+    for (const raw of ['099123', '099-ABC', '5,93991E+11', '022345678']) {
+        const { error, warning } = normalizeImportPhone(raw, 'EC');
+        assert.ok(!(error ?? warning).includes(raw), raw);
+    }
 });
 
 test('un fijo se importa, con aviso', () => {
@@ -47,7 +56,7 @@ test('solo el teléfono es error: lo demás es aviso', () => {
     const row = cleanImportRow({ row: 2, phone: '0991234567', name: 'Ana', email: 'ana@' }, 'EC');
     assert.deepEqual(row.errors, []);
     assert.equal(row.fields.email, undefined);
-    assert.match(row.warnings[0], /no es un email válido/);
+    assert.deepEqual(row.warnings[0], { field: 'email', message: 'No es un email válido: se importa sin email.' });
 });
 
 test('nombre y apellido se juntan, y los textos se limpian', () => {
@@ -59,7 +68,8 @@ test('nombre y apellido se juntan, y los textos se limpian', () => {
 test('un texto demasiado largo se recorta, con aviso', () => {
     const row = cleanImportRow({ row: 2, phone: '0991234567', company: 'x'.repeat(100) }, 'EC');
     assert.equal(row.fields.company.length, 80);
-    assert.match(row.warnings[0], /se recorta/);
+    assert.equal(row.warnings[0].field, 'company');
+    assert.match(row.warnings[0].message, /se recorta/);
 });
 
 const existing = (fields) => new Map([['593991234567', { _id: 'c1', tagKeys: [], marketingOptOut: false, ...fields }]]);
@@ -72,6 +82,8 @@ test('a un contacto existente solo se le rellena lo vacío', () => {
     );
     assert.equal(plan.entries[0].action, 'update');
     assert.deepEqual(plan.entries[0].fields, { email: 'juan@x.com' });
+    // «Se queda el nombre que ya tiene»: lo que el archivo trae y no se aplica.
+    assert.deepEqual(plan.entries[0].ignored, { name: 'J. Pérez' });
 });
 
 test('si no trae nada nuevo, queda sin cambios', () => {
@@ -112,7 +124,7 @@ test('las filas con error no entran en el plan y se cuentan', () => {
     ], { country: 'EC' });
     assert.equal(plan.entries.length, 1);
     assert.equal(plan.summary.errors, 1);
-    assert.deepEqual(plan.issues.map(i => [i.row, i.type]), [[2, 'error']]);
+    assert.deepEqual(plan.issues.map(i => [i.row, i.type, i.field]), [[2, 'error', 'phone']]);
 });
 
 test('no se pasa del máximo de etiquetas de un contacto existente', () => {
@@ -131,4 +143,37 @@ test('se cuentan los existentes que pidieron no recibir publicidad', () => {
         { country: 'EC', existingByPhone: existing({ marketingOptOut: true }) },
     );
     assert.equal(plan.summary.optedOutExisting, 1);
+});
+
+const sampleRows = [
+    { row: 2, phone: '0991111111', name: 'Nuevo uno' },
+    { row: 3, phone: '0992222222', name: 'Nuevo dos' },
+    { row: 4, phone: '0993333333', name: 'Nuevo tres' },
+    { row: 5, phone: '0994444444', email: 'roto@' },
+    { row: 6, phone: '0991234567', name: 'J. Pérez', email: 'juan@x.com' },
+];
+
+// Los primeros por orden serían tres nuevos iguales: la muestra tiene que
+// enseñar lo que hay que revisar, un contacto que se completa y uno con aviso.
+test('la muestra trae uno que se completa y uno con aviso, por orden de fila', () => {
+    const existingByPhone = existing({ name: 'Juan Pérez', email: null, tagNames: ['Quito'] });
+    const plan = planImportRows(sampleRows, { country: 'EC', existingByPhone });
+    const sample = pickImportSample(plan, existingByPhone, 3);
+    assert.deepEqual(sample.map(s => s.rows[0]), [2, 5, 6]);
+    assert.deepEqual(sample.map(s => s.action), ['create', 'create', 'update']);
+});
+
+test('en la muestra, el existente trae lo que ya tiene', () => {
+    const existingByPhone = existing({ name: 'Juan Pérez', email: null, tagNames: ['Quito'] });
+    const plan = planImportRows(sampleRows, { country: 'EC', existingByPhone });
+    const updated = pickImportSample(plan, existingByPhone, 3).find(s => s.action === 'update');
+    assert.deepEqual(updated.current, { name: 'Juan Pérez', email: null, company: null, tagNames: ['Quito'] });
+    assert.deepEqual(updated.fields, { email: 'juan@x.com' });
+    assert.equal(pickImportSample(plan, existingByPhone, 3)[0].current, null);
+});
+
+test('los sin cambios no salen en la muestra', () => {
+    const existingByPhone = existing({ name: 'Juan' });
+    const plan = planImportRows([{ row: 2, phone: '0991234567', name: 'Juan' }], { country: 'EC', existingByPhone });
+    assert.deepEqual(pickImportSample(plan, existingByPhone, 3), []);
 });
