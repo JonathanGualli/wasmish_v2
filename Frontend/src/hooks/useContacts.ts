@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSSE } from "../context/sse.context";
 import { useThrottledInvalidate } from "./useThrottledInvalidate";
@@ -57,17 +57,23 @@ export const useContactByPhone = (phone: string) => {
 };
 
 /**
- * Crear, editar y borrar. Todas refrescan la lista y la ficha, y también la
+ * Lo que hay que volver a pedir tras cambiar contactos: la lista y la ficha, la
  * bandeja de Chats (el nombre del contacto es el título de su conversación) y
  * las etiquetas (sus números cambian al ponerlas o quitarlas).
  */
-export const useContactMutations = () => {
+export const useRefreshContacts = () => {
     const queryClient = useQueryClient();
-    const refresh = () => {
+    return useCallback(() => {
         queryClient.invalidateQueries({ queryKey: ['contacts'] });
         queryClient.invalidateQueries({ queryKey: ['conversations'] });
         queryClient.invalidateQueries({ queryKey: ['tags'] });
-    };
+    }, [queryClient]);
+};
+
+/** Crear, editar y borrar. Crear y editar refrescan todo lo que depende de los contactos. */
+export const useContactMutations = () => {
+    const queryClient = useQueryClient();
+    const refresh = useRefreshContacts();
 
     const create = useMutation<ContactDetail, unknown, ContactInput>({
         mutationFn: createContactService,

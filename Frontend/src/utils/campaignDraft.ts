@@ -40,6 +40,9 @@ export interface CampaignDraft {
     updatedAt: string;
 }
 
+/** Cuántos contactos admite una campaña: el mismo tope que el backend (`CAMPAIGN_MAX_RECIPIENTS`). */
+export const CAMPAIGN_MAX_RECIPIENTS = 5000;
+
 const PREFIX = 'wasmish:campaign-draft:';
 
 export const newCampaignDraft = (recipients: CampaignRecipientsInput, selectedCount: number): CampaignDraft => ({

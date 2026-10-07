@@ -2,6 +2,7 @@ import type { QueryFunctionContext } from '@tanstack/react-query';
 import axios from 'axios';
 import type { Template, TemplateButtonParam, TemplateHeaderMedia } from '../models/template.model';
 import type { ContactFilter, ContactInput } from '../models/contact.model';
+import type { ImportBatchResult, ImportInput, ImportPreview } from '../models/contactImport.model';
 import type { BulkTagResult, Tag, TagSelectionSummary } from '../models/tag.model';
 import type { CampaignAudienceInput, CampaignDraftInput, CampaignRecipientsInput, CreateCampaignInput, RecipientState } from '../models/campaign.model';
 
@@ -281,6 +282,20 @@ export const updateContactService = async (id: string, input: ContactInput) => {
 
 export const deleteContactService = async (id: string) => {
     await axios.delete(`${API_URL}/contacts/${id}`, { withCredentials: true });
+}
+
+// --- Importar contactos ------------------------------------------------------
+
+/** Qué pasaría con el archivo entero. No escribe nada. */
+export const previewContactImportService = async (input: ImportInput): Promise<ImportPreview> => {
+    const { data } = await axios.post(`${API_URL}/contacts/import/preview`, input, { withCredentials: true });
+    return data;
+}
+
+/** Una tanda. Repetirla no duplica: lo que ya está se queda igual. */
+export const importContactsService = async (input: ImportInput & { consent: true }): Promise<ImportBatchResult> => {
+    const { data } = await axios.post(`${API_URL}/contacts/import`, input, { withCredentials: true });
+    return data;
 }
 
 // --- Etiquetas ---------------------------------------------------------------

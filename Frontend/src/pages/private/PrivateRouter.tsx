@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Navigate, Route } from "react-router-dom";
 import { RoutesWithNotFound } from "../../components/RoutersWithNotFound/RoutesWithNotFound";
 import { AppRoutes } from "../../models/routes.models";
@@ -14,6 +15,11 @@ import { DocsPage } from "./Docs/DocsPage";
 import { AdminPage } from "./Admin/AdminPage";
 import { useAuthContext } from "../../context/auth.context";
 
+// Aparte del resto: trae la lista de países y los formatos de teléfono, que
+// solo hacen falta aquí (lo que lee el Excel y el CSV se carga al elegir el archivo).
+const ImportContactsPage = lazy(() =>
+    import("./Contacts/Import/ImportContactsPage").then(m => ({ default: m.ImportContactsPage })));
+
 export const PrivateRouter = () => {
     const { user } = useAuthContext();
 
@@ -28,6 +34,10 @@ export const PrivateRouter = () => {
                 <Route path={AppRoutes.private.settings} element={<SettingsPage />} />
                 <Route path={AppRoutes.private.chats} element={<ChatPage />} />
                 <Route path={AppRoutes.private.contacts} element={<ContactsPage />} />
+                <Route
+                    path={`${AppRoutes.private.contacts}/import`}
+                    element={<Suspense fallback={null}><ImportContactsPage /></Suspense>}
+                />
                 <Route path={AppRoutes.private.campaigns} element={<CampaignsPage />} />
                 <Route path={`${AppRoutes.private.campaigns}/new`} element={<NewCampaignPage />} />
                 <Route path={`${AppRoutes.private.campaigns}/:id`} element={<CampaignDetailPage />} />

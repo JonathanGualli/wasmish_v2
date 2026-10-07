@@ -1,10 +1,11 @@
-import { useRef, type ChangeEvent, type DragEvent, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { FileText, Play, Upload } from "lucide-react";
 import { CustomButton } from "../Button/Button";
 import { Checkbox } from "../Checkbox/Checkbox";
 import { Pill } from "../Pill/Pill";
 import { ProgressBar } from "../ProgressBar/ProgressBar";
 import type { HeaderMediaUpload, PendingHeaderFile } from "../../hooks/useHeaderMediaUpload";
+import { useFilePicker } from "../../hooks/useFilePicker";
 import type { Template, TemplateHeaderMedia } from "../../models/template.model";
 import {
     HEADER_MEDIA, HEADER_SOURCE_LABEL, formatFileSize, headerFileMeta, headerMediaRule, headerMediaUrl,
@@ -175,25 +176,13 @@ const MissingCard = ({ rule, invalid, onPick }: { rule: HeaderMediaRule; invalid
  * pantalla: así sirve igual en el paso 2 que en un diálogo estrecho.
  */
 export const HeaderMediaField = ({ template, override, upload, onRevert, saveAsDefault, error }: HeaderMediaFieldProps) => {
-    const inputRef = useRef<HTMLInputElement>(null);
+    const picker = useFilePicker(upload.start);
     const rule = headerMediaRule(template);
     if (!rule) return null;
 
     const media = override ?? template.headerMedia ?? null;
     // Sin archivo, el error de validación es siempre «falta»: se dice corto.
     const shownError = upload.error ?? (error && (media ? error : `Elige ${rule.article} ${rule.noun} para continuar.`));
-
-    const openPicker = () => inputRef.current?.click();
-    const pickFile = (event: ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        event.target.value = '';   // elegir el mismo archivo otra vez también avisa
-        if (file) upload.start(file);
-    };
-    const dropFile = (event: DragEvent) => {
-        event.preventDefault();
-        const file = event.dataTransfer.files[0];
-        if (file) upload.start(file);
-    };
 
     let body: ReactNode;
     if (upload.pending) {
@@ -206,25 +195,24 @@ export const HeaderMediaField = ({ template, override, upload, onRevert, saveAsD
                 format={template.header!.format as HeaderMediaFormat}
                 isOverride={Boolean(override)}
                 invalid={Boolean(shownError)}
-                onPick={openPicker}
+                onPick={picker.open}
                 onRevert={onRevert}
                 saveAsDefault={saveAsDefault}
             />
         );
     } else {
-        body = <MissingCard rule={rule} invalid={Boolean(shownError)} onPick={openPicker} />;
+        body = <MissingCard rule={rule} invalid={Boolean(shownError)} onPick={picker.open} />;
     }
 
     return (
-        <div className="@container grid gap-2 min-w-0" onDragOver={event => event.preventDefault()} onDrop={dropFile}>
+        <div className="@container grid gap-2 min-w-0" {...picker.dropProps}>
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                 <span className="text-[13px] font-semibold text-brand-strong">{rule.title} del mensaje</span>
                 <span className="text-[12.5px] text-brand-muted">Va arriba del texto, en cada mensaje.</span>
             </div>
             {body}
             {shownError && <p className="text-xs text-brand-danger">{shownError}</p>}
-            <input ref={inputRef} type="file" accept={rule.accept} className="hidden" onChange={pickFile}
-                aria-label={`${rule.title} del mensaje de ${template.name}`} />
+            <input {...picker.inputProps} accept={rule.accept} aria-label={`${rule.title} del mensaje de ${template.name}`} />
         </div>
     );
 };

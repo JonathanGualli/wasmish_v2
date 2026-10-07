@@ -1,5 +1,5 @@
 /** Cómo llegó el contacto. `null` = anterior a que existieran los contactos. */
-export type ContactSource = 'inbound' | 'manual' | 'api' | 'ad' | null;
+export type ContactSource = 'inbound' | 'manual' | 'api' | 'ad' | 'import' | null;
 
 export type ContactFilter = 'all' | 'with_conversation' | 'without_conversation' | 'opted_out';
 
@@ -71,9 +71,12 @@ export interface ContactInput {
 }
 
 /**
- * Lo que pide Campañas al abrir Contactos (va en el estado del router): elegir
- * a quién mandar una campaña nueva (`new`) o cambiar los de un borrador (`edit`).
+ * Lo que se pide al abrir Contactos (va en el estado del router). Campañas:
+ * elegir a quién mandar una campaña nueva (`new`) o cambiar los de un
+ * borrador (`edit`). Importar: ver los importados, filtrados por las
+ * etiquetas que se les pusieron (`tagIds`).
  */
 export interface ContactsNavigationState {
     campaignPick?: 'new' | 'edit';
+    tagIds?: string[];
 }

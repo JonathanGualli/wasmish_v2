@@ -15,12 +15,12 @@ import { joinTagNames, tagsFromIds } from "../../../utils/tags";
 import { useCampaignDraft } from "../../../hooks/useCampaignDraft";
 import { useNewCampaign } from "../../../hooks/useNewCampaign";
 import { ConfirmDialog } from "../../../components/Dialog/ConfirmDialog";
-import { CampaignPaths } from "../../../models/routes.models";
+import { CampaignPaths, ContactImportPath } from "../../../models/routes.models";
 import type { Contact, ContactFilter, ContactsNavigationState } from "../../../models/contact.model";
 import { hasSeenPickIntro, markPickIntroSeen, newCampaignDraft } from "../../../utils/campaignDraft";
 import { pluralize } from "../../../utils/campaignDisplay";
 import { DraftConflictDialog } from "../Campaigns/DraftConflictDialog";
-import { WizardHeader } from "../Campaigns/NewCampaign/WizardHeader";
+import { CampaignWizardHeader } from "../Campaigns/NewCampaign/CampaignWizardHeader";
 import { contactColumns } from "./ContactColumns";
 import { ContactMobileRow } from "./ContactRow";
 import { ContactPanel, type ContactPanelState } from "./ContactPanel";
@@ -61,7 +61,8 @@ type PendingQueryChange = { query?: string; filter?: ContactFilter; tagIds?: str
  */
 export const ContactsPage = () => {
     const navigate = useNavigate();
-    const pickMode = (useLocation().state as ContactsNavigationState | null)?.campaignPick ?? null;
+    const navigationState = useLocation().state as ContactsNavigationState | null;
+    const pickMode = navigationState?.campaignPick ?? null;
     const draftStore = useCampaignDraft();
     const { draft, save: saveDraft } = draftStore;
     const newCampaign = useNewCampaign(draftStore);
@@ -71,7 +72,8 @@ export const ContactsPage = () => {
     const editing = pickMode === 'edit' ? draft?.recipients : undefined;
     const initialSearch = editing?.mode === 'query' ? editing.search ?? '' : '';
     const initialFilter = editing?.mode === 'query' ? editing.filter ?? 'all' : 'all';
-    const initialTagIds = editing?.mode === 'query' ? editing.tagIds ?? [] : [];
+    // Desde Importar, filtrada por las etiquetas que se pusieron a todos.
+    const initialTagIds = editing?.mode === 'query' ? editing.tagIds ?? [] : navigationState?.tagIds ?? [];
 
     const [pagination, setPagination] = useState(FIRST_PAGE);
     const [query, setQuery] = useState(initialSearch);
@@ -216,12 +218,19 @@ export const ContactsPage = () => {
                     icon={<Users size={22} />}
                     title="Aún no tienes contactos"
                     action={
-                        <CustomButton onClick={() => setPanel({ mode: 'create' })}>
-                            <span className="flex items-center gap-2"><Plus size={16} />Nuevo contacto</span>
-                        </CustomButton>
+                        <div className="flex flex-wrap items-center justify-center gap-2">
+                            <div className="h-10">
+                                <CustomButton onClick={() => navigate(ContactImportPath)}>
+                                    <span className="flex items-center gap-2"><Download size={15} />Importar desde Excel</span>
+                                </CustomButton>
+                            </div>
+                            <div className="h-10">
+                                <CustomButton variant="outline" onClick={() => setPanel({ mode: 'create' })}>Crear uno a mano</CustomButton>
+                            </div>
+                        </div>
                     }
                 >
-                    Aparecen solos cuando alguien escribe a tu WhatsApp. Si quieres adelantarte, crea uno a mano con su número.
+                    Aparecen solos cuando alguien escribe a tu WhatsApp. Si ya tienes tus clientes en un Excel, tráelos todos de una vez.
                 </BlankState>
             );
         }
@@ -300,7 +309,7 @@ export const ContactsPage = () => {
             {pickMode ? (
                 // Elegir destinatarios es el paso 1 de la campaña: la misma cabecera
                 // que el asistente, para que no parezca que se salió a otra sección.
-                <WizardHeader
+                <CampaignWizardHeader
                     step={1}
                     description={PICK_MODE_COPY[pickMode].description}
                     aside={
@@ -323,11 +332,11 @@ export const ContactsPage = () => {
                     icon={<Users size={20} />}
                     title="Contactos"
                     description="Las personas con las que habla tu negocio por WhatsApp."
-                    actions={
+                    // Sin contactos, las mismas acciones están en el centro: arriba sobrarían (y serían dos mentas).
+                    actions={!isEmpty && (
                         <div className="w-full sm:w-auto flex gap-2">
-                            {/* Importar contactos todavía no existe: el botón está, pero no hace nada. */}
                             <div className="flex-1 sm:flex-none h-10">
-                                <CustomButton variant="outline" onClick={() => undefined}>
+                                <CustomButton variant="outline" onClick={() => navigate(ContactImportPath)}>
                                     <span className="flex items-center justify-center gap-2"><Download size={15} />Importar</span>
                                 </CustomButton>
                             </div>
@@ -337,7 +346,7 @@ export const ContactsPage = () => {
                                 </CustomButton>
                             </div>
                         </div>
-                    }
+                    )}
                 />
             )}
 

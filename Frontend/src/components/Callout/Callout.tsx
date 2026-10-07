@@ -26,7 +26,7 @@ export const Callout = ({
 }) => {
     const t = TONES[tone];
     return (
-        <div className={`flex gap-3 border border-brand-border border-l-[3px] ${t.bar} ${t.bg}
+        <div className={`flex flex-wrap sm:flex-nowrap gap-3 border border-brand-border border-l-[3px] ${t.bar} ${t.bg}
             rounded-r-xl px-4 py-3.5`}>
             <span className={`${t.icon} flex-none mt-0.5`}>{icon}</span>
             <div className="min-w-0 flex-1">
@@ -35,7 +35,8 @@ export const Callout = ({
                 )}
                 {children && <div className="text-sm leading-[1.6] text-brand-muted">{children}</div>}
             </div>
-            {action && <div className="flex-none self-center">{action}</div>}
+            {/* En móvil no cabe al lado: pasa debajo, alineada con el texto. */}
+            {action && <div className="basis-full sm:basis-auto pl-7 sm:pl-0 flex-none self-center">{action}</div>}
         </div>
     );
 };

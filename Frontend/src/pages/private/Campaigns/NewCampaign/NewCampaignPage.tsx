@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { Check, Send } from "lucide-react";
-import { CustomButton } from "../../../../components/Button/Button";
+import { WizardFooter } from "../../../../components/Wizard/WizardFooter";
 import { useNoticeContext } from "../../../../components/Notice/context/UseNoticeContext";
 import { campaignErrors, useCampaignMutations } from "../../../../hooks/useCampaigns";
 import { CampaignPaths } from "../../../../models/routes.models";
@@ -12,7 +12,7 @@ import { useCampaignWizard, type CampaignWizard } from "./useCampaignWizard";
 import { RecipientsStep } from "./RecipientsStep";
 import { MessageStep } from "./MessageStep";
 import { ReviewStep } from "./ReviewStep";
-import { WizardHeader } from "./WizardHeader";
+import { CampaignWizardHeader } from "./CampaignWizardHeader";
 
 type Step = CampaignDraft['step'];
 
@@ -151,7 +151,7 @@ export const NewCampaignPage = () => {
     return (
         <div className="min-h-full flex flex-col">
             <div ref={contentRef} className="flex-1 mx-auto w-full max-w-6xl px-5 sm:px-8 pt-6 sm:pt-8 pb-10">
-                <WizardHeader
+                <CampaignWizardHeader
                     step={draft.step}
                     description="Una plantilla aprobada para muchos contactos a la vez."
                     aside={
@@ -166,29 +166,15 @@ export const NewCampaignPage = () => {
                 {draft.step === 3 && <ReviewStep wizard={wizard} />}
             </div>
 
-            <footer className="sticky bottom-0 z-10 bg-brand-surface border-t border-brand-border
-                shadow-[0_-8px_20px_rgba(14,17,22,0.04)]">
-                <div className="mx-auto w-full max-w-6xl px-5 sm:px-8 py-3.5 flex flex-col sm:flex-row sm:items-center gap-3">
-                    <span className={`hidden sm:block flex-1 min-w-0 text-[13px] ${hintIsError ? 'text-brand-danger' : 'text-brand-muted'}`}>
-                        {footerHint(wizard)}
-                    </span>
-                    <div className="flex gap-2">
-                        <div className="h-11 sm:h-[42px]">
-                            <CustomButton
-                                variant="outline"
-                                onClick={() => (draft.step === 1 ? navigate(CampaignPaths.list) : goToStep((draft.step - 1) as Step))}
-                            >
-                                {draft.step === 1 ? 'Salir' : 'Atrás'}
-                            </CustomButton>
-                        </div>
-                        <div className="h-11 sm:h-[42px] flex-1 sm:flex-none">
-                            <CustomButton onClick={handleNext} disabled={!canAdvance} isLoading={create.isPending}>
-                                {nextLabel}
-                            </CustomButton>
-                        </div>
-                    </div>
-                </div>
-            </footer>
+            <WizardFooter
+                hint={footerHint(wizard)}
+                hintTone={hintIsError ? 'danger' : 'muted'}
+                back={{
+                    label: draft.step === 1 ? 'Salir' : 'Atrás',
+                    onClick: () => (draft.step === 1 ? navigate(CampaignPaths.list) : goToStep((draft.step - 1) as Step)),
+                }}
+                next={{ label: nextLabel, onClick: handleNext, disabled: !canAdvance, isLoading: create.isPending }}
+            />
         </div>
     );
 };

@@ -1,5 +1,6 @@
 import type { Campaign, FailureReason } from "../../../../models/campaign.model";
 import { ProgressBar } from "../../../../components/ProgressBar/ProgressBar";
+import { MetricGrid, type Metric } from "../../../../components/MetricGrid/MetricGrid";
 import { campaignProgress, failureLabel, formatDuration, pluralize } from "../../../../utils/campaignDisplay";
 
 const Label = ({ children }: { children: React.ReactNode }) => (
@@ -40,16 +41,6 @@ export const CampaignProgressCard = ({ campaign }: { campaign: Campaign }) => {
     );
 };
 
-interface Metric {
-    label: string;
-    value: number;
-    note: string;
-    tone?: 'success' | 'info' | 'danger' | 'muted';
-}
-
-// Los mismos colores que las píldoras de cada estado.
-const METRIC_TONE = { success: 'text-brand-success', info: 'text-brand-info', danger: 'text-brand-danger', muted: 'text-brand-muted' };
-
 /** Las cifras de la campaña. Cada una con su aclaración, porque «enviado» y «entregado» no son lo mismo. */
 export const CampaignMetrics = ({ campaign }: { campaign: Campaign }) => {
     const { stats } = campaign;
@@ -67,19 +58,7 @@ export const CampaignMetrics = ({ campaign }: { campaign: Campaign }) => {
     if (stats.cancelled > 0) metrics.push({ label: 'Cancelados', value: stats.cancelled, note: 'no se enviaron', tone: 'muted' });
     else if (stats.pending > 0) metrics.push({ label: 'Pendientes', value: stats.pending, note: 'en cola', tone: 'muted' });
 
-    return (
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-flow-col lg:auto-cols-fr gap-px bg-brand-border border border-brand-border rounded-xl overflow-hidden">
-            {metrics.map(m => (
-                <div key={m.label} className="bg-brand-surface px-3.5 py-3">
-                    <div className={`font-mono text-xl font-semibold tabular-nums ${m.tone ? METRIC_TONE[m.tone] : 'text-brand-text'}`}>
-                        {formatCount(m.value)}
-                    </div>
-                    <div className="text-[12.5px] font-semibold text-brand-strong mt-0.5">{m.label}</div>
-                    <div className="text-[11.5px] text-brand-muted mt-px">{m.note}</div>
-                </div>
-            ))}
-        </div>
-    );
+    return <MetricGrid metrics={metrics} columns="grid-cols-2 sm:grid-cols-4 lg:grid-flow-col lg:auto-cols-fr" />;
 };
 
 /** De los enviados, cuántos llegaron y cuántos se leyeron. */

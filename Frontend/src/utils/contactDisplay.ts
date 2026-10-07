@@ -10,6 +10,7 @@ export const SOURCE_LABEL: Record<NonNullable<ContactSource> | 'legacy', string>
     manual: 'Creado a mano',
     api: 'Por la API',
     ad: 'Desde un anuncio',
+    import: 'Importado',
     legacy: 'Anterior',
 };
 

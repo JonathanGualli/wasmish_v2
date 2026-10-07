@@ -24,6 +24,7 @@ export const CampaignPaths = {
 };
 
 export const ContactsPath = privatePath(AppRoutes.private.contacts);
+export const ContactImportPath = privatePath(`${AppRoutes.private.contacts}/import`);
 export const ChatsPath = privatePath(AppRoutes.private.chats);
 export const SettingsPath = privatePath(AppRoutes.private.settings);
 export const TemplatesPath = privatePath(AppRoutes.private.templates);
