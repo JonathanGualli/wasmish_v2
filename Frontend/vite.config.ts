@@ -34,7 +34,7 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:3001',
         changeOrigin: true,
-        // Si el backend se cae a media respuesta (nodemon reinicia), cortar
+        // Si el backend se cae a media respuesta (reinicia en dev), cortar
         // también la del navegador. Sin esto la conexión SSE queda abierta sin
         // recibir nada: el navegador no se entera, no reconecta y la app se
         // queda sin tiempo real hasta recargar.

@@ -51,7 +51,7 @@ Monorepo con dos workspaces independientes: `Backend/` y `Frontend/`. Cada uno t
 
 **Backend** (Express 5 + MongoDB, port 3001):
 ```bash
-cd Backend && npm run dev      # nodemon src/index.js
+cd Backend && npm run dev      # node --watch (solo src/, package.json y .env)
 ```
 
 **Probar el webhook en local** — el webhook de Meta es **único por app**: apuntarlo a ngrok deja a los clientes reales sin mensajes entrantes, así que no se toca. En su lugar:
@@ -333,7 +333,7 @@ QueryClientProvider
 - Todas las llamadas HTTP van por `services/api.service.ts` (base URL `http://localhost:3001/api`, `withCredentials: true`)
 - Cada feature tiene un hook en `hooks/` que envuelve una mutation o query de React Query
 - SSE: **una sola conexión global** vía `SSEProvider` (`context/sse.provider.tsx`). Los hooks se **suscriben** con `useSSE().subscribe(evento, handler)` (devuelve la función de des-suscripción); ya no abren su propia conexión. `createSSEConnection("stream", handlers)` se usa solo dentro del provider. Base URL relativa (`/api`) → pasa por el proxy de Vite
-- **Reconexión del SSE:** si el servidor responde con error (un reinicio de nodemon tras el proxy de Vite da 500, un despliegue da 502), `EventSource` se rinde para siempre. El `SSEProvider` reconecta él mismo con espera creciente (1 s → 30 s) y, al volver tras un corte, hace `queryClient.invalidateQueries()` (solo se vuelven a pedir las de pantalla), porque los eventos del corte se perdieron. En dev había además una conexión **zombi**: el proxy de Vite no cerraba la respuesta al navegador cuando el backend moría, así que ni había error ni reconexión. Lo arregla el `configure` del proxy en `vite.config.ts`, que la destruye cuando se cierra la del backend
+- **Reconexión del SSE:** si el servidor responde con error (un reinicio del backend en dev da 500 tras el proxy de Vite, un despliegue da 502), `EventSource` se rinde para siempre. El `SSEProvider` reconecta él mismo con espera creciente (1 s → 30 s) y, al volver tras un corte, hace `queryClient.invalidateQueries()` (solo se vuelven a pedir las de pantalla), porque los eventos del corte se perdieron. En dev había además una conexión **zombi**: el proxy de Vite no cerraba la respuesta al navegador cuando el backend moría, así que ni había error ni reconexión. Lo arregla el `configure` del proxy en `vite.config.ts`, que la destruye cuando se cierra la del backend
 
 **`useConversationMessages` — patrón crítico:**
 - `useInfiniteQuery` con cursor `?limit=50&before=<ISO timestamp>`
