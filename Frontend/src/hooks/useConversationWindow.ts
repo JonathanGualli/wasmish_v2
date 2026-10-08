@@ -35,8 +35,8 @@ export const useConversationWindow = (expiresAt?: string | null) => {
     }, [expiresAt]);
 
     const expiry = expiresAt ? new Date(expiresAt).getTime() : NaN;
-    if (Number.isNaN(expiry)) return { hasWindow: false, isOpen: false, msRemaining: 0 };
+    if (Number.isNaN(expiry)) return { hasWindow: false, isOpen: false, msRemaining: 0, msSinceClosed: 0 };
 
     const msRemaining = Math.max(0, expiry - now);
-    return { hasWindow: true, isOpen: msRemaining > 0, msRemaining };
+    return { hasWindow: true, isOpen: msRemaining > 0, msRemaining, msSinceClosed: Math.max(0, now - expiry) };
 };

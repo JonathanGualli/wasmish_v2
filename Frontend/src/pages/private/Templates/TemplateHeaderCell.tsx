@@ -4,7 +4,8 @@ import { Pill } from "../../../components/Pill/Pill";
 import { useNoticeContext } from "../../../components/Notice/context/UseNoticeContext";
 import { parseError, useTemplates } from "../../../hooks/useTemplates";
 import type { Template } from "../../../models/template.model";
-import { formatFileSize, headerFileIssue, headerMediaRule, headerMediaUrl, templateHeaderIssue } from "../../../utils/templateHeader";
+import { headerFileIssue, headerMediaRule, headerMediaUrl, templateHeaderIssue } from "../../../utils/templateHeader";
+import { formatFileSize } from "../../../utils/fileSize";
 
 const linkButton = `text-[12.5px] font-semibold cursor-pointer hover:underline disabled:text-brand-subtle
     disabled:cursor-wait disabled:no-underline`;

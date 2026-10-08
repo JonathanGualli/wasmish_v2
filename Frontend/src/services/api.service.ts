@@ -5,6 +5,7 @@ import type { ContactFilter, ContactInput } from '../models/contact.model';
 import type { ImportBatchResult, ImportInput, ImportPreview } from '../models/contactImport.model';
 import type { BulkTagResult, Tag, TagSelectionSummary } from '../models/tag.model';
 import type { CampaignAudienceInput, CampaignDraftInput, CampaignRecipientsInput, CreateCampaignInput, RecipientState } from '../models/campaign.model';
+import type { Message } from '../models/message.mode';
 
 const API_URL = '/api'; // configuracion puesta en vite.config.ts
 // const API_URL = 'https://wasmish-api.solventyc.com/api';
@@ -76,6 +77,39 @@ export const getConversationsMessagesService = async (conversationId: string, co
 }
 
 // Servicio para enviar un mensaje en una conversación
+/**
+ * Enviar un archivo a una conversación. Va crudo, con su tipo en el
+ * Content-Type; el nombre y el texto que lo acompaña van en cabeceras
+ * (codificados, para que quepan tildes y emojis).
+ */
+export const sendMediaMessageService = async (
+    conversationId: string,
+    { file, mimeType, caption, temporalId, asDocument }: {
+        file: File;
+        mimeType: string;
+        caption: string;
+        temporalId: string;
+        asDocument: boolean;
+    },
+    { onProgress, signal }: { onProgress?: (loadedBytes: number) => void; signal?: AbortSignal } = {},
+): Promise<Message> => {
+    const headers: Record<string, string> = {
+        'Content-Type': mimeType || 'application/octet-stream',
+        'X-Filename': encodeURIComponent(file.name),
+        'X-Temporal-Id': temporalId,
+    };
+    if (caption) headers['X-Caption'] = encodeURIComponent(caption);
+    if (asDocument) headers['X-Send-As'] = 'document';
+
+    const { data } = await axios.post(`${API_URL}/chats/${conversationId}/media`, file, {
+        withCredentials: true,
+        headers,
+        onUploadProgress: (event) => onProgress?.(event.loaded),
+        signal,
+    });
+    return data;
+}
+
 export const sendMessageService = async (
     text: string,
     conversationId?: string,

@@ -1,25 +1,21 @@
 import { useState } from 'react';
 import { Download, FileText, ImageOff } from 'lucide-react';
 import type { Message } from '../../models/message.mode';
+import { formatFileSize } from '../../utils/fileSize';
 
-/** «1,4 MB», «312 KB». Mono al pintarlo: es un dato, no prosa. */
-const formatTamano = (bytes?: number | null) => {
-  if (!bytes) return null;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1).replace('.', ',')} MB`;
-};
 
 /**
  * El adjunto de un mensaje, servido por `/api/media/<id>`.
  *
  * La ruta es del mismo origen que la app (en dev por el proxy de Vite, en prod
  * por el nginx del front), así que la cookie de sesión viaja sola: no hace falta
- * fetch ni blobs, basta con poner la URL en el src.
+ * fetch ni blobs, basta con poner la URL en el src. Uno que se está enviando
+ * desde aquí todavía no está en el servidor: se ve desde el navegador.
  */
 export const MessageMedia = ({ msg }: { msg: Message }) => {
   const [fallo, setFallo] = useState(false);
-  const url = `/api/media/${msg.id}`;
-  const tamano = formatTamano(msg.mediaSize);
+  const url = msg.pending?.localUrl ?? `/api/media/${msg.id}`;
+  const tamano = msg.mediaSize ? formatFileSize(msg.mediaSize) : null;
 
   // El archivo se borró del volumen, o la sesión caducó. Mejor decirlo que
   // dejar el hueco roto del navegador.

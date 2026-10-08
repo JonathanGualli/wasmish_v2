@@ -11,6 +11,18 @@ export type MessageType =
   | "location" | "contacts" | "reaction" | "button" | "interactive" | "order"
   | (string & {});
 
+/**
+ * Solo en el navegador: el archivo de un mensaje que se está enviando (UI
+ * optimista). Se ve desde `localUrl` hasta que el mensaje vuelve del servidor.
+ */
+export interface PendingUpload {
+  localUrl: string;
+  loadedBytes: number;
+  totalBytes: number;
+  /** No llegó al servidor (se cortó la conexión): el archivo sigue aquí y se puede reintentar. */
+  retryable?: boolean;
+}
+
 export interface Message {
   id: string;
   conversationId: string;
@@ -36,4 +48,6 @@ export interface Message {
   temporalId?: string; // en caso de mensajes optimistas
   /** Solo en los enviados como plantilla: con él se pintan su nombre y sus botones. */
   templateName?: string | null;
+  /** Un archivo que se está enviando desde este navegador. */
+  pending?: PendingUpload;
 }

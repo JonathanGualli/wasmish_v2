@@ -8,9 +8,10 @@ import type { HeaderMediaUpload, PendingHeaderFile } from "../../hooks/useHeader
 import { useFilePicker } from "../../hooks/useFilePicker";
 import type { Template, TemplateHeaderMedia } from "../../models/template.model";
 import {
-    HEADER_MEDIA, HEADER_SOURCE_LABEL, formatFileSize, headerFileMeta, headerMediaRule, headerMediaUrl,
+    HEADER_MEDIA, HEADER_SOURCE_LABEL, headerFileMeta, headerMediaRule, headerMediaUrl,
     type HeaderMediaFormat, type HeaderMediaRule,
 } from "../../utils/templateHeader";
+import { formatFileSize } from "../../utils/fileSize";
 
 interface HeaderMediaFieldProps {
     template: Template;

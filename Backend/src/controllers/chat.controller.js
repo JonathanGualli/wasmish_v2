@@ -3,22 +3,89 @@ import Conversation from "../models/conversation.model.js";
 import Contact from "../models/contact.model.js";
 import Message from "../models/message.model.js";
 import { decrypt }  from "../utils/crypto.js";
-import { sendTextMessage } from "../libs/whatsapp.js";
+import { sendMediaMessage, sendTextMessage, uploadMedia } from "../libs/whatsapp.js";
 import { sendUser } from './stream.controller.js';
 import { freeTextBlockReason, getWindowExpiry } from "../utils/whatsapp.window.js";
 import { processTemplateSending } from "./template.controller.js";
 import { getSendingRecipient, getSendingConversation } from "./contact.controller.js";
 import { contactDisplayName } from "../utils/contact.identity.js";
+import {
+    CAPTION_MAX, buildMediaObject, captionAllowed, outboundMediaIssue, outboundMediaKind, outboundMediaText,
+} from "../utils/outbound.media.js";
+import { mimeBase, saveByContentHash } from "../utils/media.storage.js";
+import { cleanFilename } from "../services/template.media.service.js";
+import { MEDIA_DIR } from "../config.js";
 
-// Envía un texto libre y lo persiste. El destinatario es `conversation` o, si
-// no la hay, `destinationNumber` (mismo criterio que processTemplateSending).
+/**
+ * Un mensaje tal como lo ve el frontend: la lista del chat, la respuesta de un
+ * envío y su `message_created`. Del archivo solo se dice si lo hay: se pide por
+ * /api/media/<id del mensaje>, que comprueba de quién es.
+ */
+export const serializeMessage = (msg) => ({
+    id: String(msg._id),
+    conversationId: String(msg.conversationId),
+    sender: msg.sender,
+    // Los mensajes anteriores al campo no lo tienen: 'text' por defecto.
+    type: msg.type || 'text',
+    text: msg.text,
+    hasMedia: Boolean(msg.mediaFile),
+    caption: msg.caption ?? null,
+    mediaFilename: msg.mediaFilename ?? null,
+    mediaSize: msg.mediaSize ?? null,
+    timestamp: (msg.timestamp || msg.createdAt).toISOString(),
+    status: msg.status || 'sent',
+    deliveredAt: msg.deliveredAt ? msg.deliveredAt.toISOString() : null,
+    readAt: msg.readAt ? msg.readAt.toISOString() : null,
+    failedAt: msg.failedAt ? msg.failedAt.toISOString() : null,
+    errorCode: msg.errorCode,
+    errorDetail: msg.errorDetail,
+    waMessageId: msg.waMessageId || null,
+    // Con él la UI pinta «Plantilla · nombre» y los botones de la plantilla.
+    templateName: msg.templateName ?? null,
+    // Con él la UI optimista reconoce su mensaje cuando vuelve por el SSE.
+    temporalId: msg.temporalId ?? undefined,
+});
+
+// A Meta: un texto o, si hay archivo, el archivo. El archivo se sube primero
+// (el id que devuelve es del número que lo subió) y se envía por ese id.
+const sendToMeta = async ({ token, phoneNumberId, recipient, text, attachment }) => {
+    if (!attachment) return sendTextMessage({ token, phoneNumberId, recipient, text });
+
+    const { kind, buffer, mimeType, filename, caption } = attachment;
+    const mediaId = await uploadMedia({ token, phoneNumberId, buffer, mimeType, filename });
+    const media = buildMediaObject(kind, { mediaId, caption, filename });
+    return sendMediaMessage({ token, phoneNumberId, recipient, kind, media });
+};
+
+// Lo que guarda el `Message` de un archivo enviado: lo mismo que el de uno
+// recibido, así el chat lo pinta igual.
+const attachmentFields = ({ kind, mimeType, file, filename, size, caption }) => ({
+    type: kind,
+    mimeType,
+    mediaFile: file,
+    mediaFilename: kind === 'document' ? filename : null,
+    mediaSize: size,
+    caption: caption || null,
+});
+
+/**
+ * Envía un mensaje libre (un texto o, con `attachment`, un archivo) y lo
+ * persiste. El destinatario es `conversation` o, si no la hay,
+ * `destinationNumber` (mismo criterio que processTemplateSending). Si Meta lo
+ * rechaza no se aborta: el mensaje se guarda como fallido (con su archivo),
+ * para que se vea qué no salió y por qué.
+ *
+ * `attachment` = `{ kind, buffer, mimeType, file, filename, size, caption }`:
+ * ya validado (`outboundMediaIssue`) y guardado en MEDIA_DIR (`file`).
+ */
 export const processMessageSending = async ({
     user,
     conversation,
     text,
     temporalId,
     destinationNumber,
-    contactName }) => {
+    contactName,
+    attachment = null }) => {
 
     const token = decrypt(user.tokenWhatsapp);
     const phoneNumberId = conversation?.phoneNumberId || user.phoneNumberId;
@@ -27,19 +94,13 @@ export const processMessageSending = async ({
 
     const recipient = await getSendingRecipient(conversation, destinationNumber);
 
-    // Intentamos enviar a Meta. Si falla, NO abortamos: marcamos el mensaje como fallido.
     let waMessageId = null;
     let status = 'sent';
     let errorCode = null;
     let errorDetail = null;
 
     try {
-        const apiRes = await sendTextMessage({
-            token,
-            phoneNumberId,
-            recipient,
-            text
-        });
+        const apiRes = await sendToMeta({ token, phoneNumberId, recipient, text, attachment });
         waMessageId = apiRes?.data?.messages?.[0]?.id || null;
     } catch (error) {
         status = 'failed';
@@ -47,12 +108,15 @@ export const processMessageSending = async ({
         errorDetail = error.waErrorDetail || error.message;
     }
 
+    // Lo que se ve en la bandeja: el texto, o lo escrito junto al archivo (o su etiqueta).
+    const messageText = attachment ? outboundMediaText(attachment.kind, attachment) : text;
+
     // Si no hay conversación (mensaje nuevo), la creamos; si existe, la actualizamos
     const now = new Date();
     const targetConversation = await getSendingConversation({
         userId: user._id, conversation, recipient, phoneNumberId, contactName, source: 'manual',
     });
-    targetConversation.lastMessage = text;
+    targetConversation.lastMessage = messageText;
     targetConversation.lastMessageAt = now;
     await targetConversation.save();
 
@@ -62,7 +126,8 @@ export const processMessageSending = async ({
         direction: 'outbound',
         sender: 'me',
         waMessageId,
-        text,
+        text: messageText,
+        ...(attachment && attachmentFields(attachment)),
         timestamp: now,
         temporalId,
         status,
@@ -71,18 +136,7 @@ export const processMessageSending = async ({
         failedAt: status === 'failed' ? now : null,
     });
 
-    // Notificamos via SSE con el estado real
-    sendUser(String(user._id), 'message_created', {
-        id: String(msg._id),
-        conversationId: String(targetConversation._id),
-        sender: 'me',
-        text,
-        timestamp: msg.timestamp.toISOString(),
-        status,
-        errorCode,
-        errorDetail,
-        temporalId,
-    });
+    sendUser(String(user._id), 'message_created', serializeMessage(msg));
 
     return { msg, waMessageId, status, errorCode, errorDetail };
 };
@@ -112,6 +166,28 @@ const lastInboundOf = async (conversation) => {
     const last = await Message.findOne({ conversationId: conversation._id, direction: 'inbound' })
         .sort({ timestamp: -1 }).select('timestamp').lean();
     return last?.timestamp ?? null;
+};
+
+// Pone a cero los no leídos de una conversación y avisa por SSE a todas las
+// pestañas. Leer es abrir el chat o responder desde él: que un mensaje llegue
+// con el chat a la vista no basta. El filtro `unreadCount > 0` evita escribir y
+// emitir si ya estaba leída. Nunca lanza: quien la llama ya hizo lo suyo (cargó
+// los mensajes, envió la respuesta) y un fallo aquí solo deja el contador igual.
+const markConversationRead = async (userId, conversationId) => {
+    try {
+        const result = await Conversation.updateOne(
+            { _id: conversationId, userId, unreadCount: { $gt: 0 } },
+            { $set: { unreadCount: 0 } }
+        );
+        if (result.modifiedCount > 0) {
+            sendUser(String(userId), 'conversation_updated', {
+                id: String(conversationId),
+                unreadCount: 0,
+            });
+        }
+    } catch (error) {
+        console.error('No se pudo marcar la conversación como leída:', error.message);
+    }
 };
 
 export const sendMessageController = async (req, res) => {
@@ -145,7 +221,7 @@ export const sendMessageController = async (req, res) => {
         if (blocked) return res.status(409).json([{ message: WINDOW_BLOCK_MESSAGES[blocked], code: 'window_closed' }]);
 
         // Llamamos al servicio (que ahora persiste incluso si el envío falla)
-        const { msg, status, waMessageId, errorCode, errorDetail } = await processMessageSending({
+        const { msg } = await processMessageSending({
             user,
             conversation,
             text,
@@ -154,26 +230,83 @@ export const sendMessageController = async (req, res) => {
             contactName,
         });
 
-        return res.status(201).json({
-            id: String(msg._id),
-            conversationId: String(msg.conversationId),
-            sender: msg.sender,
-            text: msg.text,
-            timestamp: msg.timestamp.toISOString(),
-            status,
-            waMessageId,
-            errorCode,
-            errorDetail,
-            temporalId: msg.temporalId,
-        });
+        // Responder desde el chat es haberlo leído, aunque Meta lo rechace: se
+        // leyó y se intentó contestar.
+        await markConversationRead(user._id, msg.conversationId);
 
-
+        return res.status(201).json(serializeMessage(msg));
     } catch (error) {
         console.error("Error enviando mensaje:", error.response?.data || error.message || error);
         res.status(500).json([{ message: error.message }]);
     }
 };
 
+// Un texto que llega en una cabecera HTTP, codificado (`encodeURIComponent`)
+// para que quepan tildes y emojis.
+const decodeHeader = (raw) => {
+    try {
+        return decodeURIComponent(String(raw ?? '')).trim();
+    } catch {
+        return '';
+    }
+};
+
+/**
+ * POST /chats/:id/media — enviar un archivo a una conversación. El cuerpo es
+ * el archivo crudo (Content-Type = su tipo); el nombre, el texto que lo
+ * acompaña y el `temporalId` van en cabeceras (`X-Filename`, `X-Caption`,
+ * `X-Temporal-Id`), y `X-Send-As: document` manda una imagen como documento.
+ *
+ * Es texto libre para WhatsApp: fuera de la ventana de 24 h, 409 como el texto.
+ * El archivo se valida (tipo, tamaño y firma de bytes) y se guarda antes de
+ * llamar a Meta, así el chat lo enseña aunque Meta lo rechace.
+ */
+export const sendMediaMessageController = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        // Filtrar por userId es la comprobación de propiedad.
+        const conversation = await Conversation.findOne({ _id: req.params.id, userId });
+        if (!conversation) return res.status(404).json([{ message: "Conversation not found" }]);
+
+        const user = await User.findById(userId);
+        if (!user) return res.status(404).json([{ message: "User not found" }]);
+
+        const blocked = freeTextBlockReason(await lastInboundOf(conversation));
+        if (blocked) return res.status(409).json([{ message: WINDOW_BLOCK_MESSAGES[blocked], code: 'window_closed' }]);
+
+        const buffer = Buffer.isBuffer(req.body) ? req.body : null;
+        const mimeType = mimeBase(req.headers['content-type']);
+        const asDocument = req.headers['x-send-as'] === 'document';
+        const issue = outboundMediaIssue({ mimeType, size: buffer?.length ?? 0, buffer, asDocument });
+        if (issue) return res.status(400).json([{ message: issue }]);
+
+        const kind = outboundMediaKind(mimeType, { asDocument });
+        const caption = captionAllowed(kind) ? decodeHeader(req.headers['x-caption']) || null : null;
+        if (caption && caption.length > CAPTION_MAX) {
+            return res.status(400).json([{ message: `El texto que acompaña al archivo admite hasta ${CAPTION_MAX} caracteres.` }]);
+        }
+
+        const file = await saveByContentHash(MEDIA_DIR, 'outbound', buffer, mimeType);
+        const { msg } = await processMessageSending({
+            user,
+            conversation,
+            temporalId: String(req.headers['x-temporal-id'] ?? '').slice(0, 64) || undefined,
+            attachment: {
+                kind, buffer, mimeType, file, caption,
+                filename: cleanFilename(req.headers['x-filename']),
+                size: buffer.length,
+            },
+        });
+
+        // Responder con un archivo también es haberlo leído.
+        await markConversationRead(userId, conversation._id);
+
+        return res.status(201).json(serializeMessage(msg));
+    } catch (error) {
+        console.error("Error enviando archivo:", error.message);
+        res.status(500).json([{ message: error.message }]);
+    }
+};
 
 export const listConversations = async (req, res) => {
     const userId = req.user.id;
@@ -189,6 +322,9 @@ export const listConversations = async (req, res) => {
             const contact = item.contactId ?? { name: item.contactName, phone: item.contactPhone };
             return {
                 id: String(item._id),
+                // La ficha del contacto en el chat. `null` en una conversación
+                // anterior a los contactos que aún no se enlazó.
+                contactId: item.contactId?._id ? String(item.contactId._id) : null,
                 title: contactDisplayName(contact),
                 phone: contact.phone ?? null,
                 username: contact.username ?? null,
@@ -236,47 +372,10 @@ export const listMessages = async (req, res) => {
             ? msgs[msgs.length -1].timestamp.toISOString()
             : null;
         
-        const items = msgs
-            .map((msg) => ({
-                id: String(msg._id),
-                conversationId: String(msg.conversationId),
-                sender: msg.sender,
-                // Los mensajes anteriores al campo no lo tienen: 'text' por defecto.
-                type: msg.type || 'text',
-                text: msg.text,
-                // El front no necesita saber dónde está el archivo, solo si lo
-                // hay: lo pide por /api/media/<id del mensaje>.
-                hasMedia: Boolean(msg.mediaFile),
-                caption: msg.caption ?? null,
-                mediaFilename: msg.mediaFilename ?? null,
-                mediaSize: msg.mediaSize ?? null,
-                timestamp: (msg.timestamp || msg.createdAt).toISOString(),
-                status: msg.status || 'sent',
-                deliveredAt: msg.deliveredAt ? msg.deliveredAt.toISOString() : null,
-                readAt: msg.readAt ? msg.readAt.toISOString() : null,
-                failedAt: msg.failedAt ? msg.failedAt.toISOString() : null,
-                errorCode: msg.errorCode,
-                errorDetail: msg.errorDetail,
-                waMessageId: msg.waMessageId || null,
-                // Con él la UI pinta «Plantilla · nombre» y los botones de la plantilla.
-                templateName: msg.templateName ?? null,
-            }));
+        const items = msgs.map(serializeMessage);
 
         // Solo marcamos como leído al ABRIR la conversación (primera página, sin cursor)
-        if (!hasCursor) {
-            const result = await Conversation.updateOne(
-                { _id: conversation._id, userId, unreadCount: { $gt: 0 } },
-                { $set: { unreadCount: 0 } }
-            );
-
-            // Emitimos solo si de verdad cambió algo
-            if (result.modifiedCount > 0) {
-                sendUser(String(user._id), 'conversation_updated', {
-                    id: String(conversation._id),
-                    unreadCount: 0,
-                })
-            }
-        }
+        if (!hasCursor) await markConversationRead(userId, conversation._id);
 
         return res.json({ items, nextCursor });
 
@@ -336,6 +435,8 @@ export const sendConversationTemplateController = async (req, res) => {
             buttons: req.body.buttons ?? [],
         });
 
+        // Responder con una plantilla también es haberlo leído.
+        await markConversationRead(userId, conversation._id);
         return responderEnvioPlantilla(res, resultado);
     } catch (error) {
         return responderErrorPlantilla(res, error);

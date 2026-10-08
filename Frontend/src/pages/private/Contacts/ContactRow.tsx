@@ -12,14 +12,21 @@ const AVATAR_SIZES = {
     lg: 'w-[52px] h-[52px] rounded-[13px] text-base',
 };
 
-/** Avatar con iniciales; en la ficha va en verde profundo, como el de la conversación abierta. */
-export const ContactAvatar = ({ contact, size = 'sm', strong = false }: {
+const AVATAR_TONES = {
+    neutral: 'bg-brand-raised text-brand-gray-600',
+    /** En la ficha de Contactos, como el de la conversación abierta. */
+    strong: 'bg-brand-deep text-brand-accent',
+    /** Sobre verde profundo (la ficha del chat), donde el verde profundo no se vería. */
+    onDeep: 'bg-brand-accent text-brand-ink',
+};
+
+/** Avatar con iniciales. */
+export const ContactAvatar = ({ contact, size = 'sm', tone = 'neutral' }: {
     contact: Contact;
     size?: keyof typeof AVATAR_SIZES;
-    strong?: boolean;
+    tone?: keyof typeof AVATAR_TONES;
 }) => (
-    <div className={`${AVATAR_SIZES[size]} flex items-center justify-center flex-none font-bold
-        ${strong ? 'bg-brand-deep text-brand-accent' : 'bg-brand-raised text-brand-gray-600'}`}>
+    <div className={`${AVATAR_SIZES[size]} ${AVATAR_TONES[tone]} flex items-center justify-center flex-none font-bold`}>
         {initials(avatarName(contact))}
     </div>
 );

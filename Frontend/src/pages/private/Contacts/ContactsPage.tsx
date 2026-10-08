@@ -79,7 +79,9 @@ export const ContactsPage = () => {
     const [query, setQuery] = useState(initialSearch);
     const [filter, setFilter] = useState<ContactFilter>(initialFilter);
     const [tagIds, setTagIds] = useState<string[]>(initialTagIds);
-    const [panel, setPanel] = useState<ContactPanelState | null>(null);
+    // Desde la ficha del chat («Ver en Contactos»), con la suya abierta.
+    const [panel, setPanel] = useState<ContactPanelState | null>(() =>
+        navigationState?.contactId ? { mode: 'view', id: navigationState.contactId } : null);
     const [managingTags, setManagingTags] = useState(false);
     const [tagging, setTagging] = useState(false);
     const [pendingChange, setPendingChange] = useState<PendingQueryChange | null>(null);

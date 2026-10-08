@@ -6,7 +6,7 @@ import { useFilePicker } from "../../../../hooks/useFilePicker";
 import { IMPORT_MAX_ROWS, sheetSize, templateSheet } from "../../../../utils/contactImport";
 import { CONTACTS_FILE_ACCEPT, fileProblemCopy } from "../../../../utils/contactsFile";
 import { COUNTRY_OPTIONS, countryPhoneExample, type CountryCode } from "../../../../utils/phoneCountry";
-import { formatFileSize } from "../../../../utils/templateHeader";
+import { formatFileSize } from "../../../../utils/fileSize";
 import { downloadFile } from "../../../../utils/download";
 import type { ImportWizard } from "./useImportWizard";
 

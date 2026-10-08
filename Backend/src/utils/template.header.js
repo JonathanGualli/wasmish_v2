@@ -9,6 +9,8 @@
 // («expected IMAGE, received UNKNOWN»). Por eso cada plantilla con archivo en la
 // cabecera tiene en Wasmish su archivo guardado (`TemplateMedia`).
 
+import { matchesSignature } from './file.signature.js';
+
 /** Formatos de cabecera que llevan un archivo. */
 export const MEDIA_HEADER_FORMATS = ['IMAGE', 'VIDEO', 'DOCUMENT'];
 
@@ -108,17 +110,6 @@ export const isMetaMediaFresh = (media, phoneNumberId, now = new Date()) =>
     && media.metaUploadedAt instanceof Date
     && now.getTime() - media.metaUploadedAt.getTime() < META_MEDIA_TTL_MS;
 
-// Los primeros bytes de cada formato admitido. El Content-Type lo pone quien
-// sube el archivo; esto comprueba que lo que llega es de verdad lo que dice.
-const SIGNATURES = {
-    'image/jpeg': (b) => b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
-    'image/png': (b) => b.length > 8 && b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
-    'application/pdf': (b) => b.length > 5 && b.subarray(0, 5).toString('latin1') === '%PDF-',
-    // MP4 y 3GP son contenedores ISO: «ftyp» en el byte 4.
-    'video/mp4': (b) => b.length > 12 && b.subarray(4, 8).toString('latin1') === 'ftyp',
-    'video/3gpp': (b) => b.length > 12 && b.subarray(4, 8).toString('latin1') === 'ftyp',
-};
-
 /**
  * Por qué no vale el archivo para la cabecera de la plantilla, o `null` si
  * vale. Se mira el formato que pide la cabecera, el tipo, el tamaño y que el
@@ -137,7 +128,7 @@ export const headerMediaFileIssue = (template, { mimeType, size, buffer }) => {
     if (size > rule.maxBytes) {
         return `${rule.article === 'una' ? 'La' : 'El'} ${rule.label} pesa demasiado: el máximo es ${rule.maxBytes / (1024 * 1024)} MB.`;
     }
-    if (buffer && !SIGNATURES[type]?.(buffer)) {
+    if (buffer && !matchesSignature(type, buffer)) {
         return `El archivo no es un ${type.split('/')[1].toUpperCase()} válido.`;
     }
     return null;

@@ -22,6 +22,9 @@ import type { ChatsNavigationState } from "../../../models/conversation.mode";
  * Otra página puede pedir al navegar que se abra una conversación o un
  * borrador nuevo (`ChatsNavigationState`, desde la ficha de un contacto). El
  * borrador pedido reemplaza al que hubiera, sin preguntar.
+ *
+ * La ficha del contacto se abre para una conversación: abrir otra, o volver a
+ * Chats desde otra página, la deja cerrada.
  */
 export const ChatPage = () => {
     const { user } = useAuthContext();
@@ -34,6 +37,10 @@ export const ChatPage = () => {
     const [draft, setDraft] = useState<ConversationDraft | null>(() =>
         incoming?.draft ? { ...EMPTY_DRAFT, ...incoming.draft } : (userId ? loadDraft(userId) : null));
     const [draftOpen, setDraftOpen] = useState(Boolean(incoming?.draft));
+    // De qué conversación está abierta la ficha: cambiar de conversación la
+    // deja cerrada sin tener que acordarse de cerrarla.
+    const [contactSidebarFor, setContactSidebarFor] = useState<string | null>(null);
+    const contactSidebarOpen = Boolean(selectedId) && contactSidebarFor === selectedId;
 
     // La petición se usa una sola vez: si se quedara en el historial, recargar
     // la página volvería a pisar el borrador. (El borrador pedido lo guarda el
@@ -42,20 +49,30 @@ export const ChatPage = () => {
         if (incoming) navigate(location.pathname, { replace: true, state: null });
     }, [incoming, navigate, location.pathname]);
 
-    // ESC cierra lo que esté abierto. El borrador solo se oculta: no se pierde.
+    // ESC cierra lo que esté abierto, de fuera hacia dentro: primero la ficha,
+    // luego la conversación. El borrador solo se oculta: no se pierde.
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
             if (event.key !== "Escape") return;
+            // Un diálogo abierto (enviar plantilla) se cierra con su propio Esc;
+            // cerrar además la conversación tiraba lo escrito en ella.
+            if (document.querySelector('[aria-modal="true"]')) return;
+            if (contactSidebarOpen) {
+                setContactSidebarFor(null);
+                return;
+            }
             setSelectedId(null);
             setDraftOpen(false);
         };
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, []);
+    }, [contactSidebarOpen]);
 
     const openConversation = (id: string) => {
         setDraftOpen(false);
         setSelectedId(id);
+        // Volver a la misma de antes también la abre sin ficha.
+        setContactSidebarFor(null);
     };
 
     // El «+» y la fila «Borrador» hacen lo mismo: abren el borrador que haya,
@@ -111,7 +128,12 @@ export const ChatPage = () => {
                         onDraftChange={handleDraftChange}
                     />
                 ) : (
-                    <ChatThread conversationId={selectedId} onBack={() => setSelectedId(null)} />
+                    <ChatThread
+                        conversationId={selectedId}
+                        onBack={() => setSelectedId(null)}
+                        contactSidebarOpen={contactSidebarOpen}
+                        onContactSidebarChange={open => setContactSidebarFor(open ? selectedId : null)}
+                    />
                 )}
             </div>
         </div>

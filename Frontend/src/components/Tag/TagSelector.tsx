@@ -23,11 +23,16 @@ const MAX_OPTIONS = 8;
  * Poner y quitar etiquetas escribiendo: busca entre las de la cuenta y, si no
  * hay ninguna con ese nombre, ofrece crearla. «vip » encuentra «VIP»: las
  * mayúsculas, las tildes y los espacios no cuentan, así no nace otra igual.
+ * Sin `label` no lleva la línea de encima (ni el «3 de 20»): la ficha del chat
+ * lo abre en el sitio de las etiquetas, que ya dicen qué es. `createsOnPick`:
+ * quien lo usa guarda al momento (la ficha del chat), no al pulsar Guardar.
  */
-export const TagSelector = ({ label, value, onChange }: {
-    label: ReactNode;
+export const TagSelector = ({ label, value, onChange, autoFocus = false, createsOnPick = false }: {
+    label?: ReactNode;
     value: TagSelection;
     onChange: (value: TagSelection) => void;
+    autoFocus?: boolean;
+    createsOnPick?: boolean;
 }) => {
     const { data: tags = [] } = useTags();
     const [query, setQuery] = useState('');
@@ -61,7 +66,7 @@ export const TagSelector = ({ label, value, onChange }: {
         : isChosen ? 'Ya la tiene puesta.'
         : name.length > TAG_NAME_MAX ? `Una etiqueta tiene como mucho ${TAG_NAME_MAX} caracteres.`
         : existing && existing.name !== name ? 'Ya existe. Mayúsculas, tildes y espacios no cuentan: «vip» y «VIP» son la misma.'
-        : canCreate ? 'No hay ninguna con ese nombre. Se crea al guardar.'
+        : canCreate ? `No hay ninguna con ese nombre. Se crea al ${createsOnPick ? 'elegirla' : 'guardar'}.`
         : '';
 
     const showList = open && !full && (options.length > 0 || Boolean(hint));
@@ -102,12 +107,14 @@ export const TagSelector = ({ label, value, onChange }: {
 
     return (
         <div className="relative grid gap-[7px]">
-            <span className="flex items-baseline text-[13px] font-semibold text-brand-strong">
-                {label}
-                <span className="ml-auto font-mono text-[11px] font-normal text-brand-subtle tabular-nums">
-                    {total} de {MAX_TAGS_PER_CONTACT}
+            {label && (
+                <span className="flex items-baseline text-[13px] font-semibold text-brand-strong">
+                    {label}
+                    <span className="ml-auto font-mono text-[11px] font-normal text-brand-subtle tabular-nums">
+                        {total} de {MAX_TAGS_PER_CONTACT}
+                    </span>
                 </span>
-            </span>
+            )}
             <div
                 onClick={() => inputRef.current?.focus()}
                 className="flex flex-wrap items-center gap-1.5 min-h-[50px] lg:min-h-[46px] box-border px-2.5 py-2 cursor-text
@@ -123,6 +130,7 @@ export const TagSelector = ({ label, value, onChange }: {
                     onFocus={() => setOpen(true)}
                     onBlur={() => setOpen(false)}
                     onKeyDown={handleKeyDown}
+                    autoFocus={autoFocus}
                     disabled={full}
                     placeholder={total === 0 ? 'Escribe para buscar o crear: VIP, Quito…' : ''}
                     maxLength={TAG_NAME_MAX + 10}

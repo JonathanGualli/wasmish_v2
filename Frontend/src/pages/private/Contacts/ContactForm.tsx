@@ -9,11 +9,9 @@ import { tagError, useTagMutations } from '../../../hooks/useTags';
 import { TagSelector, type TagSelection } from '../../../components/Tag/TagSelector';
 import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
 import type { ContactDetail, ContactInput } from '../../../models/contact.model';
-import { PHONE_RE, contactTitle } from '../../../utils/contactDisplay';
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const NAME_MAX = 80;
-const NOTES_MAX = 1000;
+import {
+    CONTACT_NAME_MAX as NAME_MAX, CONTACT_NOTES_MAX as NOTES_MAX, EMAIL_RE, PHONE_RE, contactTitle,
+} from '../../../utils/contactDisplay';
 
 interface Props {
     /** El contacto a editar; sin él, el formulario crea uno nuevo. */

@@ -3,11 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
 import { ConfirmDialog } from '../../../components/Dialog/ConfirmDialog';
 import {
-    AlertTriangle, ChevronLeft, ExternalLink, LoaderCircle, Lock, Megaphone, MessageSquare, Pencil, Send, Trash2, X,
+    AlertTriangle, ChevronLeft, LoaderCircle, Lock, MessageSquare, Pencil, Send, Trash2, X,
 } from 'lucide-react';
 import { CustomButton } from '../../../components/Button/Button';
 import { Callout } from '../../../components/Callout/Callout';
-import { Pill } from '../../../components/Pill/Pill';
 import { useNoticeContext } from '../../../components/Notice/context/UseNoticeContext';
 import { contactError, useContact, useContactMutations } from '../../../hooks/useContacts';
 import { useTags } from '../../../hooks/useTags';
@@ -17,10 +16,11 @@ import { formatRemaining, useConversationWindow } from '../../../hooks/useConver
 import type { ContactDetail } from '../../../models/contact.model';
 import type { ChatsNavigationState } from '../../../models/conversation.mode';
 import { AppRoutes } from '../../../models/routes.models';
-import { contactIdentity, contactTitle, referralTypeLabel, sourceLabel } from '../../../utils/contactDisplay';
+import { contactIdentity, contactTitle, sourceLabel } from '../../../utils/contactDisplay';
 import { formatActivityTime, formatDateTime } from '../../../utils/formatChatTime';
 import { ContactAvatar } from './ContactRow';
 import { ContactForm } from './ContactForm';
+import { ReferralCard } from '../../../components/Contact/ReferralCard';
 
 export type ContactPanelState =
     | { mode: 'view'; id: string }
@@ -233,7 +233,7 @@ const ContactDetails = ({ contact, onClose, onEdit }: {
         <>
             <div className="flex-1 overflow-y-auto px-4 md:px-6 py-5 grid gap-[22px] content-start">
                 <div className="flex gap-3.5 items-center">
-                    <ContactAvatar contact={contact} size="lg" strong />
+                    <ContactAvatar contact={contact} size="lg" tone="strong" />
                     <div className="min-w-0 grid gap-0.5">
                         <div className="text-xl font-bold tracking-[-0.02em] text-brand-text break-words">{title}</div>
                         {showProfileName && (
@@ -318,29 +318,7 @@ const ContactDetails = ({ contact, onClose, onEdit }: {
                 {contact.referral && (
                     <div className="grid gap-2.5">
                         <SectionLabel>Desde un anuncio</SectionLabel>
-                        <div className="border border-brand-border rounded-xl p-3.5 flex gap-3">
-                            <div className="w-9 h-9 rounded-[9px] bg-brand-accent-soft text-brand-accent-strong
-                                flex items-center justify-center flex-none">
-                                <Megaphone size={17} />
-                            </div>
-                            <div className="min-w-0 grid gap-1.5 justify-items-start">
-                                <Pill>{referralTypeLabel(contact.referral.sourceType)}</Pill>
-                                <div className="text-sm font-semibold leading-[1.4] text-brand-text">
-                                    {contact.referral.headline || contact.referral.body || 'Sin título'}
-                                </div>
-                                {/* Meta no siempre manda el enlace. */}
-                                {contact.referral.sourceUrl && (
-                                    <a
-                                        href={contact.referral.sourceUrl}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-brand-accent-strong hover:text-brand-deep"
-                                    >
-                                        Ver en Facebook<ExternalLink size={13} />
-                                    </a>
-                                )}
-                            </div>
-                        </div>
+                        <ReferralCard referral={contact.referral} />
                     </div>
                 )}
 

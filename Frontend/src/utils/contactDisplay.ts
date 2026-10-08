@@ -4,9 +4,13 @@ import { formatChatTime } from "./formatChatTime";
 
 /** Mismo formato que valida el backend: solo dígitos, con código de país. */
 export const PHONE_RE = /^\d{8,15}$/;
+export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/** Los topes del backend (`createContactSchema`): nombre y empresa, y notas. */
+export const CONTACT_NAME_MAX = 80;
+export const CONTACT_NOTES_MAX = 1000;
 
 export const SOURCE_LABEL: Record<NonNullable<ContactSource> | 'legacy', string> = {
-    inbound: 'Escribió él',
+    inbound: 'Te escribió primero',
     manual: 'Creado a mano',
     api: 'Por la API',
     ad: 'Desde un anuncio',

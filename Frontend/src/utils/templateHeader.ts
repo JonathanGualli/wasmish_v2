@@ -1,4 +1,5 @@
 import type { Template, TemplateHeaderMedia } from '../models/template.model';
+import { formatFileSize } from './fileSize';
 
 /**
  * Lo que admite la cabecera de cada formato al subir su archivo. Mismos tipos y
@@ -54,12 +55,6 @@ export const templateHeaderIssue = (template: Template): string | null => {
     if (header.format === 'LOCATION') return 'Lleva una ubicación en la cabecera: todavía no se puede enviar desde Wasmish.';
     return 'Su cabecera es de un tipo que Wasmish no sabe enviar.';
 };
-
-/** «1,4 MB», «312 KB», «5 MB». */
-export const formatFileSize = (bytes: number) =>
-    bytes < 1024 * 1024
-        ? `${Math.max(1, Math.round(bytes / 1024))} KB`
-        : `${(bytes / (1024 * 1024)).toFixed(1).replace('.', ',').replace(/,0$/, '')} MB`;
 
 /**
  * Por qué no vale el archivo para la cabecera, o `null` si vale. Se mira antes

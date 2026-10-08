@@ -1,9 +1,8 @@
-import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import TemplateMedia from '../models/template.media.model.js';
 import { MEDIA_DIR } from '../config.js';
 import { uploadMedia } from '../libs/whatsapp.js';
-import { extensionParaMime, guardarArchivo, rutaDeArchivo } from '../utils/media.storage.js';
+import { rutaDeArchivo, saveByContentHash } from '../utils/media.storage.js';
 import { isMetaMediaFresh } from '../utils/template.header.js';
 
 // El nombre original llega en una cabecera HTTP, escrito por quien sube el
@@ -25,10 +24,7 @@ export const cleanFilename = (raw) => {
  * la duplica, y nunca lo construye quien sube el archivo.
  */
 export const saveHeaderMedia = async ({ userId, buffer, mimeType, filename }) => {
-    const hash = crypto.createHash('sha256').update(buffer).digest('hex');
-    const file = `templates/${hash}.${extensionParaMime(mimeType)}`;
-    await guardarArchivo(MEDIA_DIR, file, buffer);
-
+    const file = await saveByContentHash(MEDIA_DIR, 'templates', buffer, mimeType);
     return TemplateMedia.create({ userId, file, mimeType, filename, size: buffer.length });
 };
 

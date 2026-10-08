@@ -12,7 +12,8 @@
 // contacto cambió de número»): ni se guarda ni abre la ventana de 24 h.
 const IGNORADOS = new Set(['system']);
 
-const ETIQUETAS = {
+// También las usan los archivos que se envían desde el chat (`outbound.media.js`).
+export const ETIQUETAS = {
     image:    'Imagen',
     video:    'Video',
     audio:    'Audio',

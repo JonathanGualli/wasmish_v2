@@ -15,14 +15,19 @@ interface Props {
   conversationId: string;
   /** Solo para el texto de cabecera: a quién se le va a escribir. */
   contactName: string;
+  /** Con la ventana abierta no hace falta explicar por qué una plantilla. */
+  windowOpen: boolean;
+  /** Hay algo escrito en el chat: se avisa de que no se pierde. */
+  keepsDraft: boolean;
 }
 
 /**
- * Enviar una plantilla aprobada a una conversación cuya ventana de 24 h se
- * cerró. Los errores van al aviso global, como en el resto de la app; el
+ * Enviar una plantilla aprobada a una conversación: la única forma de retomarla
+ * con la ventana de 24 h cerrada, y otra cosa más que mandar con ella abierta
+ * (una con botones, un recordatorio ya redactado). Los errores van al aviso global, como en el resto de la app; el
  * diálogo sigue abierto debajo para corregir sin perder lo escrito.
  */
-export const SendTemplateDialog = ({ open, onClose, conversationId, contactName }: Props) => {
+export const SendTemplateDialog = ({ open, onClose, conversationId, contactName, windowOpen, keepsDraft }: Props) => {
   const form = useTemplateForm();
   const sendTemplate = useSendTemplate();
   const { state: errorVisible, setState, setContent } = useNoticeContext();
@@ -67,7 +72,7 @@ export const SendTemplateDialog = ({ open, onClose, conversationId, contactName 
               </DialogTitle>
               <p className="text-[15px] text-brand-muted mt-1.5">
                 A <span className="font-semibold text-brand-strong">{contactName}</span>.
-                Fuera de la ventana de 24 h, WhatsApp solo entrega plantillas aprobadas.
+                {!windowOpen && ' Fuera de la ventana de 24 h, WhatsApp solo entrega plantillas aprobadas.'}
               </p>
             </div>
             <button
@@ -106,7 +111,10 @@ export const SendTemplateDialog = ({ open, onClose, conversationId, contactName 
                 </div>
               )}
 
-              <div className="flex gap-2.5 justify-end">
+              <div className="flex items-center gap-2.5 justify-end">
+                {keepsDraft && (
+                  <p className="mr-auto min-w-0 text-[13px] text-brand-muted">Lo que escribiste en el chat se queda ahí.</p>
+                )}
                 <div className="h-10">
                   <CustomButton variant="outline" onClick={handleClose}>Cancelar</CustomButton>
                 </div>

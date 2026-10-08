@@ -11,6 +11,8 @@ export interface ChatsNavigationState {
 
 export interface Conversation {
   id: string;
+  /** Su contacto. `null` en una conversación anterior a los contactos que aún no se enlazó. */
+  contactId: string | null;
   title: string;
   /** `null` si la persona escribió con su nombre de usuario y WhatsApp no compartió su número. */
   phone: string | null;

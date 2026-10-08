@@ -1,34 +1,32 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { useInView } from "react-intersection-observer";
-import { ChevronLeft, CircleAlert, Clock, LayoutTemplate, SendHorizonal } from "lucide-react";
-import type { AxiosError } from "axios";
+import { Transition } from "@headlessui/react";
+import { CircleAlert } from "lucide-react";
 import { useConversationMessages } from "../../hooks/useConversationMessages";
-import { useConversationSendMessages } from "../../hooks/useConversationSendMessages.ts";
 import { useConversations } from "../../hooks/useConversations.ts";
 import { useTemplates } from "../../hooks/useTemplates.ts";
-import { useNoticeContext } from "../Notice/context/UseNoticeContext.ts";
 import { renderLegacyTemplateText } from "../../utils/legacyTemplate.ts";
 import { MessageTypeIcon } from "./MessageTypeIcon.tsx";
 import { MessageMedia } from "./MessageMedia.tsx";
 import { formatDayLabel, dayKey } from "../../utils/formatChatTime.ts";
-import { initials } from "../../utils/initials.ts";
 import type { Message, MessageStatus } from "../../models/message.mode.ts";
-import { Callout } from "../Callout/Callout.tsx";
-import { CustomButton } from "../Button/Button.tsx";
-import { useConversationWindow, formatRemaining, WINDOW_WARNING_MS } from "../../hooks/useConversationWindow.ts";
-import { SendTemplateDialog } from "./SendTemplateDialog.tsx";
 import { TemplateButtons } from "./TemplatePreview.tsx";
 import type { Template } from "../../models/template.model.ts";
 import { whatsappErrorLabel, whatsappErrorText } from "../../utils/whatsappErrors";
+import { ChatHeader } from "./ChatHeader.tsx";
+import { ContactSidebar } from "./ContactSidebar/ContactSidebar.tsx";
+import { ChatComposer } from "./Composer/ChatComposer.tsx";
+import { MessageUploadStatus } from "./MessageUploadStatus.tsx";
+import { showsUploadStatus, uploadPercent } from "../../utils/outboundMedia.ts";
+import { ProgressBar } from "../ProgressBar/ProgressBar.tsx";
 
 interface Props {
     conversationId: string | null;
     /** Volver a la bandeja en móvil, donde lista e hilo no caben a la vez. */
     onBack?: () => void;
-}
-
-interface ErrorItem {
-    message: string;
+    /** La ficha del contacto: la decide `ChatPage` (se cierra al cambiar de conversación). */
+    contactSidebarOpen: boolean;
+    onContactSidebarChange: (open: boolean) => void;
 }
 
 const CenteredMessage = ({ children }: { children: React.ReactNode }) => (
@@ -83,16 +81,11 @@ const FailedBadge = ({ msg }: { msg: Message }) => (
     </span>
 );
 
-export const ChatThread = ({ conversationId, onBack }: Props) => {
+export const ChatThread = ({ conversationId, onBack, contactSidebarOpen, onContactSidebarChange }: Props) => {
     const { data: messages, isLoading, isError, fetchNextPage, hasNextPage } =
         useConversationMessages(conversationId || "");
     const { data: conversations } = useConversations();
     const { templates } = useTemplates();
-    const sendMessageMutation = useConversationSendMessages();
-    const { setState, setContent } = useNoticeContext();
-
-    const [text, setText] = useState("");
-    const textareaRef = useRef<HTMLTextAreaElement | null>(null);
     const { ref, inView } = useInView();
 
     const conversation = useMemo(
@@ -100,64 +93,9 @@ export const ChatThread = ({ conversationId, onBack }: Props) => {
         [conversations, conversationId]
     );
 
-    const { hasWindow, isOpen, msRemaining } = useConversationWindow(conversation?.windowExpiresAt);
-    const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
-
-    // Mientras la lista de conversaciones carga no sabemos el estado real de
-    // la ventana. Bloquear por defecto haría parpadear el aviso en cada carga,
-    // así que hasta tener el dato dejamos el composer como está.
-    const windowBlocked = Boolean(conversation) && !isOpen;
-    const windowEndingSoon = isOpen && msRemaining <= WINDOW_WARNING_MS;
-
-    useEffect(() => {
-        setText("");
-        if (conversationId) textareaRef.current?.focus();
-    }, [conversationId]);
-
     useEffect(() => {
         if (inView && hasNextPage) void fetchNextPage();
     }, [inView, hasNextPage, fetchNextPage]);
-
-    // Auto-alto del composer, hasta 6 líneas y luego scroll.
-    useEffect(() => {
-        const el = textareaRef.current;
-        if (!el) return;
-        el.style.height = "auto";
-        const max = 6 * 21;
-        el.style.height = `${Math.min(el.scrollHeight, max)}px`;
-        el.style.overflowY = el.scrollHeight > max ? "auto" : "hidden";
-    }, [text]);
-
-    const handleSendMessage = (event?: React.FormEvent) => {
-        event?.preventDefault();
-        if (!text.trim() || !conversationId) return;
-
-        const message = text;
-        setText("");
-
-        sendMessageMutation.mutate(
-            { conversationId, message, temporalId: crypto.randomUUID() },
-            {
-                onError: (error: Error) => {
-                    setContent(
-                        <div className="text-brand-danger text-sm">
-                            {(error as AxiosError<ErrorItem[]>).response?.data?.map((err, i) => (
-                                <p key={i}>{err.message}</p>
-                            )) || <p>Ha ocurrido un error, inténtalo de nuevo más tarde</p>}
-                        </div>
-                    );
-                    setState(true);
-                },
-            }
-        );
-    };
-
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            handleSendMessage();
-        }
-    };
 
     const renderContent = () => {
         if (!conversationId) return <CenteredMessage>Selecciona una conversación</CenteredMessage>;
@@ -180,7 +118,7 @@ export const ChatThread = ({ conversationId, onBack }: Props) => {
             // escribió de verdad: poner «Imagen» bajo una imagen que ya se ve
             // sobra. Sin archivo (descarga fallida, o tipo sin nada que bajar)
             // se cae a la etiqueta con su icono, que es como estaba antes.
-            const conArchivo = Boolean(msg.hasMedia);
+            const conArchivo = Boolean(msg.hasMedia || msg.pending);
             // Enviado como plantilla: se nombra encima y se pintan sus botones
             // debajo, como los ve el contacto. Los botones salen de la definición
             // sincronizada; si la plantilla ya no está, solo queda el nombre.
@@ -190,7 +128,9 @@ export const ChatThread = ({ conversationId, onBack }: Props) => {
 
             nodes.push(
                 <div
-                    key={msg.id ?? msg.temporalId ?? i}
+                    // Por `temporalId` primero: el optimista y el que vuelve del
+                    // servidor son el mismo, y la imagen no se vuelve a montar.
+                    key={msg.temporalId ?? msg.id ?? i}
                     className={`max-w-[85%] md:max-w-[62%] ${mine ? "self-end" : "self-start"}`}
                 >
                     {msg.templateName && (
@@ -207,6 +147,9 @@ export const ChatThread = ({ conversationId, onBack }: Props) => {
                         {conArchivo ? (
                             <span className="flex flex-col gap-2">
                                 <MessageMedia msg={msg} />
+                                {msg.pending && msg.status !== "failed" && (
+                                    <ProgressBar percent={uploadPercent(msg.pending)} active />
+                                )}
                                 {/* Una plantilla con archivo en la cabecera: debajo va su cuerpo. */}
                                 {msg.templateName
                                     ? <span className="min-w-0">{renderLegacyTemplateText(msg.text, templates)}</span>
@@ -229,7 +172,9 @@ export const ChatThread = ({ conversationId, onBack }: Props) => {
                         ${mine ? "justify-end" : ""}`}>
                         <span className="font-mono">{formatTime(msg.timestamp)}</span>
                         {mine && (
-                            msg.status === "failed"
+                            showsUploadStatus(msg)
+                                ? <MessageUploadStatus msg={msg} />
+                                : msg.status === "failed"
                                 ? <FailedBadge msg={msg} />
                                 : <span className={msg.status === "read" ? "text-brand-success font-semibold" : ""}>
                                     {STATUS_LABEL[msg.status]}
@@ -259,124 +204,56 @@ export const ChatThread = ({ conversationId, onBack }: Props) => {
     };
 
     const title = conversation?.title || conversation?.phone || "";
+    // Una conversación anterior a los contactos sin enlazar no tiene ficha.
+    const contactId = conversation?.contactId;
+    const sidebarOpen = contactSidebarOpen && Boolean(contactId);
 
     return (
-        <div className="bg-brand-bg h-full w-full flex flex-col min-h-0">
-            {/* Cabecera del contacto */}
-            {conversationId && conversation && (
-                <div className="bg-brand-surface border-b border-brand-border px-4 md:px-6 py-3.5
-                    flex items-center gap-3 flex-none">
-                    {onBack && (
-                        <button
-                            type="button"
-                            onClick={onBack}
-                            title="Volver a la bandeja"
-                            className="md:hidden -ml-1 text-brand-strong hover:text-brand-text
-                                transition-colors cursor-pointer flex-none"
-                        >
-                            <ChevronLeft size={22} strokeWidth={2.2} />
-                        </button>
-                    )}
-                    <div className="w-9 h-9 rounded-[9px] bg-brand-accent-soft text-brand-accent-strong
-                        text-xs font-bold flex items-center justify-center flex-none">
-                        {initials(title)}
-                    </div>
-                    <div className="min-w-0">
-                        <div className="text-[15px] font-semibold text-brand-text truncate">{title}</div>
-                        <div className="font-mono text-[11px] text-brand-muted">
-                            {conversation.phone ? `+${conversation.phone}` : conversation.username && `@${conversation.username}`}
-                        </div>
-                    </div>
-                </div>
-            )}
+        <div className="relative h-full w-full flex min-h-0">
+            {/* `relative`: el aviso de soltar un archivo cubre toda la conversación. */}
+            <div className="relative bg-brand-bg flex-1 min-w-0 flex flex-col min-h-0">
+                {conversationId && conversation && (
+                    <ChatHeader
+                        conversation={conversation}
+                        onBack={onBack}
+                        contactSidebarOpen={sidebarOpen}
+                        onToggleContactSidebar={() => onContactSidebarChange(!sidebarOpen)}
+                    />
+                )}
 
-            {/* Lienzo */}
-            <div className="flex-1 overflow-y-auto min-h-0 px-6 py-[22px] flex flex-col-reverse gap-3">
-                {renderContent()}
+                {/* Lienzo */}
+                <div className="flex-1 overflow-y-auto min-h-0 px-6 py-[22px] flex flex-col-reverse gap-3">
+                    {renderContent()}
+                </div>
+
+                {conversationId && (
+                    <ChatComposer key={conversationId} conversationId={conversationId} conversation={conversation} title={title} />
+                )}
             </div>
 
-            {/* Composer */}
-            {conversationId && (
-                windowBlocked ? (
-                    <div className="bg-brand-surface border-t border-brand-border px-6 py-3.5 flex-none">
-                        <Callout
-                            tone="info"
-                            icon={hasWindow ? <LayoutTemplate size={16} /> : <Clock size={16} />}
-                            title={hasWindow
-                                ? "La ventana de 24 h se cerró"
-                                : "Esperando respuesta"}
-                        >
-                            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                                <p className="min-w-0">
-                                    {hasWindow
-                                        ? "Pasaron más de 24 h desde su último mensaje. WhatsApp solo permite retomar la conversación con una plantilla aprobada."
-                                        : `Cuando ${title} conteste, se abre la ventana de 24 h y podrás escribir libremente. Mientras tanto, solo plantillas.`}
-                                </p>
-                                <div className="sm:ml-auto flex-none">
-                                    <CustomButton onClick={() => setTemplateDialogOpen(true)}>
-                                        Enviar plantilla
-                                    </CustomButton>
-                                </div>
-                            </div>
-                        </Callout>
-                    </div>
-                ) : (
-                    <form
-                        onSubmit={handleSendMessage}
-                        className="bg-brand-surface border-t border-brand-border px-6 py-3.5 flex-none"
-                    >
-                        {windowEndingSoon && (
-                            <div className="mb-3">
-                                <Callout tone="warning" icon={<Clock size={16} />}>
-                                    La ventana de 24 h cierra en{" "}
-                                    <span className="font-mono tabular-nums font-semibold text-brand-warning">
-                                        {formatRemaining(msRemaining)}
-                                    </span>
-                                    . Después solo podrás escribirle con una plantilla.
-                                </Callout>
-                            </div>
-                        )}
-
-                        <div className="flex gap-2.5 items-end">
-                            <textarea
-                                ref={textareaRef}
-                                value={text}
-                                onChange={(e) => setText(e.target.value)}
-                                onKeyDown={handleKeyDown}
-                                rows={1}
-                                placeholder="Escribe un mensaje…"
-                                style={{ lineHeight: "21px" }}
-                                className="flex-1 resize-none text-sm text-brand-text bg-brand-bg
-                                    border border-brand-border rounded-[10px] px-3.5 py-3
-                                    placeholder:text-brand-subtle
-                                    focus:outline-none focus:bg-brand-surface focus:border-brand-success
-                                    focus:ring-[3px] focus:ring-brand-accent-soft transition-colors"
+            {contactId && conversation && (
+                // Por conversación (`key`): al cambiar de chat se va sin animar,
+                // en vez de salir deslizándose con el contacto del chat nuevo.
+                <Transition key={conversation.id} show={sidebarOpen}>
+                    {/* Desde 1280 px, una columna junto al chat que se abre a lo
+                        ancho y lo va estrechando. Por debajo no caben bandeja, chat
+                        y ficha: entra desde la derecha sobre la conversación. En
+                        móvil, a pantalla completa. */}
+                    <div className="absolute inset-0 z-20 md:left-auto md:w-[340px] md:shadow-[-24px_0_48px_rgba(14,17,22,0.10)]
+                        xl:static xl:flex-none xl:overflow-hidden xl:shadow-none xl:border-l xl:border-brand-border
+                        transition-[translate,width] duration-200 ease-out data-[leave]:duration-150 data-[leave]:ease-in
+                        data-[closed]:translate-x-full xl:data-[closed]:translate-x-0 xl:data-[closed]:w-0">
+                        <div className="h-full w-full md:w-[340px]">
+                            <ContactSidebar
+                                contactId={contactId}
+                                conversationId={conversation.id}
+                                windowExpiresAt={conversation.windowExpiresAt}
+                                onClose={() => onContactSidebarChange(false)}
                             />
-                            <button
-                                type="submit"
-                                title="Enviar"
-                                disabled={!text.trim()}
-                                className="w-11 h-11 rounded-[10px] bg-brand-accent hover:bg-brand-accent-hover
-                                    disabled:bg-brand-raised disabled:cursor-not-allowed
-                                    flex items-center justify-center flex-none cursor-pointer transition-colors"
-                            >
-                                <SendHorizonal size={18} strokeWidth={2.2}
-                                    className={text.trim() ? "text-brand-ink" : "text-brand-subtle"} />
-                            </button>
                         </div>
-                    </form>
-                )
+                    </div>
+                </Transition>
             )}
-
-            {conversationId && conversation && (
-                <SendTemplateDialog
-                    open={templateDialogOpen}
-                    onClose={() => setTemplateDialogOpen(false)}
-                    conversationId={conversationId}
-                    contactName={title}
-                />
-            )}
-
         </div>
     );
 };

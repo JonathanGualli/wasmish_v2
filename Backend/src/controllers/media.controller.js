@@ -34,10 +34,13 @@ export const getMedia = async (req, res) => {
 
         // Los documentos se descargan con su nombre original; lo demás se muestra
         // dentro de la conversación. El nombre va entre comillas y sin saltos de
-        // línea para que no pueda inyectar cabeceras.
+        // línea para que no pueda inyectar cabeceras. Una cabecera solo admite
+        // Latin-1 (un emoji en el nombre tumbaba la respuesta): el nombre entero
+        // va codificado en `filename*`, y `filename` queda de respaldo sin lo demás.
         if (message.type === 'document') {
             const nombre = String(message.mediaFilename ?? message.mediaFile).replace(/["\r\n]/g, '');
-            res.setHeader('Content-Disposition', `attachment; filename="${nombre}"`);
+            const respaldo = nombre.replace(/[^\x20-\xff]/g, '_');
+            res.setHeader('Content-Disposition', `attachment; filename="${respaldo}"; filename*=UTF-8''${encodeURIComponent(nombre)}`);
         } else {
             res.setHeader('Content-Disposition', 'inline');
         }

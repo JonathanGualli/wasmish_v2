@@ -74,9 +74,11 @@ export interface ContactInput {
  * Lo que se pide al abrir Contactos (va en el estado del router). Campañas:
  * elegir a quién mandar una campaña nueva (`new`) o cambiar los de un
  * borrador (`edit`). Importar: ver los importados, filtrados por las
- * etiquetas que se les pusieron (`tagIds`).
+ * etiquetas que se les pusieron (`tagIds`). Chats: abrir la ficha de un
+ * contacto (`contactId`).
  */
 export interface ContactsNavigationState {
     campaignPick?: 'new' | 'edit';
     tagIds?: string[];
+    contactId?: string;
 }

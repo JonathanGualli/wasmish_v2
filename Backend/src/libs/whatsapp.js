@@ -54,6 +54,23 @@ export const sendTextMessage = async ({ token, phoneNumberId, recipient, text })
     );
 }
 
+// Un archivo ya subido a Meta (`uploadMedia`). `kind` es el tipo de mensaje
+// ('image', 'video', 'audio', 'document') y `media`, su objeto: el id y, si
+// van, el texto y el nombre del documento (`buildMediaObject`).
+export const sendMediaMessage = async ({ token, phoneNumberId, recipient, kind, media }) => {
+    return whatsappApi.post(
+        `/${phoneNumberId}/messages`,
+        {
+            messaging_product: "whatsapp",
+            recipient_type: "individual",
+            ...recipientFields(recipient),
+            type: kind,
+            [kind]: media,
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+    );
+};
+
 export const sendTemplateMessage = async ({ token, phoneNumberId, recipient, templateName, language = "es", components }) => {
     return whatsappApi.post(
         `/${phoneNumberId}/messages`,

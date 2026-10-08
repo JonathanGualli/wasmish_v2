@@ -1,8 +1,11 @@
-// Dónde y cómo se guardan los adjuntos que llegan por WhatsApp.
+// Dónde y cómo se guardan los adjuntos de WhatsApp: los que llegan y los que
+// se envían (la cabecera de las plantillas, los archivos del chat).
 //
-// El archivo se nombra con el mediaId de Meta, que es numérico y único, así que
-// nunca puede contener «..» ni barras: el nombre no lo construye el usuario. Aun
-// así se valida antes de tocar el disco, porque de aquí sale una ruta real.
+// Los que llegan se nombran con el mediaId de Meta, que es numérico y único, y
+// los que se suben, con el hash de su contenido: nunca pueden contener «..» ni
+// barras, porque el nombre no lo construye el usuario. Aun así se valida antes
+// de tocar el disco, porque de aquí sale una ruta real.
+import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -11,7 +14,7 @@ import path from 'node:path';
 export const TIPOS_CON_ARCHIVO = new Set(['image', 'video', 'audio', 'document', 'sticker']);
 
 // Meta manda el mime con parámetros: "audio/ogg; codecs=opus".
-const mimeBase = (mimeType) => String(mimeType ?? '').split(';')[0].trim().toLowerCase();
+export const mimeBase = (mimeType) => String(mimeType ?? '').split(';')[0].trim().toLowerCase();
 
 // Extensión por mime. Solo formatos que WhatsApp admite; lo que no esté en la
 // lista se guarda como .bin, que el navegador se descarga en vez de ejecutar.
@@ -62,4 +65,15 @@ export const guardarArchivo = async (directorio, nombre, contenido) => {
     await fs.mkdir(path.dirname(ruta), { recursive: true });
     await fs.writeFile(ruta, contenido);
     return ruta;
+};
+
+// Guarda un archivo que sube quien usa Wasmish (la cabecera de una plantilla, un
+// adjunto del chat) en `<carpeta>/<sha256>.<ext>` y devuelve ese nombre. El
+// nombre sale del contenido: el mismo archivo no se duplica, y nunca lo
+// construye quien lo sube.
+export const saveByContentHash = async (directorio, carpeta, contenido, mimeType) => {
+    const hash = crypto.createHash('sha256').update(contenido).digest('hex');
+    const nombre = `${carpeta}/${hash}.${extensionParaMime(mimeType)}`;
+    await guardarArchivo(directorio, nombre, contenido);
+    return nombre;
 };

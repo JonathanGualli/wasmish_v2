@@ -8,26 +8,35 @@ interface TagChipProps {
     /** Con una X para quitarla (el selector, la franja del filtro). */
     onRemove?: () => void;
     size?: 'sm' | 'md';
+    /** Sobre verde profundo (la ficha del chat): sin fondo, borde y texto claros. */
+    onDeep?: boolean;
 }
+
+const chipTone = (highlight: boolean, onDeep: boolean) => {
+    if (onDeep) return 'bg-transparent border-brand-on-deep-subtle text-white';
+    return highlight ? 'bg-brand-bg border-brand-muted text-brand-strong' : 'bg-brand-surface border-brand-border-strong text-brand-strong';
+};
 
 /**
  * Una etiqueta: un dato que puso quien usa Wasmish. Se ve como una etiqueta de
  * papel (esquina casi recta, borde gris, fondo blanco) para no confundirla con
  * las píldoras de estado, que son redondas y rellenas.
  */
-export const TagChip = ({ name, highlight = false, onRemove, size = 'sm' }: TagChipProps) => (
-    <span className={`inline-flex items-center gap-1 flex-none max-w-full rounded-[4px] border font-medium text-brand-strong whitespace-nowrap
+export const TagChip = ({ name, highlight = false, onRemove, size = 'sm', onDeep = false }: TagChipProps) => (
+    <span className={`inline-flex items-center gap-1 flex-none max-w-full rounded-[4px] border font-medium whitespace-nowrap
         ${size === 'md' ? 'text-[12.5px] py-[3px]' : 'text-xs py-0.5'}
         ${onRemove ? 'pl-2 pr-1' : 'px-[7px]'}
-        ${highlight ? 'bg-brand-bg border-brand-muted' : 'bg-brand-surface border-brand-border-strong'}`}>
+        ${chipTone(highlight, onDeep)}`}>
         <span className="truncate">{name}</span>
         {onRemove && (
             <button
                 type="button"
                 onClick={event => { event.stopPropagation(); onRemove(); }}
                 aria-label={`Quitar ${name}`}
-                className="flex items-center justify-center w-4 h-4 rounded-[3px] text-brand-muted hover:text-brand-text
-                    hover:bg-brand-raised transition-colors cursor-pointer"
+                className={`flex items-center justify-center w-4 h-4 rounded-[3px] transition-colors cursor-pointer
+                    ${onDeep
+                        ? 'text-brand-on-deep-muted hover:text-white hover:bg-brand-deep-hover'
+                        : 'text-brand-muted hover:text-brand-text hover:bg-brand-raised'}`}
             >
                 <X size={12} strokeWidth={2.4} />
             </button>
