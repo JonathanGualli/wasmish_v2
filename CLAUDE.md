@@ -114,6 +114,8 @@ Cubren **funciones puras**, sin BD ni red: `utils/crypto.js`, `utils/message.sta
 
 Los tests fijan `process.env` **antes** de un `await import(...)` dinámico, porque `crypto.js` y el middleware de firma leen la config al importarse; con un `import` estático la variable llegaría tarde.
 
+**CI** (`.github/workflows/ci.yml`, GitHub Actions, 2026-10-11): en cada push a `master` y en cada PR, dos trabajos en paralelo con Node 22 (el de los Dockerfiles) y `npm ci`: Backend `npm test`, Frontend `npm run lint` + `npm run build` (que incluye `tsc -b`). No usa secretos: los tests no tocan BD ni red y el build compila sin las `VITE_META_*`. **No despliega**, y **no se despliega un commit en rojo**. Sin ramas protegidas todavía: en `master` avisa después del push, no bloquea.
+
 ---
 
 ## Arquitectura
