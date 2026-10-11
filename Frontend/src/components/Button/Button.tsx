@@ -32,7 +32,7 @@ const variantClasses: Record<ButtonVariant, string> = {
 };
 
 interface ButtonProps {
-  children: ReactNode;
+  chiren: ReactNode;
   type?: 'button' | 'submit' | 'reset';
   variant?: ButtonVariant;
   size?: ButtonSize;

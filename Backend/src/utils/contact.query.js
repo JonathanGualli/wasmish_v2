@@ -46,10 +46,8 @@ const searchPatterns = (search) => {
  */
 export const buildContactSearch = (search) => {
     const patterns = searchPatterns(search);
-    if (!patterns) return null;
 
     const conditions = SEARCH_FIELDS.map(field => ({ [field]: patterns.text }));
-    if (patterns.phone) conditions.push({ phone: patterns.phone });
     return { $or: conditions };
 };
 
