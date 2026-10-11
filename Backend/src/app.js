@@ -29,7 +29,8 @@ app.use(cors({
     credentials: true,
 }));
 
-app.use(morgan('dev'));
+// En los tests de aislamiento serían cientos de líneas por archivo.
+if (process.env.NODE_ENV !== 'test') app.use(morgan('dev'));
 // La vista previa de una importación trae el archivo entero (hasta 10 000
 // filas), que no cabe en los 100 KB por defecto. Va antes del parser general:
 // un cuerpo ya leído, aquel lo deja pasar.

@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   backend:
-    name: Backend · tests
+    name: Backend · tests y aislamiento
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -29,6 +29,16 @@ jobs:
           cache-dependency-path: Backend/package-lock.json
       - run: npm ci
       - run: npm test
+      # El binario de Mongo de los tests de aislamiento (la versión de
+      # producción, en `config.mongodbMemoryServer` del package.json): sin la
+      # caché se descargaría en cada push.
+      - id: mongo
+        run: echo "version=$(node -p "require('./package.json').config.mongodbMemoryServer.version")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/mongodb-binaries
+          key: mongodb-binaries-${{ runner.os }}-${{ steps.mongo.outputs.version }}
+      - run: npm run test:isolation
 
   frontend:
     name: Frontend · lint y build

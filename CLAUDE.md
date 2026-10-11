@@ -105,16 +105,19 @@ cd Frontend && npm run lint    # eslint
 cd Frontend && npm run preview # preview production build
 ```
 
-**Tests** (solo Backend, `node:test` nativo — sin dependencias):
+**Tests** (solo Backend, `node:test` nativo):
 ```bash
-cd Backend && npm test         # node --test "tests/**/*.test.js"
+cd Backend && npm test         # node --test "tests/*.test.js" — funciones puras
 cd Backend && npm run test:watch
+cd Backend && npm run test:isolation   # aislamiento entre cuentas, con Mongo en memoria
 ```
 Cubren **funciones puras**, sin BD ni red: `utils/crypto.js`, `utils/message.status.js`, `utils/whatsapp.window.js`, `utils/inbound.message.js`, `utils/media.storage.js`, `utils/contact.identity.js`, `utils/contact.query.js`, `utils/marketing.preference.js`, `utils/campaign.message.js`, `utils/campaign.status.js`, `utils/template.header.js`, `utils/contact.tags.js`, `utils/contact.import.js`, `utils/outbound.media.js` (con las firmas de `utils/file.signature.js`) y las de plantillas de `template.controller.js` (`buildButtonComponents`, `renderTemplateBody`). Cada test que corresponde a un bug ya corregido lleva un comentario explicando la regresión que vigila — verificados reintroduciendo el bug a propósito y comprobando que fallan. El Frontend no tiene tests.
 
 Los tests fijan `process.env` **antes** de un `await import(...)` dinámico, porque `crypto.js` y el middleware de firma leen la config al importarse; con un `import` estático la variable llegaría tarde.
 
-**CI** (`.github/workflows/ci.yml`, GitHub Actions, 2026-10-11): en cada push a `master` y en cada PR, dos trabajos en paralelo con Node 22 (el de los Dockerfiles) y `npm ci`: Backend `npm test`, Frontend `npm run lint` + `npm run build` (que incluye `tsc -b`). No usa secretos: los tests no tocan BD ni red y el build compila sin las `VITE_META_*`. **No despliega**, y **no se despliega un commit en rojo**. Sin ramas protegidas todavía: en `master` avisa después del push, no bloquea.
+**Tests de aislamiento** (`tests/isolation/`, 2026-10-11): que una cuenta no vea ni toque lo de otra, que hasta ahora dependía solo de que cada consulta llevara su `userId`. Levantan la app de verdad (`app.js`, sin `index.js`: sin worker ni puerto fijo) contra un **Mongo en memoria** (`mongodb-memory-server`, única dependencia de desarrollo) de la **misma versión que producción**, fijada en `config.mongodbMemoryServer.version` del `package.json` (8.0.28; si se actualiza el Mongo del servidor, cambiarla ahí). La primera vez descarga el binario a `~/.cache/mongodb-binaries`. `helpers.js` crea dos cuentas, A y B, con uno de cada cosa marcado `SECRETO-<cuenta>`, y cada test hace que B pida lo de A con tres comprobaciones: **404** (no 403), **la BD sin cambios** (un 404 después de escribir también pasaría el código) y un **control** en el que A sí llega con su propio id (sin él, una URL mal escrita también daría 404). `assertNoLeak` busca la marca, el teléfono y los ids de A en el texto de la respuesta. Cubren chat (lista, mensajes, texto, plantilla, archivo, `/media`), contactos y etiquetas (también los ids que llegan en el cuerpo: `tagIds`, selecciones, `add`), campañas (detalle, pausar/reanudar/cancelar, vista previa y creación con contactos, plantilla o cabecera ajenos), plantillas y sus archivos, API keys y el admin. Fuera: el webhook (su aislamiento va por `phoneNumberId`), la API pública `/v1` (llega a Meta) y el SSE. Nada llega a Meta: A no tiene WhatsApp conectado y la ventana de su conversación está cerrada, así que sus controles se frenan en el 409. Verificados quitando el filtro por cuenta en 10 sitios, uno a uno: todos fallan. Con `NODE_ENV=test`, `app.js` no monta `morgan`. **Un endpoint nuevo con `:id`, o que reciba ids en el cuerpo, lleva su caso aquí.**
+
+**CI** (`.github/workflows/ci.yml`, GitHub Actions, 2026-10-11): en cada push a `master` y en cada PR, dos trabajos en paralelo con Node 22 (el de los Dockerfiles) y `npm ci`: Backend `npm test` + `npm run test:isolation` (con caché del binario de Mongo por versión), Frontend `npm run lint` + `npm run build` (que incluye `tsc -b`). No usa secretos: los tests no tocan red y el build compila sin las `VITE_META_*`. **No despliega**, y **no se despliega un commit en rojo**. Sin ramas protegidas todavía: en `master` avisa después del push, no bloquea.
 
 ---
 
