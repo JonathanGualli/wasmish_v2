@@ -24,7 +24,7 @@
 
 ## Review Focus
 
-- **El hueco entre arrancar la imagen nueva y migrar.** Un usuario sin `accountId` tiene que recibir un **401**, nunca un 500 ni una consulta con `accountId: 'undefined'`. Una API key cuya cuenta no existe, también 401. La migración corre **antes** de arrancar la imagen nueva (ver «Antes de desplegar»): sin eso, PractyCo se quedaría sin API → tests de `sessionAuthFor` en la Tarea 1 y de la API key en la Tarea 2.
+- **El hueco entre arrancar la imagen nueva y migrar.** Un usuario sin `accountId` tiene que recibir un **401**, nunca un 500 ni una consulta con `accountId: 'undefined'`. Una API key cuya cuenta no existe, también 401. La migración final corre **con la API vieja parada** y justo antes de arrancar la nueva (ver «Antes de desplegar»): sin eso, el cliente de la API pública se quedaría sin API, y un usuario registrado en el intervalo perdería entrantes (el webhook responde 200 aunque falle un mensaje, y Meta no reintenta) → tests de `sessionAuthFor` en la Tarea 1 y de la API key en la Tarea 2.
 - **Una migración cortada a medias o repetida.** Si existe la `Account` pero el usuario aún no tiene `accountId`, la siguiente pasada termina el trabajo; una pasada sobre todo migrado no cambia nada → tests de `planAccountMigration` (Tarea 1) y dos pasadas en local (Tarea 1, paso 7).
 - **Un usuario desactivado con la cookie todavía válida.** Su siguiente petición da 401, sin esperar a que caduque el JWT. Su login con la contraseña correcta da 403 con el motivo; con una incorrecta, el mismo 400 genérico de siempre (no se puede averiguar quién está desactivado) → tests de la Tarea 2.
 - **Un registro que intenta darse privilegios.** `POST /register` con `rol: 'superadmin'`, `isSuperadmin: true`, `role: 'agent'`, `status: 'inactive'` o el `accountId` de otra cuenta crea igualmente una cuenta nueva, con su owner activo y sin superadmin → test de la Tarea 2.
@@ -207,9 +207,11 @@ git commit -m "sesión: req.auth con la cuenta, registro con cuenta propia y usu
 ### Task 3: Los datos de la cuenta salen de `req.auth.accountId`
 
 **Files:**
-- Modify (cada `req.user.id`, listados con `grep -rn "req\.user" Backend/src`): `controllers/api.key.controller.js`, `auth.controller.js` (`profile`), `campaign.controller.js`, `chat.controller.js`, `contact.controller.js`, `contact.import.controller.js`, `media.controller.js`, `tag.controller.js`, `template.controller.js`, `user.controller.js`, `whatsapp.controller.js`, `routes/stream.routes.js`, `controllers/stream.controller.js`, `services/campaign.service.js`
+- Modify (cada `req.user.id`, listados con `grep -rn "req\.user" Backend/src`): `controllers/api.key.controller.js`, `auth.controller.js` (`profile`), `campaign.controller.js`, `chat.controller.js`, `contact.controller.js`, `contact.import.controller.js`, `media.controller.js`, `tag.controller.js`, `template.controller.js`, `user.controller.js`, `whatsapp.controller.js`, `routes/stream.routes.js`, `controllers/stream.controller.js`, `services/campaign.service.js`, `controllers/webhook.controller.js` (solo el import y el nombre de `sendUser`; su argumento cambia en la Tarea 4)
+- Modify: `Backend/src/controllers/admin.controller.js` (`listClients` agrupa por `accountId`)
 - Modify: `Backend/src/middlewares/validate.token.middleware.js`, `validate.api.key.middleware.js` (quitar el `req.user` provisional)
-- Modify: `Backend/tests/isolation/helpers.js` (cuentas con `_id` distinto del usuario), `Backend/tests/isolation/account.test.js` (`/v1`)
+- Modify: `Backend/tests/isolation/helpers.js` (cuentas con `_id` distinto del usuario), `Backend/tests/isolation/account.test.js` (`/v1` y `/admin/clients`)
+- Modify: `Backend/tests/isolation/contacts.test.js:74,96`, `templates.test.js:20,24`, `campaigns.test.js:100,105` (los conteos de propiedad pasan a `userId: b.accountId`; las consultas a `User`, el JWT y `isPhoneNumberTaken` de `whatsapp.test.js` siguen con `userId`)
 - Modify: `AGENTS.md` (regla 1), `Backend/AGENTS.md` (Propiedad y Tiempo real), `docs/arquitectura/chat.md` (SSE)
 
 **Interfaces:**
@@ -223,6 +225,8 @@ Reglas del cambio, para cada controlador:
 - Donde hoy hace `User.findById(req.user.id)` para leer la conexión de WhatsApp: `const owner = await findAccountOwner(req.auth.accountId)` (chat ×5, plantillas ×3, campañas ×1, `user.controller`, `whatsapp.controller`). Se pasa como `user: owner` a las funciones de envío.
 - `isPhoneNumberTaken(owner._id, phoneNumberId)`: el `_id` del **usuario** que guarda la conexión, nunca el de la cuenta (ver Review Focus).
 - `profile`: `User.findById(req.auth.userId)`.
+- `admin.controller.js` (`listClients`): sigue listando usuarios, pero selecciona `accountId` y busca las conversaciones y agrupa los acumuladores por `accountId`, no por `u._id`.
+- El webhook solo cambia `sendUser` por `sendToAccount` con el mismo argumento: si no, su import roto impide cargar la app. El argumento (`user.accountId`) es de la Tarea 4.
 
 - [ ] **Step 1: Los helpers crean cuentas con `_id` distinto del usuario**
 
@@ -237,6 +241,9 @@ test('POST /v1/templates/send con la key de A: sale del número de A y responde 
 // cuerpo { destinationNumber: a.phone, templateName: a.templateName }
 // → 200 y el cuerpo es exactamente { success: true, waMessageId: 'wamid.v1', conversationId } (sin más claves),
 // con conversationId de una conversación con userId a.accountId; la llamada a Meta fue al número de A.
+
+test('GET /admin/clients cuenta la actividad de una cuenta cuyo _id no es el del owner', ...);
+// la entrada de A (por su correo) trae conversations >= 1 y messages >= 1.
 ```
 
 - [ ] **Step 3: Ejecutar los tests de aislamiento y ver que fallan**
@@ -300,7 +307,19 @@ test('el entrante llega por SSE a la sesión de A y no a la de B', ...);
 
 test('un número que no es de nadie se ignora con 200', ...);
 // phone_number_id '000' → 200 y ninguna conversación nueva.
+
+test('una baja de publicidad (user_preferences) marca al contacto de A, no al de B', ...);
+// baja de a.phone en el número de A → el contacto de A queda dado de baja; los contactos de B no cambian.
+
+test('un cambio de número (user_id_update) actualiza el contacto de A', ...);
+// el contacto de A cambia de identidad y 'contact_updated' llega por SSE a A.
+
+test('un estado failed con 131050 de un mensaje de A da de baja a su contacto', ...);
+// Message saliente de A con waMessageId conocido; statuses: failed con error 131050 → contacto de A dado de baja
+// y 'message_status' por SSE a A.
 ```
+
+Los formatos de `user_preferences`, `user_id_update` y `statuses` salen de `scripts/simulate-webhook.js` y de los tests puros de `contact.identity`, `marketing.preference` y `message.status`; no se inventan.
 
 Y en `campaigns.test.js`:
 
@@ -347,7 +366,7 @@ git commit -m "cuenta: el webhook, el worker y los scripts guardan con la cuenta
 - **`authRequired` hace el trabajo de `loadAuth`**, en vez de un middleware nuevo montado en cada ruta: está ya en las 61 rutas privadas y ninguna nueva puede olvidarlo.
 - **La conexión de WhatsApp sigue en el `User` del owner** y se busca con `findAccountOwner(accountId)`. Las funciones de envío no cambian de firma, porque la Fase 2 las cambia por la línea.
 - **`Account` sin `status` ni `defaultLineId`**: el spec los lista, pero nada los usa en esta fase. Llegan con la fase que los use (suspender una cuenta, o la Fase 2).
-- **Sin reserva en el código para los usuarios sin migrar**: reciben 401. La migración corre antes de arrancar la imagen nueva, y otra vez después, para quien se registre en ese intervalo con la imagen vieja.
+- **Sin reserva en el código para los usuarios sin migrar**: reciben 401. A cambio, la migración final corre **con la API vieja parada**, así que nadie puede registrarse sin cuenta entre migrar y arrancar la nueva (revisión de Codex, punto 1).
 - **Un solo PR**, no dos como sugería el spec: el cambio real son unas 60 líneas con `req.user` (el spec contó los `userId` de los modelos, que la opción B no toca), y cada commit deja los tests en verde.
 - **El login de un desactivado responde 403** con el motivo, y solo después de comprobar la contraseña.
 
@@ -357,12 +376,15 @@ Con la skill `/deploy`, que ya contempla scripts previos y posteriores:
 
 1. `mongodump` de producción.
 2. Compilar la imagen nueva **sin arrancarla**.
-3. **Scripts previos**, con la imagen nueva y sin tocar lo que corre: `migrate:accounts -- --dry-run` (revisar los conteos: tantas cuentas como usuarios y ningún `agent`) y luego `migrate:accounts`. La imagen vieja ignora los campos nuevos, así que sigue funcionando.
-4. Arrancar la imagen nueva.
-5. **Script posterior:** `migrate:accounts -- --dry-run` tiene que decir `Cuentas a crear: 0`. Si alguien se registró entre el paso 3 y el 4, se corre `migrate:accounts` otra vez.
-6. Comprobar: login en la web, `/admin` para el superadmin, un entrante en vivo y un `POST /api/v1/templates/send` con 200 en los logs.
+3. **Con la imagen vieja corriendo**, y con la nueva (`docker compose run --rm --no-deps wasmish-api …`): `migrate:accounts -- --dry-run` (revisar los conteos: tantas cuentas como usuarios y ningún `agent`) y luego `migrate:accounts`. La imagen vieja ignora los campos nuevos: sigue funcionando.
+4. **Parar la API vieja** (`docker compose stop wasmish-api`) y correr `migrate:accounts` otra vez: recoge a quien se registró desde el paso 3, y ya no puede entrar nadie más.
+5. Arrancar la imagen nueva enseguida. Mientras está parada, Meta no recibe respuesta del webhook y lo reintenta, así que no se pierden entrantes; la API pública falla esos segundos: hora de poco tráfico.
+6. `migrate:accounts -- --dry-run` tiene que decir `Cuentas a crear: 0`.
+7. Comprobar: login en la web, `/admin` para el superadmin, un entrante en vivo y un `POST /api/v1/templates/send` con 200 en los logs.
 
-Volver atrás: la imagen anterior ignora `accounts` y los campos nuevos de `User`, y los viejos siguen al día.
+**Volver atrás:** la imagen anterior ignora `accounts` y los campos nuevos de `User`, y los viejos siguen al día. Si con la imagen anterior se registra alguien, al volver a la nueva se repiten los pasos 4 a 6.
+
+**Ensayo en local antes de pedir el despliegue** (spec § 5): con el Mongo local migrado y la rama corriendo, renovar la conexión de WhatsApp y registrar una cuenta nueva; después arrancar `v1.0.11` (`git worktree add ../wasmish-1.0.11 v1.0.11`, `npm ci` y `npm run dev` en su `Backend/`) contra la misma BD y comprobar el login, un envío desde el chat al número de prueba y `npm run webhook:simulate`; registrar ahí un usuario, volver a la rama, ver que ese usuario recibe 401 y que `migrate:accounts` lo arregla.
 
 ## Lo que este plan no cubre
 
