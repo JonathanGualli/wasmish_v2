@@ -6,8 +6,9 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En producción
 
-**Versión 1.0.10** (comprobado el 2026-10-11 con `curl https://wasmish.solventyc.com/api/version`). Lleva:
+**Versión 1.0.11** (subida el 2026-10-11 para desplegar; comprobar con `curl https://wasmish.solventyc.com/api/version` tras el despliegue). Lleva:
 
+- **Multi-línea · Fase 0** (PR #6): un `phoneNumberId` solo puede estar en una cuenta (índice único `user_phoneNumberId_unique`) y, al conectarlo por el Embedded Signup o por el formulario manual, Meta tiene que listarlo en el WABA del token. Sin WhatsApp conectado, enviar texto o archivo da 409 y sincronizar plantillas 400, en vez de 500. Previo al despliegue: la consulta de `phoneNumberId` repetidos del plan, hecha por Jonathan el 2026-10-11 (`[]`).
 - Chat: ficha del contacto (notas, etiquetas, datos), enviar archivos (imagen, vídeo, audio, documento) y los no leídos que se ponen a cero al responder. Jonathan confirmó en producción que los archivos llegan a WhatsApp.
 - Contactos con teléfono y BSUID, bajas de publicidad, cambio de número, etiquetas e importar desde CSV o Excel.
 - Campañas, con archivo de cabecera por campaña.
@@ -17,8 +18,7 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En curso
 
-- **Multi-línea y multi-agente · Fase 0 (un número, una cuenta)** — rama `fase0-un-numero-una-cuenta`, PR #6, empezado el 2026-10-11 por Claude. Diseño: `docs/superpowers/specs/2026-10-11-multi-linea-multi-agente-design.md`; plan: `docs/superpowers/plans/2026-10-11-multi-linea-fase-0.md` (revisado por Codex).
-  Hecho: diseño, plan y las 4 tareas, con sus tests (Meta falso en los de aislamiento). · Falta: revisión de Codex del código, unir y desplegar (antes, la consulta de números repetidos del plan). · Sin probar: contra Meta de verdad (el Embedded Signup con el número de pruebas).
+Nada a medias en este momento (2026-10-11). La Fase 0 de multi-línea está en `master` (PR #6) y sale con la 1.0.11.
 
 <!-- Formato de una entrada:
 - **<qué>** — rama `<rama>`, PR #<n>, empezado el <fecha> por <Claude|Codex|Jonathan>.
@@ -27,6 +27,7 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## Lo siguiente
 
+- **Multi-línea y multi-agente, fases 1 a 4** (diseño aprobado, sin preguntas abiertas: `docs/superpowers/specs/2026-10-11-multi-linea-multi-agente-design.md`). La siguiente es la **Fase 1**, la cuenta separada del usuario, sin cambio visible; su plan por tareas está por escribir.
 - **Próximo módulo: un chatbot.** Jonathan aún no decidió de qué tipo. La propuesta sobre la mesa: empezar por respuestas automáticas (bienvenida, fuera de horario, palabras clave) como un motor de «respuestas» en el webhook, con traspaso a una persona (el bot se calla si alguien responde a mano) y la marca «Bot» en el chat; después, flujos con botones (requiere enviar mensajes interactivos) o IA. Antes de empezar: preguntar el tipo y qué problema concreto del cliente resuelve.
 - El campo de archivo de cabecera al enviar una plantilla a **un solo contacto** (`SendTemplateDialog` y `NewConversationPanel`); hoy solo existe en las campañas.
 - En la API pública: el campo `header`, la cabecera de texto con variable y las plantillas de carrusel. Toca al cliente de la API: con cuidado.
@@ -35,6 +36,7 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## Cabos sueltos conocidos
 
+- **Conectar WhatsApp sin probar contra Meta de verdad** (Fase 0, 1.0.11): los tests usan un Meta falso. Falta conectar el número de pruebas de WasmishTest por el Embedded Signup y por el formulario manual, y ver que un número de otro WABA da 400.
 - **Adjuntos:** nadie limpia el volumen de archivos (`MEDIA_DIR`, también `outbound/` y `templates/`): se acumulan sin política de retención. Los mensajes anteriores al 2026-09-08 no tienen archivo, y el script para recuperar los que Meta aún guarda no existe. Jonathan decidió que las dos cosas pueden esperar.
 - **Plantillas con cabecera de archivo:** ningún cliente tiene todavía. El primero que la cree tiene que subir el archivo en Plantillas (sin él, el envío da 400 antes de llegar a Meta).
 - **Plantillas sincronizadas hace mucho:** si les falta `Template.buttons`, el diálogo de enviar plantilla no pide los valores de los botones. Se arregla pulsando *Sincronizar* en Plantillas.
