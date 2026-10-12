@@ -1,9 +1,9 @@
 import mongoose from 'mongoose';
 
 // Una línea: un número de WhatsApp (`phoneNumberId`) de una cuenta. Las de
-// números anteriores se conservan `disconnected`, con su historial. En la Fase
-// 2a de multi-línea es una proyección de `User` (ver utils/line.js): el webhook
-// y los envíos todavía no la leen.
+// números anteriores se conservan `disconnected`, con su historial. Desde la
+// Fase 2c de multi-línea es la fuente de la conexión (la escribe solo
+// services/line.service.js); `User` guarda una copia de la línea por defecto.
 const lineSchema = new mongoose.Schema({
     accountId: {
         type: mongoose.Schema.Types.ObjectId,

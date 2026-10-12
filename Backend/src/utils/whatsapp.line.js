@@ -28,3 +28,11 @@ export const WHATSAPP_NOT_CONNECTED_MESSAGE = 'La cuenta no tiene WhatsApp conec
 export const LINE_DISCONNECTED_MESSAGE = 'Esta conversación es de un número de WhatsApp que ya no está conectado. Para escribirle, inicia una conversación nueva desde tu número actual.';
 
 export const LINE_NOT_FOUND_MESSAGE = 'La línea no existe en tu cuenta.';
+
+// Conectar otro número con la cuenta en el límite de su plan (Fase 2c).
+export const lineLimitMessage = (maxLines) => (maxLines === 1
+    ? 'Tu plan permite 1 línea conectada. Desconéctala antes de conectar otra, o pide más líneas.'
+    : `Tu plan permite ${maxLines} líneas conectadas. Desconecta una antes de conectar otra, o pide más líneas.`);
+
+// Otro cambio en las líneas de la misma cuenta a la vez (`withLineLock`).
+export const LINE_BUSY_MESSAGE = 'Hay otro cambio en las líneas de esta cuenta en curso. Inténtalo de nuevo en unos segundos.';

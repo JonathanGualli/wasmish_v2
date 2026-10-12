@@ -1,18 +1,23 @@
+import crypto from 'node:crypto';
 import Account from '../models/account.model.js';
 import Line from '../models/line.model.js';
 import User from '../models/user.model.js';
 import Waba from '../models/waba.model.js';
 import { findAccountOwner } from './account.service.js';
-import { ownerConnection, lineMatchesOwner, sendingLineFor } from '../utils/line.js';
+import { legacyUserFields, ownerConnection, planConnection, sendingLineFor } from '../utils/line.js';
 import {
-    LINE_DISCONNECTED_MESSAGE, LINE_NOT_FOUND_MESSAGE, WHATSAPP_NOT_CONNECTED_MESSAGE,
+    LINE_BUSY_MESSAGE, LINE_DISCONNECTED_MESSAGE, LINE_NOT_FOUND_MESSAGE, WHATSAPP_NOT_CONNECTED_MESSAGE, lineLimitMessage,
 } from '../utils/whatsapp.line.js';
 
-// Fase 2a de multi-línea: `Waba`, `Line` y `Account.defaultLineId` son una
-// proyección de la conexión que guarda el owner en `User` (ver utils/line.js).
-// Solo `syncLinesFromOwner` los escribe (más las líneas de números anteriores
-// que crea `migrate:lines`). Desde la 2b, lo que entra y sale de WhatsApp los
-// LEE (`findInboundLine`); `User` sigue siendo la fuente hasta la 2c.
+// Las líneas de WhatsApp de una cuenta. Desde la Fase 2c de multi-línea,
+// `Waba`, `Line` y `Account.defaultLineId` son la FUENTE de la conexión, y
+// solo este archivo la escribe (`applyConnection`), siempre dentro de
+// `withLineLock`. El owner guarda en `User` una copia de la línea por defecto
+// (`writeLegacyUser`) para que la imagen anterior, que lee `User`, siga
+// funcionando mientras ninguna cuenta tenga dos líneas.
+//
+// `syncLinesFromOwner` es lo de la Fase 2a (de `User` a `Line`): solo lo usa
+// `migrate:lines`, en las cuentas que todavía no tienen ninguna línea.
 
 const MAX_SYNC_ATTEMPTS = 3;
 
@@ -64,6 +69,7 @@ const writeProjection = async (accountId, owner, details) => {
 };
 
 /**
+ * (Fase 2a; desde la 2c, solo para `migrate:lines` en una cuenta sin líneas.)
  * Deja `Waba`, `Line` y `Account.defaultLineId` como dice el owner de la cuenta.
  * Idempotente. Lee el owner de la BD, escribe, y lo vuelve a leer: si su
  * conexión cambió entre medias (otra conexión a la vez), repite, así que la
@@ -92,30 +98,27 @@ export const syncLinesFromOwner = async (accountId, { details = null, afterRead 
  * `{ accountId, lineId, phoneNumberId, tokenWhatsapp }`, con el token (cifrado)
  * para bajar los adjuntos.
  *
- * Mientras `User` sea la fuente de la conexión (hasta la Fase 2c), la cuenta
- * sale del `User` que tiene el número (es único) y la línea, de esa cuenta y
- * ese número: una línea activa obsoleta de otra cuenta no se queda nada. Si la
- * proyección coincide con `User` (`lineMatchesOwner`), el token es el del WABA
- * de la línea. Si no (la proyección falló o se cortó), la reserva del spec: el
- * token de `User` y la línea de ese número en la cuenta si existe (o null),
- * nunca la de otro número, con aviso en el log. Un número que ningún `User`
- * tiene no es de nadie: null.
+ * La línea activa de ese número (un número activo está en una sola cuenta) y
+ * el token de su WABA. Un número que es `Line` pero no está activo en ninguna
+ * cuenta no recibe: se desconectó. La reserva del spec («nunca se descarta»)
+ * queda solo para un número sin ninguna `Line` que el `User` de una cuenta sí
+ * tiene (una conexión hecha con la imagen anterior): se procesa en esa cuenta,
+ * sin línea, con aviso en el log.
  */
 export const findInboundLine = async (phoneNumberId) => {
-    const owner = await User.findOne({ phoneNumberId }).select('accountId tokenWhatsapp phoneNumberId waBusinessId').lean();
-    if (!owner) return null;
-
-    const line = await Line.findOne({ accountId: owner.accountId, phoneNumberId }).lean();
-    const waba = line?.wabaId ? await Waba.findById(line.wabaId).lean() : null;
-
-    if (lineMatchesOwner({ owner, line, waba })) {
-        return { accountId: owner.accountId, lineId: line._id, phoneNumberId, tokenWhatsapp: waba.tokenWhatsapp };
+    const line = await Line.findOne({ phoneNumberId, status: 'active' }).lean();
+    if (line) {
+        const waba = line.wabaId ? await Waba.findById(line.wabaId).lean() : null;
+        return { accountId: line.accountId, lineId: line._id, phoneNumberId, tokenWhatsapp: waba?.tokenWhatsapp ?? null };
     }
+    if (await Line.exists({ phoneNumberId })) return null;
 
-    console.error('Webhook por la reserva de User: la línea no refleja la conexión', {
-        accountId: String(owner.accountId), phoneNumberId, lineId: line ? String(line._id) : null,
+    const owner = await User.findOne({ phoneNumberId }).select('accountId tokenWhatsapp').lean();
+    if (!owner) return null;
+    console.error('Webhook por la reserva de User: el número no tiene línea', {
+        accountId: String(owner.accountId), phoneNumberId,
     });
-    return { accountId: owner.accountId, lineId: line?._id ?? null, phoneNumberId, tokenWhatsapp: owner.tokenWhatsapp ?? null };
+    return { accountId: owner.accountId, lineId: null, phoneNumberId, tokenWhatsapp: owner.tokenWhatsapp ?? null };
 };
 
 /**
@@ -134,40 +137,159 @@ const statusError = (statusCode, message) => Object.assign(new Error(message), {
 /**
  * La línea por la que sale un envío de la cuenta: un SendingLine
  * `{ accountId, lineId, phoneNumberId, waBusinessId, tokenWhatsapp }` (token
- * cifrado; ver `sendingLineFor`). `User` sigue siendo la fuente de la conexión.
+ * cifrado; ver `sendingLineFor`).
  *
  * - `lineId`: esa línea de la cuenta; si no es suya, 404.
- * - Si no, la del número `phoneNumberId` (una conversación sin línea) o, sin él,
- *   la del número conectado: la línea por defecto.
+ * - Si no, la del número `phoneNumberId` (una conversación sin línea).
+ * - Si no, la línea por defecto de la cuenta.
  *
- * Errores con `statusCode`: 409 sin WhatsApp conectado o si la línea es de un
- * número que ya no está conectado. La reserva (la proyección no cuadra con
- * `User`) envía igual y deja un `console.error`.
+ * Errores con `statusCode`: 409 sin WhatsApp conectado, o si la línea pedida
+ * está desconectada.
  */
 export const findSendingLine = async (accountId, { lineId = null, phoneNumberId = null } = {}) => {
-    const owner = await findAccountOwner(accountId).lean();
-
     let line = null;
     if (lineId) {
         line = await Line.findOne({ _id: lineId, accountId }).lean();
         if (!line) throw statusError(404, LINE_NOT_FOUND_MESSAGE);
+    } else if (phoneNumberId) {
+        line = await Line.findOne({ accountId, phoneNumberId }).lean();
     } else {
-        const number = phoneNumberId ?? owner?.phoneNumberId;
-        line = number ? await Line.findOne({ accountId, phoneNumberId: number }).lean() : null;
+        const account = await Account.findById(accountId).select('defaultLineId').lean();
+        line = account?.defaultLineId ? await Line.findOne({ _id: account.defaultLineId, accountId }).lean() : null;
     }
     const waba = line?.wabaId ? await Waba.findById(line.wabaId).lean() : null;
 
-    const result = sendingLineFor({ owner, line, waba, phoneNumberId });
+    const result = sendingLineFor({ line, waba, requested: Boolean(lineId || phoneNumberId) });
     if (result.issue === 'not_connected') throw statusError(409, WHATSAPP_NOT_CONNECTED_MESSAGE);
     if (result.issue === 'disconnected') throw statusError(409, LINE_DISCONNECTED_MESSAGE);
-    if (result.fallback) {
-        console.error('Envío por la reserva de User: la línea no refleja la conexión', {
-            accountId: String(accountId), lineId: line ? String(line._id) : null,
-        });
-    }
     return result.line;
 };
 
 // La línea de una conversación: la suya o, si es anterior a las líneas, la de su número.
 export const findConversationLine = (conversation) =>
     findSendingLine(conversation.userId, { lineId: conversation.lineId, phoneNumberId: conversation.phoneNumberId });
+
+// --- Escribir la conexión (Fase 2c) ------------------------------------------
+
+const LOCK_MS = 30 * 1000;
+
+/**
+ * Ejecuta `fn` con el candado de líneas de la cuenta: un cambio de líneas a la
+ * vez por cuenta, también entre procesos (lo guarda `Account.lineLock` en
+ * Mongo, sin transacciones). Ocupado → 409 `LINE_BUSY_MESSAGE`. Caduca a los
+ * 30 s, por si un proceso muere con él; se suelta solo si sigue siendo suyo.
+ */
+export const withLineLock = async (accountId, fn) => {
+    const token = crypto.randomUUID();
+    const now = new Date();
+    const taken = await Account.findOneAndUpdate(
+        { _id: accountId, $or: [{ lineLock: null }, { 'lineLock.expiresAt': { $lte: now } }] },
+        { $set: { lineLock: { token, expiresAt: new Date(now.getTime() + LOCK_MS) } } },
+        { projection: { _id: 1 } },
+    );
+    if (!taken) throw statusError(409, LINE_BUSY_MESSAGE);
+    try {
+        return await fn();
+    } finally {
+        await Account.updateOne({ _id: accountId, 'lineLock.token': token }, { $set: { lineLock: null } });
+    }
+};
+
+// La copia que le toca al owner de la cuenta: la de su línea por defecto.
+const legacyFieldsOf = async (accountId) => {
+    const account = await Account.findById(accountId).select('defaultLineId').lean();
+    const line = account?.defaultLineId ? await Line.findById(account.defaultLineId).lean() : null;
+    const waba = line?.wabaId ? await Waba.findById(line.wabaId).lean() : null;
+    return legacyUserFields(line, waba);
+};
+
+const copyToOwner = async (accountId) => {
+    await User.updateOne({ accountId, role: 'owner' }, { $set: await legacyFieldsOf(accountId) });
+    await Account.updateOne({ _id: accountId }, { $set: { legacyUserStale: false } });
+};
+
+/**
+ * Escribe en el owner la copia de la línea por defecto (`legacyUserFields`),
+ * para la imagen anterior. Nunca lanza: `Line` ya está escrita y es la fuente.
+ *
+ * Si choca con `User.phoneNumberId` (único), es que el `User` de OTRA cuenta
+ * conserva ese número en una copia atrasada (su cuenta ya lo tiene como
+ * `Line`, desconectada): se rehace primero la copia de esa cuenta, desde SUS
+ * líneas, y se reintenta. Si aun así falla, `Account.legacyUserStale` queda en
+ * true y `migrate:lines` la repara (revisión de Codex del plan de la 2c).
+ */
+export const writeLegacyUser = async (accountId) => {
+    try {
+        await copyToOwner(accountId);
+        return;
+    } catch (error) {
+        if (error.code === 11000) {
+            try {
+                const { phoneNumberId } = await legacyFieldsOf(accountId);
+                const holder = await User.findOne({ phoneNumberId, accountId: { $ne: accountId } }).select('accountId').lean();
+                if (holder && await Line.exists({ accountId: holder.accountId, phoneNumberId })) {
+                    await copyToOwner(holder.accountId);
+                    await copyToOwner(accountId);
+                    return;
+                }
+            } catch (retryError) {
+                error = retryError;
+            }
+        }
+        console.error('No se pudo copiar la conexión en User:', { accountId: String(accountId), error: error.message });
+    }
+    await Account.updateOne({ _id: accountId }, { $set: { legacyUserStale: true } }).catch(() => {});
+};
+
+/**
+ * Conecta (o renueva) el número `phoneNumberId` del WABA `waBusinessId` en la
+ * cuenta, con su token ya cifrado, y devuelve `{ lineId }`. Lo que comparten el
+ * Embedded Signup y el formulario manual DESPUÉS de hablar con Meta y de
+ * reclamar el WABA (`claimWaba`). `details` = `{ phoneNumberId,
+ * displayPhoneNumber, verifiedName }` de Meta.
+ *
+ * Dentro del candado: el plan (`planConnection`) con las líneas y el límite de
+ * ahora (409 si no cabe) y, en este orden, la línea activa (si otra cuenta
+ * activó el número a la vez, E11000 y no se cambia nada más), el token del
+ * WABA, las líneas reemplazadas, la línea por defecto y la copia en `User`.
+ * `afterLock` es SOLO para los tests: se llama con el candado tomado.
+ */
+export const applyConnection = async (
+    { accountId, waBusinessId, tokenWhatsapp, phoneNumberId, details = null },
+    { afterLock = null } = {},
+) => withLineLock(accountId, async () => {
+    await afterLock?.();
+    const account = await Account.findById(accountId).select('limits defaultLineId').lean();
+    const maxLines = account?.limits?.maxLines ?? 1;
+    const lines = await Line.find({ accountId }).select('_id phoneNumberId status').lean();
+    const plan = planConnection({ lines, maxLines, phoneNumberId });
+    if (plan.error) throw statusError(409, lineLimitMessage(maxLines));
+
+    const waba = await Waba.findOneAndUpdate(
+        { waBusinessId, accountId },
+        { $setOnInsert: { tokenWhatsapp: null } },
+        { upsert: true, new: true },
+    );
+    const freshDetails = details?.phoneNumberId === phoneNumberId ? details : null;
+    const line = await Line.findOneAndUpdate(
+        { accountId, phoneNumberId },
+        { $set: {
+            wabaId: waba._id,
+            status: 'active',
+            ...(freshDetails && { displayPhoneNumber: freshDetails.displayPhoneNumber ?? null, verifiedName: freshDetails.verifiedName ?? null }),
+        } },
+        { upsert: true, new: true },
+    );
+    await Waba.updateOne({ _id: waba._id }, { $set: { tokenWhatsapp } });
+    if (plan.action === 'replace') {
+        await Line.updateMany({ _id: { $in: plan.replaceLineIds }, accountId }, { $set: { status: 'disconnected' } });
+    }
+
+    const defaultIsActive = account?.defaultLineId
+        && lines.some(other => String(other._id) === String(account.defaultLineId) && other.status === 'active');
+    if (plan.action === 'replace' || !defaultIsActive) {
+        await Account.updateOne({ _id: accountId }, { $set: { defaultLineId: line._id } });
+    }
+    await writeLegacyUser(accountId);
+    return { lineId: line._id };
+});

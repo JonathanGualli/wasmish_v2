@@ -5,9 +5,8 @@ import Line from '../models/line.model.js';
 import Template from '../models/template.model.js';
 import User from '../models/user.model.js';
 import Waba from '../models/waba.model.js';
-import { syncLinesFromOwner } from './line.service.js';
-import { findAccountOwner } from './account.service.js';
-import { historicalLines, lineStateIssues, ownerConnection, sharedWabas } from '../utils/line.js';
+import { syncLinesFromOwner, writeLegacyUser } from './line.service.js';
+import { historicalLines, legacyUserIssues, ownerConnection, sharedWabas } from '../utils/line.js';
 
 // La lógica de `migrate:lines` (Fase 2a de multi-línea), aparte del script para
 // poder probarla con Mongo. Crea las líneas de los datos de hoy y le pone a
@@ -15,9 +14,12 @@ import { historicalLines, lineStateIssues, ownerConnection, sharedWabas } from '
 // anteriores conservan su historial en una línea desconectada). Desde la 2b,
 // además cambia el índice de conversaciones a uno por contacto y línea.
 //
-// Idempotente. La conexión actual sale de `User` en el momento de escribir
-// (`syncLinesFromOwner`), así que se puede correr con la API en marcha: una
-// conexión hecha a la vez no se pisa.
+// Idempotente. Desde la Fase 2c, `Line` es la fuente de la conexión y `User`
+// su copia: solo una cuenta SIN ninguna línea se construye desde `User`
+// (`syncLinesFromOwner`, que lo relee al escribir: una conexión hecha a la vez
+// no se pisa). Una cuenta con líneas nunca se reconstruye: si su `User` no es
+// la copia de la línea por defecto, se repara solo si la imagen nueva marcó el
+// fallo (`legacyUserStale`); si no, se informa sin elegir.
 
 const accountLabel = (owner) => owner.email ?? String(owner.accountId);
 
@@ -39,44 +41,68 @@ const replaceConversationIndex = async () => {
     for (const name of await oldConversationIndexes()) await Conversation.collection.dropIndex(name);
 };
 
+const sameId = (a, b) => a != null && b != null && String(a) === String(b);
+
+// El WABA de la línea por defecto de una cuenta con líneas, leído AHORA.
+const defaultLineOf = async (accountId) => {
+    const account = await Account.findById(accountId).select('defaultLineId').lean();
+    const line = account?.defaultLineId ? await Line.findById(account.defaultLineId).lean() : null;
+    const waba = line?.wabaId ? await Waba.findById(line.wabaId).lean() : null;
+    return { line, waba };
+};
+
 // Lo que hay en una cuenta y lo que la migración haría en ella.
 const inspectAccount = async (owner) => {
     const accountId = owner.accountId;
     const connection = ownerConnection(owner);
+    const account = await Account.findById(accountId).lean();
+    const lines = await Line.find({ accountId }).lean();
+    const withoutLines = lines.length === 0;
 
     const phoneNumberIds = await Conversation.distinct('phoneNumberId', { userId: accountId });
     // `distinct` no devuelve los documentos SIN el campo: se buscan aparte.
     if (await Conversation.exists({ userId: accountId, $or: [{ phoneNumberId: null }, { phoneNumberId: '' }] })) {
         phoneNumberIds.push(null);
     }
-    const lines = await Line.find({ accountId }).lean();
-    const historical = historicalLines(phoneNumberIds, lines.map(line => line.phoneNumberId), connection?.phoneNumberId ?? null);
+    // El número actual de una cuenta sin líneas lo crea `syncLinesFromOwner`.
+    const historical = historicalLines(
+        phoneNumberIds, lines.map(line => line.phoneNumberId), withoutLines ? connection?.phoneNumberId ?? null : null,
+    );
 
-    const issues = lineStateIssues({
-        owner,
-        account: await Account.findById(accountId).lean(),
-        lines,
-        waba: connection ? await Waba.findOne({ waBusinessId: connection.waBusinessId }).lean() : null,
-    });
+    let issues = [];
+    let templateWaba = null;
+    if (withoutLines) {
+        if (connection) issues = ['la cuenta no tiene líneas: se crean desde User'];
+        templateWaba = connection?.waBusinessId ?? null;
+    } else {
+        const defaultLine = lines.find(line => sameId(line._id, account?.defaultLineId)) ?? null;
+        const waba = defaultLine?.wabaId ? await Waba.findById(defaultLine.wabaId).lean() : null;
+        issues = legacyUserIssues({ owner, defaultLine, waba, hasActiveLines: lines.some(line => line.status === 'active') });
+        templateWaba = defaultLine?.status === 'active' ? waba?.waBusinessId ?? null : null;
+    }
+    const stale = !withoutLines && Boolean(account?.legacyUserStale);
 
     return {
         owner,
+        withoutLines,
+        stale,
         phoneNumberIds: phoneNumberIds.filter(Boolean),
         historical,
-        issues,
+        issues: stale ? [...issues, 'la copia en User falló (legacyUserStale): migrar la rehace desde Line'] : issues,
         conversations: await Conversation.countDocuments({ userId: accountId, lineId: null }),
         // Solo cuentan las de una cuenta con línea por defecto: sin conexión no
         // hay línea que ponerles.
-        campaigns: connection ? await Campaign.countDocuments({ userId: accountId, lineId: null }) : 0,
+        campaigns: (withoutLines ? connection : account?.defaultLineId)
+            ? await Campaign.countDocuments({ userId: accountId, lineId: null }) : 0,
         // Las sincronizadas antes de la 2a no tienen WABA, y desde la 2b se
-        // buscan por él. Reciben el actual, que es con el que se usan hoy.
-        templates: connection ? await Template.countDocuments({ userId: accountId, waBusinessId: null }) : 0,
+        // buscan por él. Reciben el de la línea por defecto.
+        templates: templateWaba ? await Template.countDocuments({ userId: accountId, waBusinessId: null }) : 0,
     };
 };
 
-const applyAccount = async ({ owner, phoneNumberIds, historical }) => {
+const applyAccount = async ({ owner, withoutLines, stale, phoneNumberIds, historical }) => {
     const accountId = owner.accountId;
-    await syncLinesFromOwner(accountId);
+    if (withoutLines && ownerConnection(owner)) await syncLinesFromOwner(accountId);
 
     for (const phoneNumberId of historical.create) {
         await Line.updateOne(
@@ -93,15 +119,15 @@ const applyAccount = async ({ owner, phoneNumberIds, historical }) => {
         if (lineId) await Conversation.updateMany({ userId: accountId, phoneNumberId, lineId: null }, { $set: { lineId } });
     }
 
-    const { defaultLineId } = await Account.findById(accountId).select('defaultLineId').lean();
-    if (defaultLineId) await Campaign.updateMany({ userId: accountId, lineId: null }, { $set: { lineId: defaultLineId } });
-
-    // El WABA de AHORA, no el de la lectura del principio: la cuenta puede
-    // haber cambiado de WABA mientras corría la migración.
-    const connection = ownerConnection(await findAccountOwner(accountId).lean());
-    if (connection) {
-        await Template.updateMany({ userId: accountId, waBusinessId: null }, { $set: { waBusinessId: connection.waBusinessId } });
+    // La línea por defecto y su WABA de AHORA, no los de la lectura del
+    // principio: la cuenta puede haber cambiado mientras corría la migración.
+    const { line: defaultLine, waba } = await defaultLineOf(accountId);
+    if (defaultLine) await Campaign.updateMany({ userId: accountId, lineId: null }, { $set: { lineId: defaultLine._id } });
+    if (defaultLine?.status === 'active' && waba) {
+        await Template.updateMany({ userId: accountId, waBusinessId: null }, { $set: { waBusinessId: waba.waBusinessId } });
     }
+
+    if (stale) await writeLegacyUser(accountId);
 };
 
 /**
@@ -132,7 +158,8 @@ export const runLineMigration = async ({ dryRun = false, check = false, afterIns
         conversations: inspected.reduce((sum, state) => sum + state.conversations, 0),
         campaigns: inspected.reduce((sum, state) => sum + state.campaigns, 0),
         templates: inspected.reduce((sum, state) => sum + state.templates, 0),
-        accountsOutOfSync: inspected.filter(state => state.issues.length > 0).length,
+        accountsOutOfSync: inspected.filter(state => !state.stale && state.issues.length > 0).length,
+        legacyUserStale: inspected.filter(state => state.stale).length,
         oldConversationIndex: await hasOldConversationIndex(),
     };
     const issues = inspected

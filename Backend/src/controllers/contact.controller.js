@@ -110,8 +110,8 @@ export const getConversationContact = async (conversation) => {
 };
 
 /**
- * El filtro de «las conversaciones de esta línea». Sin línea (la reserva: la
- * proyección falló), las sin línea DE ESE NÚMERO: una sin línea de otro número
+ * El filtro de «las conversaciones de esta línea». Sin línea (la reserva del
+ * webhook: un número sin `Line`), las sin línea DE ESE NÚMERO: una sin línea de otro número
  * tiene otro historial y otra ventana.
  */
 export const conversationLineFilter = ({ lineId = null, phoneNumberId }) =>
@@ -124,8 +124,8 @@ export const conversationLineFilter = ({ lineId = null, phoneNumberId }) =>
  *
  * `line` = `{ lineId, phoneNumberId }`. Una por contacto y LÍNEA (Fase 2b de
  * multi-línea): nunca devuelve la de otra línea, porque su historial y su
- * ventana son de ese número. `lineId` null solo por la reserva (la proyección
- * de la línea falló): la pone la siguiente `migrate:lines`.
+ * ventana son de ese número. `lineId` null solo por la reserva del webhook (un
+ * número sin `Line`): la pone la siguiente `migrate:lines`.
  */
 export const findOrCreateConversation = async ({ userId, contact, line }) => {
     const { lineId = null, phoneNumberId } = line;

@@ -350,7 +350,7 @@ export const handleWebhook = async (req, res) => {
                 if(!phoneNumberId) continue;
 
                 // La línea activa de ese número (Fase 2b de multi-línea), con
-                // la reserva de `User` si la proyección falló. Todo lo que llega
+                // la reserva de `User` si el número no tiene `Line`. Todo lo que llega
                 // es de su CUENTA (`inbound.accountId`) y va a su conversación
                 // en esa línea; el token de su WABA baja los adjuntos.
                 const inbound = await findInboundLine(phoneNumberId);

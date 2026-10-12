@@ -30,6 +30,7 @@ import crypto from 'node:crypto';
 import mongoose from 'mongoose';
 
 import User from '../src/models/user.model.js';
+import Line from '../src/models/line.model.js';
 import Contact from '../src/models/contact.model.js';
 import Conversation from '../src/models/conversation.model.js';
 import Message from '../src/models/message.model.js';
@@ -122,19 +123,26 @@ if (elegidos.includes(CAMBIO_NUMERO) && !NEW_FROM) morir(`${CAMBIO_NUMERO} neces
 // --- ejecución --------------------------------------------------------------
 await mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/wasmish');
 
-const dueno = phoneNumberIdArg
-    ? await User.findOne({ phoneNumberId: phoneNumberIdArg }).lean()
-    : await User.findOne({ phoneNumberId: { $ne: null } }).lean();
+// El número sale de las líneas activas (desde la Fase 2c, una segunda línea no
+// está en `User`) y, si no hay ninguna, del `User` que lo tenga (una BD sin migrar).
+const lineaActiva = phoneNumberIdArg
+    ? await Line.findOne({ phoneNumberId: phoneNumberIdArg, status: 'active' }).lean()
+    : await Line.findOne({ status: 'active' }).lean();
+const dueno = lineaActiva
+    ? { ...await User.findOne({ accountId: lineaActiva.accountId, role: 'owner' }).select('email').lean(), accountId: lineaActiva.accountId, phoneNumberId: lineaActiva.phoneNumberId }
+    : phoneNumberIdArg
+        ? await User.findOne({ phoneNumberId: phoneNumberIdArg }).lean()
+        : await User.findOne({ phoneNumberId: { $ne: null } }).lean();
 
 if (!dueno) {
     morir(phoneNumberIdArg
-        ? `Ningún usuario de la BD local tiene el phoneNumberId ${phoneNumberIdArg}.`
-        : 'Ningún usuario de la BD local tiene phoneNumberId. Conéctalo en Ajustes o pásalo con --phone-number-id.');
+        ? `Ninguna línea activa ni usuario de la BD local tiene el phoneNumberId ${phoneNumberIdArg}.`
+        : 'Ninguna línea activa ni usuario de la BD local tiene phoneNumberId. Conéctalo en Ajustes o pásalo con --phone-number-id.');
 }
 
 const phoneNumberId = dueno.phoneNumberId;
 
-// `dueno` es el owner que tiene conectado el número; los datos son de su
+// `dueno` es el owner de la cuenta que tiene conectado el número; los datos son de su
 // cuenta (`dueno.accountId`). Toda consulta va filtrada por ella: con varias cuentas en la BD local,
 // buscar solo por teléfono acierta la cuenta equivocada — y en --clean eso
 // significa borrar la conversación de otro.
