@@ -1,4 +1,4 @@
-import User from "../models/user.model.js";
+import { findAccountOwner } from "../services/account.service.js";
 import { encrypt } from "../utils/crypto.js";
 import { exchangeCodeForToken, subscribeAppToWaba } from "../libs/whatsapp.js";
 import { isPhoneNumberTaken, verifyWabaPhoneNumber, PHONE_NUMBER_TAKEN_MESSAGE } from "../services/whatsapp.connection.service.js";
@@ -16,15 +16,17 @@ export const connectionErrorResponse = (res, error) => {
 
 export const connectWhatsappEmbedded = async (req, res) => {
     try {
-        const userId = req.user.id;
         const { code, phoneNumberId, waBusinessId } = req.body;
 
-        const user = await User.findById(userId);
+        // La conexión es de la cuenta y la guarda su owner (hasta la Fase 2).
+        const user = await findAccountOwner(req.auth.accountId);
         if (!user) return res.status(404).json([{ message: "User not found" }]);
 
         // 1. El número no puede estar en otra cuenta. Va antes que todo lo
-        //    demás: no hace falta molestar a Meta para saberlo.
-        if (await isPhoneNumberTaken(userId, phoneNumberId)) {
+        //    demás: no hace falta molestar a Meta para saberlo. Con el `_id`
+        //    del owner, no el de la cuenta: si no, renovar el token del propio
+        //    número daría 409.
+        if (await isPhoneNumberTaken(user._id, phoneNumberId)) {
             return res.status(409).json([{ message: PHONE_NUMBER_TAKEN_MESSAGE }]);
         }
 

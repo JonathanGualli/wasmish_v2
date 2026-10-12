@@ -18,7 +18,7 @@ Monorepo con dos workspaces independientes: `Backend/` y `Frontend/`. Cada uno t
 
 ## Reglas que no se rompen
 
-1. **Cada cuenta ve solo lo suyo.** Toda consulta filtra por la cuenta de la sesión (`findOne({ _id, userId })`, nunca `findById` a secas sobre algo del cliente), y un recurso ajeno responde **404, no 403**. Un endpoint nuevo con `:id`, o que reciba ids en el cuerpo, lleva su caso en `Backend/tests/isolation/` → [pruebas-y-scripts.md § Tests de aislamiento](docs/arquitectura/pruebas-y-scripts.md#tests-de-aislamiento).
+1. **Cada cuenta ve solo lo suyo.** Toda consulta filtra por la cuenta de la sesión (`findOne({ _id, userId: req.auth.accountId })`: el campo `userId` de los modelos guarda la **cuenta**, no la persona; nunca `findById` a secas sobre algo del cliente, ni `req.auth.userId` como dueño), y un recurso ajeno responde **404, no 403**. Un endpoint nuevo con `:id`, o que reciba ids en el cuerpo, lleva su caso en `Backend/tests/isolation/` → [pruebas-y-scripts.md § Tests de aislamiento](docs/arquitectura/pruebas-y-scripts.md#tests-de-aislamiento).
 2. **El token de WhatsApp nunca sale del backend**: va cifrado en la BD y las respuestas dicen `whatsappConnected`, no el token. Las API keys se guardan hasheadas → [api.md](docs/arquitectura/api.md).
 3. **No tocar el webhook de Meta**: es único por app, y apuntarlo a ngrok deja a los clientes reales sin mensajes entrantes. Se prueba con `npm run webhook:simulate` → [pruebas-y-scripts.md](docs/arquitectura/pruebas-y-scripts.md).
 4. **Nunca apuntar el `.env` local a la base de datos de producción.** Los scripts de prueba se niegan a correr si `MONGO_URI` no es local.

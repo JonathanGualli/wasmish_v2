@@ -23,7 +23,7 @@ const countContacts = (userId, tagId) => Contact.countDocuments({ userId, tags: 
 export const listTags = async (req, res) => {
     try {
         // aggregate no convierte tipos como find: el userId tiene que ir ya como ObjectId.
-        const userId = new mongoose.Types.ObjectId(req.user.id);
+        const userId = new mongoose.Types.ObjectId(req.auth.accountId);
         const [tags, counts] = await Promise.all([
             Tag.find({ userId }).collation({ locale: 'es', strength: 1 }).sort({ name: 1 }).lean(),
             Contact.aggregate([
@@ -45,7 +45,7 @@ export const listTags = async (req, res) => {
  * por qué saber si existía.
  */
 export const createTag = async (req, res) => {
-    const userId = req.user.id;
+    const userId = req.auth.accountId;
     const name = cleanTagName(req.body.name);
     const key = tagKey(name);
     try {
@@ -66,7 +66,7 @@ export const createTag = async (req, res) => {
 
 // PATCH /tags/:id — renombrar cambia en todos sus contactos a la vez (llevan el id).
 export const renameTag = async (req, res) => {
-    const userId = req.user.id;
+    const userId = req.auth.accountId;
     const name = cleanTagName(req.body.name);
     const key = tagKey(name);
     try {
@@ -88,7 +88,7 @@ export const renameTag = async (req, res) => {
 
 // DELETE /tags/:id — se quita de sus contactos; los contactos no se tocan más.
 export const deleteTag = async (req, res) => {
-    const userId = req.user.id;
+    const userId = req.auth.accountId;
     try {
         const tag = await findOwnedTag(userId, req.params.id);
         if (!tag) return sendTagError(res, 404, 'Etiqueta no encontrada');

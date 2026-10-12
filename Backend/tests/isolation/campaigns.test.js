@@ -97,12 +97,12 @@ test('POST /campaigns/preview/recipients: B no lista los contactos de A', async 
 
 test('POST /campaigns: B no crea una campaña a los contactos de A', async () => {
     await connectWhatsapp(b);
-    const before = await Campaign.countDocuments({ userId: b.userId });
+    const before = await Campaign.countDocuments({ userId: b.accountId });
 
     const asB = await request(b, 'POST', '/campaigns', { ...draft(b, { recipients: { mode: 'ids', contactIds: [a.contactId] } }), name: 'de B' });
     assert.equal(asB.status, 400, asB.text);
     assert.ok(asB.body.some(e => e.field === 'recipients'), asB.text);
-    assert.equal(await Campaign.countDocuments({ userId: b.userId }), before);
+    assert.equal(await Campaign.countDocuments({ userId: b.accountId }), before);
 
     // Control: a los suyos sí.
     const own = await request(b, 'POST', '/campaigns', { ...draft(b), name: 'de B' });

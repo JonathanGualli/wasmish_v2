@@ -13,11 +13,11 @@ Express 5 app. Entry: `index.js` → `app.js`. Patrón: `routes/` → `controlle
 ## Reglas del backend
 
 - **Una ruta nueva** sigue `routes/` → `controllers/` → `models/`, con el cuerpo validado por un esquema Zod (`validateSchema`) y los errores como array `[{ message }]`.
-- **Propiedad:** el controlador busca con la cuenta de la sesión (`{ _id, userId: req.user.id }`) y responde 404 si no es suya. Su caso va en `tests/isolation/` (cómo: [pruebas-y-scripts.md § Tests de aislamiento](../docs/arquitectura/pruebas-y-scripts.md#tests-de-aislamiento)).
+- **Propiedad:** el controlador busca con la cuenta de la sesión (`{ _id, userId: req.auth.accountId }`) y responde 404 si no es suya. `authRequired` y `validateApiKey` dejan `req.auth` ([api.md § Autenticación](../docs/arquitectura/api.md#autenticación--dos-vías)); `req.user` ya no existe. La conexión de WhatsApp la guarda el owner de la cuenta: `findAccountOwner(accountId)` (`services/account.service.js`), hasta la Fase 2 de multi-línea. Su caso va en `tests/isolation/` (cómo: [pruebas-y-scripts.md § Tests de aislamiento](../docs/arquitectura/pruebas-y-scripts.md#tests-de-aislamiento)).
 - **Lo que no sabe de HTTP** va en `utils/` (puro, con test en `tests/`) o en `services/` (con BD). Los controladores no repiten esa lógica.
 - **Un solo camino por envío:** `processMessageSending` (texto y archivos) y `processTemplateSending` (plantillas, también las campañas y la API pública). No se escribe otro → [whatsapp-envio.md](../docs/arquitectura/whatsapp-envio.md).
 - **A Meta solo se llama desde `libs/whatsapp.js`**, que deja el error de Meta en `err.waErrorCode` / `err.waErrorDetail`. Los tests nunca llaman a Meta.
-- **Tiempo real:** `sendUser(userId, evento, datos)`; los eventos y sus payloads están en [chat.md § Eventos SSE](../docs/arquitectura/chat.md#eventos-sse-y-sus-payloads).
+- **Tiempo real:** `sendToAccount(accountId, evento, datos)`, a todas las pestañas abiertas de la cuenta; los eventos y sus payloads están en [chat.md § Eventos SSE](../docs/arquitectura/chat.md#eventos-sse-y-sus-payloads).
 - **Índices únicos** sobre un campo que puede ser `null`: parciales con `$type`, no `sparse` (ver abajo).
 
 ## Comandos y tests

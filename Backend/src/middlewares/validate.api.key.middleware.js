@@ -31,8 +31,6 @@ export const validateApiKey = async (req, res, next) => {
         // 5. La sesión de la API: sin persona, toda la cuenta (`lineIds: null` = todas las líneas).
         const accountId = String(account._id);
         req.auth = { userId: null, accountId, role: 'api', lineIds: null, isSuperadmin: false };
-        // Provisional, hasta la Tarea 3 del plan de la Fase 1.
-        req.user = { id: accountId };
         req.apiKey = apiKeyDoc;
 
         next();

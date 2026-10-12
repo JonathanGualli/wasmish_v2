@@ -24,9 +24,6 @@ export const authRequired = async (req, res, next) => {
         if (!auth) return res.status(401).json([{ message: 'Unauthorized' }]);
 
         req.auth = auth;
-        // Provisional: los controladores pasan a `req.auth` en la Tarea 3 del
-        // plan de la Fase 1, que quita esta línea.
-        req.user = { id: auth.userId };
         next();
     } catch (error) {
         return res.status(500).json([{ message: error.message }]);

@@ -71,7 +71,7 @@ test('POST /contacts/tags: B no etiqueta contactos de A ni usa sus etiquetas', a
         selection: { mode: 'query', search: '', filter: 'all' }, remove: [a.tagId],
     });
     assert.equal(byQuery.status, 200, byQuery.text);
-    assert.equal(byQuery.body.matched, await Contact.countDocuments({ userId: b.userId }));
+    assert.equal(byQuery.body.matched, await Contact.countDocuments({ userId: b.accountId }));
     assert.deepEqual(await tagsOf(a.contactId), [a.tagId]);
 
     // Añadir una etiqueta de A: 400.
@@ -93,7 +93,7 @@ test('POST /contacts/tags/summary: B no cuenta los contactos de A ni ve sus etiq
     assert.equal(byIds.body.total, 0);
 
     const byQuery = await request(b, 'POST', '/contacts/tags/summary', { selection: { mode: 'query', filter: 'all' } });
-    assert.equal(byQuery.body.total, await Contact.countDocuments({ userId: b.userId }));
+    assert.equal(byQuery.body.total, await Contact.countDocuments({ userId: b.accountId }));
     assertNoLeak(byQuery, a);
 
     const asA = await request(a, 'POST', '/contacts/tags/summary', { selection: { mode: 'ids', contactIds: [a.contactId] } });

@@ -1,10 +1,10 @@
-import User from "../models/user.model.js";
+import { findAccountOwner } from "../services/account.service.js";
 import Conversation from "../models/conversation.model.js";
 import Contact from "../models/contact.model.js";
 import Message from "../models/message.model.js";
 import { decrypt }  from "../utils/crypto.js";
 import { sendMediaMessage, sendTextMessage, uploadMedia } from "../libs/whatsapp.js";
-import { sendUser } from './stream.controller.js';
+import { sendToAccount } from './stream.controller.js';
 import { freeTextBlockReason, getWindowExpiry } from "../utils/whatsapp.window.js";
 import { processTemplateSending } from "./template.controller.js";
 import { getSendingRecipient, getSendingConversation } from "./contact.controller.js";
@@ -78,6 +78,9 @@ const attachmentFields = ({ kind, mimeType, file, filename, size, caption }) => 
  *
  * `attachment` = `{ kind, buffer, mimeType, file, filename, size, caption }`:
  * ya validado (`outboundMediaIssue`) y guardado en MEDIA_DIR (`file`).
+ *
+ * `user` es el owner de la cuenta: de él salen el token y el número (hasta la
+ * Fase 2 de multi-línea), y de su `accountId`, el dueño de lo que se guarda.
  */
 export const processMessageSending = async ({
     user,
@@ -118,7 +121,7 @@ export const processMessageSending = async ({
     // Si no hay conversación (mensaje nuevo), la creamos; si existe, la actualizamos
     const now = new Date();
     const targetConversation = await getSendingConversation({
-        userId: user._id, conversation, recipient, phoneNumberId, contactName, source: 'manual',
+        userId: user.accountId, conversation, recipient, phoneNumberId, contactName, source: 'manual',
     });
     targetConversation.lastMessage = messageText;
     targetConversation.lastMessageAt = now;
@@ -140,7 +143,7 @@ export const processMessageSending = async ({
         failedAt: status === 'failed' ? now : null,
     });
 
-    sendUser(String(user._id), 'message_created', serializeMessage(msg));
+    sendToAccount(String(user.accountId), 'message_created', serializeMessage(msg));
 
     return { msg, waMessageId, status, errorCode, errorDetail };
 };
@@ -184,7 +187,7 @@ const markConversationRead = async (userId, conversationId) => {
             { $set: { unreadCount: 0 } }
         );
         if (result.modifiedCount > 0) {
-            sendUser(String(userId), 'conversation_updated', {
+            sendToAccount(String(userId), 'conversation_updated', {
                 id: String(conversationId),
                 unreadCount: 0,
             });
@@ -199,8 +202,10 @@ export const sendMessageController = async (req, res) => {
         const { id } = req.params; // Puede ser undefined si es un chat nuevo
         const { text, temporalId, destinationNumber, contactName } = req.body;
 
-        const user = await User.findById(req.user.id);
-        if (!user) return res.status(404).json([{ message: "User not found" }]);
+        const accountId = req.auth.accountId;
+        // Quien guarda la conexión de WhatsApp (hasta la Fase 2, el owner).
+        const owner = await findAccountOwner(accountId);
+        if (!owner) return res.status(404).json([{ message: "User not found" }]);
 
         if (!id && !destinationNumber) {
             return res.status(400).json([{ message: "Conversation ID or Destination Number is required" }]);
@@ -212,7 +217,7 @@ export const sendMessageController = async (req, res) => {
         // Sin ID, processMessageSending reutiliza la del contacto de ese número.
         let conversation = null;
         if (id) {
-            conversation = await Conversation.findOne({ _id: id, userId: user._id });
+            conversation = await Conversation.findOne({ _id: id, userId: accountId });
             if (!conversation) return res.status(404).json([{ message: "Conversation not found" }]);
         }
 
@@ -220,14 +225,14 @@ export const sendMessageController = async (req, res) => {
         // rechaza aquí, sin llamarla y sin dejar un mensaje fallido. La interfaz
         // ya lo frena; esto cubre lo que se cuele (otra pestaña, la ventana que
         // se cierra mientras se escribe). Lo que sí pasa al chat es el aviso.
-        const target = conversation ?? await findConversationByNumber(user._id, destinationNumber);
+        const target = conversation ?? await findConversationByNumber(accountId, destinationNumber);
         const blocked = freeTextBlockReason(await lastInboundOf(target));
         if (blocked) return res.status(409).json([{ message: WINDOW_BLOCK_MESSAGES[blocked], code: 'window_closed' }]);
-        assertWhatsappConnected(user);
+        assertWhatsappConnected(owner);
 
         // Llamamos al servicio (que ahora persiste incluso si el envío falla)
         const { msg } = await processMessageSending({
-            user,
+            user: owner,
             conversation,
             text,
             temporalId,
@@ -237,7 +242,7 @@ export const sendMessageController = async (req, res) => {
 
         // Responder desde el chat es haberlo leído, aunque Meta lo rechace: se
         // leyó y se intentó contestar.
-        await markConversationRead(user._id, msg.conversationId);
+        await markConversationRead(accountId, msg.conversationId);
 
         return res.status(201).json(serializeMessage(msg));
     } catch (error) {
@@ -268,18 +273,18 @@ const decodeHeader = (raw) => {
  */
 export const sendMediaMessageController = async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = req.auth.accountId;
         // Filtrar por userId es la comprobación de propiedad.
         const conversation = await Conversation.findOne({ _id: req.params.id, userId });
         if (!conversation) return res.status(404).json([{ message: "Conversation not found" }]);
 
-        const user = await User.findById(userId);
-        if (!user) return res.status(404).json([{ message: "User not found" }]);
+        const owner = await findAccountOwner(userId);
+        if (!owner) return res.status(404).json([{ message: "User not found" }]);
 
         const blocked = freeTextBlockReason(await lastInboundOf(conversation));
         if (blocked) return res.status(409).json([{ message: WINDOW_BLOCK_MESSAGES[blocked], code: 'window_closed' }]);
         // Antes de guardar el archivo: si no puede salir, no se queda en disco.
-        assertWhatsappConnected(user);
+        assertWhatsappConnected(owner);
 
         const buffer = Buffer.isBuffer(req.body) ? req.body : null;
         const mimeType = mimeBase(req.headers['content-type']);
@@ -295,7 +300,7 @@ export const sendMediaMessageController = async (req, res) => {
 
         const file = await saveByContentHash(MEDIA_DIR, 'outbound', buffer, mimeType);
         const { msg } = await processMessageSending({
-            user,
+            user: owner,
             conversation,
             temporalId: String(req.headers['x-temporal-id'] ?? '').slice(0, 64) || undefined,
             attachment: {
@@ -316,7 +321,7 @@ export const sendMediaMessageController = async (req, res) => {
 };
 
 export const listConversations = async (req, res) => {
-    const userId = req.user.id;
+    const userId = req.auth.accountId;
     try{
         const items = await Conversation.find({ userId })
             .sort({ lastMessageAt: -1 })
@@ -349,15 +354,11 @@ export const listConversations = async (req, res) => {
 };
 
 export const listMessages = async (req, res) => {
-    const userId = req.user.id;
+    const userId = req.auth.accountId;
     const conversationId = req.params.id;
     const { before, limit } = req.query;
 
     try {
-
-        const user = await User.findById(userId);
-        if (!user) return res.status(404).json([{message: "User not found"}]);
-
         const conversation = await Conversation.findOne({ _id: conversationId, userId });
         if (!conversation) return res.status(404).json([{ message: "Conversation not found" }]);
         const pageLimit = Math.min(parseInt(limit, 10) || 20, 100);
@@ -422,7 +423,7 @@ const responderErrorPlantilla = (res, error) => {
 
 export const sendConversationTemplateController = async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = req.auth.accountId;
         const { id } = req.params;
 
         // Filtrar por userId además del _id es la comprobación de propiedad:
@@ -430,11 +431,11 @@ export const sendConversationTemplateController = async (req, res) => {
         const conversation = await Conversation.findOne({ _id: id, userId });
         if (!conversation) return res.status(404).json([{ message: "Conversation not found" }]);
 
-        const user = await User.findById(userId);
-        if (!user) return res.status(404).json([{ message: "User not found" }]);
+        const owner = await findAccountOwner(userId);
+        if (!owner) return res.status(404).json([{ message: "User not found" }]);
 
         const resultado = await processTemplateSending({
-            user,
+            user: owner,
             conversation,
             templateName: req.body.templateName,
             language: req.body.language,
@@ -454,14 +455,14 @@ export const sendConversationTemplateController = async (req, res) => {
 // WhatsApp solo le entrega plantillas aprobadas, así que la conversación nace
 // con una. `processTemplateSending` la crea si no existe o reutiliza la del
 // contacto de ese número (el índice { userId, contactId } no admite dos), y ya
-// la filtra por el user de la sesión: no hay conversación ajena que comprobar.
+// la filtra por la cuenta de la sesión: no hay conversación ajena que comprobar.
 export const startConversationTemplateController = async (req, res) => {
     try {
-        const user = await User.findById(req.user.id);
-        if (!user) return res.status(404).json([{ message: "User not found" }]);
+        const owner = await findAccountOwner(req.auth.accountId);
+        if (!owner) return res.status(404).json([{ message: "User not found" }]);
 
         const resultado = await processTemplateSending({
-            user,
+            user: owner,
             destinationNumber: req.body.destinationNumber,
             contactName: req.body.contactName || undefined,
             source: 'manual',

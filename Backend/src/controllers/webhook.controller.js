@@ -1,7 +1,7 @@
 import { WHATSAPP_VERIFY_TOKEN } from '../config.js';
 import User from "../models/user.model.js";
 import Message from "../models/message.model.js";
-import { sendUser } from './stream.controller.js';
+import { sendToAccount } from './stream.controller.js';
 import Conversation from "../models/conversation.model.js";
 import {
     resolveContact, findOrCreateConversation, findContactByIdentity, getConversationContact, applyMarketingPreference,
@@ -155,7 +155,7 @@ const procesarEntrante = async (user, phoneNumberId, messageData, contacts) => {
     conversation.unreadCount = (conversation.unreadCount || 0) + 1;
     await conversation.save();
 
-    sendUser(
+    sendToAccount(
         String(user._id),
         'message_created', {
             id: String(messageCreated._id),
@@ -198,7 +198,7 @@ const procesarEntrante = async (user, phoneNumberId, messageData, contacts) => {
 // Avisa a la UI de que un contacto se dio de baja o de alta de la publicidad.
 // La ficha y la lista de Contactos se refrescan con él.
 const avisarPreferencia = (user, contact) => {
-    sendUser(String(user._id), 'contact_updated', {
+    sendToAccount(String(user._id), 'contact_updated', {
         id: String(contact._id),
         marketingOptOut: contact.marketingOptOut,
         marketingOptOutAt: contact.marketingOptOutAt ? contact.marketingOptOutAt.toISOString() : null,
@@ -244,7 +244,7 @@ const procesarCambioDeNumero = async (user, updateData) => {
     const contact = await applyUserIdUpdate(user._id, update);
     if (!contact) return;
 
-    sendUser(String(user._id), 'contact_updated', { id: String(contact._id) });
+    sendToAccount(String(user._id), 'contact_updated', { id: String(contact._id) });
     console.log('Cambio de número aplicado:', { contactId: String(contact._id) });
 };
 
@@ -294,7 +294,7 @@ const procesarEstado = async (user, statusData) => {
 
     await message.save();
 
-    sendUser(
+    sendToAccount(
         String(user._id),
         'message_status', {
             id: String(message._id),

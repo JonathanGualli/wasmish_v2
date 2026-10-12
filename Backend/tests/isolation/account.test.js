@@ -6,7 +6,8 @@ import assert from 'node:assert/strict';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import {
-    seedAccount, request, sessionFrom, ANONYMOUS, assertNoLeak, assertHasOwn, Account, ApiKey, User,
+    seedAccount, request, sessionFrom, ANONYMOUS, assertNoLeak, assertHasOwn, connectWhatsapp, onMeta, metaCalls,
+    Account, ApiKey, Conversation, User,
 } from './helpers.js';
 
 const { hashApiKey } = await import('../../src/utils/crypto.js');
@@ -117,4 +118,35 @@ test('una API key cuya cuenta no existe → 401', async () => {
     const res = await request(ANONYMOUS, 'POST', '/v1/templates/send',
         { destinationNumber: '593990000001', templateName: 'x' }, { Authorization: 'Bearer wm_sin_cuenta' });
     assert.equal(res.status, 401, res.text);
+});
+
+// Es lo que usa el cliente de la API pública: la cuenta de A no tiene el `_id`
+// de ningún usuario, y la respuesta tiene que ser la de siempre.
+test('POST /v1/templates/send con la key de A: sale del número de A y responde como siempre', async () => {
+    await connectWhatsapp(a);
+    await ApiKey.create({ userId: a.accountId, keyHash: hashApiKey('wm_prueba_a'), keyPreview: 'wm_prueba', name: 'v1' });
+    onMeta(async (config) => (config.method === 'post' && config.url === `/99${a.seq}/messages`
+        ? { data: { messages: [{ id: 'wamid.v1' }] } }
+        : undefined));
+    try {
+        const res = await request(ANONYMOUS, 'POST', '/v1/templates/send',
+            { destinationNumber: a.phone, templateName: a.templateName }, { Authorization: 'Bearer wm_prueba_a' });
+        assert.equal(res.status, 200, res.text);
+        assert.deepEqual(Object.keys(res.body).sort(), ['conversationId', 'success', 'waMessageId']);
+        assert.equal(res.body.success, true);
+        assert.equal(res.body.waMessageId, 'wamid.v1');
+        assert.ok(await Conversation.exists({ _id: res.body.conversationId, userId: a.accountId }));
+        assert.deepEqual(metaCalls.at(-1), { method: 'post', url: `/99${a.seq}/messages` });
+    } finally {
+        onMeta(null);
+    }
+});
+
+// Regresión que vigila: el panel buscaba la actividad por el `_id` del usuario.
+test('GET /admin/clients cuenta la actividad de una cuenta cuyo _id no es el del owner', async () => {
+    const res = await request(admin, 'GET', '/admin/clients?limit=50');
+    assert.equal(res.status, 200, res.text);
+    const entry = res.body.clients.find(client => client.email === 'a@pruebas.local');
+    assert.ok(entry.conversations >= 1, res.text);
+    assert.ok(entry.messages >= 1, res.text);
 });

@@ -5,6 +5,12 @@
 //
 // Nada llega a Meta: A no tiene WhatsApp conectado, el worker de campañas no
 // arranca (vive en index.js) y CAMPAIGN_DRY_RUN está encendido.
+//
+// La cuenta de cada una NO tiene el `_id` de su usuario. En producción
+// coinciden (el owner crea la cuenta con su mismo `_id`), y por eso un
+// `req.user.id` o un `user._id` usado como cuenta funcionaría allí «de
+// casualidad». Aquí no: los datos cuelgan de la cuenta, y el control de cada
+// test (A llega a lo suyo) falla si el código busca por la persona.
 import { after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -93,26 +99,27 @@ const writeMedia = async (file) => {
  */
 export const seedAccount = async (label, { isSuperadmin = false, seq = 1 } = {}) => {
     const marker = `SECRETO-${label}`;
-    // La cuenta y su owner comparten `_id`, como en producción.
-    const _id = new mongoose.Types.ObjectId();
-    await Account.create({ _id, name: marker, ownerId: _id });
-    const user = await User.create({
-        _id, name: marker, email: `${label.toLowerCase()}@pruebas.local`, password: 'x',
-        accountId: _id, role: 'owner', isSuperadmin,
+    // La cuenta y su owner con `_id` distintos (ver la cabecera).
+    const user = new User({
+        name: marker, email: `${label.toLowerCase()}@pruebas.local`, password: 'x',
+        accountId: new mongoose.Types.ObjectId(), role: 'owner', isSuperadmin,
     });
+    await Account.create({ _id: user.accountId, name: marker, ownerId: user._id });
+    await user.save();
+    const accountId = user.accountId;
 
-    const tag = await Tag.create({ userId: user._id, name: `${marker} etiqueta`, key: `${label.toLowerCase()}-etiqueta` });
+    const tag = await Tag.create({ userId: accountId, name: `${marker} etiqueta`, key: `${label.toLowerCase()}-etiqueta` });
     const contact = await Contact.create({
-        userId: user._id, phone: `59399000000${seq}`, name: `${marker} contacto`, tags: [tag._id], source: 'manual',
+        userId: accountId, phone: `59399000000${seq}`, name: `${marker} contacto`, tags: [tag._id], source: 'manual',
     });
     // Un contacto sin conversación: el único que se puede borrar.
-    const loneContact = await Contact.create({ userId: user._id, phone: `59399000010${seq}`, name: `${marker} suelto` });
+    const loneContact = await Contact.create({ userId: accountId, phone: `59399000010${seq}`, name: `${marker} suelto` });
 
     // Ventana cerrada: el único mensaje del contacto es de hace dos días (sin
     // `lastInboundAt`, el chat lo busca en sus mensajes). Así el texto libre se
     // frena con un 409 antes de llegar al token de WhatsApp, que A no tiene.
     const conversation = await Conversation.create({
-        userId: user._id, contactId: contact._id, contactPhone: contact.phone, phoneNumberId: `10${seq}`,
+        userId: accountId, contactId: contact._id, contactPhone: contact.phone, phoneNumberId: `10${seq}`,
         lastMessage: `${marker} último`, unreadCount: 3,
     });
     const mediaFile = `${seq}000.png`;
@@ -126,10 +133,10 @@ export const seedAccount = async (label, { isSuperadmin = false, seq = 1 } = {})
     const headerFile = `templates/${label.toLowerCase()}.png`;
     await writeMedia(headerFile);
     const headerMedia = await TemplateMedia.create({
-        userId: user._id, file: headerFile, mimeType: 'image/png', filename: `${marker}.png`, size: PNG.length,
+        userId: accountId, file: headerFile, mimeType: 'image/png', filename: `${marker}.png`, size: PNG.length,
     });
     const templateFields = {
-        userId: user._id, language: 'es', category: 'MARKETING', status: 'APPROVED',
+        userId: accountId, language: 'es', category: 'MARKETING', status: 'APPROVED',
         parameterFormat: 'POSITIONAL', buttons: [],
     };
     const template = await Template.create({
@@ -142,17 +149,17 @@ export const seedAccount = async (label, { isSuperadmin = false, seq = 1 } = {})
     });
 
     const campaign = await Campaign.create({
-        userId: user._id, name: `${marker} campaña`, totalRecipients: 1, dryRun: true,
+        userId: accountId, name: `${marker} campaña`, totalRecipients: 1, dryRun: true,
         template: { templateId: template.templateId, name: template.name, language: 'es', category: 'MARKETING', bodyText: template.bodyText },
     });
-    await CampaignRecipient.create({ campaignId: campaign._id, userId: user._id, contactId: contact._id });
+    await CampaignRecipient.create({ campaignId: campaign._id, userId: accountId, contactId: contact._id });
 
     const apiKey = await ApiKey.create({
-        userId: user._id, keyHash: `hash-${label}`, keyPreview: `wm_${marker}`, name: `${marker} key`,
+        userId: accountId, keyHash: `hash-${label}`, keyPreview: `wm_${marker}`, name: `${marker} key`,
     });
 
     return {
-        label, marker, seq, userId: String(user._id),
+        label, marker, seq, userId: String(user._id), accountId: String(accountId),
         token: await createAccessToken({ id: String(user._id) }),
         tagId: String(tag._id),
         contactId: String(contact._id),
@@ -206,7 +213,7 @@ export const ANONYMOUS = { token: '' };
 /** Ni la marca ni ningún id de `owner` aparecen en la respuesta. */
 export const assertNoLeak = (response, owner) => {
     const ids = [
-        owner.userId, owner.tagId, owner.contactId, owner.loneContactId, owner.conversationId,
+        owner.userId, owner.accountId, owner.tagId, owner.contactId, owner.loneContactId, owner.conversationId,
         owner.messageId, owner.headerMediaId, owner.templateId, owner.imageTemplateId, owner.campaignId, owner.apiKeyId,
     ];
     for (const secret of [owner.marker, owner.phone, ...ids]) {

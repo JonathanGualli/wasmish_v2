@@ -1,4 +1,4 @@
-import User from "../models/user.model.js";
+import { findAccountOwner } from "../services/account.service.js";
 import { encrypt } from "../utils/crypto.js";
 import { isPhoneNumberTaken, verifyWabaPhoneNumber, PHONE_NUMBER_TAKEN_MESSAGE } from "../services/whatsapp.connection.service.js";
 import { connectionErrorResponse } from "./whatsapp.controller.js";
@@ -8,14 +8,16 @@ import { connectionErrorResponse } from "./whatsapp.controller.js";
 // Signup (whatsapp.controller.js), con el token que pega el usuario.
 export const updateUserTokenWhatsapp = async (req, res) => {
     const { tokenWhatsapp, phoneNumberId, waBusinessId } = req.body;
-    const userId = req.user.id;
 
     try {
-        const userFound = await User.findById(userId);
+        // La conexión es de la cuenta y la guarda su owner (hasta la Fase 2).
+        const userFound = await findAccountOwner(req.auth.accountId);
 
         if (!userFound) return res.status(404).json([{ message: 'User not found' }]);
 
-        if (await isPhoneNumberTaken(userId, phoneNumberId)) {
+        // El `_id` del usuario que guarda la conexión, no el de la cuenta: con
+        // el de la cuenta, renovar el token del propio número daría 409.
+        if (await isPhoneNumberTaken(userFound._id, phoneNumberId)) {
             return res.status(409).json([{ message: PHONE_NUMBER_TAKEN_MESSAGE }]);
         }
 

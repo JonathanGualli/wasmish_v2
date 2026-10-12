@@ -4,7 +4,7 @@ import { hashApiKey } from "../utils/crypto.js";
 
 export const generateApiKeyController = async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = req.auth.accountId;
         const { nameApiKey } = req.body;
 
         const apiKeyFound = await ApiKey.findOne({ userId, name: nameApiKey });
@@ -37,7 +37,7 @@ export const generateApiKeyController = async (req, res) => {
 // Listar las API keys del usuario (nunca se devuelve el hash)
 export const listApiKeysController = async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = req.auth.accountId;
         const keys = await ApiKey.find({ userId }).sort({ createdAt: -1 });
         return res.json(keys.map(k => ({
             id: k._id,
@@ -55,7 +55,7 @@ export const listApiKeysController = async (req, res) => {
 // Revocar (eliminar) una API key del usuario
 export const revokeApiKeyController = async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = req.auth.accountId;
         const { id } = req.params;
         const deleted = await ApiKey.findOneAndDelete({ _id: id, userId });
         if (!deleted) return res.status(404).json([{ message: "API key no encontrada" }]);

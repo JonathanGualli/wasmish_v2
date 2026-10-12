@@ -28,7 +28,7 @@
 - **Una migración cortada a medias o repetida.** Si existe la `Account` pero el usuario aún no tiene `accountId`, la siguiente pasada termina el trabajo; una pasada sobre todo migrado no cambia nada → tests de `planAccountMigration` (Tarea 1) y dos pasadas en local (Tarea 1, paso 7).
 - **Un usuario desactivado con la cookie todavía válida.** Su siguiente petición da 401, sin esperar a que caduque el JWT. Su login con la contraseña correcta da 403 con el motivo; con una incorrecta, el mismo 400 genérico de siempre (no se puede averiguar quién está desactivado) → tests de la Tarea 2.
 - **Un registro que intenta darse privilegios.** `POST /register` con `rol: 'superadmin'`, `isSuperadmin: true`, `role: 'agent'`, `status: 'inactive'` o el `accountId` de otra cuenta crea igualmente una cuenta nueva, con su owner activo y sin superadmin → test de la Tarea 2.
-- **Reconectar el propio número con cuentas de `_id` distinto.** `isPhoneNumberTaken` recibe el `_id` del **usuario** que tiene la conexión (el owner), no el de la cuenta: si recibiera el de la cuenta, renovar el token daría 409 → lo cazan los tests de `whatsapp.test.js` cuando los helpers pasan a `_id` distintos (Tarea 3).
+- **Reconectar el propio número con cuentas de `_id` distinto.** `isPhoneNumberTaken` recibe el `_id` del **usuario** que tiene la conexión (el owner), no el de la cuenta: si recibiera el de la cuenta, renovar el token daría 409 → dos tests de `whatsapp.test.js` reconectan el propio número por cada endpoint, con los helpers ya con `_id` distintos (Tarea 3). Al ejecutar se vio que el test directo de `isPhoneNumberTaken` no bastaba: no pasa por los controladores.
 
 ---
 
