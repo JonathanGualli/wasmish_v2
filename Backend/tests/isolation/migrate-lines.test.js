@@ -118,6 +118,19 @@ test('migrar pone el WABA actual a las plantillas que no lo tienen', async () =>
     assert.equal((await runLineMigration({ check: true })).pending.templates, 0);
 });
 
+// Regresión que vigila (Codex, PR #15): las plantillas recibían el WABA de la
+// lectura del principio aunque la cuenta cambiara de WABA mientras corría.
+test('si el WABA cambia mientras migra, las plantillas reciben el actual', async () => {
+    const z = await seedAccount('Z', { seq: 6 });
+    await setConnection(z, { tokenWhatsapp: 'cifrado-z', phoneNumberId: '106', waBusinessId: 'waba-z-viejo' });
+    await Template.updateMany({ userId: z.accountId }, { $set: { waBusinessId: null } });
+
+    await runLineMigration({
+        afterInspect: () => setConnection(z, { waBusinessId: 'waba-z-nuevo' }),
+    });
+    assert.deepEqual(await Template.distinct('waBusinessId', { userId: z.accountId }), ['waba-z-nuevo']);
+});
+
 // Regresión que vigila (Codex, plan de la Fase 2a): con `Waba` vacía, dos owners
 // con el mismo WABA en `User` pasaban la comprobación y el segundo pisaba el
 // token del primero.

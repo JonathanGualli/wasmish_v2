@@ -77,15 +77,16 @@ conversationSchema.index(
         partialFilterExpression: { contactId: { $type: 'objectId' }, lineId: { $type: 'objectId' } },
     },
 );
-// Las que nacen SIN línea (si la proyección de `Line` falló al conectar) también
-// son una por contacto: el índice de arriba no las cubre, y dos entrantes a la
-// vez de un contacto nuevo crearían dos. Otro orden de claves que el índice
-// viejo `{ userId, contactId }`: Mongo no admite dos índices con las mismas
-// claves, y los dos conviven mientras `migrate:lines` cambia uno por otro.
+// Las que nacen SIN línea (la reserva: la proyección de `Line` falló) son una
+// por contacto y NÚMERO: el índice de arriba no las cubre, y dos entrantes a la
+// vez de un contacto nuevo crearían dos. Por número y no por contacto, porque
+// cada número tiene su historial y su ventana. Otras claves que el índice
+// viejo `{ userId, contactId }`: Mongo no admite dos índices con las mismas,
+// y los dos conviven mientras `migrate:lines` cambia uno por otro.
 conversationSchema.index(
-    { userId: 1, contactId: 1, lineId: 1 },
+    { userId: 1, contactId: 1, phoneNumberId: 1 },
     {
-        name: 'conversation_contact_without_line_unique',
+        name: 'conversation_contact_number_without_line_unique',
         unique: true,
         partialFilterExpression: { contactId: { $type: 'objectId' }, lineId: { $type: 'null' } },
     },

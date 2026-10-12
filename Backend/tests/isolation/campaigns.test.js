@@ -4,7 +4,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    seedAccount, request, assertNoLeak, assertHasOwn, connectWhatsapp, Account, Campaign, CampaignRecipient, Conversation, Line, Message,
+    seedAccount, request, assertNoLeak, assertHasOwn, connectWhatsapp,
+    Account, Campaign, CampaignRecipient, Conversation, Line, Message, Template,
 } from './helpers.js';
 
 const { processNext } = await import('../../src/workers/campaign.worker.js');
@@ -164,4 +165,18 @@ test('una campaña nueva nace con la línea por defecto de su cuenta', async () 
     assert.ok(defaultLineId);
     const campaign = await Campaign.findOne({ userId: s.accountId, name: 'con línea' }).lean();
     assert.equal(String(campaign.lineId), String(defaultLineId));
+});
+
+// Regresión que vigila (Codex, PR #15): la campaña aceptaba una plantilla de un
+// WABA anterior, y el worker la enviaba por la línea nueva sin volver a buscarla.
+test('una campaña con una plantilla de otro WABA → 400', async () => {
+    const y = await seedAccount('Y', { seq: 7 });
+    await connectWhatsapp(y);
+    await Template.updateOne({ templateId: y.templateId }, { waBusinessId: 'waba-anterior' });
+    const before = await Campaign.countDocuments({ userId: y.accountId });
+
+    const res = await request(y, 'POST', '/campaigns', { ...draft(y), name: 'otro WABA' });
+    assert.equal(res.status, 400, res.text);
+    assert.ok(res.body.some(error => error.field === 'templateId'), res.text);
+    assert.equal(await Campaign.countDocuments({ userId: y.accountId }), before);
 });

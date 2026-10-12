@@ -6,7 +6,7 @@ import { sendMediaMessage, sendTextMessage, uploadMedia } from "../libs/whatsapp
 import { sendToAccount } from './stream.controller.js';
 import { freeTextBlockReason, getWindowExpiry } from "../utils/whatsapp.window.js";
 import { processTemplateSending } from "./template.controller.js";
-import { getSendingRecipient, getSendingConversation } from "./contact.controller.js";
+import { getSendingRecipient, getSendingConversation, conversationLineFilter } from "./contact.controller.js";
 import { contactDisplayName } from "../utils/contact.identity.js";
 import {
     CAPTION_MAX, buildMediaObject, captionAllowed, outboundMediaIssue, outboundMediaKind, outboundMediaText,
@@ -152,11 +152,11 @@ const WINDOW_BLOCK_MESSAGES = {
 // La conversación de un número EN UNA LÍNEA, sin crear nada (el envío puede no
 // salir): la ventana es de cada línea. Por el contacto, o por `contactPhone` si
 // es anterior a los contactos y no se enlazó.
-const findConversationByNumber = async (userId, phone, lineId) => {
+const findConversationByNumber = async (userId, phone, line) => {
     const contact = await Contact.findOne({ userId, phone }).select('_id').lean();
     return Conversation.findOne({
         userId,
-        lineId,
+        ...conversationLineFilter(line),
         $or: [...(contact ? [{ contactId: contact._id }] : []), { contactPhone: phone }],
     }).lean();
 };
@@ -223,7 +223,7 @@ export const sendMessageController = async (req, res) => {
         // rechaza aquí, sin llamarla y sin dejar un mensaje fallido. La interfaz
         // ya lo frena; esto cubre lo que se cuele (otra pestaña, la ventana que
         // se cierra mientras se escribe). Lo que sí pasa al chat es el aviso.
-        const target = conversation ?? await findConversationByNumber(accountId, destinationNumber, line.lineId);
+        const target = conversation ?? await findConversationByNumber(accountId, destinationNumber, line);
         const blocked = freeTextBlockReason(await lastInboundOf(target));
         if (blocked) return res.status(409).json([{ message: WINDOW_BLOCK_MESSAGES[blocked], code: 'window_closed' }]);
         // Con conversación, su línea: 409 si es de un número que ya no está conectado.

@@ -262,6 +262,14 @@ export const createCampaign = async (req, res) => {
         if (draft.errors.length > 0) return res.status(400).json(draft.errors);
 
         const { template } = draft;
+        // La plantilla tiene que ser del WABA de la línea: el worker envía la
+        // copia guardada en la campaña y ya no la vuelve a buscar.
+        if (template.waBusinessId !== line.waBusinessId) {
+            return res.status(400).json([{
+                field: 'templateId',
+                message: 'La plantilla no es de la cuenta de WhatsApp Business conectada. Sincroniza tus plantillas y elige otra.',
+            }]);
+        }
         // El worker la envía por esta línea (Fase 2b).
         const campaign = await Campaign.create({
             userId,

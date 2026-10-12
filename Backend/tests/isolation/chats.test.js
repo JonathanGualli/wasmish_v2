@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
     seedAccount, request, assertNoLeak, assertHasOwn, connectWhatsapp, onMeta, metaCalls,
-    Contact, Conversation, Line, Message, Waba, PNG,
+    Contact, Conversation, Line, Message, User, Waba, PNG,
 } from './helpers.js';
 
 const { encrypt } = await import('../../src/utils/crypto.js');
@@ -165,4 +165,24 @@ test('con la proyección desajustada, el envío sale con el token de User', asyn
     } finally {
         onMeta(null);
     }
+});
+
+// Regresión que vigila (Codex, PR #15): con la reserva (cambio de número que la
+// proyección no reflejó), la línea es null, y una conversación sin línea de
+// OTRO número prestaba su ventana al número nuevo.
+test('con la reserva, la ventana de una conversación sin línea de otro número no cuenta', async () => {
+    const f = await seedAccount('F', { seq: 6 });
+    await connectWhatsapp(f);
+    const contact = await Contact.create({ userId: f.accountId, phone: '593990002005', name: 'número viejo' });
+    await Conversation.create({
+        userId: f.accountId, contactId: contact._id, contactPhone: contact.phone,
+        phoneNumberId: '8815', lineId: null, lastInboundAt: new Date(),
+    });
+    await User.updateOne({ _id: f.userId }, { phoneNumberId: `97${f.seq}` });   // solo User
+    const calls = metaCalls.length;
+
+    const res = await request(f, 'POST', '/chats/messages', { text: 'hola', destinationNumber: contact.phone });
+    assert.equal(res.status, 409, res.text);
+    assert.equal(res.body[0].code, 'window_closed');
+    assert.equal(metaCalls.length, calls);
 });
