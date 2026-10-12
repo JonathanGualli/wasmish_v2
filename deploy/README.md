@@ -111,7 +111,7 @@ La compilación (tanto del front como del back) ocurre **dentro de Docker**, no 
 
 **Regla práctica: reconstruye solo lo que cambió.**
 
-> ⚠️ **Si cambió `deploy/compose.yml`, hay que subirlo aparte.** El `tar` solo
+> ⚠️ **Si cambió `deploy/compose.yml`, hay que subirlo aparte.** La subida solo
 > sincroniza `app/Backend` y `app/Frontend`; el compose vive un nivel más arriba
 > y no viaja con él. Se olvida fácil y falla en silencio: el despliegue funciona
 > pero sin el volumen o la red nueva que acabas de añadir.
@@ -132,7 +132,7 @@ Escribe `version` en los **dos** `package.json` a la vez (los valida antes de to
 
 ### Antes de subir el código
 
-1. **Archivos borrados.** El `tar` no borra (ver notas): lo que se eliminó o renombró en el repo sigue en el servidor, y si el build del front compila un archivo que importa algo que ya no existe, falla. Lístalos desde la última etiqueta desplegada (`<commit desplegado>` = `git describe --tags --abbrev=0 --match 'v*'`) y bórralos en `app/Backend` o `app/Frontend` antes del `up --build`:
+1. **Archivos borrados.** La subida no borra (ver notas): lo que se eliminó o renombró en el repo sigue en el servidor, y si el build del front compila un archivo que importa algo que ya no existe, falla. Lístalos desde la última etiqueta desplegada (`<commit desplegado>` = `git describe --tags --abbrev=0 --match 'v*'`) y bórralos en `app/Backend` o `app/Frontend` antes del `up --build`:
    ```bash
    git diff --no-renames --diff-filter=D --name-only <commit desplegado> HEAD
    ```
@@ -194,16 +194,16 @@ En el navegador: recarga forzada **Ctrl + Shift + R** (los assets tienen hash y 
 
 ## 6. Notas importantes
 
-- **Nunca subas tu `.env` local.** Por eso los `tar` de arriba llevan `--exclude='.env*'`, que deja fuera también `.env.local` y compañía (un `--exclude=.env` a secas los dejaba pasar). Hoy no rompería nada — el `.dockerignore` de cada workspace lo excluye de la imagen, y el contenedor lee `config/api.env` — pero deja un archivo con secretos de desarrollo en el disco de producción, y hace que toda la protección dependa de un único `.dockerignore` que alguien podría editar sin darse cuenta. En local ese `.env` puede apuntar a la app de pruebas de Meta (WasmishTest), que no tiene nada que hacer en el servidor.
+- **Nunca subas tu `.env` local.** `git archive` ya no puede: solo exporta lo versionado, y los `.env` reales están en el `.gitignore` (solo viajan los `.env.example`, que no llevan secretos). Hasta el 2026-10-11, con `tar` sobre la carpeta, dependía de un `--exclude='.env*'`; uno anterior, `--exclude=.env` a secas, dejó pasar `.env.local`. Un `.env` en el servidor no rompería nada (el `.dockerignore` lo deja fuera de la imagen y el contenedor lee `config/api.env`), pero deja secretos de desarrollo en el disco de producción. En local, además, puede apuntar a la app de pruebas de Meta.
   Si en algún despliegue anterior se subió, se borra así:
   ```bash
   ssh megaserver 'rm -f /opt/docker-projects/prod-wasmish-main/app/Backend/.env* \
                         /opt/docker-projects/prod-wasmish-main/app/Frontend/.env*'
   ```
-- **Tampoco sube `Backend/media/`** (`--exclude=./media`): son los adjuntos de tus pruebas locales. Sin excluirlo acababan en `app/Backend/media` y dentro de la imagen (tapados por el volumen, pero ocupando sitio). El `./` hace que solo se excluya la carpeta de la raíz del Backend.
+- **Tampoco sube `Backend/media/`** (los adjuntos de tus pruebas locales): está en el `.gitignore`, así que `git archive` no lo exporta. Con el `tar` viejo había que excluirlo a mano; sin hacerlo, acababa en `app/Backend/media` y dentro de la imagen (tapado por el volumen, pero ocupando sitio).
 - **Los adjuntos viven en un volumen, no en la imagen.** El servicio `wasmish-api` monta `prod-wasmish-main-media` en `/app/media`, y `MEDIA_DIR` en `config/api.env` tiene que apuntar ahí. Sin el volumen, cada `up --build` borraría todas las fotos y audios recibidos. **Al desplegar por primera vez esta versión hay que añadir `MEDIA_DIR=/app/media` al `config/api.env` del servidor** — si falta, la api escribe en `media/` dentro del contenedor y se pierde en el siguiente rebuild.
   Para ver cuánto ocupa: `docker run --rm -v prod-wasmish-main-media:/m alpine du -sh /m`
-- **`tar` sobreescribe, no borra.** Si eliminaste archivos en local, no desaparecen del server automáticamente: el `git diff` de «Antes de subir el código» (sección 5) dice cuáles borrar. Para una limpieza total de un lado, borra el contenido de `app/Backend` o `app/Frontend` en el server antes de re-subir.
+- **La subida sobreescribe, no borra.** Si eliminaste archivos en local, no desaparecen del server automáticamente: el `git diff` de «Antes de subir el código» (sección 5) dice cuáles borrar. Para una limpieza total de un lado, borra el contenido de `app/Backend` o `app/Frontend` en el server antes de re-subir.
 - **Cambios solo en `config/api.env`** (sin cambio de código): basta reiniciar la api sin rebuild →
   `docker compose up -d wasmish-api` (Compose detecta el env_file y recrea el contenedor).
 - **Cambios en los `VITE_*` del `.env`**: sí requieren **rebuild del front** (`--build wasmish-web`), porque Vite los embebe en tiempo de compilación.
