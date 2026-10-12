@@ -32,13 +32,16 @@ const printPending = ({ pending, issues }) => {
 };
 
 const main = async () => {
-    await mongoose.connect(MONGO_URI);
+    // Sin `autoIndex` ni `autoCreate`: Mongoose crearía los índices de los
+    // modelos al cargarlos, también con --check y --dry-run, que no escriben.
+    // Al aplicar se crean a mano, antes de escribir nada.
+    await mongoose.connect(MONGO_URI, { autoIndex: false, autoCreate: false });
     console.log(`Conectado a ${safeUri}`);
     if (dryRun || check) console.log('Solo informa: no se va a escribir nada\n');
 
     // Los índices únicos de Waba y Line tienen que existir ANTES de escribir:
     // son los que frenan un WABA o un número activo en dos cuentas.
-    if (!dryRun && !check) await Promise.all([Waba.init(), Line.init()]);
+    if (!dryRun && !check) await Promise.all([Waba.createIndexes(), Line.createIndexes()]);
 
     const result = await runLineMigration({ dryRun, check });
 

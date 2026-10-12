@@ -125,6 +125,18 @@ test('DELETE /tags/:id: B no borra una etiqueta de A ni se la quita a sus contac
     assert.equal(asA.status, 200, asA.text);
 });
 
+// Regresión que vigila (Codex, PR #13): el índice por línea excluye las
+// conversaciones sin `lineId` (las que nacen si la proyección de la línea
+// falló), y dos entrantes a la vez de un contacto nuevo creaban dos.
+test('dos conversaciones sin línea del mismo contacto chocan con el índice', async () => {
+    await Conversation.init();
+    const e = await seedAccount('E', { seq: 5 });   // su conversación sembrada no tiene línea
+    await assert.rejects(
+        Conversation.create({ userId: e.accountId, contactId: e.contactId, contactPhone: e.phone, phoneNumberId: '105' }),
+        error => error.code === 11000,
+    );
+});
+
 // Fase 2b de multi-línea: un contacto tiene una conversación por línea.
 test('un contacto con dos conversaciones: la ficha las lista y la actividad suma las dos', async () => {
     const c = await seedAccount('C', { seq: 3 });

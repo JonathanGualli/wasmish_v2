@@ -3,7 +3,9 @@
 // caso que la para (un WABA compartido) va el último.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { seedAccount, Account, Campaign, Conversation, Line, User, Waba } from './helpers.js';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { seedAccount, mongoUri, Account, Campaign, Conversation, Line, User, Waba } from './helpers.js';
 
 const { runLineMigration } = await import('../../src/services/line.migration.service.js');
 
@@ -66,6 +68,29 @@ test('migrar crea el índice nuevo de conversaciones y borra el viejo; --check l
     assert.ok(!names.includes('conversation_contact_unique'));
     assert.ok(names.includes('conversation_line_contact_unique'));
     assert.equal((await runLineMigration({ check: true })).pending.oldConversationIndex, false);
+});
+
+// Regresión que vigila (Codex, PR #13): Mongoose crea los índices del esquema
+// al cargar los modelos (`autoIndex`), así que `--check` creaba el índice
+// nuevo aunque dijera que no escribe.
+test('el script con --check y --dry-run no toca los índices', async () => {
+    await Conversation.collection.dropIndex('conversation_line_contact_unique');
+    await Conversation.collection.createIndex(
+        { userId: 1, contactId: 1 },
+        { name: 'conversation_contact_unique', unique: true, partialFilterExpression: { contactId: { $type: 'objectId' } } },
+    );
+    const indexNames = async () => (await Conversation.collection.indexes()).map(index => index.name).sort();
+    const before = await indexNames();
+
+    const run = (flag) => promisify(execFile)('node', ['scripts/migrate-lines.js', flag], {
+        cwd: new URL('../..', import.meta.url).pathname, env: { ...process.env, MONGO_URI: mongoUri },
+    }).then(() => 0, error => error.code);
+
+    assert.equal(await run('--check'), 1);   // queda el índice viejo
+    assert.equal(await run('--dry-run'), 0);
+    assert.deepEqual(await indexNames(), before);
+
+    await runLineMigration({});   // deja los índices como los quieren los tests siguientes
 });
 
 test('--check no escribe y dice lo pendiente', async () => {
