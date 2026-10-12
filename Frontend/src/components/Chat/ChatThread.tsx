@@ -12,6 +12,7 @@ import { formatDayLabel, dayKey } from "../../utils/formatChatTime.ts";
 import type { Message, MessageStatus } from "../../models/message.mode.ts";
 import { TemplateButtons } from "./TemplatePreview.tsx";
 import type { Template } from "../../models/template.model.ts";
+import type { NewConversationRequest } from "../../models/conversation.mode.ts";
 import { whatsappErrorLabel, whatsappErrorText } from "../../utils/whatsappErrors";
 import { ChatHeader } from "./ChatHeader.tsx";
 import { ContactSidebar } from "./ContactSidebar/ContactSidebar.tsx";
@@ -27,6 +28,10 @@ interface Props {
     /** La ficha del contacto: la decide `ChatPage` (se cierra al cambiar de conversación). */
     contactSidebarOpen: boolean;
     onContactSidebarChange: (open: boolean) => void;
+    /** Escribirle desde otra línea (la suya se desconectó): la conversación nueva con el contacto ya puesto. */
+    onStartConversation: (request: NewConversationRequest) => void;
+    /** Abrir otra conversación del mismo contacto, desde su ficha (la de otra línea). */
+    onOpenConversation: (conversationId: string) => void;
 }
 
 const CenteredMessage = ({ children }: { children: React.ReactNode }) => (
@@ -81,7 +86,9 @@ const FailedBadge = ({ msg }: { msg: Message }) => (
     </span>
 );
 
-export const ChatThread = ({ conversationId, onBack, contactSidebarOpen, onContactSidebarChange }: Props) => {
+export const ChatThread = ({
+    conversationId, onBack, contactSidebarOpen, onContactSidebarChange, onStartConversation, onOpenConversation,
+}: Props) => {
     const { data: messages, isLoading, isError, fetchNextPage, hasNextPage } =
         useConversationMessages(conversationId || "");
     const { data: conversations } = useConversations();
@@ -227,7 +234,8 @@ export const ChatThread = ({ conversationId, onBack, contactSidebarOpen, onConta
                 </div>
 
                 {conversationId && (
-                    <ChatComposer key={conversationId} conversationId={conversationId} conversation={conversation} title={title} />
+                    <ChatComposer key={conversationId} conversationId={conversationId} conversation={conversation} title={title}
+                        onStartConversation={onStartConversation} />
                 )}
             </div>
 
@@ -248,6 +256,7 @@ export const ChatThread = ({ conversationId, onBack, contactSidebarOpen, onConta
                                 contactId={contactId}
                                 conversationId={conversation.id}
                                 windowExpiresAt={conversation.windowExpiresAt}
+                                onOpenConversation={onOpenConversation}
                                 onClose={() => onContactSidebarChange(false)}
                             />
                         </div>

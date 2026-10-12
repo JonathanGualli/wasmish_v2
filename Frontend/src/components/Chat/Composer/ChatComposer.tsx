@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type FormEvent, type KeyboardEvent } from "react";
-import { Clock, Download, Info, LayoutTemplate, Paperclip, SendHorizonal, X } from "lucide-react";
+import { Clock, Download, Info, LayoutTemplate, Paperclip, SendHorizonal, Unplug, X } from "lucide-react";
+import { Link } from "react-router-dom";
 import type { AxiosError } from "axios";
 import { useConversationSendMessages } from "../../../hooks/useConversationSendMessages";
 import { formatRemaining, useConversationWindow, WINDOW_WARNING_MS } from "../../../hooks/useConversationWindow";
@@ -8,7 +9,11 @@ import { useFilePicker } from "../../../hooks/useFilePicker";
 import { useOutgoingAttachment } from "../../../hooks/useOutgoingAttachment";
 import { useSendMediaMessage } from "../../../hooks/useSendMediaMessage";
 import { useWindowFileDrag } from "../../../hooks/useWindowFileDrag";
-import type { Conversation } from "../../../models/conversation.mode";
+import { useLines } from "../../../hooks/useLines";
+import type { Conversation, NewConversationRequest } from "../../../models/conversation.mode";
+import type { Line } from "../../../models/line.model";
+import { SettingsPath } from "../../../models/routes.models";
+import { lineLabel } from "../../../utils/lineDisplay";
 import { CAPTION_MAX, OUTBOUND_ACCEPT } from "../../../utils/outboundMedia";
 import { Callout } from "../../Callout/Callout";
 import { CustomButton } from "../../Button/Button";
@@ -21,6 +26,8 @@ interface Props {
     /** `undefined` mientras carga la bandeja: hasta tenerla no se sabe la ventana. */
     conversation?: Conversation;
     title: string;
+    /** Escribirle desde otra línea: abre la conversación nueva con el contacto ya puesto. */
+    onStartConversation: (request: NewConversationRequest) => void;
 }
 
 /** Hasta 6 líneas de 21 px; luego, scroll. */
@@ -42,13 +49,15 @@ const namePasted = (file: File) => {
  * El campo de escribir: el sitio de todo lo que se envía. Texto, un archivo
  * (eligiéndolo, soltándolo sobre la conversación o pegándolo) o una plantilla.
  * Con la ventana de 24 h cerrada solo plantillas; si se cierra mientras se
- * prepara un envío, lo escrito y el archivo se quedan.
+ * prepara un envío, lo escrito y el archivo se quedan. Una conversación de una
+ * línea desconectada, o sin ninguna línea conectada en la cuenta, queda para
+ * consulta: el campo lo dice antes de intentar enviar.
  *
  * Se monta una vez por conversación (`key`): cambiar de chat empieza en blanco.
  * El aviso al arrastrar se pinta sobre toda la conversación: su contenedor
  * tiene que ser `relative`.
  */
-export const ChatComposer = ({ conversationId, conversation, title }: Props) => {
+export const ChatComposer = ({ conversationId, conversation, title, onStartConversation }: Props) => {
     const sendText = useConversationSendMessages();
     const media = useSendMediaMessage();
     const attachment = useOutgoingAttachment();
@@ -64,8 +73,16 @@ export const ChatComposer = ({ conversationId, conversation, title }: Props) => 
     const windowBlocked = Boolean(conversation) && !isOpen;
     const endingSoon = isOpen && msRemaining <= WINDOW_WARNING_MS;
 
+    const { isLoading: linesLoading, isError: linesError, activeLines, defaultLine, showLines, lineById } = useLines();
+    const line = lineById(conversation?.lineId);
+    // Sin saber las líneas no se bloquea, como con la ventana.
+    const lineBlock = !conversation || linesLoading || linesError ? null
+        : activeLines.length === 0 ? 'none'
+        : line?.status === 'disconnected' ? 'disconnected'
+        : null;
+
     const picker = useFilePicker(file => attachment.attach([file]));
-    const dragging = useWindowFileDrag(!windowBlocked && !templateDialogOpen);
+    const dragging = useWindowFileDrag(!lineBlock && !windowBlocked && !templateDialogOpen);
 
     useEffect(() => {
         textareaRef.current?.focus();
@@ -148,10 +165,16 @@ export const ChatComposer = ({ conversationId, conversation, title }: Props) => 
             )}
 
             <div className="bg-brand-surface border-t border-brand-border px-4 md:px-6 py-3.5 flex-none grid gap-3">
-                {windowBlocked ? (
+                {lineBlock ? (
+                    <LineClosedNotice reason={lineBlock} sendFrom={defaultLine}
+                        onWrite={conversation?.phone
+                            ? () => onStartConversation({ phone: conversation.phone ?? '', name: title })
+                            : undefined} />
+                ) : windowBlocked ? (
                     <>
                         {file && <AttachmentPreview attachment={attachment} onChange={picker.open} disabled withText={Boolean(text.trim())} />}
                         <WindowClosedNotice hasWindow={hasWindow} interrupted={hasDraft} title={title}
+                            lineName={showLines && line ? lineLabel(line) : null}
                             onSendTemplate={() => setTemplateDialogOpen(true)} />
                     </>
                 ) : (
@@ -219,11 +242,12 @@ export const ChatComposer = ({ conversationId, conversation, title }: Props) => 
                 )}
             </div>
 
-            {conversation && (
+            {conversation && !lineBlock && (
                 <SendTemplateDialog
                     open={templateDialogOpen}
                     onClose={() => setTemplateDialogOpen(false)}
                     conversationId={conversationId}
+                    line={line}
                     contactName={title}
                     windowOpen={isOpen}
                     keepsDraft={hasDraft}
@@ -254,10 +278,12 @@ const ComposerIconButton = ({ title, active = false, onClick, children }: {
  * La ventana está cerrada: solo plantillas. Si se cerró mientras se preparaba
  * un envío (`interrupted`), se dice que lo escrito y el archivo siguen ahí.
  */
-const WindowClosedNotice = ({ hasWindow, interrupted, title, onSendTemplate }: {
+const WindowClosedNotice = ({ hasWindow, interrupted, title, lineName, onSendTemplate }: {
     hasWindow: boolean;
     interrupted: boolean;
     title: string;
+    /** Con varias líneas, la ventana es de una: se dice cuál. */
+    lineName: string | null;
     onSendTemplate: () => void;
 }) => {
     const action = <CustomButton onClick={onSendTemplate}>Enviar plantilla</CustomButton>;
@@ -271,10 +297,40 @@ const WindowClosedNotice = ({ hasWindow, interrupted, title, onSendTemplate }: {
     }
     return (
         <Callout tone="info" icon={hasWindow ? <LayoutTemplate size={16} /> : <Clock size={16} />}
-            title={hasWindow ? "La ventana de 24 h se cerró" : "Esperando respuesta"} action={action}>
+            title={hasWindow ? `La ventana de 24 h se cerró${lineName ? ` en ${lineName}` : ''}` : "Esperando respuesta"} action={action}>
             {hasWindow
-                ? "Pasaron más de 24 h desde su último mensaje. WhatsApp solo permite retomar la conversación con una plantilla aprobada."
+                ? `Pasaron más de 24 h desde su último mensaje${lineName ? ' a este número' : ''}. WhatsApp solo permite retomar la conversación con una plantilla aprobada.`
                 : `Cuando ${title} conteste, se abre la ventana de 24 h y podrás escribir libremente. Mientras tanto, solo plantillas.`}
+        </Callout>
+    );
+};
+
+/**
+ * La conversación ya no se puede usar para enviar: su línea se desconectó
+ * (`disconnected`), o la cuenta no tiene ninguna conectada (`none`). Queda para
+ * consulta; el camino es escribirle desde la línea por defecto o conectar un
+ * número en Ajustes.
+ */
+const LineClosedNotice = ({ reason, sendFrom, onWrite }: {
+    reason: 'disconnected' | 'none';
+    sendFrom: Line | null;
+    /** Sin teléfono (escribió con su usuario) no se le puede empezar una conversación. */
+    onWrite?: () => void;
+}) => {
+    if (reason === 'none') {
+        return (
+            <Callout tone="neutral" icon={<Unplug size={16} />} title="No hay ningún número conectado."
+                action={<Link to={SettingsPath} className="text-[13px] font-semibold text-brand-accent-strong hover:underline">Ir a Ajustes</Link>}>
+                Las conversaciones quedan para consulta. Conecta un número para volver a escribir.
+            </Callout>
+        );
+    }
+    return (
+        <Callout tone="neutral" icon={<Unplug size={16} />} title="Este número ya no está conectado."
+            action={onWrite && sendFrom && (
+                <CustomButton variant="outline" onClick={onWrite}>Escribirle desde {lineLabel(sendFrom)}</CustomButton>
+            )}>
+            La conversación queda para consulta: no se pueden enviar mensajes ni plantillas desde aquí.
         </Callout>
     );
 };

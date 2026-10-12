@@ -1,6 +1,7 @@
 import { ChevronLeft, PanelRight } from "lucide-react";
 import type { Conversation } from "../../models/conversation.mode";
 import { initials } from "../../utils/initials";
+import { LineChip } from "../Line/LineChip";
 
 interface Props {
     conversation: Conversation;
@@ -14,6 +15,8 @@ interface Props {
  * Cabecera de la conversación. «Ficha» abre la del contacto, y el nombre y el
  * avatar también (no todo el mundo descubre el clic en el nombre, por eso el
  * botón). Una conversación anterior a los contactos sin enlazar no tiene ficha.
+ * Con más de una línea, dice de cuál es la conversación: en escritorio, la
+ * pastilla con el número; en móvil, la etiqueta corta.
  */
 export const ChatHeader = ({ conversation, onBack, contactSidebarOpen, onToggleContactSidebar }: Props) => {
     const title = conversation.title || conversation.phone || "";
@@ -51,22 +54,26 @@ export const ChatHeader = ({ conversation, onBack, contactSidebarOpen, onToggleC
                     {hasContact && <span className="block md:hidden text-xs text-brand-muted">Toca para ver la ficha</span>}
                 </span>
             </button>
-            {hasContact && (
-                <button
-                    type="button"
-                    onClick={onToggleContactSidebar}
-                    aria-pressed={contactSidebarOpen}
-                    title={contactSidebarOpen ? "Cerrar la ficha" : "Ver la ficha del contacto"}
-                    className={`ml-auto flex-none flex items-center gap-2 h-11 md:h-9 px-3 rounded-[8px] border text-[13px]
-                        font-semibold transition-colors cursor-pointer
-                        ${contactSidebarOpen
-                            ? 'bg-brand-accent-soft border-brand-accent-soft text-brand-accent-strong'
-                            : 'bg-brand-surface border-brand-border-strong text-brand-strong hover:bg-brand-bg'}`}
-                >
-                    <PanelRight size={16} />
-                    <span className="hidden md:inline">Ficha</span>
-                </button>
-            )}
+            <div className="ml-auto flex-none flex items-center gap-2">
+                <span className="hidden md:contents"><LineChip lineId={conversation.lineId} variant="header" /></span>
+                <span className="md:hidden contents"><LineChip lineId={conversation.lineId} /></span>
+                {hasContact && (
+                    <button
+                        type="button"
+                        onClick={onToggleContactSidebar}
+                        aria-pressed={contactSidebarOpen}
+                        title={contactSidebarOpen ? "Cerrar la ficha" : "Ver la ficha del contacto"}
+                        className={`flex-none flex items-center gap-2 h-11 md:h-9 px-3 rounded-[8px] border text-[13px]
+                            font-semibold transition-colors cursor-pointer
+                            ${contactSidebarOpen
+                                ? 'bg-brand-accent-soft border-brand-accent-soft text-brand-accent-strong'
+                                : 'bg-brand-surface border-brand-border-strong text-brand-strong hover:bg-brand-bg'}`}
+                    >
+                        <PanelRight size={16} />
+                        <span className="hidden md:inline">Ficha</span>
+                    </button>
+                )}
+            </div>
         </div>
     );
 };

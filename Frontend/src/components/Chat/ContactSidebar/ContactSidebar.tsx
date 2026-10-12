@@ -12,12 +12,16 @@ import { CustomButton } from "../../Button/Button";
 import { ContactSidebarTags } from "./ContactSidebarTags";
 import { ContactNotes } from "./ContactNotes";
 import { ContactDataCard } from "./ContactDataCard";
+import { LineWindowList } from "../../Contact/LineWindowList";
+import { useLines } from "../../../hooks/useLines";
 
 interface Props {
     contactId: string;
     conversationId: string;
     /** El de la conversación: a diferencia del del contacto, sigue ahí cuando la ventana se cierra. */
     windowExpiresAt?: string | null;
+    /** Abrir su conversación de otra línea, desde la ventana por línea. */
+    onOpenConversation: (conversationId: string) => void;
     onClose: () => void;
 }
 
@@ -25,15 +29,25 @@ interface Props {
  * La ficha del contacto en Chats, ordenada para quien atiende: quién es, sus
  * etiquetas y la ventana arriba (sobre verde profundo), y debajo notas, datos y
  * cifras. Se edita en el sitio. La columna y su posición las pone `ChatThread`.
+ *
+ * Con más de una línea, la ventana va por línea: una fila por conversación
+ * del contacto, con la abierta resaltada, y tocar otra la abre.
  */
-export const ContactSidebar = ({ contactId, conversationId, windowExpiresAt, onClose }: Props) => {
+export const ContactSidebar = ({ contactId, conversationId, windowExpiresAt, onOpenConversation, onClose }: Props) => {
     const { data: contact, isError } = useLiveContact(contactId, conversationId);
+    const { showLines } = useLines();
+    const byLine = showLines && contact && contact.conversations.length > 0;
 
     return (
         <aside aria-label="Ficha del contacto" className="h-full flex flex-col bg-brand-raised">
             <div className="flex-none bg-brand-deep text-white px-4 pt-3.5 pb-4 grid gap-3.5">
                 <SidebarTopBar onClose={onClose} />
-                {contact && <ContactIdentity contact={contact} windowExpiresAt={windowExpiresAt} />}
+                {contact && (
+                    <ContactIdentity contact={contact} windowSlot={byLine
+                        ? <LineWindowList tone="onDeep" conversations={contact.conversations}
+                            currentConversationId={conversationId} onOpen={onOpenConversation} />
+                        : <WindowLine expiresAt={windowExpiresAt} />} />
+                )}
             </div>
 
             {contact ? (
@@ -47,7 +61,7 @@ export const ContactSidebar = ({ contactId, conversationId, windowExpiresAt, onC
                         {/* Por contacto: al cambiar de conversación, el de antes termina de guardar lo suyo. */}
                         <ContactNotes key={contact.id} contact={contact} />
                         <ContactDataCard key={`data-${contact.id}`} contact={contact} />
-                        <ActivityCard contact={contact} />
+                        <ActivityCard contact={contact} conversationCount={byLine ? contact.conversations.length : 1} />
                     </div>
                     <div className="flex-none px-3.5 pb-3.5">
                         <SeeInContacts contactId={contact.id} />
@@ -89,7 +103,7 @@ const SidebarTopBar = ({ onClose }: { onClose: () => void }) => (
     </div>
 );
 
-const ContactIdentity = ({ contact, windowExpiresAt }: { contact: ContactDetail; windowExpiresAt?: string | null }) => {
+const ContactIdentity = ({ contact, windowSlot }: { contact: ContactDetail; windowSlot: React.ReactNode }) => {
     const title = contactTitle(contact);
     const identity = contactIdentity(contact);
     // El nombre que tiene en WhatsApp, si no es el que se le puso aquí.
@@ -108,7 +122,7 @@ const ContactIdentity = ({ contact, windowExpiresAt }: { contact: ContactDetail;
                 </div>
             </div>
             <ContactSidebarTags contact={contact} />
-            <WindowLine expiresAt={windowExpiresAt} />
+            {windowSlot}
         </>
     );
 };
@@ -133,13 +147,17 @@ const WindowLine = ({ expiresAt }: { expiresAt?: string | null }) => {
     );
 };
 
-const ActivityCard = ({ contact }: { contact: ContactDetail }) => {
+/** Las cifras son de todas sus conversaciones; con varias, se dice. */
+const ActivityCard = ({ contact, conversationCount }: { contact: ContactDetail; conversationCount: number }) => {
     const { sent, received, failed } = contact.activity;
     return (
-        <div className="bg-brand-surface rounded-xl px-3.5 py-3 flex flex-wrap gap-x-3.5 gap-y-1 text-[12.5px] text-brand-muted">
-            <ActivityFigure value={sent} label={['enviado', 'enviados']} />
-            <ActivityFigure value={received} label={['recibido', 'recibidos']} />
-            <ActivityFigure value={failed} label={['fallido', 'fallidos']} danger={failed > 0} />
+        <div className="bg-brand-surface rounded-xl px-3.5 py-3 grid gap-1">
+            <div className="flex flex-wrap gap-x-3.5 gap-y-1 text-[12.5px] text-brand-muted">
+                <ActivityFigure value={sent} label={['enviado', 'enviados']} />
+                <ActivityFigure value={received} label={['recibido', 'recibidos']} />
+                <ActivityFigure value={failed} label={['fallido', 'fallidos']} danger={failed > 0} />
+            </div>
+            {conversationCount > 1 && <div className="text-[11.5px] text-brand-subtle">Suma de sus {conversationCount} conversaciones</div>}
         </div>
     );
 };

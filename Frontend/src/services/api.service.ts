@@ -303,10 +303,11 @@ export const startConversationTemplateService = async (
     language?: string,
     buttons?: TemplateButtonParam[],
     contactName?: string,
+    lineId?: string,
 ) => {
     const { data } = await axios.post(
         `${API_URL}/chats/template`,
-        { destinationNumber, contactName, templateName, parameters, language, buttons },
+        { destinationNumber, contactName, templateName, parameters, language, buttons, lineId },
         { withCredentials: true },
     );
     return data;

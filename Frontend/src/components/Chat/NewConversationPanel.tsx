@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronLeft, LayoutTemplate, LoaderCircle, Plus, Send, X } from 'lucide-react';
+import { AlertCircle, ChevronLeft, LayoutTemplate, LoaderCircle, MessageSquare, Plus, Send, X } from 'lucide-react';
 import { AuthField } from '../Auth/AuthField';
 import { CustomButton } from '../Button/Button';
 import { Callout } from '../Callout/Callout';
@@ -14,6 +14,19 @@ import { TemplateBubble, TemplateButtons } from './TemplatePreview';
 import { templateHeaderIssue } from '../../utils/templateHeader';
 import type { ConversationDraft } from '../../utils/conversationDraft';
 import { PHONE_RE } from '../../utils/contactDisplay';
+import { useLines } from '../../hooks/useLines';
+import type { Line } from '../../models/line.model';
+import { lineLabel } from '../../utils/lineDisplay';
+import { LineSelect } from '../Line/LineSelect';
+
+/** La plantilla que se quitó al cambiar a una línea de otra cuenta, con lo rellenado: «Volver a …» la recupera. */
+interface RemovedTemplate {
+  templateName: string;
+  values: Record<string, string>;
+  buttonValues: Record<number, string>;
+  from: Line;
+  to: Line;
+}
 
 interface Props {
   /** Lo guardado del borrador: el panel arranca con eso al volver a abrirlo. */
@@ -38,30 +51,64 @@ interface Props {
  * plantilla sale; mientras tanto la bandeja la enseña como «Borrador», y lo
  * escrito se guarda (ver `utils/conversationDraft.ts`) para no perderlo al
  * abrir otra conversación.
+ *
+ * Con más de una línea conectada, lo primero es «Enviar desde», con la por
+ * defecto puesta. Las plantillas son las de la cuenta de WhatsApp Business de
+ * esa línea: pasar a una de otra cuenta quita la elegida (si allí no hay una
+ * con su nombre), lo dice y deja volver atrás.
  */
 export const NewConversationPanel = ({ initialDraft, onClose, onBack, onCreated, onOpenExisting, onDraftChange }: Props) => {
   const [phone, setPhone] = useState(initialDraft.phone);
   const [name, setName] = useState(initialDraft.name);
+  const [lineId, setLineId] = useState(initialDraft.lineId);
+  const [removed, setRemoved] = useState<RemovedTemplate | null>(null);
   const { setState, setContent } = useNoticeContext();
 
-  const form = useTemplateForm(initialDraft);
+  // La elegida si sigue conectada; si no (o sin elegir), la por defecto.
+  const { hasManyLines, activeLines, defaultLine, lineById } = useLines();
+  const line = activeLines.find(l => l.id === lineId) ?? defaultLine ?? undefined;
+
+  const form = useTemplateForm(initialDraft, line ? line.waBusinessId : undefined);
   const startConversation = useStartConversation();
   const { data: conversations } = useConversations();
 
   const digits = phone.replace(/\D/g, '');
   const phoneValid = PHONE_RE.test(digits);
 
-  // Con dos conversaciones del mismo número no se puede (índice único en el
-  // backend): enviar aquí escribiría en la que ya existe. Mejor ofrecer abrirla.
+  // Una conversación por número y línea (índice único en el backend): enviar
+  // aquí escribiría en la que ya existe en esa línea. Se dice, y se ofrece abrirla.
   const existing = useMemo(
-    () => (phoneValid ? conversations?.find(c => c.phone === digits) : undefined),
-    [conversations, digits, phoneValid],
+    () => (phoneValid ? conversations?.find(c => c.phone === digits && (!line || c.lineId === line.id)) : undefined),
+    [conversations, digits, phoneValid, line],
   );
 
   const { selectedName, values, buttonValues } = form;
   useEffect(() => {
-    onDraftChange({ phone, name, templateName: selectedName, values, buttonValues });
-  }, [phone, name, selectedName, values, buttonValues, onDraftChange]);
+    onDraftChange({ phone, name, lineId, templateName: selectedName, values, buttonValues });
+  }, [phone, name, lineId, selectedName, values, buttonValues, onDraftChange]);
+
+  const changeLine = (nextId: string) => {
+    const next = lineById(nextId);
+    if (!next || !line || next.id === line.id) return;
+    const keepsTemplate = !selectedName || form.selectedExistsIn(next.waBusinessId);
+    setRemoved(keepsTemplate ? null : { templateName: selectedName, values, buttonValues, from: line, to: next });
+    if (!keepsTemplate) form.reset();
+    setLineId(next.id);
+  };
+
+  const undoLineChange = () => {
+    if (!removed) return;
+    setLineId(removed.from.id);
+    form.selectTemplate(removed.templateName);
+    form.setValues(removed.values);
+    form.setButtonValues(removed.buttonValues);
+    setRemoved(null);
+  };
+
+  const selectTemplate = (templateName: string) => {
+    setRemoved(null);
+    form.selectTemplate(templateName);
+  };
 
   const status = !digits ? 'Escribe el número de destino.'
     : !phoneValid ? 'El número parece incompleto: lleva código de país.'
@@ -86,6 +133,7 @@ export const NewConversationPanel = ({ initialDraft, onClose, onBack, onCreated,
       const message = await startConversation.mutateAsync({
         destinationNumber: digits,
         contactName: name.trim() || undefined,
+        lineId: line?.id,
         ...form.buildPayload(),
       });
       onCreated(message.conversationId);
@@ -109,7 +157,8 @@ export const NewConversationPanel = ({ initialDraft, onClose, onBack, onCreated,
     }
     if (form.approved.length === 0) {
       return (
-        <Callout tone="info" icon={<LayoutTemplate size={16} />} title="No tienes plantillas aprobadas">
+        <Callout tone="info" icon={<LayoutTemplate size={16} />}
+          title={hasManyLines && line ? `${lineLabel(line)} no tiene plantillas aprobadas` : 'No tienes plantillas aprobadas'}>
           Créalas en el Administrador de WhatsApp de Meta. Cuando Meta las apruebe, pulsa{' '}
           <span className="font-semibold text-brand-strong">Sincronizar</span> en la página{' '}
           <Link
@@ -123,8 +172,19 @@ export const NewConversationPanel = ({ initialDraft, onClose, onBack, onCreated,
     }
     return (
       <div className="grid gap-3.5">
-        <TemplatePicker templates={form.approved} selected={form.selected} onSelect={t => form.selectTemplate(t.name)}
-          disabledReason={templateHeaderIssue} />
+        {removed && (
+          <Callout tone="warning" icon={<AlertCircle size={16} />} title={`Quitamos «${removed.templateName}».`}
+            action={<button type="button" onClick={undoLineChange}
+              className="text-[13px] font-semibold text-brand-accent-strong hover:underline cursor-pointer">
+              Volver a {lineLabel(removed.from)}
+            </button>}>
+            Es de otra cuenta de WhatsApp Business y no se puede enviar por {lineLabel(removed.to)}.
+            Elige una de las de {lineLabel(removed.to)}.
+          </Callout>
+        )}
+        <TemplatePicker templates={form.approved} selected={form.selected} onSelect={t => selectTemplate(t.name)}
+          disabledReason={templateHeaderIssue}
+          hint={hasManyLines && line ? `${form.approved.length} de ${lineLabel(line)}` : undefined} />
         <TemplateFields form={form} />
       </div>
     );
@@ -164,6 +224,20 @@ export const NewConversationPanel = ({ initialDraft, onClose, onBack, onCreated,
           </button>
         </div>
 
+        <div className="empty:hidden mt-3.5">
+          <LineSelect value={line?.id ?? null} onChange={changeLine} templateChosen={Boolean(selectedName)} />
+        </div>
+
+        {hasManyLines && existing && line && (
+          <div className="mt-3.5">
+            <Callout icon={<MessageSquare size={16} />} title={`${existing.title} ya tiene una conversación por ${lineLabel(line)}.`}
+              action={<button type="button" onClick={() => onOpenExisting(existing.id)}
+                className="text-[13px] font-semibold text-brand-accent-strong hover:underline cursor-pointer">Abrirla</button>}>
+              La plantilla se envía en esa conversación y el historial sigue junto.
+            </Callout>
+          </div>
+        )}
+
         <div className="grid sm:grid-cols-2 gap-x-4 gap-y-3.5 mt-3.5">
           <AuthField
             label="Número de WhatsApp"
@@ -173,7 +247,7 @@ export const NewConversationPanel = ({ initialDraft, onClose, onBack, onCreated,
             inputMode="numeric"
             autoComplete="off"
             mono
-            hint={existing ? (
+            hint={existing && !hasManyLines ? (
               <>
                 Ya tienes una conversación con este número.{' '}
                 <button
@@ -237,7 +311,7 @@ export const NewConversationPanel = ({ initialDraft, onClose, onBack, onCreated,
           <div className="h-10">
             <CustomButton type="submit" isLoading={startConversation.isPending} disabled={!ready}>
               <Send size={16} />
-              Enviar plantilla
+              {hasManyLines && existing ? 'Enviar en su conversación' : 'Enviar plantilla'}
             </CustomButton>
           </div>
         </div>

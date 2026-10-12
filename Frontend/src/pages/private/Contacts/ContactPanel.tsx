@@ -21,6 +21,8 @@ import { formatActivityTime, formatDateTime } from '../../../utils/formatChatTim
 import { ContactAvatar } from './ContactRow';
 import { ContactForm } from './ContactForm';
 import { ReferralCard } from '../../../components/Contact/ReferralCard';
+import { LineWindowList } from '../../../components/Contact/LineWindowList';
+import { useLines } from '../../../hooks/useLines';
 
 export type ContactPanelState =
     | { mode: 'view'; id: string }
@@ -184,6 +186,9 @@ const ContactDetails = ({ contact, onClose, onEdit }: {
 }) => {
     const navigate = useNavigate();
     const window24 = useConversationWindow(contact.windowExpiresAt);
+    // Con más de una línea, la ventana es de cada número: una fila por conversación.
+    const { showLines } = useLines();
+    const byLine = showLines && contact.conversations.length > 0;
     const { data: allTags = [] } = useTags();
     const tags = tagsFromIds(allTags, contact.tagIds);
     const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -274,16 +279,22 @@ const ContactDetails = ({ contact, onClose, onEdit }: {
 
                 <div className="grid gap-2.5">
                     <SectionLabel>Actividad</SectionLabel>
-                    <div className={`border rounded-xl px-3.5 py-3 grid gap-0.5 ${windowInfo.box}`}>
-                        <div className="flex items-center gap-2">
-                            <span className={`w-2 h-2 rounded-full flex-none ${windowInfo.dot}`} />
-                            <span className="text-sm font-semibold text-brand-text">{windowInfo.title}</span>
-                            {windowInfo.right && (
-                                <span className="ml-auto font-mono text-xs font-medium text-brand-accent-strong">{windowInfo.right}</span>
-                            )}
+                    {byLine ? (
+                        <LineWindowList tone="light" conversations={contact.conversations}
+                            onOpen={conversationId => navigate(`${AppRoutes.private.root}/${AppRoutes.private.chats}`,
+                                { state: { conversationId } satisfies ChatsNavigationState })} />
+                    ) : (
+                        <div className={`border rounded-xl px-3.5 py-3 grid gap-0.5 ${windowInfo.box}`}>
+                            <div className="flex items-center gap-2">
+                                <span className={`w-2 h-2 rounded-full flex-none ${windowInfo.dot}`} />
+                                <span className="text-sm font-semibold text-brand-text">{windowInfo.title}</span>
+                                {windowInfo.right && (
+                                    <span className="ml-auto font-mono text-xs font-medium text-brand-accent-strong">{windowInfo.right}</span>
+                                )}
+                            </div>
+                            <div className="text-[12.5px] text-brand-strong pl-4">{windowInfo.sub}</div>
                         </div>
-                        <div className="text-[12.5px] text-brand-strong pl-4">{windowInfo.sub}</div>
-                    </div>
+                    )}
                     <div className="grid grid-cols-2 gap-px bg-brand-border border border-brand-border rounded-xl overflow-hidden">
                         <div className="bg-brand-surface px-3.5 py-2.5">
                             <div className="text-xs text-brand-muted">Primer contacto</div>
@@ -313,6 +324,9 @@ const ContactDetails = ({ contact, onClose, onEdit }: {
                             </div>
                         ))}
                     </div>
+                    {byLine && contact.conversations.length > 1 && (
+                        <div className="text-[11.5px] text-brand-subtle -mt-1">Suma de sus {contact.conversations.length} conversaciones</div>
+                    )}
                 </div>
 
                 {contact.referral && (

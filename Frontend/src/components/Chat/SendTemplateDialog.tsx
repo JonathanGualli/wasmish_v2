@@ -8,11 +8,17 @@ import { useTemplateForm, templateSendError } from '../../hooks/useTemplateForm'
 import { TemplatePicker, TemplateFields } from './TemplateFields';
 import { TemplateBubble, TemplateButtons } from './TemplatePreview';
 import { templateHeaderIssue } from '../../utils/templateHeader';
+import { useLines } from '../../hooks/useLines';
+import type { Line } from '../../models/line.model';
+import { lineLabel } from '../../utils/lineDisplay';
+import { LineSwatch } from '../Line/LineSwatch';
 
 interface Props {
   open: boolean;
   onClose: () => void;
   conversationId: string;
+  /** La línea de la conversación: se envía por ella, con las plantillas de su cuenta de WhatsApp Business. */
+  line?: Line;
   /** Solo para el texto de cabecera: a quién se le va a escribir. */
   contactName: string;
   /** Con la ventana abierta no hace falta explicar por qué una plantilla. */
@@ -26,9 +32,13 @@ interface Props {
  * con la ventana de 24 h cerrada, y otra cosa más que mandar con ella abierta
  * (una con botones, un recordatorio ya redactado). Los errores van al aviso global, como en el resto de la app; el
  * diálogo sigue abierto debajo para corregir sin perder lo escrito.
+ *
+ * No se elige línea: es la de la conversación. Con varias, la cabecera dice
+ * cuál, y solo se ofrecen las plantillas de su cuenta de WhatsApp Business.
  */
-export const SendTemplateDialog = ({ open, onClose, conversationId, contactName, windowOpen, keepsDraft }: Props) => {
-  const form = useTemplateForm();
+export const SendTemplateDialog = ({ open, onClose, conversationId, line, contactName, windowOpen, keepsDraft }: Props) => {
+  const form = useTemplateForm(undefined, line ? line.waBusinessId : undefined);
+  const { showLines, colorOf } = useLines();
   const sendTemplate = useSendTemplate();
   const { state: errorVisible, setState, setContent } = useNoticeContext();
 
@@ -74,6 +84,15 @@ export const SendTemplateDialog = ({ open, onClose, conversationId, contactName,
                 A <span className="font-semibold text-brand-strong">{contactName}</span>.
                 {!windowOpen && ' Fuera de la ventana de 24 h, WhatsApp solo entrega plantillas aprobadas.'}
               </p>
+              {showLines && line && (
+                <p className="text-[13px] text-brand-muted mt-1">
+                  Por{' '}
+                  <span className="inline-flex items-center gap-1.5 align-baseline font-semibold text-brand-strong">
+                    <LineSwatch colorClass={colorOf(line.id)} size="sm" />{lineLabel(line)}
+                  </span>
+                  , con las plantillas de su cuenta de WhatsApp Business.
+                </p>
+              )}
             </div>
             <button
               type="button"
