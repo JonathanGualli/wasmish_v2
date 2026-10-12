@@ -25,6 +25,31 @@ await mongoose.connect(mongod.getUri());
 const { default: app } = await import('../../src/app.js');
 const { createAccessToken } = await import('../../src/libs/jwt.js');
 const { encrypt } = await import('../../src/utils/crypto.js');
+const { whatsappApi } = await import('../../src/libs/whatsapp.js');
+
+// Meta falso. Todas las llamadas a Meta pasan por `whatsappApi`, así que
+// cambiarle el transporte basta para que ningún test llegue a la red, ni
+// siquiera si una regresión mueve una comprobación por detrás de la llamada.
+// Un test prepara las respuestas con `onMeta`; lo que no tiene respuesta
+// lanza y queda en `unexpectedMetaCalls`, y el `after` de abajo hace fallar
+// el archivo aunque el controlador se haya tragado el error.
+export const metaCalls = [];
+const unexpectedMetaCalls = [];
+let metaResponder = null;
+
+/** `responder(config) → { data, status? } | undefined`; `undefined` = llamada no prevista. `null` lo quita. */
+export const onMeta = (responder) => { metaResponder = responder; };
+
+whatsappApi.defaults.adapter = async (config) => {
+    const call = { method: config.method, url: config.url };
+    metaCalls.push(call);
+    const reply = await metaResponder?.(config);
+    if (!reply) {
+        unexpectedMetaCalls.push(call);
+        throw new Error(`Llamada a Meta no prevista en un test: ${config.method?.toUpperCase()} ${config.url}`);
+    }
+    return { data: reply.data, status: reply.status ?? 200, statusText: 'OK', headers: {}, config, request: {} };
+};
 const load = async (file) => (await import(`../../src/models/${file}`)).default;
 
 export const User = await load('user.model.js');
@@ -46,6 +71,9 @@ after(async () => {
     await mongoose.disconnect();
     await mongod.stop();
     await fs.rm(process.env.MEDIA_DIR, { recursive: true, force: true });
+    // Al final: si fallara antes de cerrar, Mongo y el servidor quedarían
+    // abiertos y el proceso no terminaría nunca.
+    assert.deepEqual(unexpectedMetaCalls, [], 'un test llamó a Meta sin respuesta preparada');
 });
 
 // La firma de un PNG y poco más: basta para pasar la comprobación de formato.
