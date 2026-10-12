@@ -145,7 +145,7 @@ export const seedAccount = async (label, { rol = 'admin', seq = 1 } = {}) => {
     });
 
     return {
-        label, marker, userId: String(user._id),
+        label, marker, seq, userId: String(user._id),
         token: await createAccessToken({ id: String(user._id) }),
         tagId: String(tag._id),
         contactId: String(contact._id),
@@ -162,9 +162,12 @@ export const seedAccount = async (label, { rol = 'admin', seq = 1 } = {}) => {
     };
 };
 
-/** Una cuenta con WhatsApp «conectado», para lo que lo exige antes de nada (crear una campaña). */
+/**
+ * Una cuenta con WhatsApp «conectado», para lo que lo exige antes de nada (crear una campaña).
+ * El número es distinto por cuenta (`99<seq>`): un número solo puede estar en una.
+ */
 export const connectWhatsapp = (account) =>
-    User.updateOne({ _id: account.userId }, { tokenWhatsapp: encrypt('token-de-pruebas'), phoneNumberId: '999' });
+    User.updateOne({ _id: account.userId }, { tokenWhatsapp: encrypt('token-de-pruebas'), phoneNumberId: `99${account.seq}` });
 
 /**
  * Una petición con la sesión de `account`. `body` puede ser un objeto (JSON)

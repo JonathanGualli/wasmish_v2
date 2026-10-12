@@ -1,23 +1,45 @@
 import User from "../models/user.model.js";
 import { encrypt } from "../utils/crypto.js";
 import { exchangeCodeForToken, subscribeAppToWaba } from "../libs/whatsapp.js";
+import { isPhoneNumberTaken, verifyWabaPhoneNumber, PHONE_NUMBER_TAKEN_MESSAGE } from "../services/whatsapp.connection.service.js";
+
+// La respuesta de error de las dos formas de conectar (esta y el formulario
+// manual, en user.controller.js). El 11000 es el índice único de
+// `User.phoneNumberId`: otra conexión se quedó el número entre la comprobación
+// y el guardado.
+export const connectionErrorResponse = (res, error) => {
+    if (error.code === 11000) return res.status(409).json([{ message: PHONE_NUMBER_TAKEN_MESSAGE }]);
+    const status = error.statusCode || (error.waErrorCode ? 502 : 500);
+    if (status >= 500) console.error('Conectar WhatsApp falló:', error.waErrorDetail ?? error.message);
+    return res.status(status).json([{ message: error.message, errorCode: error.waErrorCode ?? null }]);
+};
 
 export const connectWhatsappEmbedded = async (req, res) => {
     try {
         const userId = req.user.id;
         const { code, phoneNumberId, waBusinessId } = req.body;
 
-        // 1. Canjear el "code" por el token permanente
-        const accessToken = await exchangeCodeForToken(code);
-        if ( !accessToken ) return res.status(400).json([{message: 'No se pudo obtener el token de Meta'}]);
-
-        // 2. Subir la app a los whebhooks del whatsapp del cliente
-        await subscribeAppToWaba( { token: accessToken, waBusinessId } );
-
-        // 3. Guardar credenciales (token cifrado) en el usuario
         const user = await User.findById(userId);
         if (!user) return res.status(404).json([{ message: "User not found" }]);
 
+        // 1. El número no puede estar en otra cuenta. Va antes que todo lo
+        //    demás: no hace falta molestar a Meta para saberlo.
+        if (await isPhoneNumberTaken(userId, phoneNumberId)) {
+            return res.status(409).json([{ message: PHONE_NUMBER_TAKEN_MESSAGE }]);
+        }
+
+        // 2. Canjear el "code" por el token permanente
+        const accessToken = await exchangeCodeForToken(code);
+        if ( !accessToken ) return res.status(400).json([{message: 'No se pudo obtener el token de Meta'}]);
+
+        // 3. El número tiene que ser del WABA de ese token. Antes de suscribir
+        //    la app: si no lo es, no se toca nada en Meta.
+        await verifyWabaPhoneNumber({ token: accessToken, waBusinessId, phoneNumberId });
+
+        // 4. Subir la app a los whebhooks del whatsapp del cliente
+        await subscribeAppToWaba( { token: accessToken, waBusinessId } );
+
+        // 5. Guardar credenciales (token cifrado) en el usuario
         user.tokenWhatsapp = encrypt(accessToken);
         user.phoneNumberId = phoneNumberId;
         user.waBusinessId = waBusinessId;
@@ -30,6 +52,6 @@ export const connectWhatsappEmbedded = async (req, res) => {
         });
 
     } catch (error) {
-        return res.status(500).json([{message: error.message}]);
+        return connectionErrorResponse(res, error);
     }
 }

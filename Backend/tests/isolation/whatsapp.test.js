@@ -1,0 +1,94 @@
+// Un número de WhatsApp es de una sola cuenta: el webhook enruta por él.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { seedAccount, request, connectWhatsapp, metaCalls, onMeta, User } from './helpers.js';
+
+const { isPhoneNumberTaken } = await import('../../src/services/whatsapp.connection.service.js');
+
+const a = await seedAccount('A', { seq: 1 });
+const b = await seedAccount('B', { seq: 2 });
+await connectWhatsapp(a);
+const A_NUMBER = '991';
+
+// Meta devuelve `numbers` como los números del WABA; el resto de llamadas, OK.
+const fakeMeta = (numbers, { onPhoneNumbers } = {}) => onMeta(async (config) => {
+    if (config.url === '/oauth/access_token') return { data: { access_token: 'token-nuevo' } };
+    if (config.url.endsWith('/phone_numbers')) {
+        await onPhoneNumbers?.();
+        return { data: { data: numbers.map(id => ({ id })) } };
+    }
+    if (config.url.endsWith('/subscribed_apps')) return { data: { success: true } };
+});
+
+const updateToken = (account, phoneNumberId) => request(account, 'PUT', '/users/update-user-token-whatsapp',
+    { tokenWhatsapp: 'token-manual', phoneNumberId, waBusinessId: `waba-${account.label}` });
+
+// Regresión que vigila: un número ya conectado en otra cuenta no se puede volver a conectar.
+test('PUT /users/update-user-token-whatsapp: B no puede declarar el número de A, y sin llamar a Meta', async () => {
+    const before = metaCalls.length;
+    const res = await updateToken(b, A_NUMBER);
+    assert.equal(res.status, 409, res.text);
+    assert.equal(metaCalls.length, before);
+    assert.equal((await User.findById(b.userId).lean()).phoneNumberId, null);
+});
+
+test('POST /whatsapp/connect: B no puede conectar el número de A, y sin llamar a Meta', async () => {
+    const before = metaCalls.length;
+    const res = await request(b, 'POST', '/whatsapp/connect', { code: 'x', phoneNumberId: A_NUMBER, waBusinessId: 'waba-b' });
+    assert.equal(res.status, 409, res.text);
+    assert.equal(metaCalls.length, before);
+});
+
+test('PUT /users/update-user-token-whatsapp: faltan phoneNumberId o waBusinessId → 400', async () => {
+    const res = await request(b, 'PUT', '/users/update-user-token-whatsapp', { tokenWhatsapp: 'x' });
+    assert.equal(res.status, 400, res.text);
+});
+
+test('PUT /users/update-user-token-whatsapp: un número que no está en el WABA → 400 y nada guardado', async () => {
+    const c = await seedAccount('C', { seq: 3 });
+    fakeMeta(['993-otro']);
+    const res = await updateToken(c, '993');
+    onMeta(null);
+    assert.equal(res.status, 400, res.text);
+    assert.equal((await User.findById(c.userId).lean()).phoneNumberId, null);
+});
+
+test('PUT /users/update-user-token-whatsapp: un número del WABA se guarda, con el token cifrado', async () => {
+    const d = await seedAccount('D', { seq: 4 });
+    fakeMeta(['994']);
+    const res = await updateToken(d, '994');
+    onMeta(null);
+    assert.equal(res.status, 200, res.text);
+    const saved = await User.findById(d.userId).lean();
+    assert.equal(saved.phoneNumberId, '994');
+    assert.notEqual(saved.tokenWhatsapp, 'token-manual');
+});
+
+test('POST /whatsapp/connect: comprueba el número antes de suscribir la app, y lo guarda', async () => {
+    const e = await seedAccount('E', { seq: 5 });
+    fakeMeta(['995']);
+    const before = metaCalls.length;
+    const res = await request(e, 'POST', '/whatsapp/connect', { code: 'x', phoneNumberId: '995', waBusinessId: 'waba-e' });
+    onMeta(null);
+    assert.equal(res.status, 200, res.text);
+    assert.deepEqual(metaCalls.slice(before).map(c => c.url),
+        ['/oauth/access_token', '/waba-e/phone_numbers', '/waba-e/subscribed_apps']);
+    assert.equal((await User.findById(e.userId).lean()).phoneNumberId, '995');
+});
+
+test('dos conexiones a la vez: la segunda recibe 409, no 500, y no guarda nada', async () => {
+    await User.init();
+    const f = await seedAccount('F', { seq: 6 });
+    const g = await seedAccount('G', { seq: 7 });
+    // Mientras Meta responde a F, G se queda el número: F ya pasó la comprobación previa.
+    fakeMeta(['996'], { onPhoneNumbers: () => User.updateOne({ _id: g.userId }, { phoneNumberId: '996' }) });
+    const res = await updateToken(f, '996');
+    onMeta(null);
+    assert.equal(res.status, 409, res.text);
+    assert.equal((await User.findById(f.userId).lean()).phoneNumberId, null);
+});
+
+test('isPhoneNumberTaken: el número propio no cuenta como tomado (reconectar)', async () => {
+    assert.equal(await isPhoneNumberTaken(a.userId, A_NUMBER), false);
+    assert.equal(await isPhoneNumberTaken(b.userId, A_NUMBER), true);
+});
