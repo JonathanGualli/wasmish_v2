@@ -3,7 +3,8 @@
 // donde más fácil se olvida el filtro por cuenta.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { seedAccount, request, assertNoLeak, assertHasOwn, Contact, Tag } from './helpers.js';
+import mongoose from 'mongoose';
+import { seedAccount, request, assertNoLeak, assertHasOwn, Contact, Conversation, Message, Tag } from './helpers.js';
 
 const a = await seedAccount('A', { seq: 1 });
 const b = await seedAccount('B', { seq: 2 });
@@ -122,4 +123,68 @@ test('DELETE /tags/:id: B no borra una etiqueta de A ni se la quita a sus contac
 
     const asA = await request(a, 'DELETE', `/tags/${a.tagId}`);
     assert.equal(asA.status, 200, asA.text);
+});
+
+// Regresión que vigila (Codex, PR #13): el índice por línea excluye las
+// conversaciones sin `lineId` (las que nacen si la proyección de la línea
+// falló), y dos entrantes a la vez de un contacto nuevo creaban dos.
+test('dos conversaciones sin línea del mismo contacto chocan con el índice', async () => {
+    await Conversation.init();
+    const e = await seedAccount('E', { seq: 5 });   // su conversación sembrada no tiene línea
+    await assert.rejects(
+        Conversation.create({ userId: e.accountId, contactId: e.contactId, contactPhone: e.phone, phoneNumberId: '105' }),
+        error => error.code === 11000,
+    );
+});
+
+// Fase 2b de multi-línea: un contacto tiene una conversación por línea.
+test('un contacto con dos conversaciones: la ficha las lista y la actividad suma las dos', async () => {
+    const c = await seedAccount('C', { seq: 3 });
+    const second = await Conversation.create({
+        userId: c.accountId, contactId: c.contactId, contactPhone: c.phone, phoneNumberId: '7003',
+        lineId: new mongoose.Types.ObjectId(), lastMessageAt: new Date(Date.now() + 60_000), lastInboundAt: new Date(),
+    });
+    await Message.create({
+        conversationId: second._id, direction: 'inbound', sender: 'them', text: 'por la otra línea', timestamp: new Date(),
+    });
+
+    const res = await request(c, 'GET', `/contacts/${c.contactId}`);
+    assert.equal(res.status, 200, res.text);
+    assert.deepEqual(res.body.conversations.map(item => item.conversationId), [String(second._id), c.conversationId]);
+    assert.equal(res.body.conversations[0].lineId, String(second.lineId));
+    // Los campos sueltos son los de la más reciente (el front los lee hasta la 2c).
+    assert.equal(res.body.conversationId, String(second._id));
+    assert.ok(res.body.windowExpiresAt);
+    assert.equal(res.body.activity.received, 2);
+});
+
+test('la lista no repite al contacto con dos conversaciones', async () => {
+    const d = await seedAccount('D', { seq: 4 });
+    await Conversation.create({
+        userId: d.accountId, contactId: d.contactId, contactPhone: d.phone, phoneNumberId: '7004',
+        lineId: new mongoose.Types.ObjectId(), lastMessageAt: new Date(Date.now() + 60_000),
+    });
+
+    const res = await request(d, 'GET', `/contacts?search=${d.phone}`);
+    assert.equal(res.status, 200, res.text);
+    assert.equal(res.body.contacts.length, 1);
+    assert.equal(res.body.contacts[0].conversations.length, 2);
+    // «Con conversación» lo sigue contando una vez.
+    const withConversation = await request(d, 'GET', '/contacts?filter=with_conversation');
+    assert.equal(withConversation.body.contacts.filter(item => item.id === d.contactId).length, 1);
+});
+
+// La conversación de otra cuenta que apunta a un contacto de A no debería
+// existir; si existiera (un dato roto), la ficha de A no puede enseñarla.
+test('las conversaciones de un contacto nunca traen las de otra cuenta', async () => {
+    const intruder = await Conversation.create({
+        userId: b.accountId, contactId: a.contactId, contactPhone: a.phone, phoneNumberId: '7002',
+        lineId: new mongoose.Types.ObjectId(), lastMessage: `${b.marker} intrusa`,
+    });
+
+    const detail = await request(a, 'GET', `/contacts/${a.contactId}`);
+    assert.equal(detail.status, 200, detail.text);
+    assert.ok(!detail.body.conversations.some(item => item.conversationId === String(intruder._id)));
+    const list = await request(a, 'GET', `/contacts?search=${a.phone}`);
+    assert.ok(!list.text.includes(String(intruder._id)));
 });

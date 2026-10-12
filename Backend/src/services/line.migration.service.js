@@ -10,13 +10,28 @@ import { historicalLines, lineStateIssues, ownerConnection, sharedWabas } from '
 // La lógica de `migrate:lines` (Fase 2a de multi-línea), aparte del script para
 // poder probarla con Mongo. Crea las líneas de los datos de hoy y le pone a
 // cada conversación la línea de SU número (no la del actual: los números
-// anteriores conservan su historial en una línea desconectada).
+// anteriores conservan su historial en una línea desconectada). Desde la 2b,
+// además cambia el índice de conversaciones a uno por contacto y línea.
 //
 // Idempotente. La conexión actual sale de `User` en el momento de escribir
 // (`syncLinesFromOwner`), así que se puede correr con la API en marcha: una
 // conexión hecha a la vez no se pisa.
 
 const accountLabel = (owner) => owner.email ?? String(owner.accountId);
+
+// El índice anterior a la Fase 2b: una conversación por contacto en toda la
+// cuenta. Con él, un contacto no puede tener una conversación en cada línea.
+const OLD_CONVERSATION_INDEX = 'conversation_contact_unique';
+
+const hasOldConversationIndex = async () =>
+    (await Conversation.collection.indexes()).some(index => index.name === OLD_CONVERSATION_INDEX);
+
+// Primero el índice nuevo (`conversation_line_contact_unique`, el del esquema)
+// y después se borra el viejo: nunca hay un momento sin ninguno de los dos.
+const replaceConversationIndex = async () => {
+    await Conversation.createIndexes();
+    if (await hasOldConversationIndex()) await Conversation.collection.dropIndex(OLD_CONVERSATION_INDEX);
+};
 
 // Lo que hay en una cuenta y lo que la migración haría en ella.
 const inspectAccount = async (owner) => {
@@ -100,6 +115,7 @@ export const runLineMigration = async ({ dryRun = false, check = false } = {}) =
         conversations: inspected.reduce((sum, state) => sum + state.conversations, 0),
         campaigns: inspected.reduce((sum, state) => sum + state.campaigns, 0),
         accountsOutOfSync: inspected.filter(state => state.issues.length > 0).length,
+        oldConversationIndex: await hasOldConversationIndex(),
     };
     const issues = inspected
         .filter(state => state.issues.length > 0)
@@ -108,5 +124,6 @@ export const runLineMigration = async ({ dryRun = false, check = false } = {}) =
     if (stop.length > 0 || dryRun || check) return { stop, pending, issues, applied: false };
 
     for (const state of inspected) await applyAccount(state);
+    await replaceConversationIndex();
     return { stop, pending, issues, applied: true };
 };

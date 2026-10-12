@@ -32,14 +32,27 @@ export interface Contact {
     referral: ContactReferral | null;
     marketingOptOut: boolean;
     marketingOptOutAt: string | null;
-    /** `null` = nunca hubo conversación: se puede borrar y cambiar el teléfono. */
+    /**
+     * `null` = nunca hubo conversación: se puede borrar y cambiar el teléfono.
+     * Con varias líneas, la más reciente (como `lastInteractionAt` y `windowExpiresAt`).
+     */
     conversationId: string | null;
     lastInteractionAt: string | null;
     /** ISO de cuándo cierra la ventana de 24 h. `null` = cerrada o nunca escribió. */
     windowExpiresAt: string | null;
+    /** Una por línea, la más reciente primero. La UI las usa desde la Fase 2c. */
+    conversations: ContactConversation[];
     /** Sus etiquetas; los nombres salen de `GET /tags`. */
     tagIds: string[];
     createdAt: string;
+}
+
+export interface ContactConversation {
+    conversationId: string;
+    lineId: string | null;
+    lastInteractionAt: string | null;
+    /** La ventana de esta conversación: es de su línea, no del contacto. */
+    windowExpiresAt: string | null;
 }
 
 export interface ContactActivity {

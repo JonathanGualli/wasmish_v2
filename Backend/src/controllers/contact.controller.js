@@ -3,8 +3,7 @@ import Contact from "../models/contact.model.js";
 import Conversation from "../models/conversation.model.js";
 import Message from "../models/message.model.js";
 import { hasContactIdentity, mergeContactUpdates, contactDisplayName } from "../utils/contact.identity.js";
-import { pickContactFields, buildContactMatch, CONTACT_FILTERS } from "../utils/contact.query.js";
-import { getWindowExpiry } from "../utils/whatsapp.window.js";
+import { pickContactFields, buildContactMatch, CONTACT_FILTERS, summarizeConversations } from "../utils/contact.query.js";
 import { resolveMarketingPreference } from "../utils/marketing.preference.js";
 import { MAX_TAGS_PER_CONTACT } from "../utils/contact.tags.js";
 import { resolveOwnedTagIds } from "../services/tag.service.js";
@@ -247,33 +246,44 @@ const MAX_PAGE_SIZE = 50;
 const findOwnedContact = (userId, id) =>
     mongoose.isValidObjectId(id) ? Contact.findOne({ _id: id, userId }) : null;
 
-const findContactConversation = (userId, contactId) =>
-    Conversation.findOne({ userId, contactId }).lean();
+// Lo que la ficha y la lista necesitan de cada conversación del contacto (una
+// por línea, Fase 2b de multi-línea).
+const CONVERSATION_SUMMARY_FIELDS = { lineId: 1, lastMessageAt: 1, lastInboundAt: 1 };
+
+const findContactConversations = (userId, contactId) =>
+    Conversation.find({ userId, contactId }).select(CONVERSATION_SUMMARY_FIELDS).lean();
 
 const toIso = (date) => (date ? new Date(date).toISOString() : null);
 
 // La forma en que la API devuelve un contacto, en la lista y en la ficha.
-const serializeContact = (contact, conversation = null) => ({
-    id: String(contact._id),
-    displayName: contactDisplayName(contact),
-    name: contact.name ?? null,
-    profileName: contact.profileName ?? null,
-    phone: contact.phone ?? null,
-    username: contact.username ?? null,
-    email: contact.email ?? null,
-    company: contact.company ?? null,
-    notes: contact.notes ?? null,
-    source: contact.source ?? null,
-    referral: contact.referral ?? null,
-    // Solo los ids: los nombres los tiene el front con GET /tags.
-    tagIds: (contact.tags ?? []).map(String),
-    marketingOptOut: Boolean(contact.marketingOptOut),
-    marketingOptOutAt: toIso(contact.marketingOptOutAt),
-    conversationId: conversation ? String(conversation._id) : null,
-    lastInteractionAt: toIso(conversation?.lastMessageAt),
-    windowExpiresAt: toIso(getWindowExpiry(conversation?.lastInboundAt)),
-    createdAt: toIso(contact.createdAt),
-});
+// `conversations`: todas las suyas, una por línea. Los campos sueltos
+// (`conversationId`, `lastInteractionAt`, `windowExpiresAt`) son los de la más
+// reciente: el front los lee hasta la Fase 2c.
+const serializeContact = (contact, conversations = []) => {
+    const { latest, items } = summarizeConversations(conversations);
+    return {
+        id: String(contact._id),
+        displayName: contactDisplayName(contact),
+        name: contact.name ?? null,
+        profileName: contact.profileName ?? null,
+        phone: contact.phone ?? null,
+        username: contact.username ?? null,
+        email: contact.email ?? null,
+        company: contact.company ?? null,
+        notes: contact.notes ?? null,
+        source: contact.source ?? null,
+        referral: contact.referral ?? null,
+        // Solo los ids: los nombres los tiene el front con GET /tags.
+        tagIds: (contact.tags ?? []).map(String),
+        marketingOptOut: Boolean(contact.marketingOptOut),
+        marketingOptOutAt: toIso(contact.marketingOptOutAt),
+        conversationId: latest ? String(latest._id) : null,
+        lastInteractionAt: items[0]?.lastInteractionAt ?? null,
+        windowExpiresAt: items[0]?.windowExpiresAt ?? null,
+        conversations: items,
+        createdAt: toIso(contact.createdAt),
+    };
+};
 
 const sendContactError = (res, status, message, extra = {}) =>
     res.status(status).json([{ message, ...extra }]);
@@ -293,7 +303,8 @@ const sendUnknownTags = (res) =>
 
 /**
  * Las etapas de aggregate que dejan los contactos de una búsqueda y un filtro,
- * cada uno con su `conversation` (o null). Las comparten la lista y las
+ * cada uno con sus `conversations` (una por línea, la más reciente primero) y
+ * `conversation`, la más reciente (o null). Las comparten la lista y las
  * campañas: «todos los que coinciden» tiene que ser exactamente lo que se ve.
  *
  * `userId` como ObjectId: aggregate no convierte tipos como find.
@@ -308,9 +319,20 @@ export const contactSelectionStages = ({ userId, search, filter, tagIds }) => {
 
     return [
         { $match: match },
-        { $lookup: { from: Conversation.collection.name, localField: '_id', foreignField: 'contactId', as: 'conversations' } },
+        // Con `let` y `pipeline` (vale desde Mongo 3.6) para filtrar también
+        // por la cuenta: una conversación ajena que apuntara a este contacto
+        // no se cuela.
+        { $lookup: {
+            from: Conversation.collection.name,
+            let: { contactId: '$_id', userId: '$userId' },
+            pipeline: [
+                { $match: { $expr: { $and: [{ $eq: ['$contactId', '$$contactId'] }, { $eq: ['$userId', '$$userId'] }] } } },
+                { $sort: { lastMessageAt: -1 } },
+                { $project: CONVERSATION_SUMMARY_FIELDS },
+            ],
+            as: 'conversations',
+        } },
         { $addFields: { conversation: { $ifNull: [{ $arrayElemAt: ['$conversations', 0] }, null] } } },
-        { $project: { conversations: 0 } },
         ...conversationMatch,
     ];
 };
@@ -362,7 +384,7 @@ export const listContacts = async (req, res) => {
         ]);
 
         return res.json({
-            contacts: result.items.map(item => serializeContact(item, item.conversation)),
+            contacts: result.items.map(item => serializeContact(item, item.conversations)),
             totalCount: result.total[0]?.count ?? 0,
             page,
             limit,
@@ -372,18 +394,19 @@ export const listContacts = async (req, res) => {
     }
 };
 
-// GET /contacts/:id — la ficha: el contacto y la actividad de su conversación.
+// GET /contacts/:id — la ficha: el contacto y la actividad de todas sus
+// conversaciones (una por línea).
 export const getContact = async (req, res) => {
     try {
         const userId = req.auth.accountId;
         const contact = await findOwnedContact(userId, req.params.id);
         if (!contact) return sendContactError(res, 404, 'Contacto no encontrado');
 
-        const conversation = await findContactConversation(userId, contact._id);
+        const conversations = await findContactConversations(userId, contact._id);
 
-        const [stats] = conversation
+        const [stats] = conversations.length > 0
             ? await Message.aggregate([
-                { $match: { conversationId: conversation._id } },
+                { $match: { conversationId: { $in: conversations.map(conversation => conversation._id) } } },
                 { $group: {
                     _id: null,
                     firstMessageAt: { $min: '$timestamp' },
@@ -395,7 +418,7 @@ export const getContact = async (req, res) => {
             : [];
 
         return res.json({
-            ...serializeContact(contact, conversation),
+            ...serializeContact(contact, conversations),
             activity: {
                 firstMessageAt: toIso(stats?.firstMessageAt),
                 sent: stats?.sent ?? 0,
@@ -436,8 +459,9 @@ export const updateContact = async (req, res) => {
         const contact = await findOwnedContact(userId, req.params.id);
         if (!contact) return sendContactError(res, 404, 'Contacto no encontrado');
 
-        const conversation = await findContactConversation(userId, contact._id);
-        if (conversation && fields.phone !== undefined && fields.phone !== contact.phone) {
+        // Con conversación en cualquier línea, el número ya no cambia.
+        const conversations = await findContactConversations(userId, contact._id);
+        if (conversations.length > 0 && fields.phone !== undefined && fields.phone !== contact.phone) {
             return sendContactError(res, 409, 'El número no se puede cambiar: el historial de WhatsApp es de este número.', { field: 'phone' });
         }
 
@@ -449,7 +473,7 @@ export const updateContact = async (req, res) => {
 
         Object.assign(contact, fields);
         await contact.save();
-        return res.json(serializeContact(contact, conversation));
+        return res.json(serializeContact(contact, conversations));
     } catch (error) {
         if (error.code === 11000) return sendDuplicatePhone(res, userId, fields.phone);
         return sendContactError(res, 500, error.message);

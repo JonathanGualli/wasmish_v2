@@ -1,6 +1,7 @@
 // Crea las líneas (`Waba` + `Line`) de los datos de hoy y le pone a cada
 // conversación la línea de SU número, a cada campaña la línea por defecto de su
-// cuenta. Fase 2a de multi-línea: ver services/line.migration.service.js.
+// cuenta, y cambia el índice de conversaciones a uno por contacto y línea
+// (Fase 2b). Fase 2a de multi-línea: ver services/line.migration.service.js.
 //
 //   node scripts/migrate-lines.js --dry-run   ← solo informa, no escribe
 //   node scripts/migrate-lines.js --check     ← igual, y sale con 1 si queda algo
@@ -26,17 +27,21 @@ const safeUri = MONGO_URI.replace(/\/\/[^/]*@/, '//***:***@');
 const printPending = ({ pending, issues }) => {
     console.log(`Líneas anteriores por crear: ${pending.oldLines} · conversaciones sin línea: ${pending.conversations} · campañas sin línea: ${pending.campaigns}`);
     console.log(`Cuentas con WABA o líneas desajustados respecto a User: ${pending.accountsOutOfSync}`);
+    console.log(`Índice viejo de conversaciones (uno por contacto, sin línea): ${pending.oldConversationIndex ? 'sigue, se cambia' : 'ya no está'}`);
     issues.forEach(({ account, issues }) => console.log(`  ${account}: ${issues.join('; ')}`));
 };
 
 const main = async () => {
-    await mongoose.connect(MONGO_URI);
+    // Sin `autoIndex` ni `autoCreate`: Mongoose crearía los índices de los
+    // modelos al cargarlos, también con --check y --dry-run, que no escriben.
+    // Al aplicar se crean a mano, antes de escribir nada.
+    await mongoose.connect(MONGO_URI, { autoIndex: false, autoCreate: false });
     console.log(`Conectado a ${safeUri}`);
     if (dryRun || check) console.log('Solo informa: no se va a escribir nada\n');
 
     // Los índices únicos de Waba y Line tienen que existir ANTES de escribir:
     // son los que frenan un WABA o un número activo en dos cuentas.
-    if (!dryRun && !check) await Promise.all([Waba.init(), Line.init()]);
+    if (!dryRun && !check) await Promise.all([Waba.createIndexes(), Line.createIndexes()]);
 
     const result = await runLineMigration({ dryRun, check });
 
@@ -59,7 +64,8 @@ const main = async () => {
 
     if (check) {
         const { pending } = result;
-        const left = pending.oldLines + pending.conversations + pending.campaigns + pending.accountsOutOfSync;
+        const left = pending.oldLines + pending.conversations + pending.campaigns + pending.accountsOutOfSync
+            + (pending.oldConversationIndex ? 1 : 0);
         if (left > 0) process.exit(1);
     }
 };

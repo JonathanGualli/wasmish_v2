@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { pickContactFields, buildContactSearch, buildContactMatch, matchesContactSearch, escapeRegex } from '../src/utils/contact.query.js';
+import {
+    pickContactFields, buildContactSearch, buildContactMatch, matchesContactSearch, escapeRegex, summarizeConversations,
+} from '../src/utils/contact.query.js';
 
 // Lo que pone WhatsApp no se edita a mano: aunque llegue en el body, se ignora.
 test('solo pasan los campos editables', () => {
@@ -92,4 +94,35 @@ test('varias etiquetas: basta con tener alguna', () => {
 test('sin etiquetas no se filtra por ellas', () => {
     assert.equal('tags' in buildContactMatch({ userId: 'u1' }), false);
     assert.equal('tags' in buildContactMatch({ userId: 'u1', tagIds: [] }), false);
+});
+
+test('summarizeConversations: sin conversaciones, latest null e items vacío', () => {
+    assert.deepEqual(summarizeConversations([]), { latest: null, items: [] });
+    assert.deepEqual(summarizeConversations(undefined), { latest: null, items: [] });
+});
+
+// Con varias líneas, un contacto tiene una conversación por línea: los campos
+// sueltos del contacto (los que lee el front hasta la 2c) son los de la más reciente.
+test('summarizeConversations: la más reciente primero y como latest', () => {
+    const vieja = { _id: 'c1', lineId: 'l1', lastMessageAt: new Date('2026-10-10T10:00:00Z'), lastInboundAt: null };
+    const nueva = {
+        _id: 'c2', lineId: 'l2',
+        lastMessageAt: new Date('2026-10-12T10:00:00Z'), lastInboundAt: new Date('2026-10-12T09:00:00Z'),
+    };
+
+    const { latest, items } = summarizeConversations([vieja, nueva]);
+
+    assert.equal(latest, nueva);
+    assert.deepEqual(items, [
+        {
+            conversationId: 'c2', lineId: 'l2',
+            lastInteractionAt: '2026-10-12T10:00:00.000Z', windowExpiresAt: '2026-10-13T09:00:00.000Z',
+        },
+        { conversationId: 'c1', lineId: 'l1', lastInteractionAt: '2026-10-10T10:00:00.000Z', windowExpiresAt: null },
+    ]);
+});
+
+test('summarizeConversations: una conversación sin línea todavía la deja en null', () => {
+    const { items } = summarizeConversations([{ _id: 'c1', lastMessageAt: null }]);
+    assert.deepEqual(items, [{ conversationId: 'c1', lineId: null, lastInteractionAt: null, windowExpiresAt: null }]);
 });

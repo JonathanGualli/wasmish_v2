@@ -29,7 +29,9 @@ process.env.META_APP_SECRET = 'secreto-meta-pruebas';
 process.env.MEDIA_DIR = await fs.mkdtemp(path.join(os.tmpdir(), 'wasmish-isolation-'));
 
 const mongod = await MongoMemoryServer.create();
-await mongoose.connect(mongod.getUri());
+// Para los scripts que se prueban en su propio proceso (migrate:lines).
+export const mongoUri = mongod.getUri();
+await mongoose.connect(mongoUri);
 
 const { default: app } = await import('../../src/app.js');
 const { createAccessToken } = await import('../../src/libs/jwt.js');
