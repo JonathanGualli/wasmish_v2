@@ -106,7 +106,7 @@ curl -sI https://wasmish.solventyc.com   # HTTP/2 200
 
 > **Se hace con la skill `deploy`** (`.agents/skills/deploy/SKILL.md`; en Claude Code, `/deploy`), que sigue estos pasos con una confirmación en cada comando del servidor. Esta sección es la referencia de qué hace cada paso. **Solo se despliega desde `master` limpio, al día y con el CI en verde**, y lo desplegado queda registrado con una **etiqueta de git `vX.Y.Z`**: el último despliegue es `git describe --tags --abbrev=0 --match 'v*'`.
 
-El código de la app se sincroniza con **`tar` sobre SSH** (la máquina local no tiene `rsync`).
+El código de la app se sincroniza con **`git archive` sobre SSH** (la máquina local no tiene `rsync`): exporta solo los archivos **versionados** del commit, así que nada sin seguimiento (`.env*`, `media/`, `node_modules`, claves `*.pem`) puede colarse. `set -o pipefail` hace que una subida a medias falle en vez de dar éxito. Hasta el 2026-10-11 se usaba `tar` sobre la carpeta, con `--exclude`; la revisión de Codex encontró que subiría cualquier archivo ignorado por git que no estuviera en la lista.
 La compilación (tanto del front como del back) ocurre **dentro de Docker**, no en local.
 
 **Regla práctica: reconstruye solo lo que cambió.**
@@ -146,8 +146,8 @@ Escribe `version` en los **dos** `package.json` a la vez (los valida antes de to
 ### 5.1 Solo cambió el Backend
 ```bash
 # 1) LOCAL (raíz del repo) — subir código del backend
-tar czf - -C Backend --exclude=node_modules --exclude=.git --exclude='.env*' --exclude=./media . \
-  | ssh megaserver 'tar xzf - -C /opt/docker-projects/prod-wasmish-main/app/Backend'
+set -o pipefail
+git archive HEAD:Backend | ssh megaserver 'tar xf - -C /opt/docker-projects/prod-wasmish-main/app/Backend'
 
 # 2) SERVER — reconstruir SOLO la api
 ssh megaserver
@@ -158,8 +158,8 @@ docker compose up -d --build wasmish-api
 ### 5.2 Solo cambió el Frontend
 ```bash
 # 1) LOCAL (raíz del repo) — subir código del frontend
-tar czf - -C Frontend --exclude=node_modules --exclude=dist --exclude=.git --exclude='.env*' . \
-  | ssh megaserver 'tar xzf - -C /opt/docker-projects/prod-wasmish-main/app/Frontend'
+set -o pipefail
+git archive HEAD:Frontend | ssh megaserver 'tar xf - -C /opt/docker-projects/prod-wasmish-main/app/Frontend'
 
 # 2) SERVER — reconstruir SOLO la web
 ssh megaserver
@@ -170,10 +170,9 @@ docker compose up -d --build wasmish-web
 ### 5.3 Cambiaron ambos
 ```bash
 # 1) LOCAL (raíz del repo) — subir backend y frontend
-tar czf - -C Backend  --exclude=node_modules --exclude=.git --exclude='.env*' --exclude=./media . \
-  | ssh megaserver 'tar xzf - -C /opt/docker-projects/prod-wasmish-main/app/Backend'
-tar czf - -C Frontend --exclude=node_modules --exclude=dist --exclude=.git --exclude='.env*' . \
-  | ssh megaserver 'tar xzf - -C /opt/docker-projects/prod-wasmish-main/app/Frontend'
+set -o pipefail
+git archive HEAD:Backend  | ssh megaserver 'tar xf - -C /opt/docker-projects/prod-wasmish-main/app/Backend'
+git archive HEAD:Frontend | ssh megaserver 'tar xf - -C /opt/docker-projects/prod-wasmish-main/app/Frontend'
 
 # 2) SERVER — reconstruir todo
 ssh megaserver

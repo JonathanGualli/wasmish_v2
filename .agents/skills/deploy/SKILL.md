@@ -64,36 +64,51 @@ Se le presenta a Jonathan un resumen con:
   git diff --quiet $LAST HEAD -- deploy/compose.yml || echo "compose cambió"
   ```
 - **Variables nuevas:** si cambió `deploy/config/api.env.example` o `deploy/build.env.example`, Jonathan las añade **a mano en el servidor** antes del despliegue. Los secretos nunca pasan por el chat.
-- **Scripts que correr** (backfills, `check:duplicates` antes de un índice único nuevo): según los commits y `docs/estado.md`. Se preguntan; no se deducen.
+- **Scripts que correr**, según los commits y `docs/estado.md`, separados en **previos** (antes de arrancar la versión nueva: `check:duplicates` antes de un índice único nuevo, que la API crea al arrancar) y **posteriores** (backfills que necesitan el código nuevo corriendo). Se preguntan; no se deducen.
 
 Jonathan confirma el resumen antes de seguir.
 
 ## 3. En el servidor (cada comando, con confirmación)
 
-1. **Guardar las imágenes que corren**, para volver atrás sin recompilar:
+Los comandos con tuberías llevan `set -o pipefail`: sin eso, una subida a medias devuelve éxito. Si uno falla, **se para**: nada de reintentar a ciegas.
+
+1. **Guardar lo que corre ahora**, para volver atrás sin recompilar. Se etiqueta la imagen **de cada contenedor en marcha** (no `:local`, que tras un intento fallido puede ser otra), y nunca se pisa un respaldo distinto. También se guarda el `compose.yml` vigente:
    ```bash
-   ssh $SERVER "docker tag prod-wasmish-main-api:local prod-wasmish-main-api:$PROD && docker tag prod-wasmish-main-web:local prod-wasmish-main-web:$PROD"
+   ssh $SERVER "set -e; for s in api web; do \
+     run=\$(docker inspect --format '{{.Image}}' prod-wasmish-main-\$s-ct); \
+     if old=\$(docker image inspect --format '{{.Id}}' prod-wasmish-main-\$s:$PROD 2>/dev/null); then \
+       [ \"\$old\" = \"\$run\" ] || { echo \"\$s:$PROD ya existe y NO es lo que corre: parar\"; exit 1; }; \
+     else docker tag \$run prod-wasmish-main-\$s:$PROD; fi; \
+     echo \"\$s:$PROD = \$run\"; done; \
+     [ -f $REMOTE/compose.yml.$PROD ] || cp $REMOTE/compose.yml $REMOTE/compose.yml.$PROD"
    ```
 2. **Borrar los archivos eliminados** (si hay). Las rutas del repo `Backend/…` y `Frontend/…` son las mismas bajo `$REMOTE/app/`:
    ```bash
    ssh $SERVER "cd $REMOTE/app && rm -f -- <archivo1> <archivo2> …"
    ```
-3. **Subir el código** de lo que cambió. Sin `.env*` (secretos de desarrollo) ni `./media` (adjuntos de pruebas locales):
+3. **Subir el código** de lo que cambió con `git archive`: exporta **solo lo versionado del commit**, así que nada sin seguimiento (claves `*.pem`, `.env`, `media/`, `node_modules`) puede colarse:
    ```bash
-   tar czf - -C Backend --exclude=node_modules --exclude=.git --exclude='.env*' --exclude=./media . \
-     | ssh $SERVER "tar xzf - -C $REMOTE/app/Backend"
-   tar czf - -C Frontend --exclude=node_modules --exclude=dist --exclude=.git --exclude='.env*' . \
-     | ssh $SERVER "tar xzf - -C $REMOTE/app/Frontend"
+   set -o pipefail
+   git archive HEAD:Backend  | ssh $SERVER "tar xf - -C $REMOTE/app/Backend"  && echo "Backend subido"
+   git archive HEAD:Frontend | ssh $SERVER "tar xf - -C $REMOTE/app/Frontend" && echo "Frontend subido"
    ```
-4. **Subir `compose.yml`** (solo si cambió):
+4. **Subir `compose.yml`** (solo si cambió; el anterior quedó guardado en el paso 1):
    ```bash
    scp deploy/compose.yml $SERVER:$REMOTE/
    ```
-5. **Reconstruir solo lo que cambió**, nombrando siempre el servicio, para no reiniciar nada más:
+5. **Compilar sin arrancar**: si el build falla, no se ha reemplazado nada y producción sigue igual.
    ```bash
-   ssh $SERVER "cd $REMOTE && docker compose up -d --build wasmish-api wasmish-web"   # o solo uno de los dos
+   ssh $SERVER "cd $REMOTE && docker compose build wasmish-api wasmish-web"   # o solo uno de los dos
    ```
-6. **Scripts**, si los hay: `ssh $SERVER "cd $REMOTE && docker compose exec wasmish-api npm run <script>"`.
+6. **Scripts previos** (si los hay), con la imagen nueva y sin tocar lo que corre:
+   ```bash
+   ssh $SERVER "cd $REMOTE && docker compose run --rm --no-deps wasmish-api npm run <script>"
+   ```
+7. **Arrancar lo nuevo**, nombrando siempre el servicio, para no reiniciar nada más:
+   ```bash
+   ssh $SERVER "cd $REMOTE && docker compose up -d --no-build wasmish-api wasmish-web"   # o solo uno de los dos
+   ```
+8. **Scripts posteriores** (si los hay): `ssh $SERVER "cd $REMOTE && docker compose exec wasmish-api npm run <script>"`.
 
 ## 4. Verificar
 
@@ -116,10 +131,14 @@ La etiqueta es el registro de qué está desplegado: el próximo despliegue part
 
 ## 6. Volver atrás
 
-Sin recompilar, con las imágenes guardadas en el paso 3.1:
+Sin recompilar, con lo guardado en el paso 3.1: primero el `compose.yml` anterior (si se cambió) y después las imágenes.
 
 ```bash
-ssh $SERVER "cd $REMOTE && docker tag prod-wasmish-main-api:$PROD prod-wasmish-main-api:local && docker tag prod-wasmish-main-web:$PROD prod-wasmish-main-web:local && docker compose up -d --no-build wasmish-api wasmish-web"
+ssh $SERVER "set -e; cd $REMOTE; \
+  [ -f compose.yml.$PROD ] && cp compose.yml.$PROD compose.yml; \
+  docker tag prod-wasmish-main-api:$PROD prod-wasmish-main-api:local; \
+  docker tag prod-wasmish-main-web:$PROD prod-wasmish-main-web:local; \
+  docker compose up -d --no-build wasmish-api wasmish-web"
 ```
 
-El código de `$REMOTE/app/` sigue siendo el nuevo: el próximo `up --build` lo volvería a desplegar. Para dejarlo también, se sube el código de la etiqueta `v$PROD` (`git switch --detach v$PROD` y los `tar` del paso 3.3) y se vuelve a `master`. **No se crea la etiqueta `v$NEW`** de un despliegue revertido.
+Los cambios hechos a mano en `config/api.env` o en `.env` no los revierte esto: se deshacen a mano. El código de `$REMOTE/app/` sigue siendo el nuevo, y el próximo `build` lo volvería a desplegar. Para dejarlo también, se sube el de la etiqueta anterior (`git archive v$PROD:Backend …` y `v$PROD:Frontend`, como en el paso 3.3). **No se crea la etiqueta `v$NEW`** de un despliegue revertido.
