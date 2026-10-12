@@ -1,9 +1,11 @@
-// Las líneas como proyección de `User` (Fase 2a de multi-línea): sea cual sea
-// el orden de las escrituras, al terminar `syncLinesFromOwner` lo que dicen
-// `Waba`, `Line` y `Account.defaultLineId` es lo que dice el owner.
+// Las líneas de una cuenta. `syncLinesFromOwner` (Fase 2a; desde la 2c solo lo
+// usa `migrate:lines` en una cuenta sin líneas): sea cual sea el orden de las
+// escrituras, al terminar lo que dicen `Waba`, `Line` y `Account.defaultLineId`
+// es lo que dice el owner. Y `findInboundLine`: a qué cuenta y línea va lo que
+// entra (desde la 2c, por la línea activa del número).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { seedAccount, Account, Line, User, Waba } from './helpers.js';
+import { seedAccount, connectWhatsapp, Account, Line, User, Waba } from './helpers.js';
 
 const { syncLinesFromOwner, findInboundLine } = await import('../../src/services/line.service.js');
 const { lineStateIssues } = await import('../../src/utils/line.js');
@@ -171,9 +173,8 @@ test('el número actual activo en otra cuenta (obsoleto) se desconecta allí', a
     assert.equal((await Line.findOne({ accountId: n.accountId, phoneNumberId: '7020' }).lean()).status, 'disconnected');
 });
 
-// Fase 2b: el webhook encuentra la cuenta por el número (`User`, que sigue siendo
-// la fuente) y la línea por cuenta y número; el token sale del WABA de la línea
-// cuando la proyección coincide con `User`.
+// El webhook encuentra la cuenta y la línea por la línea activa del número, y el
+// token sale del WABA de esa línea.
 test('findInboundLine: la línea del número, con el token de su WABA', async (t) => {
     const p = await newAccount('P');
     await setConnection(p, { tokenWhatsapp: 'cifrado-p', phoneNumberId: '7030', waBusinessId: 'waba-p' });
@@ -189,14 +190,14 @@ test('findInboundLine: la línea del número, con el token de su WABA', async (t
     assert.equal(logged.mock.callCount(), 0);
 });
 
-test('findInboundLine: un número que ningún User tiene no es de nadie, aunque quede una línea', async () => {
+test('findInboundLine: un número que solo es una línea desconectada no recibe', async () => {
     const q = await newAccount('Q');
     await Line.create({ accountId: q.accountId, phoneNumberId: '7040', status: 'disconnected' });
     assert.equal(await findInboundLine('7040'), null);
 });
 
-// La reserva del spec: un número que `User` tiene y la proyección no (una
-// sincronización que falló) se procesa con `User`, nunca se descarta.
+// La reserva del spec: un número sin ninguna `Line` que el `User` de una cuenta
+// tiene (conectado con la imagen anterior) se procesa con `User`, nunca se descarta.
 test('findInboundLine: sin Line pero con User, la reserva y su console.error', async (t) => {
     const r = await newAccount('R');
     await setConnection(r, { tokenWhatsapp: 'cifrado-r', phoneNumberId: '7050', waBusinessId: 'waba-r' });
@@ -210,21 +211,21 @@ test('findInboundLine: sin Line pero con User, la reserva y su console.error', a
     assert.equal(logged.mock.callCount(), 1);
 });
 
-// Regresión que vigila (Codex, PR #14): A cambió de número sin que la proyección
-// lo reflejara, B conectó el número viejo de A, y la línea activa obsoleta de A
-// se quedaba los entrantes de B.
-test('findInboundLine: una línea activa obsoleta de otra cuenta no se queda el número', async (t) => {
+// Regresión que vigila (plan de la 2c, Review Focus 2): un número que una cuenta
+// soltó y otra conectó. Los entrantes van a la cuenta que lo tiene ACTIVO, y el
+// historial de la primera sigue en su línea desconectada.
+test('findInboundLine: un número desconectado en S y conectado en U va a U', async () => {
     const s = await newAccount('S');
     const u = await newAccount('U');
-    await setConnection(s, { tokenWhatsapp: 'cifrado-s', phoneNumberId: '7060', waBusinessId: 'waba-s' });
-    await syncLinesFromOwner(s.accountId);
-    await setConnection(s, { phoneNumberId: '7061' });   // solo User: la proyección no lo sabe
-    await setConnection(u, { tokenWhatsapp: 'cifrado-u', phoneNumberId: '7060', waBusinessId: 'waba-u' });
-    t.mock.method(console, 'error', () => {});
+    await connectWhatsapp(s, { phoneNumberId: '7060' });
+    await connectWhatsapp(s, { phoneNumberId: '7061' });   // maxLines 1: reemplaza, 7060 queda desconectada
+    await connectWhatsapp(u, { phoneNumberId: '7060' });
 
     const inbound = await findInboundLine('7060');
     assert.equal(String(inbound.accountId), u.accountId);
-    assert.equal(inbound.tokenWhatsapp, 'cifrado-u');
+    const uLine = await Line.findOne({ accountId: u.accountId, phoneNumberId: '7060' }).lean();
+    assert.equal(String(inbound.lineId), String(uLine._id));
+    assert.equal((await Line.findOne({ accountId: s.accountId, phoneNumberId: '7060' }).lean()).status, 'disconnected');
 });
 
 // Regresión que vigila (Codex, PR #14): la reserva usaba la línea por defecto,

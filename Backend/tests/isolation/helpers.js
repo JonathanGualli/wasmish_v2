@@ -37,7 +37,7 @@ const { default: app } = await import('../../src/app.js');
 const { createAccessToken } = await import('../../src/libs/jwt.js');
 const { encrypt } = await import('../../src/utils/crypto.js');
 const { whatsappApi } = await import('../../src/libs/whatsapp.js');
-const { syncLinesFromOwner } = await import('../../src/services/line.service.js');
+const { applyConnection } = await import('../../src/services/line.service.js');
 
 // Meta falso. Todas las llamadas a Meta pasan por `whatsappApi`, así que
 // cambiarle el transporte basta para que ningún test llegue a la red, ni
@@ -105,14 +105,14 @@ const writeMedia = async (file) => {
  * `SECRETO-<label>`: si aparece en una respuesta de la otra cuenta, se filtró.
  * `seq` separa los teléfonos y los nombres de archivo de las dos cuentas.
  */
-export const seedAccount = async (label, { isSuperadmin = false, seq = 1 } = {}) => {
+export const seedAccount = async (label, { isSuperadmin = false, seq = 1, maxLines = 1 } = {}) => {
     const marker = `SECRETO-${label}`;
     // La cuenta y su owner con `_id` distintos (ver la cabecera).
     const user = new User({
         name: marker, email: `${label.toLowerCase()}@pruebas.local`, password: 'x',
         accountId: new mongoose.Types.ObjectId(), role: 'owner', isSuperadmin,
     });
-    await Account.create({ _id: user.accountId, name: marker, ownerId: user._id });
+    await Account.create({ _id: user.accountId, name: marker, ownerId: user._id, limits: { maxLines } });
     await user.save();
     const accountId = user.accountId;
 
@@ -188,15 +188,12 @@ export const seedAccount = async (label, { isSuperadmin = false, seq = 1 } = {})
 
 /**
  * Una cuenta con WhatsApp «conectado», para lo que lo exige antes de nada (crear una campaña).
- * El número es distinto por cuenta (`99<seq>`): un número solo puede estar en una. Como una
- * conexión de verdad, guarda el WABA (`waba-<label>` si no se da otro) y refleja `Waba` y `Line`.
+ * Pasa por `applyConnection`, como una conexión de verdad después de hablar con Meta: la línea
+ * del número (`99<seq>` si no se da otro: un número solo puede estar en una cuenta), el token en
+ * su WABA (`waba-<label>` si no se da otro) y la copia en `User`. Devuelve `{ lineId }`.
  */
-export const connectWhatsapp = async (account, { waBusinessId = `waba-${account.label}` } = {}) => {
-    await User.updateOne({ _id: account.userId }, {
-        tokenWhatsapp: encrypt('token-de-pruebas'), phoneNumberId: `99${account.seq}`, waBusinessId,
-    });
-    await syncLinesFromOwner(account.accountId);
-};
+export const connectWhatsapp = (account, { waBusinessId = `waba-${account.label}`, phoneNumberId = `99${account.seq}` } = {}) =>
+    applyConnection({ accountId: account.accountId, waBusinessId, tokenWhatsapp: encrypt('token-de-pruebas'), phoneNumberId });
 
 /**
  * Una petición con la sesión de `account`. `body` puede ser un objeto (JSON)

@@ -1,8 +1,10 @@
+import Account from "../models/account.model.js";
+import Line from "../models/line.model.js";
 import User from "../models/user.model.js";
 import Waba from "../models/waba.model.js";
-import { syncLinesFromOwner } from "./line.service.js";
 import { getWabaPhoneNumbers } from "../libs/whatsapp.js";
-import { describeWabaPhoneNumber, nextPageCursor } from "../utils/whatsapp.line.js";
+import { planConnection } from "../utils/line.js";
+import { describeWabaPhoneNumber, lineLimitMessage, nextPageCursor } from "../utils/whatsapp.line.js";
 
 // Lo que comparten las dos formas de conectar un número (Embedded Signup y el
 // formulario manual de Ajustes). El webhook enruta cada mensaje por su
@@ -36,21 +38,32 @@ export const claimWaba = async (accountId, waBusinessId) => {
     }
 };
 
-// Tras guardar la conexión en `User`, refleja `Waba` y `Line`. Si falla, la
-// conexión NO se deshace: el enrutado lee `User`, que ya está bien, y la
-// siguiente sincronización (o `migrate:lines`) completa la proyección.
-export const syncLinesAfterConnecting = async (accountId, details) => {
-    try {
-        await syncLinesFromOwner(accountId, { details });
-    } catch (error) {
-        console.error('No se pudieron sincronizar las líneas tras conectar:', { accountId: String(accountId), error: error.message });
+// Si el número ya está en OTRA cuenta: una línea activa suya, o el `User` de
+// una cuenta que no tiene ninguna `Line` de ese número (anterior a las líneas,
+// o conectada con la imagen anterior). Un `User` con la copia atrasada de un
+// número que su cuenta ya desconectó no lo bloquea. El propio no cuenta:
+// volver a conectarlo (para renovar el token) tiene que poder hacerse.
+export const isPhoneNumberTaken = async (accountId, phoneNumberId) => {
+    if (await Line.exists({ phoneNumberId, status: 'active', accountId: { $ne: accountId } })) return true;
+    const holders = await User.find({ phoneNumberId, accountId: { $ne: accountId } }).select('accountId').lean();
+    for (const holder of holders) {
+        if (!await Line.exists({ accountId: holder.accountId, phoneNumberId })) return true;
     }
+    return false;
 };
 
-// Si el número ya está en OTRA cuenta. El propio no cuenta: volver a conectarlo
-// (para renovar el token) tiene que poder hacerse.
-export const isPhoneNumberTaken = async (userId, phoneNumberId) =>
-    Boolean(await User.exists({ phoneNumberId, _id: { $ne: userId } }));
+// Si el número cabe en el plan de la cuenta, ANTES de llamar a Meta: 409 si
+// no. `applyConnection` lo vuelve a comprobar con el candado tomado.
+export const checkLineLimit = async (accountId, phoneNumberId) => {
+    const account = await Account.findById(accountId).select('limits').lean();
+    const maxLines = account?.limits?.maxLines ?? 1;
+    const lines = await Line.find({ accountId }).select('_id phoneNumberId status').lean();
+    if (planConnection({ lines, maxLines, phoneNumberId }).error) {
+        const error = new Error(lineLimitMessage(maxLines));
+        error.statusCode = 409;
+        throw error;
+    }
+};
 
 // Tope de páginas de `/phone_numbers` (de 100): ningún WABA real se acerca, y
 // una respuesta rara de Meta no puede dejar la petición dando vueltas.

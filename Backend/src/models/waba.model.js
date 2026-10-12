@@ -2,8 +2,8 @@ import mongoose from 'mongoose';
 
 // Una cuenta de WhatsApp Business (WABA) conectada a una cuenta de Wasmish. El
 // token del Embedded Signup es del WABA y vale para todos sus números, así que
-// va aquí una vez, no copiado en cada línea. En la Fase 2a de multi-línea es
-// una proyección de `User` (ver utils/line.js): nada la lee para enviar.
+// va aquí una vez, no copiado en cada línea. Desde la Fase 2c de multi-línea es
+// la fuente del token (lo escribe `applyConnection`, en services/line.service.js).
 const wabaSchema = new mongoose.Schema({
     accountId: {
         type: mongoose.Schema.Types.ObjectId,

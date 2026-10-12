@@ -77,7 +77,7 @@ conversationSchema.index(
         partialFilterExpression: { contactId: { $type: 'objectId' }, lineId: { $type: 'objectId' } },
     },
 );
-// Las que nacen SIN línea (la reserva: la proyección de `Line` falló) son una
+// Las que nacen SIN línea (la reserva del webhook: un número sin `Line`) son una
 // por contacto y NÚMERO: el índice de arriba no las cubre, y dos entrantes a la
 // vez de un contacto nuevo crearían dos. Por número y no por contacto, porque
 // cada número tiene su historial y su ventana. Otras claves que el índice

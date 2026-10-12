@@ -13,6 +13,11 @@ const { LINE_DISCONNECTED_MESSAGE } = await import('../../src/utils/whatsapp.lin
 
 const a = await seedAccount('A', { seq: 1 });
 const b = await seedAccount('B', { seq: 2 });
+// La cuenta de los tests de la Fase 2b, preparada aquí y no junto a ellos: un
+// `await` de primer nivel entre dos `test()` hace que node:test pueda cerrar el
+// archivo (y su `after`, que cierra Mongo) antes de registrar los de abajo.
+const d = await seedAccount('D', { seq: 4 });
+await connectWhatsapp(d);
 
 const messagesIn = (account) => Message.countDocuments({ conversationId: account.conversationId });
 const unreadOf = async (account) => (await Conversation.findById(account.conversationId).lean()).unreadCount;
@@ -88,8 +93,6 @@ test('GET /media/:id: B no descarga el adjunto de un mensaje de A', async () => 
 });
 
 // Fase 2b: los envíos salen por la línea de la conversación.
-const d = await seedAccount('D', { seq: 4 });
-await connectWhatsapp(d);
 const D_NUMBER = `99${d.seq}`;
 const currentLineOf = (account) => Line.findOne({ accountId: account.accountId, phoneNumberId: `99${account.seq}` }).lean();
 
@@ -147,21 +150,42 @@ test('ventana por línea: abierta en el número anterior y cerrada en el actual 
     assert.equal(res.body[0].code, 'window_closed');
 });
 
-// La reserva: si la proyección no cuadra con `User` (aquí, el token del Waba
-// quedó viejo), el envío sale con la conexión de `User`, que es la buena.
-test('con la proyección desajustada, el envío sale con el token de User', async () => {
+// Fase 2c: el token sale del `Waba` de la línea, que es la fuente. Una copia
+// desajustada en `User` (aquí, otro token) no cambia nada.
+test('con un User desajustado, el envío sale con el token del Waba de la línea', async () => {
     const conversation = await openConversation(d, await currentLineOf(d), '593990002004');
-    await Waba.updateOne({ accountId: d.accountId }, { tokenWhatsapp: encrypt('token-viejo') });
+    await User.updateOne({ _id: d.userId }, { tokenWhatsapp: encrypt('token-de-user') });
     let authorization = null;
     onMeta(async (config) => {
         if (config.method !== 'post' || config.url !== `/${D_NUMBER}/messages`) return undefined;
         authorization = config.headers?.Authorization;
-        return { data: { messages: [{ id: 'wamid.reserva' }] } };
+        return { data: { messages: [{ id: 'wamid.waba' }] } };
     });
     try {
         const res = await request(d, 'POST', `/chats/${conversation._id}/messages`, { text: 'hola', temporalId: 't-r' });
         assert.equal(res.status, 201, res.text);
         assert.equal(authorization, 'Bearer token-de-pruebas');
+    } finally {
+        onMeta(null);
+    }
+});
+
+// Fase 2c: con dos líneas activas, cada conversación responde desde la suya.
+test('cada conversación responde por su línea, con dos líneas activas', async () => {
+    const m = await seedAccount('M', { seq: 9, maxLines: 2 });
+    await connectWhatsapp(m);
+    await connectWhatsapp(m, { phoneNumberId: '9909' });
+    const first = await openConversation(m, await currentLineOf(m), '593990002009');
+    const second = await openConversation(m, await Line.findOne({ accountId: m.accountId, phoneNumberId: '9909' }).lean(), '593990002010');
+    onMeta(async (config) => (config.method === 'post' && config.url.endsWith('/messages')
+        ? { data: { messages: [{ id: `wamid.${config.url}` }] } }
+        : undefined));
+    try {
+        for (const [conversation, number] of [[first, `99${m.seq}`], [second, '9909']]) {
+            const res = await request(m, 'POST', `/chats/${conversation._id}/messages`, { text: 'hola', temporalId: `t-${number}` });
+            assert.equal(res.status, 201, res.text);
+            assert.deepEqual(metaCalls.at(-1), { method: 'post', url: `/${number}/messages` });
+        }
     } finally {
         onMeta(null);
     }

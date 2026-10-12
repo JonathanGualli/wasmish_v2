@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { seedAccount, mongoUri, Account, Campaign, Conversation, Line, Template, User, Waba } from './helpers.js';
+import { seedAccount, connectWhatsapp, mongoUri, Account, Campaign, Conversation, Line, Template, User, Waba } from './helpers.js';
 
 const { runLineMigration } = await import('../../src/services/line.migration.service.js');
 
@@ -43,7 +43,7 @@ test('una segunda pasada no tiene nada pendiente', async () => {
     const result = await runLineMigration({ check: true });
     assert.deepEqual(result.stop, []);
     assert.deepEqual(result.pending, {
-        oldLines: 0, conversations: 0, campaigns: 0, templates: 0, accountsOutOfSync: 0, oldConversationIndex: false,
+        oldLines: 0, conversations: 0, campaigns: 0, templates: 0, accountsOutOfSync: 0, legacyUserStale: 0, pendingReplace: 0, oldConversationIndex: false,
     });
     assert.deepEqual(result.issues, []);
 });
@@ -129,6 +129,86 @@ test('si el WABA cambia mientras migra, las plantillas reciben el actual', async
         afterInspect: () => setConnection(z, { waBusinessId: 'waba-z-nuevo' }),
     });
     assert.deepEqual(await Template.distinct('waBusinessId', { userId: z.accountId }), ['waba-z-nuevo']);
+});
+
+// --- Fase 2c: `Line` es la fuente; `User`, su copia ----------------------------
+
+const activeNumbers = async (account) =>
+    (await Line.find({ accountId: account.accountId, status: 'active' }).lean()).map(line => line.phoneNumberId).sort();
+
+// Regresión que vigila (plan de la 2c): `syncLinesFromOwner` deja activa solo la
+// línea de `User`, así que migrar una cuenta con dos líneas desconectaba la segunda.
+test('migrar no desactiva la segunda línea de una cuenta', async () => {
+    const s = await seedAccount('S', { seq: 7, maxLines: 2 });
+    await connectWhatsapp(s, { phoneNumberId: '7107' });
+    await connectWhatsapp(s, { phoneNumberId: '7117' });
+
+    await runLineMigration({});
+    assert.deepEqual(await activeNumbers(s), ['7107', '7117']);
+    assert.equal((await User.findById(s.userId).lean()).phoneNumberId, '7107');
+});
+
+test('--check detecta un User que no es copia de la línea por defecto, y migrar no lo toca', async () => {
+    const t = await seedAccount('T', { seq: 8 });
+    await connectWhatsapp(t, { phoneNumberId: '7108' });
+    await setConnection(t, { phoneNumberId: '7118' });   // lo escribió la imagen anterior
+
+    const check = await runLineMigration({ check: true });
+    assert.equal(check.pending.accountsOutOfSync, 1);
+    assert.ok(check.issues.some(entry => entry.account === 't@pruebas.local'), JSON.stringify(check.issues));
+
+    await runLineMigration({});
+    assert.equal((await User.findById(t.userId).lean()).phoneNumberId, '7118');
+    assert.deepEqual(await activeNumbers(t), ['7108']);
+    await setConnection(t, { phoneNumberId: '7108' });   // al día para los tests siguientes
+});
+
+// Regresión que vigila (Codex, plan de la 2c): una cuenta que desconectó su
+// última línea y no pudo limpiar `User` no tiene líneas activas, y la migración
+// la reconstruía desde `User`, reactivando el número.
+test('desconectar la última línea, fallar la copia de User y migrar: la línea sigue desconectada y User se limpia', async () => {
+    const v = await seedAccount('V', { seq: 9 });
+    await connectWhatsapp(v, { phoneNumberId: '7109' });
+    await Line.updateOne({ accountId: v.accountId, phoneNumberId: '7109' }, { status: 'disconnected' });
+    await Account.updateOne({ _id: v.accountId }, { defaultLineId: null, legacyUserStale: true });
+
+    assert.equal((await runLineMigration({ check: true })).pending.legacyUserStale, 1);
+    await runLineMigration({});
+    assert.deepEqual(await activeNumbers(v), []);
+    assert.equal((await User.findById(v.userId).lean()).phoneNumberId, null);
+    assert.equal((await Account.findById(v.accountId).lean()).legacyUserStale, false);
+    assert.equal((await runLineMigration({ check: true })).pending.legacyUserStale, 0);
+});
+
+// Regresión que vigila (Codex, PR #19): una cuenta sin líneas al inspeccionar
+// conectó dos números antes de escribir, y `syncLinesFromOwner` dejaba activa
+// solo la de `User`.
+test('si la cuenta conecta líneas mientras migra, la migración no las toca', async () => {
+    const w = await seedAccount('W', { seq: 10, maxLines: 2 });
+    await setConnection(w, { tokenWhatsapp: 'cifrado-w', phoneNumberId: '7110', waBusinessId: 'waba-W' });
+
+    await runLineMigration({
+        afterInspect: async () => {
+            await connectWhatsapp(w, { phoneNumberId: '7120' });
+            await connectWhatsapp(w, { phoneNumberId: '7121' });
+        },
+    });
+    assert.deepEqual(await activeNumbers(w), ['7120', '7121']);
+});
+
+test('migrar termina un cambio de número que quedó a medias', async () => {
+    const x = await seedAccount('X2', { seq: 11 });
+    await connectWhatsapp(x, { phoneNumberId: '7111' });
+    const old = await Line.findOne({ accountId: x.accountId, phoneNumberId: '7111' }).lean();
+    // El número nuevo llegó a activarse, pero no se desconectó el anterior.
+    await Line.create({ accountId: x.accountId, phoneNumberId: '7112', status: 'active', wabaId: old.wabaId });
+    await Account.updateOne({ _id: x.accountId }, { pendingReplace: { phoneNumberId: '7112', replaceLineIds: [old._id] } });
+
+    assert.equal((await runLineMigration({ check: true })).pending.pendingReplace, 1);
+    await runLineMigration({});
+    assert.deepEqual(await activeNumbers(x), ['7112']);
+    assert.equal((await User.findById(x.userId).lean()).phoneNumberId, '7112');
+    assert.equal((await Account.findById(x.accountId).lean()).pendingReplace, null);
 });
 
 // Regresión que vigila (Codex, plan de la Fase 2a): con `Waba` vacía, dos owners

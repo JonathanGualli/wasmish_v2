@@ -5,6 +5,9 @@ import fs from 'node:fs/promises';
 import { seedAccount, request, connectWhatsapp, metaCalls, onMeta, Account, Line, User, Waba, Conversation, PNG } from './helpers.js';
 
 const { isPhoneNumberTaken, WABA_TAKEN_MESSAGE } = await import('../../src/services/whatsapp.connection.service.js');
+const { applyConnection, writeLegacyUser } = await import('../../src/services/line.service.js');
+const { lineLimitMessage, LINE_BUSY_MESSAGE } = await import('../../src/utils/whatsapp.line.js');
+const { encrypt } = await import('../../src/utils/crypto.js');
 const { lineStateIssues } = await import('../../src/utils/line.js');
 
 const a = await seedAccount('A', { seq: 1 });
@@ -79,11 +82,11 @@ test('POST /whatsapp/connect: comprueba el número antes de suscribir la app, y 
 });
 
 test('dos conexiones a la vez: la segunda recibe 409, no 500, y no guarda nada', async () => {
-    await User.init();
+    await Line.init();
     const f = await seedAccount('F', { seq: 6 });
     const g = await seedAccount('G', { seq: 7 });
-    // Mientras Meta responde a F, G se queda el número: F ya pasó la comprobación previa.
-    fakeMeta(['996'], { onPhoneNumbers: () => User.updateOne({ _id: g.userId }, { phoneNumberId: '996' }) });
+    // Mientras Meta responde a F, G activa el número: F ya pasó la comprobación previa.
+    fakeMeta(['996'], { onPhoneNumbers: () => Line.create({ accountId: g.accountId, phoneNumberId: '996', status: 'active' }) });
     const res = await updateToken(f, '996');
     onMeta(null);
     assert.equal(res.status, 409, res.text);
@@ -107,8 +110,22 @@ test('PUT /users/update-user-token-whatsapp: un número en la segunda página de
 });
 
 test('isPhoneNumberTaken: el número propio no cuenta como tomado (reconectar)', async () => {
-    assert.equal(await isPhoneNumberTaken(a.userId, A_NUMBER), false);
-    assert.equal(await isPhoneNumberTaken(b.userId, A_NUMBER), true);
+    assert.equal(await isPhoneNumberTaken(a.accountId, A_NUMBER), false);
+    assert.equal(await isPhoneNumberTaken(b.accountId, A_NUMBER), true);
+});
+
+// Fase 2c: el `User` de otra cuenta con una copia atrasada de un número que esa
+// cuenta ya desconectó no lo ocupa; el de una cuenta sin líneas (anterior a
+// ellas), sí.
+test('isPhoneNumberTaken: una copia atrasada en User no ocupa el número; una cuenta sin líneas, sí', async () => {
+    const h = await seedAccount('HH', { seq: 60 });
+    await Line.create({ accountId: h.accountId, phoneNumberId: '7760', status: 'disconnected' });
+    await User.updateOne({ _id: h.userId }, { phoneNumberId: '7760' });
+    assert.equal(await isPhoneNumberTaken(b.accountId, '7760'), false);
+
+    const i = await seedAccount('II', { seq: 61 });
+    await User.updateOne({ _id: i.userId }, { phoneNumberId: '7761' });
+    assert.equal(await isPhoneNumberTaken(b.accountId, '7761'), true);
 });
 
 // Regresión que vigila: los controladores tienen que pasar el `_id` del usuario
@@ -247,3 +264,176 @@ for (const [via, connect] of [
         assert.equal(saved.waBusinessId ?? null, null);
     });
 }
+
+// --- Fase 2c: varias líneas por cuenta ----------------------------------------
+
+const activeNumbers = async (account) =>
+    (await Line.find({ accountId: account.accountId, status: 'active' }).sort({ createdAt: 1 }).lean()).map(line => line.phoneNumberId);
+const ownerOf = (account) => User.findById(account.userId).lean();
+const defaultLineOf = async (account) => {
+    const { defaultLineId } = await Account.findById(account.accountId).lean();
+    return defaultLineId ? Line.findById(defaultLineId).lean() : null;
+};
+
+test('conectar con maxLines 2 añade una segunda línea y conserva la primera', async () => {
+    const k = await seedAccount('K2', { seq: 62, maxLines: 2 });
+    await connectWhatsapp(k);
+    fakeMeta(['7762']);
+    const res = await connectManual(k, '7762', `waba-${k.label}`);
+    onMeta(null);
+    assert.equal(res.status, 200, res.text);
+    assert.ok(res.body.lineId);
+    assert.deepEqual(await activeNumbers(k), [`99${k.seq}`, '7762']);
+    // La por defecto sigue siendo la primera, y User es su copia.
+    assert.equal((await defaultLineOf(k)).phoneNumberId, `99${k.seq}`);
+    assert.equal((await ownerOf(k)).phoneNumberId, `99${k.seq}`);
+});
+
+test('conectar con la cuenta en el límite → 409 sin llamar a Meta', async () => {
+    const l = await seedAccount('L2', { seq: 63, maxLines: 2 });
+    await connectWhatsapp(l);
+    await connectWhatsapp(l, { phoneNumberId: '7763' });
+    const before = metaCalls.length;
+    for (const connect of [
+        () => connectManual(l, '7764', `waba-${l.label}`),
+        () => request(l, 'POST', '/whatsapp/connect', { code: 'x', phoneNumberId: '7764', waBusinessId: `waba-${l.label}` }),
+    ]) {
+        const res = await connect();
+        assert.equal(res.status, 409, res.text);
+        assert.equal(res.body[0].message, lineLimitMessage(2));
+    }
+    assert.equal(metaCalls.length, before);
+    assert.deepEqual(await activeNumbers(l), [`99${l.seq}`, '7763']);
+});
+
+test('conectar un número del mismo WABA reemplaza el token del Waba para las dos líneas', async () => {
+    const m = await seedAccount('M2', { seq: 64, maxLines: 2 });
+    await connectWhatsapp(m);
+    fakeMeta(['7765']);
+    const res = await connectManual(m, '7765', `waba-${m.label}`);
+    onMeta(null);
+    assert.equal(res.status, 200, res.text);
+    const lines = await Line.find({ accountId: m.accountId, status: 'active' }).lean();
+    assert.equal(lines.length, 2);
+    assert.equal(String(lines[0].wabaId), String(lines[1].wabaId));
+    const waba = await Waba.findById(lines[0].wabaId).lean();
+    assert.notEqual(waba.tokenWhatsapp, encrypt('token-de-pruebas'));   // el del formulario, cifrado
+    assert.equal(await Waba.countDocuments({ accountId: m.accountId }), 1);
+});
+
+// Regresión que vigila (Codex, plan de la 2c; Review Focus 3): dos conexiones a
+// la vez en el límite. Antes, las dos pasaban la comprobación y la compensación
+// dejaba la línea por defecto y User en la línea deshecha.
+test('dos conexiones a la vez: la segunda da 409 LINE_BUSY y el estado final es el de la primera', async () => {
+    const n = await seedAccount('N2', { seq: 65 });
+    const connect = (phoneNumberId, options) => applyConnection(
+        { accountId: n.accountId, waBusinessId: `waba-${n.label}`, tokenWhatsapp: encrypt('token-de-pruebas'), phoneNumberId },
+        options,
+    );
+    let second = null;
+    await connect('7766', {
+        afterLock: async () => {
+            second = await connect('7767').then(() => null, error => error);
+        },
+    });
+
+    assert.equal(second?.statusCode, 409);
+    assert.equal(second.message, LINE_BUSY_MESSAGE);
+    assert.deepEqual(await activeNumbers(n), ['7766']);
+    assert.equal((await defaultLineOf(n)).phoneNumberId, '7766');
+    assert.equal((await ownerOf(n)).phoneNumberId, '7766');
+    assert.equal((await Account.findById(n.accountId).lean()).lineLock, null);
+});
+
+test('withLineLock: un candado vencido se puede tomar', async () => {
+    const o = await seedAccount('O2', { seq: 66 });
+    await Account.updateOne({ _id: o.accountId }, { lineLock: { token: 'muerto', expiresAt: new Date(Date.now() - 1000) } });
+    await connectWhatsapp(o);
+    assert.deepEqual(await activeNumbers(o), [`99${o.seq}`]);
+
+    await Account.updateOne({ _id: o.accountId }, { lineLock: { token: 'vivo', expiresAt: new Date(Date.now() + 60_000) } });
+    await assert.rejects(connectWhatsapp(o), (error) => error.statusCode === 409 && error.message === LINE_BUSY_MESSAGE);
+});
+
+// Regresión que vigila (Codex, plan de la 2c; Review Focus 5): con el límite
+// bajado por debajo de las activas, renovar el token desconectaba la línea.
+test('renovar el token con la cuenta por encima del límite (se bajó) funciona y no desconecta nada', async () => {
+    const p = await seedAccount('P2', { seq: 67, maxLines: 2 });
+    await connectWhatsapp(p);
+    await connectWhatsapp(p, { phoneNumberId: '7768' });
+    await Account.updateOne({ _id: p.accountId }, { 'limits.maxLines': 1 });
+
+    fakeMeta(['7768']);
+    const res = await connectManual(p, '7768', `waba-${p.label}`);
+    onMeta(null);
+    assert.equal(res.status, 200, res.text);
+    assert.deepEqual(await activeNumbers(p), [`99${p.seq}`, '7768']);
+});
+
+test('tras conectar, User es la copia de la línea por defecto', async () => {
+    const q = await seedAccount('Q2', { seq: 68 });
+    await connectWhatsapp(q);
+    const owner = await ownerOf(q);
+    const line = await defaultLineOf(q);
+    const waba = await Waba.findById(line.wabaId).lean();
+    assert.equal(owner.phoneNumberId, line.phoneNumberId);
+    assert.equal(owner.waBusinessId, waba.waBusinessId);
+    assert.equal(owner.tokenWhatsapp, waba.tokenWhatsapp);
+    assert.equal((await Account.findById(q.accountId).lean()).legacyUserStale, false);
+});
+
+// Regresión que vigila (Codex, plan de la 2c): la copia en User de otra cuenta,
+// atrasada (su línea ya está desconectada), bloqueaba la de esta con E11000.
+test('si la copia de User choca con la copia atrasada de otra cuenta, se repara esa y se reintenta', async () => {
+    await User.init();
+    const r = await seedAccount('R2', { seq: 69 });
+    const s = await seedAccount('S2', { seq: 70 });
+    await connectWhatsapp(r, { phoneNumberId: '7770' });
+    // R desconecta su línea, pero su copia en User se queda con el número.
+    await Line.updateOne({ accountId: r.accountId }, { status: 'disconnected' });
+    await Account.updateOne({ _id: r.accountId }, { defaultLineId: null });
+    assert.equal((await ownerOf(r)).phoneNumberId, '7770');
+
+    await connectWhatsapp(s, { phoneNumberId: '7770' });
+    assert.equal((await ownerOf(r)).phoneNumberId, null);
+    assert.equal((await ownerOf(s)).phoneNumberId, '7770');
+    assert.equal((await Account.findById(s.accountId).lean()).legacyUserStale, false);
+});
+
+test('si la copia de User falla, legacyUserStale queda en true y la siguiente la arregla', async (t) => {
+    const u = await seedAccount('U2', { seq: 71 });
+    const failing = t.mock.method(User, 'updateOne', async () => { throw new Error('Mongo caído'); });
+    t.mock.method(console, 'error', () => {});
+    await connectWhatsapp(u);
+    failing.mock.restore();
+
+    assert.deepEqual(await activeNumbers(u), [`99${u.seq}`]);   // la línea sí: es la fuente
+    assert.equal((await Account.findById(u.accountId).lean()).legacyUserStale, true);
+    assert.equal((await ownerOf(u)).phoneNumberId, null);
+
+    await writeLegacyUser(u.accountId);
+    assert.equal((await Account.findById(u.accountId).lean()).legacyUserStale, false);
+    assert.equal((await ownerOf(u)).phoneNumberId, `99${u.seq}`);
+});
+
+// Regresión que vigila (Codex, PR #19): con maxLines 1, activar el número nuevo
+// y desconectar el anterior no es atómico. Si lo segundo fallaba, reintentar
+// daba «renovar»: las dos quedaban activas y la por defecto en la vieja.
+test('un reemplazo de número cortado a medias se termina al reintentar', async (t) => {
+    const v = await seedAccount('V2', { seq: 72 });
+    await connectWhatsapp(v, { phoneNumberId: '7772' });
+    let failed = false;
+    const original = Line.updateMany.bind(Line);
+    t.mock.method(Line, 'updateMany', (...args) => {
+        if (!failed) { failed = true; throw new Error('Mongo caído'); }
+        return original(...args);
+    });
+    await assert.rejects(connectWhatsapp(v, { phoneNumberId: '7773' }), /Mongo caído/);
+    assert.deepEqual(await activeNumbers(v), ['7772', '7773']);   // a medias
+
+    await connectWhatsapp(v, { phoneNumberId: '7773' });
+    assert.deepEqual(await activeNumbers(v), ['7773']);
+    assert.equal((await defaultLineOf(v)).phoneNumberId, '7773');
+    assert.equal((await ownerOf(v)).phoneNumberId, '7773');
+    assert.equal((await Account.findById(v.accountId).lean()).pendingReplace, null);
+});

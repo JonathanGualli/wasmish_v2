@@ -142,22 +142,46 @@ test('POST /v1/templates/send con la key de A: sale del número de A y responde 
     }
 });
 
-// Regresión que vigila (Codex, plan de la 2b, Review Focus 3): un cambio de número
-// que la proyección no reflejó (aquí, solo en `User`) dejaba al OTP del cliente
-// sin línea. Sale por la reserva, con el número de `User`.
-test('POST /v1/templates/send con un cambio de número a medias sigue saliendo', async () => {
+// Fase 2c: `Line` es la fuente y `User` solo una copia para la imagen anterior.
+// Una copia desajustada (aquí, otro número en `User`) no cambia por dónde sale el OTP.
+test('POST /v1/templates/send con un User desajustado sale por la línea por defecto', async () => {
     await User.updateOne({ _id: a.userId }, { phoneNumberId: `98${a.seq}` });
-    onMeta(async (config) => (config.method === 'post' && config.url === `/98${a.seq}/messages`
-        ? { data: { messages: [{ id: 'wamid.reserva' }] } }
+    onMeta(async (config) => (config.method === 'post' && config.url === `/99${a.seq}/messages`
+        ? { data: { messages: [{ id: 'wamid.linea' }] } }
         : undefined));
     try {
         const res = await request(ANONYMOUS, 'POST', '/v1/templates/send',
             { destinationNumber: a.phone, templateName: a.templateName }, { Authorization: 'Bearer wm_prueba_a' });
         assert.equal(res.status, 200, res.text);
-        assert.deepEqual(metaCalls.at(-1), { method: 'post', url: `/98${a.seq}/messages` });
+        assert.deepEqual(metaCalls.at(-1), { method: 'post', url: `/99${a.seq}/messages` });
     } finally {
         onMeta(null);
         await User.updateOne({ _id: a.userId }, { phoneNumberId: `99${a.seq}` });
+    }
+});
+
+// Regresión que vigila (plan de la 2c, Review Focus 1): el «volver a conectar»
+// con otro número de siempre. Con `maxLines: 1`, el nuevo reemplaza al anterior,
+// que se queda con su historial, y el OTP sale por el nuevo.
+test('conectar otro número con maxLines 1 lo reemplaza y /v1 sale por el nuevo', async () => {
+    const r = await seedAccount('R', { seq: 7 });
+    await connectWhatsapp(r);
+    await ApiKey.create({ userId: r.accountId, keyHash: hashApiKey('wm_prueba_r'), keyPreview: 'wm_prueba', name: 'v1' });
+    const { lineId } = await connectWhatsapp(r, { phoneNumberId: '9707' });
+
+    assert.equal((await Line.findOne({ accountId: r.accountId, phoneNumberId: `99${r.seq}` }).lean()).status, 'disconnected');
+    assert.equal(String((await Account.findById(r.accountId).lean()).defaultLineId), String(lineId));
+    assert.equal((await User.findById(r.userId).lean()).phoneNumberId, '9707');
+    onMeta(async (config) => (config.method === 'post' && config.url === '/9707/messages'
+        ? { data: { messages: [{ id: 'wamid.nuevo' }] } }
+        : undefined));
+    try {
+        const res = await request(ANONYMOUS, 'POST', '/v1/templates/send',
+            { destinationNumber: r.phone, templateName: r.templateName }, { Authorization: 'Bearer wm_prueba_r' });
+        assert.equal(res.status, 200, res.text);
+        assert.deepEqual(metaCalls.at(-1), { method: 'post', url: '/9707/messages' });
+    } finally {
+        onMeta(null);
     }
 });
 

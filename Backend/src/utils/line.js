@@ -1,7 +1,7 @@
-// Las líneas de WhatsApp de una cuenta (`Waba` + `Line`). En la Fase 2a de
-// multi-línea son una PROYECCIÓN de la conexión que guarda el owner en `User`
-// (`tokenWhatsapp`, `phoneNumberId`, `waBusinessId`), que es lo que enruta:
-// la escribe `syncLinesFromOwner` y nada lee las líneas para decidir.
+// Las líneas de WhatsApp de una cuenta (`Waba` + `Line`). Desde la Fase 2c de
+// multi-línea son la FUENTE de la conexión, y el owner guarda en `User`
+// (`tokenWhatsapp`, `phoneNumberId`, `waBusinessId`) una copia de la línea por
+// defecto, para la imagen anterior (`legacyUserFields`).
 
 import { LINE_NOT_FOUND_MESSAGE } from './whatsapp.line.js';
 
@@ -15,7 +15,9 @@ export const ownerConnection = (owner) => {
     return { tokenWhatsapp: owner.tokenWhatsapp, phoneNumberId: owner.phoneNumberId, waBusinessId: owner.waBusinessId };
 };
 
-// En qué no coincide la proyección con `User`. Vacío = al día. `lines` son
+// En qué no coincide la proyección con `User` (lo que garantiza
+// `syncLinesFromOwner`; desde la Fase 2c solo vale para una cuenta sin líneas,
+// que `migrate:lines` construye desde `User`). Vacío = al día. `lines` son
 // todas las de la cuenta; `waba`, el del WABA de `User` (o null si no existe).
 export const lineStateIssues = ({ owner, account, lines, waba }) => {
     const issues = [];
@@ -76,54 +78,74 @@ export const historicalLines = (conversationPhoneIds, existingPhoneIds, currentP
     };
 };
 
-// Si una línea sirve para recibir o enviar (Fase 2b). Mientras `User` sea la
-// fuente de la conexión, solo si la proyección coincide con él: la línea
-// activa del número del owner, en su cuenta, con su WABA y el token de `User`.
-// Si no (una sincronización que falló o se cortó), quien llama usa la reserva
-// de `User` en vez de una línea o un token obsoletos.
-export const lineMatchesOwner = ({ owner, line, waba }) => {
-    const connection = ownerConnection(owner);
-    return Boolean(connection && line && waba)
-        && line.status === 'active'
-        && sameId(line.accountId, owner.accountId)
-        && line.phoneNumberId === connection.phoneNumberId
-        && sameId(line.wabaId, waba._id)
-        && waba.waBusinessId === connection.waBusinessId
-        && waba.tokenWhatsapp === connection.tokenWhatsapp;
+// Lo que la imagen anterior (1.0.14, que lee `User`) tiene que encontrar en el
+// owner (Fase 2c de multi-línea): la conexión de la línea por defecto, o nada
+// si no está activa o su WABA no tiene token. `User` ya no enruta: es esta copia.
+export const legacyUserFields = (defaultLine, waba) => {
+    if (defaultLine?.status !== 'active' || !waba?.tokenWhatsapp) {
+        return { tokenWhatsapp: null, phoneNumberId: null, waBusinessId: null };
+    }
+    return { tokenWhatsapp: waba.tokenWhatsapp, phoneNumberId: defaultLine.phoneNumberId, waBusinessId: waba.waBusinessId };
+};
+
+// En qué no coincide `User` con la copia de la línea por defecto. Vacío = al día.
+// `hasActiveLines`: si la cuenta tiene alguna línea activa (entonces alguna
+// tiene que ser la por defecto).
+export const legacyUserIssues = ({ owner, defaultLine, waba, hasActiveLines = false }) => {
+    const issues = [];
+    if (hasActiveLines && defaultLine?.status !== 'active') issues.push('ninguna línea activa es la por defecto');
+
+    const expected = legacyUserFields(defaultLine, waba);
+    if ((owner?.phoneNumberId ?? null) !== expected.phoneNumberId) {
+        issues.push(`User tiene el número ${owner?.phoneNumberId ?? 'ninguno'} y la línea por defecto es ${expected.phoneNumberId ?? 'ninguna'}`);
+    }
+    if ((owner?.waBusinessId ?? null) !== expected.waBusinessId) issues.push('el WABA de User no es el de la línea por defecto');
+    if ((owner?.tokenWhatsapp ?? null) !== expected.tokenWhatsapp) issues.push('el token de User no es el del WABA de la línea por defecto');
+    return issues;
 };
 
 /**
- * Por qué línea sale un envío (Fase 2b): `{ line, fallback }` o `{ issue }`.
- * `line` es un SendingLine: `{ accountId, lineId, phoneNumberId, waBusinessId,
- * tokenWhatsapp }` (token cifrado). `User` sigue siendo la fuente hasta la
- * 2c: decide qué número está conectado. `line` es la `Line` pedida (la de la
- * conversación, o la del número de `User`); `phoneNumberId`, el número de una
- * conversación sin línea.
+ * Qué hace conectar el número `phoneNumberId` en una cuenta con estas `lines`
+ * (`_id`, `phoneNumberId`, `status`) y este límite:
  *
- * - Sin WhatsApp conectado → `{ issue: 'not_connected' }`.
- * - Otro número que el de `User` → `{ issue: 'disconnected' }`: una conversación
- *   de un número anterior ya no puede responderse desde él.
- * - La proyección cuadra (`lineMatchesOwner`) → la línea y el token de su WABA.
- * - Si no, la reserva: la conexión de `User`, con la línea si existe
- *   (`fallback: true`, quien llama lo deja en el log).
+ * - Ya activo → `{ action: 'renew', lineId }`: renovar el token nunca choca
+ *   con el límite, aunque se haya bajado por debajo de las activas.
+ * - Por debajo del límite → `{ action: 'add' }` (también si el número tiene
+ *   una línea desconectada: se reactiva).
+ * - `maxLines: 1` y exactamente una activa de otro número → `{ action:
+ *   'replace', replaceLineIds }`: el «volver a conectar» con otro número de
+ *   siempre.
+ * - Si no → `{ error: 'limit' }`. Con más activas que el límite (se bajó)
+ *   nunca se reemplaza: bajar el límite no desconecta nada.
  */
-export const sendingLineFor = ({ owner, line, waba, phoneNumberId = null }) => {
-    const connection = ownerConnection(owner);
-    if (!connection) return { issue: 'not_connected' };
+export const planConnection = ({ lines, maxLines, phoneNumberId }) => {
+    const active = lines.filter(line => line.status === 'active');
+    const same = active.find(line => line.phoneNumberId === phoneNumberId);
+    if (same) return { action: 'renew', lineId: same._id };
+    if (active.length < maxLines) return { action: 'add' };
+    if (maxLines === 1 && active.length === 1) return { action: 'replace', replaceLineIds: [active[0]._id] };
+    return { error: 'limit' };
+};
 
-    const wanted = line?.phoneNumberId ?? phoneNumberId ?? connection.phoneNumberId;
-    if (wanted !== connection.phoneNumberId) return { issue: 'disconnected' };
-
-    if (lineMatchesOwner({ owner, line, waba })) {
-        return {
-            line: {
-                accountId: owner.accountId, lineId: line._id, phoneNumberId: line.phoneNumberId,
-                waBusinessId: waba.waBusinessId, tokenWhatsapp: waba.tokenWhatsapp,
-            },
-            fallback: false,
-        };
+/**
+ * Por qué línea sale un envío (Fase 2c: `Line` y `Waba` son la fuente):
+ * `{ line }` (un SendingLine, `{ accountId, lineId, phoneNumberId,
+ * waBusinessId, tokenWhatsapp }`, token cifrado) o `{ issue }`.
+ *
+ * Sin línea, desconectada o sin token en su WABA: `disconnected` si se pidió
+ * una línea o un número concretos (`requested`: la de una conversación), y
+ * `not_connected` si se buscaba la por defecto.
+ */
+export const sendingLineFor = ({ line, waba, requested = false }) => {
+    if (line?.status !== 'active' || !waba?.tokenWhatsapp) {
+        return { issue: requested ? 'disconnected' : 'not_connected' };
     }
-    return { line: { accountId: owner.accountId, lineId: line?._id ?? null, ...connection }, fallback: true };
+    return {
+        line: {
+            accountId: line.accountId, lineId: line._id, phoneNumberId: line.phoneNumberId,
+            waBusinessId: waba.waBusinessId, tokenWhatsapp: waba.tokenWhatsapp,
+        },
+    };
 };
 
 const digitsOf = (text) => String(text ?? '').replace(/\D/g, '');

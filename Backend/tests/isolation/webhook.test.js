@@ -7,8 +7,6 @@ import {
     seedAccount, connectWhatsapp, postWebhook, openStream, Contact, Conversation, Line, Message, User,
 } from './helpers.js';
 
-const { syncLinesFromOwner } = await import('../../src/services/line.service.js');
-
 const a = await seedAccount('A', { seq: 1 });
 const b = await seedAccount('B', { seq: 2 });
 await connectWhatsapp(a);
@@ -153,8 +151,7 @@ test('un entrante a A2 no toca el historial ni la ventana de la conversación de
         lineId: a1._id, lastMessage: 'en A1', lastInboundAt,
     });
     // C pasa al número A2 (con `maxLines: 1`, A1 queda desconectada con su historial).
-    await User.updateOne({ _id: c.userId }, { phoneNumberId: '8833' });
-    await syncLinesFromOwner(c.accountId);
+    await connectWhatsapp(c, { phoneNumberId: '8833' });
     const a2 = await Line.findOne({ accountId: c.accountId, phoneNumberId: '8833' }).lean();
 
     assert.equal((await postWebhook('8833', textMessage(contact.phone, 'a la línea A2'))).status, 200);
@@ -165,6 +162,21 @@ test('un entrante a A2 no toca el historial ni la ventana de la conversación de
     assert.equal(await Message.countDocuments({ conversationId: inA1._id }), 0);
     const inA2 = await Conversation.findOne({ userId: c.accountId, contactId: contact._id, lineId: a2._id }).lean();
     assert.ok(await Message.exists({ conversationId: inA2._id, text: 'a la línea A2' }));
+});
+
+// Fase 2c: con dos líneas activas, cada número llega a su línea, en su cuenta.
+test('dos líneas activas: cada entrante cae en la conversación de su línea', async () => {
+    const m = await seedAccount('M', { seq: 9, maxLines: 2 });
+    const { lineId: first } = await connectWhatsapp(m);
+    const { lineId: second } = await connectWhatsapp(m, { phoneNumberId: '8839' });
+
+    for (const [number, lineId] of [[`99${m.seq}`, first], ['8839', second]]) {
+        assert.equal((await postWebhook(number, textMessage('593990002019', `a ${number}`))).status, 200);
+        const conversation = await Conversation.findOne({ userId: m.accountId, lineId }).lean();
+        assert.ok(conversation, `no nació la conversación de la línea ${number}`);
+        assert.ok(await Message.exists({ conversationId: conversation._id, text: `a ${number}` }));
+    }
+    assert.equal(await Conversation.countDocuments({ userId: m.accountId, contactPhone: '593990002019' }), 2);
 });
 
 // Regresión que vigila (Codex, PR #15): con la reserva, la línea es null, y la
