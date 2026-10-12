@@ -1,6 +1,8 @@
 // Piezas puras de la sección de Contactos: qué campos acepta la API y cómo se
 // traduce la búsqueda a una consulta de Mongo.
 
+import { getWindowExpiry } from './whatsapp.window.js';
+
 // Lo único que se edita a mano. Nombre de WhatsApp, usuario, BSUID, origen y
 // baja de publicidad los pone WhatsApp: aunque lleguen en el body, se ignoran.
 const EDITABLE_FIELDS = ['phone', 'name', 'email', 'company', 'notes'];
@@ -77,4 +79,26 @@ export const matchesContactSearch = (contact, search) => {
     if (!patterns) return true;
     return SEARCH_FIELDS.some(field => typeof contact[field] === 'string' && patterns.text.test(contact[field]))
         || Boolean(patterns.phone && typeof contact.phone === 'string' && patterns.phone.test(contact.phone));
+};
+
+const toIso = (date) => (date ? new Date(date).toISOString() : null);
+
+/**
+ * Las conversaciones de un contacto, una por línea (Fase 2b de multi-línea),
+ * de la más reciente a la más antigua. `latest` es la más reciente (o null):
+ * de ella salen los campos sueltos del contacto, que el front lee hasta la 2c.
+ * La ventana va siempre con su línea: es de esa conversación, no del contacto.
+ */
+export const summarizeConversations = (conversations = []) => {
+    const sorted = [...(conversations ?? [])].sort((a, b) =>
+        new Date(b.lastMessageAt ?? 0) - new Date(a.lastMessageAt ?? 0));
+    return {
+        latest: sorted[0] ?? null,
+        items: sorted.map(conversation => ({
+            conversationId: String(conversation._id),
+            lineId: conversation.lineId ? String(conversation.lineId) : null,
+            lastInteractionAt: toIso(conversation.lastMessageAt),
+            windowExpiresAt: toIso(getWindowExpiry(conversation.lastInboundAt)),
+        })),
+    };
 };

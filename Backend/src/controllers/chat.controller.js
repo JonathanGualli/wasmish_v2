@@ -454,7 +454,7 @@ export const sendConversationTemplateController = async (req, res) => {
 // Iniciar una conversación desde la bandeja. A un número que nunca escribió
 // WhatsApp solo le entrega plantillas aprobadas, así que la conversación nace
 // con una. `processTemplateSending` la crea si no existe o reutiliza la del
-// contacto de ese número (el índice { userId, contactId } no admite dos), y ya
+// contacto de ese número, y ya
 // la filtra por la cuenta de la sesión: no hay conversación ajena que comprobar.
 export const startConversationTemplateController = async (req, res) => {
     try {
