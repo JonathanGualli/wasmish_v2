@@ -25,6 +25,31 @@ await mongoose.connect(mongod.getUri());
 const { default: app } = await import('../../src/app.js');
 const { createAccessToken } = await import('../../src/libs/jwt.js');
 const { encrypt } = await import('../../src/utils/crypto.js');
+const { whatsappApi } = await import('../../src/libs/whatsapp.js');
+
+// Meta falso. Todas las llamadas a Meta pasan por `whatsappApi`, así que
+// cambiarle el transporte basta para que ningún test llegue a la red, ni
+// siquiera si una regresión mueve una comprobación por detrás de la llamada.
+// Un test prepara las respuestas con `onMeta`; lo que no tiene respuesta
+// lanza y queda en `unexpectedMetaCalls`, y el `after` de abajo hace fallar
+// el archivo aunque el controlador se haya tragado el error.
+export const metaCalls = [];
+const unexpectedMetaCalls = [];
+let metaResponder = null;
+
+/** `responder(config) → { data, status? } | undefined`; `undefined` = llamada no prevista. `null` lo quita. */
+export const onMeta = (responder) => { metaResponder = responder; };
+
+whatsappApi.defaults.adapter = async (config) => {
+    const call = { method: config.method, url: config.url };
+    metaCalls.push(call);
+    const reply = await metaResponder?.(config);
+    if (!reply) {
+        unexpectedMetaCalls.push(call);
+        throw new Error(`Llamada a Meta no prevista en un test: ${config.method?.toUpperCase()} ${config.url}`);
+    }
+    return { data: reply.data, status: reply.status ?? 200, statusText: 'OK', headers: {}, config, request: {} };
+};
 const load = async (file) => (await import(`../../src/models/${file}`)).default;
 
 export const User = await load('user.model.js');
@@ -46,6 +71,9 @@ after(async () => {
     await mongoose.disconnect();
     await mongod.stop();
     await fs.rm(process.env.MEDIA_DIR, { recursive: true, force: true });
+    // Al final: si fallara antes de cerrar, Mongo y el servidor quedarían
+    // abiertos y el proceso no terminaría nunca.
+    assert.deepEqual(unexpectedMetaCalls, [], 'un test llamó a Meta sin respuesta preparada');
 });
 
 // La firma de un PNG y poco más: basta para pasar la comprobación de formato.
@@ -117,7 +145,7 @@ export const seedAccount = async (label, { rol = 'admin', seq = 1 } = {}) => {
     });
 
     return {
-        label, marker, userId: String(user._id),
+        label, marker, seq, userId: String(user._id),
         token: await createAccessToken({ id: String(user._id) }),
         tagId: String(tag._id),
         contactId: String(contact._id),
@@ -134,9 +162,12 @@ export const seedAccount = async (label, { rol = 'admin', seq = 1 } = {}) => {
     };
 };
 
-/** Una cuenta con WhatsApp «conectado», para lo que lo exige antes de nada (crear una campaña). */
+/**
+ * Una cuenta con WhatsApp «conectado», para lo que lo exige antes de nada (crear una campaña).
+ * El número es distinto por cuenta (`99<seq>`): un número solo puede estar en una.
+ */
 export const connectWhatsapp = (account) =>
-    User.updateOne({ _id: account.userId }, { tokenWhatsapp: encrypt('token-de-pruebas'), phoneNumberId: '999' });
+    User.updateOne({ _id: account.userId }, { tokenWhatsapp: encrypt('token-de-pruebas'), phoneNumberId: `99${account.seq}` });
 
 /**
  * Una petición con la sesión de `account`. `body` puede ser un objeto (JSON)

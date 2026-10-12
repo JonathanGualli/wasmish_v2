@@ -45,8 +45,16 @@ const userSchema = new mongoose.Schema({
         trim: true,
         default: null,
     },
-}, { 
+}, {
     timestamps: true,
 });
+
+// Un número de WhatsApp es de una sola cuenta: el webhook enruta por él. Es
+// PARCIAL por lo mismo que `contact_phone_unique`: hay muchos usuarios sin
+// número (null), y dos null chocarían en un índice único normal.
+userSchema.index(
+    { phoneNumberId: 1 },
+    { name: 'user_phoneNumberId_unique', unique: true, partialFilterExpression: { phoneNumberId: { $type: 'string' } } },
+);
 
 export default mongoose.model('User', userSchema);

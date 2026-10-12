@@ -46,8 +46,8 @@ No se aplica a `/api/webhook` (Meta manda ráfagas) ni a `/api/stream` (conexió
 | POST | `/api/logout` | No | Borra cookie |
 | GET | `/api/verify` | No | Verifica cookie JWT activa |
 | GET | `/api/profile` | JWT | Perfil del usuario autenticado |
-| PUT | `/api/users/update-user-token-whatsapp` | JWT | Guarda token WA cifrado (carga manual) |
-| POST | `/api/whatsapp/connect` | JWT | Embedded Signup: canjea el `code` de Meta → token permanente, suscribe webhook, guarda credenciales |
+| PUT | `/api/users/update-user-token-whatsapp` | JWT | Guarda token WA cifrado (carga manual). Pide `tokenWhatsapp`, `phoneNumberId` y `waBusinessId` (400 si falta alguno); 409 si el número está en otra cuenta, 400 si no es del WABA ([Un número, una cuenta](whatsapp-envio.md#embedded-signup-objetivo-central--saas-multi-cliente)) |
+| POST | `/api/whatsapp/connect` | JWT | Embedded Signup: canjea el `code` de Meta → token permanente, comprueba el número en el WABA, suscribe webhook, guarda credenciales. 409 si el número está en otra cuenta, 400 si no es del WABA |
 | POST | `/api/chats/messages` | JWT | Enviar mensaje por número (reutiliza su conversación). **409** si el contacto nunca escribió o la ventana está cerrada: hay que empezar con una plantilla |
 | POST | `/api/chats/:id/messages` | JWT | Enviar mensaje a conversación existente. **409** (`code: window_closed`) si la ventana de 24 h está cerrada, sin llamar a Meta |
 | POST | `/api/chats/:id/media` | JWT | Enviar un archivo a una conversación. Cuerpo = el archivo crudo (Content-Type = su tipo); `X-Filename`, `X-Caption` (URI-encoded) y `X-Temporal-Id` en cabeceras, `X-Send-As: document` para una imagen como documento. 400 si no vale, **409** fuera de la ventana. Responde el mensaje (`201`) aunque Meta lo rechace |

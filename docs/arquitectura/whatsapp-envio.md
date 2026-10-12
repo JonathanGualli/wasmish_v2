@@ -28,6 +28,16 @@ Todo lo que sale hacia Meta: cliente de la Graph API, Embedded Signup, API públ
 
 **Embedded Signup (objetivo central — SaaS multi-cliente):** que cada cliente conecte su WhatsApp con "login con Facebook". Frontend: `libs/facebookSdk.ts` (carga el SDK) + `useConnectWhatsapp` (popup con `config_id`, captura `code` + `phone_number_id` + `waba_id`) → `POST /api/whatsapp/connect`. App Review de Meta aprobado: clientes reales pueden conectarse en producción. En local el frontend se expone con **ngrok** (dominio fijo) y Vite proxya `/api` → `localhost:3001`.
 
+**Un número, una cuenta.** El webhook enruta cada mensaje por su `phone_number_id`, así que conectar un número (por el Embedded Signup o por el formulario manual de Ajustes, `PUT /api/users/update-user-token-whatsapp`) pasa por las mismas comprobaciones, en este orden (`services/whatsapp.connection.service.js`):
+
+1. `isPhoneNumberTaken`: si el número ya está en **otra** cuenta, 409 «Ese número de WhatsApp ya está conectado a otra cuenta de Wasmish.», sin llamar a Meta. El propio número no cuenta: reconectarlo para renovar el token funciona.
+2. (Embedded Signup) canjear el `code` por el token.
+3. `verifyWabaPhoneNumber`: `GET /{waba-id}/phone_numbers` con ese token (`getWabaPhoneNumbers`) tiene que listar el número (`describeWabaPhoneNumber`, en `utils/whatsapp.line.js`). Si no, 400 «Ese número no pertenece a la cuenta de WhatsApp Business conectada.».
+4. (Embedded Signup) suscribir la app al WABA.
+5. Guardar.
+
+El índice único parcial `user_phoneNumberId_unique` cubre la carrera de dos conexiones a la vez: la segunda recibe un E11000, que `connectionErrorResponse` (en `whatsapp.controller.js`) traduce al mismo 409. Un error de Meta → 502 con su `errorCode`. Si falla cualquier paso, no se guarda nada (2026-10-11, Fase 0 de multi-línea).
+
 ### API pública de plantillas (`sendTemplateController`)
 
 **API pública de plantillas (`sendTemplateController`):** autenticada por API key. Descifra el token WA del user, envía la plantilla a Meta (parámetros posicionales `["Juan"]` o nombrados `[{name,value}]`), persiste la conversación + `Message` (con `status`; si Meta rechaza, `status:'failed'` + error), y **emite `message_created` por SSE** para que aparezca en vivo en la UI del dueño.
@@ -67,7 +77,8 @@ Todo lo que sale hacia Meta: cliente de la Graph API, Embedded Signup, API públ
 
 **Flujo de mensaje saliente (`sendMessageController`):**
 1. Con `id` (params) busca la conversación con `findOne({ _id: id, userId })` — es la comprobación de propiedad; sin `id`, el destinatario es `destinationNumber` (body) y se reutiliza la conversación de su contacto si existe
-2. Decripta `user.tokenWhatsapp` → llama Meta Cloud API con el destinatario del contacto (teléfono o BSUID)
-3. `getSendingConversation` da la conversación (la crea con su contacto si no existía); se actualiza `lastMessage` y **`lastMessageAt`** — nunca `updatedAt`, que Mongoose pisa en el `save()` por `timestamps: true` y que además no es el campo por el que ordena `listConversations`. La conversación y el `Message` comparten un único `const now` para que el orden de la lista y el cursor de paginación estén en la misma escala
-4. Persiste `Message` con `temporalId` (para UI optimista). Si Meta rechaza, guarda igual `status:'failed'` + `errorCode`/`errorDetail` (no se pierde)
-5. Emite `message_created` via SSE; el POST responde el mensaje normalizado con `id` real (para que los `message_status` posteriores casen con el optimista del frontend)
+2. Sin WhatsApp conectado (sin token o sin número), **409** «La cuenta no tiene WhatsApp conectado…» (`assertWhatsappConnected`, en `utils/whatsapp.line.js`; la comparten el texto, los archivos y `processTemplateSending`). Va después del 409 de la ventana y, en los archivos, **antes** de guardarlo en disco (2026-10-11; antes daba 500 por `decrypt(null)`). `GET /api/templates/sync` responde 400 en el mismo caso, también sin descifrar nada.
+3. Decripta `user.tokenWhatsapp` → llama Meta Cloud API con el destinatario del contacto (teléfono o BSUID)
+4. `getSendingConversation` da la conversación (la crea con su contacto si no existía); se actualiza `lastMessage` y **`lastMessageAt`** — nunca `updatedAt`, que Mongoose pisa en el `save()` por `timestamps: true` y que además no es el campo por el que ordena `listConversations`. La conversación y el `Message` comparten un único `const now` para que el orden de la lista y el cursor de paginación estén en la misma escala
+5. Persiste `Message` con `temporalId` (para UI optimista). Si Meta rechaza, guarda igual `status:'failed'` + `errorCode`/`errorDetail` (no se pierde)
+6. Emite `message_created` via SSE; el POST responde el mensaje normalizado con `id` real (para que los `message_status` posteriores casen con el optimista del frontend)

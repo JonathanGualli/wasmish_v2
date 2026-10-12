@@ -17,7 +17,8 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En curso
 
-Nada a medias en este momento (2026-10-11). La reorganización de la documentación y el flujo con CI, ramas y PRs ya está en `master`.
+- **Multi-línea y multi-agente · Fase 0 (un número, una cuenta)** — rama `fase0-un-numero-una-cuenta`, PR #6, empezado el 2026-10-11 por Claude. Diseño: `docs/superpowers/specs/2026-10-11-multi-linea-multi-agente-design.md`; plan: `docs/superpowers/plans/2026-10-11-multi-linea-fase-0.md` (revisado por Codex).
+  Hecho: diseño, plan y las 4 tareas, con sus tests (Meta falso en los de aislamiento). · Falta: revisión de Codex del código, unir y desplegar (antes, la consulta de números repetidos del plan). · Sin probar: contra Meta de verdad (el Embedded Signup con el número de pruebas).
 
 <!-- Formato de una entrada:
 - **<qué>** — rama `<rama>`, PR #<n>, empezado el <fecha> por <Claude|Codex|Jonathan>.
@@ -39,7 +40,6 @@ Nada a medias en este momento (2026-10-11). La reorganización de la documentaci
 - **Plantillas sincronizadas hace mucho:** si les falta `Template.buttons`, el diálogo de enviar plantilla no pide los valores de los botones. Se arregla pulsando *Sincronizar* en Plantillas.
 - **Conversación nueva con plantilla:** cuatro detalles los decidió el agente y Jonathan no los confirmó. Si Meta rechaza el envío, la conversación queda creada con el mensaje fallido junto al borrador. «Esperando respuesta» conserva el botón «Enviar plantilla». El aviso de la cabecera es genérico. Y si se cambia de conversación antes de que termine el envío, al acabar lleva al chat nuevo.
 - **Importar:** un contacto que solo tiene BSUID no se reconoce por teléfono al importar (se crea otro). La casilla de consentimiento empieza sin marcar y las tandas son de 200: decisiones del agente, a revisar. Sin probar a ojo: el aviso de más de 5000 al crear una campaña desde Importar.
-- **Enviar texto o archivo con la ventana abierta y sin WhatsApp conectado** responde 500 («Cannot read properties of null») en vez de un 409 claro: `processMessageSending` llama a `decrypt` sin comprobar que haya token. Las plantillas sí lo comprueban. Encontrado con los tests de aislamiento; sin arreglar.
 - **Bandeja de Chats:** un contacto sin ningún nombre sale con el teléfono como título y un dígito como avatar (`initials(title)` en `ConversationList`). Sin confirmar si sigue.
 - **Código muerto** en `hooks/useSendMessage.ts` y `pages/private/DashboardPage`: «dejarlo por el momento». `Frontend/src/index.js` está vacío y se puede borrar.
 - **Bundle del frontend:** 792 kB el 2026-10-11 y crece con cada módulo; candidato a cargar las páginas con `lazy`.
