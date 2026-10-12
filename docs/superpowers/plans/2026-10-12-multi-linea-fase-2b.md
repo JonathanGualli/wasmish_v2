@@ -25,18 +25,21 @@
 ## Review Focus
 
 - **Un contacto con conversación en un número anterior escribe al número actual.** Nace una conversación nueva en la línea actual y el mensaje no se pierde (el índice viejo `{ userId, contactId }` ya no está) → test en la Tarea 2.
-- **El hueco entre desplegar y correr `migrate:lines`**, con el índice viejo todavía puesto: crear la segunda conversación del contacto da E11000. El mensaje **no se pierde**: se guarda en la conversación que ya tenía el contacto, con un `console.error` → test en la Tarea 2.
+- **Un entrante a una línea nunca toca la conversación de otra:** ni su historial ni su ventana (`lastInboundAt`), aunque sea del mismo contacto → test en la Tarea 2. Por eso el índice se cambia **antes** de que corra el código que enruta por línea (Tarea 1 y «Antes de desplegar»).
+- **Un cambio de número a medias** (la proyección escribió la línea nueva pero no `defaultLineId`, o falló entre medias): el OTP del cliente por `/v1` sigue saliendo → test en la Tarea 3.
 - **Responder en una conversación de una línea desconectada** → 409 `LINE_DISCONNECTED_MESSAGE`, 0 llamadas a Meta, 0 `Message` nuevos → test en la Tarea 3.
 - **Una plantilla sincronizada antes de la 2a** (`waBusinessId: null`) que el cliente de la API envía por nombre: no aparece en la búsqueda por WABA, la sincronización JIT le pone el WABA y el envío sale → test en la Tarea 3.
-- **Una campaña en cola desde antes de desplegar** (`lineId: null`): el worker la envía por la línea por defecto → test en la Tarea 3.
+- **Una campaña en cola desde antes de desplegar** (`lineId: null`): el worker la envía por la línea por defecto, y cuenta como esa línea al repartir (no avanza a la vez que otra campaña nueva de la misma línea) → test en la Tarea 3.
 
 ---
 
 ### Task 1: Un contacto, varias conversaciones (PR 1, rama `fase2b-contactos`)
 
-Sin cambio de comportamiento con una conversación por contacto; prepara la lista y la ficha para cuando haya más.
+Sin cambio de comportamiento con una conversación por contacto; prepara el índice, la lista y la ficha para cuando haya más. El índice va aquí, y no con el webhook (Tarea 2), para que en producción se cambie **antes** de que nada enrute por línea.
 
 **Files:**
+- Modify: `Backend/src/models/conversation.model.js` (índice)
+- Modify: `Backend/src/services/line.migration.service.js`, `Backend/tests/isolation/migrate-lines.test.js`, `Backend/AGENTS.md` (índices), `docs/arquitectura/pruebas-y-scripts.md` (`migrate:lines`)
 - Modify: `Backend/src/utils/contact.query.js`, `Backend/tests/contact.query.test.js`
 - Modify: `Backend/src/controllers/contact.controller.js` (`contactSelectionStages`, `serializeContact`, `listContacts`, `getContact`, `updateContact`, `findContactConversation`)
 - Modify: `Backend/tests/isolation/contacts.test.js`
@@ -49,6 +52,8 @@ Sin cambio de comportamiento con una conversación por contacto; prepara la list
   - Un contacto serializado lleva `conversations` (los `items`) y conserva `conversationId`, `lastInteractionAt` y `windowExpiresAt`, que pasan a ser **los de la más reciente** (compatibilidad con el front hasta la 2c).
   - `contactSelectionStages` deja en cada contacto `conversations` (solo `_id`, `lineId`, `lastMessageAt`, `lastInboundAt`) y `conversation` = la más reciente. Los filtros «con» y «sin conversación» y el orden por actividad (`conversation.lastMessageAt`) no cambian de significado.
   - `getContact`: `activity` suma los mensajes de **todas** sus conversaciones.
+  - Índice nuevo `conversation_line_contact_unique` = `{ userId: 1, lineId: 1, contactId: 1 }` único **parcial** `{ contactId: { $type: 'objectId' }, lineId: { $type: 'objectId' } }`; el viejo `conversation_contact_unique` sale del esquema. Con el código de la 2a sigue protegiendo la misma carrera (dos entrantes a la vez de un contacto nuevo), porque las conversaciones nuevas ya nacen con `lineId`.
+  - `runLineMigration` añade `pending.oldConversationIndex` (`true` si `conversation_contact_unique` existe; `--check` sale con 1) y, al aplicar, **primero** `Conversation.createIndexes()` (el nuevo) y **después** `Conversation.collection.dropIndex('conversation_contact_unique')`. Idempotente.
 
 - [ ] **Step 1: Tests puros que fallan** en `tests/contact.query.test.js`
 
@@ -66,6 +71,9 @@ test('un contacto con dos conversaciones: la ficha las lista y la actividad suma
 // conversationId === la más reciente, activity.received cuenta los mensajes de las dos
 test('la lista no repite al contacto con dos conversaciones', ...);   // GET /contacts → aparece una vez
 test('las conversaciones de un contacto nunca traen las de otra cuenta', ...);
+// migrate-lines.test.js
+test('migrar crea el índice nuevo y borra el viejo; --check lo detecta antes', ...);
+// crear a mano el índice viejo → --check: oldConversationIndex true; migrar → solo queda el nuevo; segunda pasada: nada pendiente
 ```
 
 - [ ] **Step 3: Ejecutarlos y ver que fallan.** Run: `cd Backend && npm test && npm run test:isolation` · Expected: FAIL.
@@ -74,13 +82,13 @@ test('las conversaciones de un contacto nunca traen las de otra cuenta', ...);
 
 - [ ] **Step 5: Ejecutar todo y ver que pasa.** Run: `cd Backend && npm test && npm run test:isolation && cd ../Frontend && npm run build` · Expected: PASS.
 
-- [ ] **Step 6: Documentar** en `contactos.md`: `conversations` en la lista y la ficha, y que los campos sueltos son los de la más reciente hasta la 2c.
+- [ ] **Step 6: Documentar** en `contactos.md`: `conversations` en la lista y la ficha, y que los campos sueltos son los de la más reciente hasta la 2c. En `pruebas-y-scripts.md`, que `migrate:lines` cambia el índice; en `Backend/AGENTS.md`, el índice nuevo.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add Backend/src Backend/tests Frontend/src/models/contact.model.ts docs/arquitectura/contactos.md
-git commit -m "contactos: un contacto puede tener varias conversaciones"
+git add Backend/src Backend/tests Frontend/src/models/contact.model.ts Backend/AGENTS.md docs/arquitectura
+git commit -m "contactos: un contacto puede tener varias conversaciones, una por línea"
 ```
 
 ---
@@ -90,18 +98,14 @@ git commit -m "contactos: un contacto puede tener varias conversaciones"
 **Files:**
 - Modify: `Backend/src/services/line.service.js`, `Backend/tests/isolation/lines.test.js`
 - Modify: `Backend/src/controllers/webhook.controller.js`, `Backend/src/controllers/contact.controller.js` (`findOrCreateConversation`, `getSendingConversation`)
-- Modify: `Backend/src/models/conversation.model.js` (índice)
-- Modify: `Backend/src/services/line.migration.service.js`, `Backend/scripts/migrate-lines.js`, `Backend/tests/isolation/migrate-lines.test.js`
 - Modify: `Backend/tests/isolation/webhook.test.js`
-- Modify: `Backend/AGENTS.md` (índices), `docs/arquitectura/webhook-adjuntos.md`, `docs/arquitectura/pruebas-y-scripts.md` (`migrate:lines`)
+- Modify: `docs/arquitectura/webhook-adjuntos.md`
 
 **Interfaces:**
 - Produces:
   - `findInboundLine(phoneNumberId) → Promise<InboundLine | null>` en `line.service.js`. `InboundLine = { accountId, lineId, phoneNumberId, tokenWhatsapp }` (token **cifrado**, del `Waba` de la línea; `null` si no tiene). Busca la `Line` **activa** de ese número. Reserva: sin ella, `User.findOne({ phoneNumberId })`; si existe, `{ accountId: user.accountId, lineId: account.defaultLineId, phoneNumberId, tokenWhatsapp: user.tokenWhatsapp }` y `console.error('Webhook por la reserva de User', { accountId, phoneNumberId })`. Ni línea ni `User` → `null` (se ignora, como hoy).
-  - `findOrCreateConversation({ userId, contact, line })`, con `line = { lineId, phoneNumberId }` en lugar de `phoneNumberId`. Busca y crea por `{ userId, lineId, contactId }`; la de antes de los contactos (`contactPhone`, `contactId: null`), también dentro de esa línea. Si crear da E11000 y no hay conversación del contacto **en esa línea**, devuelve la que el contacto tenga en cualquier línea y deja `console.error('Conversación en otra línea: falta migrate:lines', …)` (el índice viejo sigue puesto).
+  - `findOrCreateConversation({ userId, contact, line })`, con `line = { lineId, phoneNumberId }` en lugar de `phoneNumberId`. Busca y crea por `{ userId, lineId, contactId }`; la de antes de los contactos (`contactPhone`, `contactId: null`), también dentro de esa línea. **Nunca** devuelve una conversación de otra línea: si crear da E11000, vuelve a buscar **en esa línea** y, si no está, el error sube como hoy (el índice viejo ya no existe: lo quitó la Tarea 1 antes de desplegar).
   - `getSendingConversation({ …, line })`: lo mismo, reenviado.
-  - Índice nuevo `conversation_line_contact_unique` = `{ userId: 1, lineId: 1, contactId: 1 }` único **parcial** `{ contactId: { $type: 'objectId' }, lineId: { $type: 'objectId' } }`; el viejo `conversation_contact_unique` sale del esquema.
-  - `runLineMigration` añade `pending.oldConversationIndex` (`true` si `conversation_contact_unique` existe; `--check` sale con 1) y, al aplicar, lo borra con `Conversation.collection.dropIndex`. Idempotente: si no existe, no hace nada.
 
 `procesarEntrante`, `procesarEstado`, `procesarPreferencia`, `procesarCambioDeNumero` y `descargarAdjunto` reciben el `InboundLine` en lugar del `user`: la cuenta sale de `inbound.accountId` y el token de `inbound.tokenWhatsapp`.
 
@@ -116,25 +120,24 @@ test('findInboundLine: sin Line pero con User, la reserva y su console.error', .
 test('un entrante cae en la conversación de SU línea', ...);
 // Regresión que vigila (Review Focus 1): el contacto ya tenía conversación en una línea anterior.
 test('el contacto con conversación en otro número estrena una conversación en la línea actual', ...);
-// Regresión que vigila (Review Focus 2): el hueco entre desplegar y migrar.
-test('con el índice viejo puesto, el mensaje se guarda en la conversación que ya tenía', ...);
-// crear a mano el índice { userId, contactId } único parcial antes del postWebhook; el mensaje está en la conversación vieja
-// migrate-lines.test.js
-test('migrar borra el índice viejo de conversaciones, y --check lo detecta antes', ...);
+// Regresión que vigila (Review Focus 2): las ventanas son de cada línea.
+test('un entrante a A2 no toca el historial ni la ventana de la conversación de A1', ...);
+// dos Line activas de la cuenta; conversación del contacto en A1 con lastInboundAt viejo → entrante a A2:
+// la de A1 conserva lastInboundAt, lastMessage y sus mensajes; el nuevo está en la de A2
 ```
 
 - [ ] **Step 2: Ejecutarlos y ver que fallan.** Run: `cd Backend && npm run test:isolation` · Expected: FAIL.
 
-- [ ] **Step 3: Implementar** `findInboundLine`, el cambio de `findOrCreateConversation`, el índice y el paso de la migración. Los envíos (`processMessageSending`, `processTemplateSending`) todavía pasan `line` construido con el owner (`{ lineId: await findLineId(accountId, phoneNumberId), phoneNumberId }`): la Tarea 3 lo sustituye.
+- [ ] **Step 3: Implementar** `findInboundLine` y el cambio de `findOrCreateConversation`. Los envíos (`processMessageSending`, `processTemplateSending`) todavía pasan `line` construido con el owner (`{ lineId: await findLineId(accountId, phoneNumberId), phoneNumberId }`): la Tarea 3 lo sustituye.
 
-- [ ] **Step 4: Ejecutar todo y ver que pasa**, y probarlo en local: `npm run dev`, `npm run migrate:lines` (borra el índice) y `npm run webhook:simulate -- texto` → el mensaje cae en su conversación; `npm run migrate:lines -- --check` sale con 0.
+- [ ] **Step 4: Ejecutar todo y ver que pasa**, y probarlo en local: `npm run dev` y `npm run webhook:simulate -- texto` → el mensaje cae en la conversación de su línea; `npm run migrate:lines -- --check` sale con 0.
 
-- [ ] **Step 5: Documentar** en `webhook-adjuntos.md` (el webhook enruta por `Line`, con la reserva), `pruebas-y-scripts.md` (`migrate:lines` borra el índice viejo) y `Backend/AGENTS.md` (el índice nuevo de `Conversation`).
+- [ ] **Step 5: Documentar** en `webhook-adjuntos.md`: el webhook enruta por `Line`, con la reserva, y cada línea tiene su conversación.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add Backend/src Backend/tests Backend/scripts Backend/AGENTS.md docs/arquitectura
+git add Backend/src Backend/tests docs/arquitectura
 git commit -m "líneas: el webhook enruta por Line y cada línea tiene su conversación"
 ```
 
@@ -155,10 +158,11 @@ git commit -m "líneas: el webhook enruta por Line y cada línea tiene su conver
 - Produces:
   - `SendingLine = { accountId, lineId, phoneNumberId, waBusinessId, tokenWhatsapp }` (token cifrado).
   - `sendingLineIssue({ line, waba }) → null | 'not_connected' | 'disconnected'` (pura, `utils/line.js`): sin línea, o su `Waba` sin token → `'not_connected'`; línea `disconnected` → `'disconnected'`.
-  - `findSendingLine(accountId, lineId = null) → Promise<SendingLine>` en `line.service.js`. Con `lineId`: esa línea **de esa cuenta** (`{ _id: lineId, accountId }`), o 404 `'La línea no existe en tu cuenta.'`. Sin él: `Account.defaultLineId`. `sendingLineIssue` → 409 con `WHATSAPP_NOT_CONNECTED_MESSAGE` o `LINE_DISCONNECTED_MESSAGE` (exportada desde `utils/whatsapp.line.js`). Reserva: sin `defaultLineId` y con `ownerConnection(owner)` → la conexión del owner con `lineId: await findLineId(...)` y `console.error('Envío por la reserva de User', …)`.
+  - `findSendingLine(accountId, lineId = null) → Promise<SendingLine>` en `line.service.js`. Con `lineId`: esa línea **de esa cuenta** (`{ _id: lineId, accountId }`), o 404 `'La línea no existe en tu cuenta.'`. Sin él: `Account.defaultLineId`. `sendingLineIssue` → 409 con `WHATSAPP_NOT_CONNECTED_MESSAGE` o `LINE_DISCONNECTED_MESSAGE` (exportada desde `utils/whatsapp.line.js`). Reserva: **sin `lineId`**, si la línea por defecto falta o no sirve (`sendingLineIssue` no es `null`) y el owner tiene `ownerConnection(owner)` → la conexión del owner con `lineId: await findLineId(...)` y `console.error('Envío por la reserva de User', …)`. En la 2b `User` sigue siendo la fuente: si la proyección no lo refleja (un cambio de número a medias, una sincronización que falló), manda `User`. Con `lineId` explícito no hay reserva.
   - `processMessageSending({ line, conversation, … })` y `processTemplateSending({ line, … })`: `line` (un `SendingLine`) reemplaza a `user`. El número sale **siempre** de `line.phoneNumberId` (desaparece `conversation?.phoneNumberId || user.phoneNumberId`).
   - `syncTemplatesForWaba({ accountId, waBusinessId, tokenWhatsapp })` reemplaza a `syncTemplatesForUser(user)`. Las búsquedas de plantillas por nombre llevan `waBusinessId: line.waBusinessId`; una con `waBusinessId: null` no se encuentra (la sincronización JIT se lo pone).
-  - `pickCampaignPerLine(candidates) → campaign[]` (pura, `utils/campaign.status.js`): la lógica de hoy de `pickActiveCampaigns`, con la clave `String(campaign.lineId ?? campaign.userId)`.
+  - `pickCampaignPerLine(candidates, defaultLineByAccount) → campaign[]` (pura, `utils/campaign.status.js`): la lógica de hoy de `pickActiveCampaigns`, agrupando por la **línea efectiva**: `String(campaign.lineId ?? defaultLineByAccount.get(String(campaign.userId)) ?? campaign.userId)`. `pickActiveCampaigns` lee el `defaultLineId` de las cuentas de los candidatos (un `Account.find` con `$in`) y arma el `Map`.
+  - `writeProjection` (en `line.service.js`) cambia de orden: primero activa la línea del número actual y pone `Account.defaultLineId`, y **después** desconecta las demás. Así la línea por defecto nunca apunta a una desconectada; durante un instante puede haber dos activas en la cuenta (números distintos, el índice lo admite), y la siguiente escritura lo deja en una. `syncLinesFromOwner` admite `beforeDisconnect`, como `afterRead` **solo para los tests**: se llama justo antes de desconectar las demás.
 
 Quién pide qué línea:
 
@@ -186,26 +190,35 @@ test('sendingLineIssue: línea desconectada → disconnected', ...);
 test('pickCampaignPerLine: una por línea, la que envía antes que la que está en cola', ...);
 test('pickCampaignPerLine: dos líneas de la misma cuenta envían a la vez', ...);
 test('pickCampaignPerLine: sin lineId, cuenta como la línea de su cuenta', ...);
+// Regresión que vigila (Review Focus 6): una vieja sin lineId y una nueva con la línea por defecto son la MISMA línea
+test('pickCampaignPerLine: campaña vieja sin lineId y nueva de la línea por defecto → solo una', ...);
 ```
 
 - [ ] **Step 2: Tests de aislamiento que fallan**
 
 ```js
 // chats.test.js
-// Regresión que vigila (Review Focus 3)
+// Regresión que vigila (Review Focus 4)
 test('responder en una conversación de una línea desconectada → 409 sin llamar a Meta', ...);   // 0 metaCalls, 0 Message nuevos
 test('el envío sale con el número de la línea y el token de su WABA', ...);
 // metaCalls[0]: url con el phoneNumberId de la línea, Authorization con el token del Waba (distinto del de User a propósito)
 test('ventana por línea: abierta en A1 y cerrada en A2 → 409 en A2', ...);
 // maxLines 2 y dos Line activas puestas a mano; conversación del contacto en A1 con lastInboundAt reciente
 // templates.test.js
-// Regresión que vigila (Review Focus 4)
+// Regresión que vigila (Review Focus 5)
 test('una plantilla sin WABA se sincroniza y sale', ...);
 test('GET /templates solo lista las del WABA de la línea', ...);
 // campaigns.test.js
-// Regresión que vigila (Review Focus 5)
+// Regresión que vigila (Review Focus 6)
 test('una campaña sin lineId sale por la línea por defecto', ...);
 test('una campaña de una línea desconectada se pausa con whatsapp_disconnected', ...);
+// lines.test.js
+// Regresión que vigila (Review Focus 3)
+test('cambio de número a medias: /v1 sin línea sigue enviando', ...);
+// estado puesto a mano: línea nueva activa, defaultLineId apuntando a la vieja ya desconectada, User con el número nuevo
+// → POST /v1/templates/send 200 por la reserva, con el número de User
+test('sincronizar un número nuevo nunca deja defaultLineId en una línea desconectada', ...);
+// beforeDisconnect del sync: en ese momento la línea de defaultLineId ya es la nueva y está activa
 // whatsapp.test.js
 test('si la proyección falla tras conectar, 500 y el mensaje para reintentar', ...);
 ```
@@ -294,7 +307,8 @@ git commit -m "líneas: la API pública y la conversación nueva eligen la líne
 - **Los campos sueltos del contacto se quedan** (`conversationId`, `lastInteractionAt`, `windowExpiresAt`, los de la conversación más reciente) junto al `conversations` nuevo. El spec decía «en lugar de una sola»; quitarlos rompería el front, que se cambia en la 2c.
 - **Responder desde un número desconectado da 409.** Hoy esa respuesta saldría con el número viejo y el token nuevo, y Meta la rechazaría con un `Message` fallido.
 - **Conectar responde 500 si la proyección falla** (en la 2a era 200 con `console.error`): desde la 2b los envíos leen el token del `Waba`.
-- **Si el índice viejo sigue puesto, el entrante va a la conversación que ya tenía el contacto** (con `console.error`), en vez de perderse.
+- **El índice de conversaciones se cambia en el PR 1 y en producción antes de arrancar la 1.0.14** (`migrate:lines` con la imagen nueva, con la 1.0.13 en marcha). Así nunca corre el código que enruta por línea con el índice viejo, y no hace falta ninguna reserva que mezcle conversaciones de líneas distintas (revisión de Codex del plan).
+- **Al enviar sin línea explícita, si la proyección no refleja `User`, manda `User`** (la reserva), y `writeProjection` activa la línea nueva antes de desconectar la vieja (revisión de Codex del plan).
 - **`GET /templates` sin línea lista todas las de la cuenta**, como hoy; con línea, solo las de su WABA.
 - **El panel de superadmin no cuenta líneas todavía:** va con la 2c, junto a la UI.
 
@@ -302,9 +316,9 @@ git commit -m "líneas: la API pública y la conversación nueva eligen la líne
 
 Con `/deploy`, cuando estén unidos los cuatro PRs y la 1.0.14 subida:
 
-1. `mongodump` de producción. Ensayo con una copia en el Mongo local (con el `.env` local): restaurar, arrancar la 1.0.14, correr `migrate:lines -- --check` (dice que el índice viejo existe), `migrate:lines` y otra vez `--check` → 0.
-2. Desplegar la imagen nueva y, **justo después**, `migrate:lines` (borra el índice viejo). Hasta entonces, un contacto que escriba a otra línea de su cuenta cae en su conversación de siempre (no se pierde nada). En producción no hay líneas anteriores, así que no debería pasar.
-3. `migrate:lines -- --check` tiene que salir con 0.
+1. `mongodump` de producción. Ensayo con una copia en el Mongo local (con el `.env` local): restaurar, correr con la 1.0.14 `migrate:lines -- --check` (dice que el índice viejo existe), `migrate:lines` y otra vez `--check` → 0.
+2. Compilar la imagen nueva **sin arrancarla** y, con la 1.0.13 en marcha, correr la migración con ella: `docker compose run --rm --no-deps wasmish-api npm run migrate:lines -- --dry-run`, después sin `--dry-run`. Crea el índice nuevo y borra el viejo; la 1.0.13 funciona igual (sus conversaciones nuevas ya nacen con `lineId`, así que el índice nuevo las protege).
+3. `migrate:lines -- --check` con 0, y **después** `up` de la 1.0.14. Otra vez `--check` con 0.
 4. Comprobar: un entrante en vivo, una respuesta desde el chat y `POST /api/v1/templates/send` con 200 en los logs; ningún `por la reserva de User` en los logs.
 
 **Volver atrás:** las imágenes `:1.0.13` ignoran lo nuevo y siguen leyendo `User`, que está al día. Si con la 1.0.14 nació una segunda conversación de un contacto, la 1.0.13 encuentra una de las dos (`findOne`) y su `autoIndex` no podrá recrear el índice viejo (solo lo registra en el log).
