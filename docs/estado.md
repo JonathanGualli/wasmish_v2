@@ -6,9 +6,9 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En producción
 
-**Versión 1.0.13** (subida el 2026-10-12 para desplegar; comprobar con `curl https://wasmish.solventyc.com/api/version` tras el despliegue). Lleva:
+**Versión 1.0.13**, desplegada el 2026-10-12 (etiqueta `v1.0.13`; `curl https://wasmish.solventyc.com/api/version` dice cuál corre). Lleva:
 
-- **Multi-línea · Fase 2a** (PR #9): las colecciones `wabas` y `lines`, una proyección de la conexión que guarda el owner en `User` (que sigue siendo la fuente de verdad); conectar WhatsApp las sincroniza, y un WABA solo puede estar en una cuenta (409 si ya es de otra). Las conversaciones, campañas y plantillas nuevas guardan su línea y su WABA, pero todavía nada enruta por ellos. Sin cambio visible. **Despliegue con migración** (`migrate:lines`), sin parar la API: plan de la Fase 2a, «Antes de desplegar». Ensayada el 2026-10-12 con una copia del `mongodump` de producción: no paró y `--check` salió con 0.
+- **Multi-línea · Fase 2a** (PR #9): las colecciones `wabas` y `lines`, una proyección de la conexión que guarda el owner en `User` (que sigue siendo la fuente de verdad); conectar WhatsApp las sincroniza, y un WABA solo puede estar en una cuenta (409 si ya es de otra). Las conversaciones, campañas y plantillas nuevas guardan su línea y su WABA, pero todavía nada enruta por ellos. Sin cambio visible. Se migró con `migrate:lines` sin parar la API (plan de la Fase 2a, «Antes de desplegar»), y en producción `--check` salió con 0.
 - **Multi-línea · Fase 1** (PR #8, en producción desde la 1.0.12): la cuenta (`Account`) separada del usuario, con el mismo `_id` que su owner; el backend toma al dueño de los datos de `req.auth.accountId`; el registro crea cuenta y owner e ignora `rol` y `status` del cuerpo; un usuario desactivado o sin cuenta recibe 401; el superadmin sale de `isSuperadmin`; la API key es de la cuenta. Sin cambio visible. **Despliegue con migración** (`migrate:accounts`), con la API vieja parada durante la última pasada: plan de la Fase 1, «Antes de desplegar».
 - **Multi-línea · Fase 0** (PR #6, en producción desde la 1.0.11): un `phoneNumberId` solo puede estar en una cuenta (índice único `user_phoneNumberId_unique`) y, al conectarlo por el Embedded Signup o por el formulario manual, Meta tiene que listarlo en el WABA del token. Sin WhatsApp conectado, enviar texto o archivo da 409 y sincronizar plantillas 400, en vez de 500. Previo al despliegue: la consulta de `phoneNumberId` repetidos del plan, hecha por Jonathan el 2026-10-11 (`[]`).
 - Chat: ficha del contacto (notas, etiquetas, datos), enviar archivos (imagen, vídeo, audio, documento) y los no leídos que se ponen a cero al responder. Jonathan confirmó en producción que los archivos llegan a WhatsApp.
@@ -20,7 +20,8 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En curso
 
-- Nada. La Fase 2b (leer las líneas) empieza después de desplegar la 1.0.13.
+- **El plan de la Fase 2b** (enrutar por `Line`), empezado el 2026-10-12 por Claude. Va como primer commit de la rama de la 2b y lo revisa Codex antes de programar.
+  Hecho: nada · Falta: el plan, su revisión y la implementación.
 
 <!-- Formato de una entrada:
 - **<qué>** — rama `<rama>`, PR #<n>, empezado el <fecha> por <Claude|Codex|Jonathan>.
@@ -29,7 +30,7 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## Lo siguiente
 
-- **Multi-línea y multi-agente, fases 1 a 4** (diseño aprobado, sin preguntas abiertas: `docs/superpowers/specs/2026-10-11-multi-linea-multi-agente-design.md`). Fases 1 y 2a hechas (la cuenta separada del usuario y las líneas como proyección de `User`). Sigue la **Fase 2b**: enrutar por `Line` (webhook, envíos, worker), plantillas por WABA, la API pública con `lineId`/`from` y contactos con varias conversaciones; después, la 2c (la UI de líneas). Antes de la 2b: comprobar en WasmishTest si repetir el Embedded Signup en el mismo WABA invalida el token anterior (spec § 2.2).
+- **Multi-línea y multi-agente, fases 1 a 4** (diseño aprobado, sin preguntas abiertas: `docs/superpowers/specs/2026-10-11-multi-linea-multi-agente-design.md`). Fases 1 y 2a hechas y en producción (la cuenta separada del usuario y las líneas como proyección de `User`). Sigue la **Fase 2b**: enrutar por `Line` (webhook, envíos, worker), plantillas por WABA, la API pública con `lineId`/`from` y contactos con varias conversaciones; después, la 2c (la UI de líneas). **Antes de la 2c** (o de dar `maxLines > 1` a una cuenta): comprobar en WasmishTest si repetir el Embedded Signup en el mismo WABA invalida el token anterior (spec § 2.2). Hace falta un número de pruebas, que Jonathan aún no tiene: una línea fija sin WhatsApp (se verifica por llamada) o un chip prepago.
 - **Próximo módulo: un chatbot.** Jonathan aún no decidió de qué tipo. La propuesta sobre la mesa: empezar por respuestas automáticas (bienvenida, fuera de horario, palabras clave) como un motor de «respuestas» en el webhook, con traspaso a una persona (el bot se calla si alguien responde a mano) y la marca «Bot» en el chat; después, flujos con botones (requiere enviar mensajes interactivos) o IA. Antes de empezar: preguntar el tipo y qué problema concreto del cliente resuelve.
 - El campo de archivo de cabecera al enviar una plantilla a **un solo contacto** (`SendTemplateDialog` y `NewConversationPanel`); hoy solo existe en las campañas.
 - En la API pública: el campo `header`, la cabecera de texto con variable y las plantillas de carrusel. Toca al cliente de la API: con cuidado.
@@ -38,7 +39,7 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## Cabos sueltos conocidos
 
-- **Conectar WhatsApp sin probar contra Meta de verdad** (Fase 0, 1.0.11): los tests usan un Meta falso. Falta conectar el número de pruebas de WasmishTest por el Embedded Signup y por el formulario manual, y ver que un número de otro WABA da 400. Desde la 1.0.13 (Fase 2a), comprobar también que, al conectar, se crean su `Waba` y su `Line` (`migrate:lines -- --check` con 0).
+- **Conectar WhatsApp sin probar contra Meta de verdad** (Fase 0, 1.0.11): los tests usan un Meta falso. Falta conectar el número de pruebas de WasmishTest por el Embedded Signup y por el formulario manual, y ver que un número de otro WABA da 400. Desde la 1.0.13 (Fase 2a), comprobar también que, al conectar, se crean su `Waba` y su `Line` (`migrate:lines -- --check` con 0). Se hará con el número de pruebas, junto con la comprobación del token de antes de la 2c. **El `.env` local está mezclado** (el backend con la app WasmishTest y el frontend con la de producción): para el Embedded Signup en local, los dos tienen que apuntar a WasmishTest, con un Config ID propio de esa app.
 - **Adjuntos:** nadie limpia el volumen de archivos (`MEDIA_DIR`, también `outbound/` y `templates/`): se acumulan sin política de retención. Los mensajes anteriores al 2026-09-08 no tienen archivo, y el script para recuperar los que Meta aún guarda no existe. Jonathan decidió que las dos cosas pueden esperar.
 - **Plantillas con cabecera de archivo:** ningún cliente tiene todavía. El primero que la cree tiene que subir el archivo en Plantillas (sin él, el envío da 400 antes de llegar a Meta).
 - **Plantillas sincronizadas hace mucho:** si les falta `Template.buttons`, el diálogo de enviar plantilla no pide los valores de los botones. Se arregla pulsando *Sincronizar* en Plantillas.
