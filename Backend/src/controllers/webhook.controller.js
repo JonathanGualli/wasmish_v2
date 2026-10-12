@@ -101,11 +101,11 @@ const procesarEntrante = async (user, phoneNumberId, messageData, contacts) => {
 
     const timestamp = messageData.timestamp ? new Date(parseInt(messageData.timestamp) * 1000) : new Date();
 
-    const contact = await resolveContact(user._id, identity, {
+    const contact = await resolveContact(user.accountId, identity, {
         source: identity.referral ? 'ad' : 'inbound',
         referral: identity.referral,
     });
-    const conversation = await findOrCreateConversation({ userId: user._id, contact, phoneNumberId });
+    const conversation = await findOrCreateConversation({ userId: user.accountId, contact, phoneNumberId });
 
     // La ventana nunca retrocede: Meta no garantiza el orden de los
     // webhooks, y un entrante viejo que llegue tarde la cerraría antes
@@ -156,7 +156,7 @@ const procesarEntrante = async (user, phoneNumberId, messageData, contacts) => {
     await conversation.save();
 
     sendToAccount(
-        String(user._id),
+        String(user.accountId),
         'message_created', {
             id: String(messageCreated._id),
             conversationId: String(conversation._id),
@@ -198,7 +198,7 @@ const procesarEntrante = async (user, phoneNumberId, messageData, contacts) => {
 // Avisa a la UI de que un contacto se dio de baja o de alta de la publicidad.
 // La ficha y la lista de Contactos se refrescan con él.
 const avisarPreferencia = (user, contact) => {
-    sendToAccount(String(user._id), 'contact_updated', {
+    sendToAccount(String(user.accountId), 'contact_updated', {
         id: String(contact._id),
         marketingOptOut: contact.marketingOptOut,
         marketingOptOutAt: contact.marketingOptOutAt ? contact.marketingOptOutAt.toISOString() : null,
@@ -224,7 +224,7 @@ const procesarPreferencia = async (user, preferenceData) => {
     // No se crea el contacto: para darse de baja tuvo que recibir una plantilla
     // nuestra, y cada envío ya deja su contacto. Si no está, es de otra
     // herramienta que comparte el número, y no hay nada que marcar.
-    const contact = await findContactByIdentity(user._id, preference);
+    const contact = await findContactByIdentity(user.accountId, preference);
     if (!contact) {
         console.warn('Preferencia de marketing de un contacto que no existe; se ignora.');
         return;
@@ -241,10 +241,10 @@ const procesarCambioDeNumero = async (user, updateData) => {
     const update = describeUserIdUpdate(updateData);
     if (!update) return;
 
-    const contact = await applyUserIdUpdate(user._id, update);
+    const contact = await applyUserIdUpdate(user.accountId, update);
     if (!contact) return;
 
-    sendToAccount(String(user._id), 'contact_updated', { id: String(contact._id) });
+    sendToAccount(String(user.accountId), 'contact_updated', { id: String(contact._id) });
     console.log('Cambio de número aplicado:', { contactId: String(contact._id) });
 };
 
@@ -252,7 +252,7 @@ const procesarCambioDeNumero = async (user, updateData) => {
 // `user_preferences` no haya llegado (no estar suscrito a ese campo, o que se
 // perdiera). Se marca con la hora del acuse.
 const marcarBajaPorFallo = async (user, message, timestamp) => {
-    const conversation = await Conversation.findOne({ _id: message.conversationId, userId: user._id });
+    const conversation = await Conversation.findOne({ _id: message.conversationId, userId: user.accountId });
     if (!conversation) return;
 
     const contact = await getConversationContact(conversation);
@@ -295,7 +295,7 @@ const procesarEstado = async (user, statusData) => {
     await message.save();
 
     sendToAccount(
-        String(user._id),
+        String(user.accountId),
         'message_status', {
             id: String(message._id),
             conversationId: String(message.conversationId),
@@ -343,6 +343,9 @@ export const handleWebhook = async (req, res) => {
 
                 if(!phoneNumberId) continue;
 
+                // El owner que tiene conectado ese número (hasta la Fase 2 de
+                // multi-línea). Todo lo que llega es de su CUENTA (`user.accountId`);
+                // de `user` solo sale el token, para descargar los adjuntos.
                 const user = await User.findOne({ phoneNumberId });
                 if (!user) continue;
 

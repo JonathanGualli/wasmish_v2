@@ -3,7 +3,11 @@
 // al crearla.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { seedAccount, request, assertNoLeak, assertHasOwn, connectWhatsapp, Campaign } from './helpers.js';
+import {
+    seedAccount, request, assertNoLeak, assertHasOwn, connectWhatsapp, Campaign, CampaignRecipient, Conversation, Message,
+} from './helpers.js';
+
+const { processNext } = await import('../../src/workers/campaign.worker.js');
 
 const a = await seedAccount('A', { seq: 1 });
 const b = await seedAccount('B', { seq: 2 });
@@ -107,4 +111,25 @@ test('POST /campaigns: B no crea una campaña a los contactos de A', async () =>
     // Control: a los suyos sí.
     const own = await request(b, 'POST', '/campaigns', { ...draft(b), name: 'de B' });
     assert.equal(own.status, 201, own.text);
+});
+
+// Regresión que vigila: el worker buscaba la conexión con `User.findById(campaign.userId)`,
+// que es la cuenta: con una cuenta que no tiene el `_id` de su owner, no la encontraba
+// y la campaña no salía. Sin Meta: CAMPAIGN_DRY_RUN está encendido en los helpers.
+test('el worker envía la campaña de una cuenta cuyo _id no es el del owner', async () => {
+    const c = await seedAccount('C', { seq: 3 });
+    await connectWhatsapp(c);
+
+    let campaign = await Campaign.findById(c.campaignId).lean();
+    assert.equal(campaign.status, 'queued');
+    for (let i = 0; i < 5; i++) {
+        if (await processNext(campaign) === 'idle') break;
+        campaign = await Campaign.findById(c.campaignId).lean();
+    }
+
+    const recipient = await CampaignRecipient.findOne({ campaignId: c.campaignId }).lean();
+    assert.equal(recipient.status, 'done');
+    const sent = await Message.findOne({ campaignId: c.campaignId }).lean();
+    assert.ok(sent, 'la campaña no dejó ningún mensaje');
+    assert.ok(await Conversation.exists({ _id: sent.conversationId, userId: c.accountId }));
 });

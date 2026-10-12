@@ -13,6 +13,7 @@
 // test (A llega a lo suyo) falla si el código busca por la persona.
 import { after } from 'node:test';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -23,6 +24,8 @@ import { MongoMemoryServer } from 'mongodb-memory-server';
 process.env.NODE_ENV = 'test';
 process.env.TOKEN_SECRET = 'secreto-de-pruebas';
 process.env.CAMPAIGN_DRY_RUN = 'true';
+// Con él, `postWebhook` firma el cuerpo igual que Meta.
+process.env.META_APP_SECRET = 'secreto-meta-pruebas';
 process.env.MEDIA_DIR = await fs.mkdtemp(path.join(os.tmpdir(), 'wasmish-isolation-'));
 
 const mongod = await MongoMemoryServer.create();
@@ -209,6 +212,57 @@ export const sessionFrom = (response) => ({ token: /token=([^;]+)/.exec(response
 
 /** Sin sesión: registro, login y la API pública. */
 export const ANONYMOUS = { token: '' };
+
+/**
+ * Un webhook de Meta, firmado con HMAC-SHA256 sobre los bytes que se mandan
+ * (como `verifyWebhookSignature` espera). `value` es el de un solo cambio, sin
+ * `metadata`: la pone `phoneNumberId`.
+ */
+export const postWebhook = async (phoneNumberId, value) => {
+    const body = JSON.stringify({ entry: [{ changes: [{ value: { metadata: { phone_number_id: phoneNumberId }, ...value } }] }] });
+    const signature = 'sha256=' + crypto.createHmac('sha256', process.env.META_APP_SECRET).update(body).digest('hex');
+    const response = await fetch(`${baseUrl}/webhook`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-hub-signature-256': signature },
+        body,
+    });
+    return { status: response.status };
+};
+
+/**
+ * Una conexión SSE abierta con la sesión de `account`. `waitFor(text, ms)` se
+ * resuelve con `true` en cuanto lo recibido contiene `text`, o con `false` al
+ * pasar `ms`. `close()` la cierra.
+ */
+export const openStream = async (account) => {
+    const controller = new AbortController();
+    const response = await fetch(`${baseUrl}/stream`, { headers: { Cookie: `token=${account.token}` }, signal: controller.signal });
+    assert.equal(response.status, 200);
+    let received = '';
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    const pump = (async () => {
+        try {
+            for (;;) {
+                const { done, value } = await reader.read();
+                if (done) return;
+                received += decoder.decode(value, { stream: true });
+            }
+        } catch { /* cerrada */ }
+    })();
+    const waitFor = async (text, ms) => {
+        const deadline = Date.now() + ms;
+        while (Date.now() < deadline) {
+            if (received.includes(text)) return true;
+            await new Promise(resolve => setTimeout(resolve, 20));
+        }
+        return received.includes(text);
+    };
+    const close = async () => { controller.abort(); await pump; };
+    // El servidor la registra al recibirla: se espera a su primer comentario.
+    await waitFor(': connected', 2000);
+    return { waitFor, close };
+};
 
 /** Ni la marca ni ningún id de `owner` aparecen en la respuesta. */
 export const assertNoLeak = (response, owner) => {

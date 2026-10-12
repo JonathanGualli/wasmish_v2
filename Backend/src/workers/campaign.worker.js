@@ -1,7 +1,7 @@
 import Campaign from "../models/campaign.model.js";
 import CampaignRecipient from "../models/campaign.recipient.model.js";
 import Contact from "../models/contact.model.js";
-import User from "../models/user.model.js";
+import { findAccountOwner } from "../services/account.service.js";
 import { processTemplateSending } from "../controllers/template.controller.js";
 import { emitCampaignProgress } from "../services/campaign.service.js";
 import { buildContactParameters } from "../utils/campaign.message.js";
@@ -82,9 +82,9 @@ const markRecipient = (recipient, changes) =>
  * Envía al siguiente destinatario de una campaña. Devuelve qué pasó, para que
  * la vuelta decida cuánto esperar: 'sent' (hubo llamada a Meta), 'skipped'
  * (no hizo falta llamar), 'throttled' (Meta pidió frenar) o 'idle' (no quedaba
- * nadie).
+ * nadie). Exportada para los tests de aislamiento.
  */
-const processNext = async (campaign) => {
+export const processNext = async (campaign) => {
     if (campaign.status === 'queued') {
         const started = await Campaign.findOneAndUpdate(
             { _id: campaign._id, status: 'queued' },
@@ -118,7 +118,8 @@ const processNext = async (campaign) => {
         return 'skipped';
     }
 
-    const user = await User.findById(campaign.userId);
+    // `campaign.userId` es la cuenta; la conexión de WhatsApp la guarda su owner.
+    const user = await findAccountOwner(campaign.userId);
 
     try {
         const { parameters, buttons } = buildContactParameters(campaign.template, campaign, contact);

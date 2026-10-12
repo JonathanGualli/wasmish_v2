@@ -130,7 +130,8 @@ if (!dueno) {
 
 const phoneNumberId = dueno.phoneNumberId;
 
-// Toda consulta va filtrada por userId: con varias cuentas en la BD local,
+// `dueno` es el owner que tiene conectado el número; los datos son de su
+// cuenta (`dueno.accountId`). Toda consulta va filtrada por ella: con varias cuentas en la BD local,
 // buscar solo por teléfono acierta la cuenta equivocada — y en --clean eso
 // significa borrar la conversación de otro.
 // Con --new-from, el contacto puede estar ya con la identidad nueva.
@@ -140,12 +141,12 @@ const testIdentity = { $or: [
 ].filter(Boolean) };
 const senderLabel = USERNAME ? `@${USERNAME} (sin número)` : FROM;
 
-const findTestContact = () => Contact.findOne({ userId: dueno._id, ...testIdentity });
+const findTestContact = () => Contact.findOne({ userId: dueno.accountId, ...testIdentity });
 
 // Una conversación de prueba anterior a los contactos solo se encuentra por teléfono.
 const findTestConversation = async (contact) => contact
-    ? Conversation.findOne({ userId: dueno._id, contactId: contact._id })
-    : PHONE && Conversation.findOne({ userId: dueno._id, contactPhone: PHONE });
+    ? Conversation.findOne({ userId: dueno.accountId, contactId: contact._id })
+    : PHONE && Conversation.findOne({ userId: dueno.accountId, contactPhone: PHONE });
 
 if (limpiar) {
     const contact = await findTestContact();

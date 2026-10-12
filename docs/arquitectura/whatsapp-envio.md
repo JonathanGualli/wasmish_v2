@@ -38,6 +38,8 @@ Todo lo que sale hacia Meta: cliente de la Graph API, Embedded Signup, API públ
 
 El índice único parcial `user_phoneNumberId_unique` cubre la carrera de dos conexiones a la vez: la segunda recibe un E11000, que `connectionErrorResponse` (en `whatsapp.controller.js`) traduce al mismo 409. Un error de Meta → 502 con su `errorCode`. Si falla cualquier paso, no se guarda nada (2026-10-11, Fase 0 de multi-línea).
 
+**Dónde se guarda la conexión** (Fase 1 de multi-línea, 2026-10-11): en el `User` del **owner** de la cuenta, no en quien tenga la sesión. Conectar, enviar, sincronizar plantillas y el worker de campañas la buscan con `findAccountOwner(accountId)` (`services/account.service.js`); `processMessageSending` y `processTemplateSending` reciben ese owner como `user` y guardan lo enviado en su cuenta (`user.accountId`). El webhook encuentra al owner por el número (`User.findOne({ phoneNumberId })`) y guarda lo que llega en su cuenta. La Fase 2 pasa todo esto a `Waba` y `Line`.
+
 ### API pública de plantillas (`sendTemplateController`)
 
 **API pública de plantillas (`sendTemplateController`):** autenticada por API key. Descifra el token WA del user, envía la plantilla a Meta (parámetros posicionales `["Juan"]` o nombrados `[{name,value}]`), persiste la conversación + `Message` (con `status`; si Meta rechaza, `status:'failed'` + error), y **emite `message_created` por SSE** para que aparezca en vivo en la UI del dueño.
