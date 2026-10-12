@@ -60,6 +60,8 @@ export const syncTemplatesForUser = async (user) => {
                 update: {
                     $set: {
                         userId: user.accountId,
+                        // El WABA de la plantilla (Fase 2a: se guarda, todavía no se busca por él).
+                        waBusinessId,
                         name: tpl.name,
                         category: tpl.category,
                         status: tpl.status,

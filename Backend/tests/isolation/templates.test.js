@@ -2,7 +2,7 @@
 // ni les quita el archivo, no sube archivos a su nombre ni descarga los suyos.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { seedAccount, request, assertNoLeak, assertHasOwn, Template, TemplateMedia, PNG } from './helpers.js';
+import { seedAccount, request, assertNoLeak, assertHasOwn, connectWhatsapp, onMeta, Template, TemplateMedia, PNG } from './helpers.js';
 
 const a = await seedAccount('A', { seq: 1 });
 const b = await seedAccount('B', { seq: 2 });
@@ -52,4 +52,25 @@ test('DELETE /templates/:templateId/header-media: B no le quita el archivo a una
 
     const asA = await request(a, 'DELETE', `/templates/${a.imageTemplateId}/header-media`);
     assert.equal(asA.status, 200, asA.text);
+});
+
+// Fase 2a: cada plantilla sabe su WABA (todavía no se busca por él).
+test('sincronizar guarda el WABA en cada plantilla', async () => {
+    const t = await seedAccount('T', { seq: 3 });
+    await connectWhatsapp(t);
+    onMeta(async (config) => (config.method === 'get' && config.url === '/waba-T/message_templates'
+        ? { data: { data: [{
+            id: 'tpl-sync-T', name: 'sync_t', category: 'MARKETING', status: 'APPROVED', language: 'es',
+            components: [{ type: 'BODY', text: 'hola' }],
+        }] } }
+        : undefined));
+    try {
+        const res = await request(t, 'GET', '/templates/sync');
+        assert.equal(res.status, 200, res.text);
+    } finally {
+        onMeta(null);
+    }
+    const template = await Template.findOne({ templateId: 'tpl-sync-T' }).lean();
+    assert.equal(String(template.userId), t.accountId);
+    assert.equal(template.waBusinessId, 'waba-T');
 });

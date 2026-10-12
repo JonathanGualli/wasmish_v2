@@ -34,6 +34,14 @@ const conversationSchema = new mongoose.Schema({
         type: String, 
         required: true,
     },
+    // La línea de `phoneNumberId` (Fase 2a de multi-línea: se guarda,
+    // todavía no se usa para enrutar). null hasta que `migrate:lines` la ponga.
+    lineId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Line',
+        default: null,
+        index: true,
+    },
     lastMessage: { 
         type: String, 
         default: '',

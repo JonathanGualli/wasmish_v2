@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    seedAccount, connectWhatsapp, postWebhook, openStream, Contact, Conversation, Message,
+    seedAccount, connectWhatsapp, postWebhook, openStream, Contact, Conversation, Line, Message,
 } from './helpers.js';
 
 const a = await seedAccount('A', { seq: 1 });
@@ -107,4 +107,13 @@ test('un estado failed con 131050 de un mensaje de A da de baja a su contacto y 
     } finally {
         await stream.close();
     }
+});
+
+// Fase 2a: la conversación nace con la línea de su número (todavía no enruta por ella).
+test('una conversación nueva nace con la línea de su número', async () => {
+    const line = await Line.findOne({ accountId: a.accountId, phoneNumberId: A_NUMBER }).lean();
+    assert.ok(line, 'connectWhatsapp no dejó la línea de A');
+    assert.equal((await postWebhook(A_NUMBER, textMessage('593990005555', 'con línea'))).status, 200);
+    const conversation = await Conversation.findOne({ userId: a.accountId, contactPhone: '593990005555' }).lean();
+    assert.equal(String(conversation.lineId), String(line._id));
 });

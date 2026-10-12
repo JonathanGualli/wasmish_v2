@@ -6,7 +6,7 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En producción
 
-**Versión 1.0.12** (subida el 2026-10-11 para desplegar; comprobar con `curl https://wasmish.solventyc.com/api/version` tras el despliegue). Lleva:
+**Versión 1.0.12**, desplegada el 2026-10-12 (etiqueta `v1.0.12`; comprobar con `curl https://wasmish.solventyc.com/api/version`). Lleva:
 
 - **Multi-línea · Fase 1** (PR #8): la cuenta (`Account`) separada del usuario, con el mismo `_id` que su owner; el backend toma al dueño de los datos de `req.auth.accountId`; el registro crea cuenta y owner e ignora `rol` y `status` del cuerpo; un usuario desactivado o sin cuenta recibe 401; el superadmin sale de `isSuperadmin`; la API key es de la cuenta. Sin cambio visible. **Despliegue con migración** (`migrate:accounts`), con la API vieja parada durante la última pasada: plan de la Fase 1, «Antes de desplegar».
 - **Multi-línea · Fase 0** (PR #6, en producción desde la 1.0.11): un `phoneNumberId` solo puede estar en una cuenta (índice único `user_phoneNumberId_unique`) y, al conectarlo por el Embedded Signup o por el formulario manual, Meta tiene que listarlo en el WABA del token. Sin WhatsApp conectado, enviar texto o archivo da 409 y sincronizar plantillas 400, en vez de 500. Previo al despliegue: la consulta de `phoneNumberId` repetidos del plan, hecha por Jonathan el 2026-10-11 (`[]`).
@@ -19,7 +19,8 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En curso
 
-- **Multi-línea · Fase 2a: líneas, ampliar y migrar** — rama `fase2a-lineas`, PR #9, empezado el 2026-10-11 por Claude. Plan revisado por Codex; falta el visto bueno de Jonathan y las tareas. Se despliega **después** de la 1.0.12.
+- **Multi-línea · Fase 2a: líneas, ampliar y migrar** — rama `fase2a-lineas`, PR #9, empezado el 2026-10-11 por Claude.
+  Hecho: el plan (revisado por Codex) y las tareas 1 a 4; tests en verde; `migrate:lines` probada en el Mongo local, también con un número anterior; ensayo de vuelta atrás con `v1.0.12`. · Falta: la revisión de Codex del código, que Jonathan lo una y desplegarlo (sin parar la API: plan, «Antes de desplegar»). · Sin probar: la migración contra una copia del `mongodump` de producción (paso 1 del despliegue) y conectar un número contra Meta de verdad.
 
 <!-- Formato de una entrada:
 - **<qué>** — rama `<rama>`, PR #<n>, empezado el <fecha> por <Claude|Codex|Jonathan>.

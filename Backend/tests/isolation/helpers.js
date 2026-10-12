@@ -35,6 +35,7 @@ const { default: app } = await import('../../src/app.js');
 const { createAccessToken } = await import('../../src/libs/jwt.js');
 const { encrypt } = await import('../../src/utils/crypto.js');
 const { whatsappApi } = await import('../../src/libs/whatsapp.js');
+const { syncLinesFromOwner } = await import('../../src/services/line.service.js');
 
 // Meta falso. Todas las llamadas a Meta pasan por `whatsappApi`, así que
 // cambiarle el transporte basta para que ningún test llegue a la red, ni
@@ -72,6 +73,8 @@ export const TemplateMedia = await load('template.media.model.js');
 export const Campaign = await load('campaign.model.js');
 export const CampaignRecipient = await load('campaign.recipient.model.js');
 export const ApiKey = await load('api.keys.model.js');
+export const Waba = await load('waba.model.js');
+export const Line = await load('line.model.js');
 
 const server = app.listen(0);
 const baseUrl = `http://127.0.0.1:${server.address().port}/api`;
@@ -181,10 +184,15 @@ export const seedAccount = async (label, { isSuperadmin = false, seq = 1 } = {})
 
 /**
  * Una cuenta con WhatsApp «conectado», para lo que lo exige antes de nada (crear una campaña).
- * El número es distinto por cuenta (`99<seq>`): un número solo puede estar en una.
+ * El número es distinto por cuenta (`99<seq>`): un número solo puede estar en una. Como una
+ * conexión de verdad, guarda el WABA (`waba-<label>` si no se da otro) y refleja `Waba` y `Line`.
  */
-export const connectWhatsapp = (account) =>
-    User.updateOne({ _id: account.userId }, { tokenWhatsapp: encrypt('token-de-pruebas'), phoneNumberId: `99${account.seq}` });
+export const connectWhatsapp = async (account, { waBusinessId = `waba-${account.label}` } = {}) => {
+    await User.updateOne({ _id: account.userId }, {
+        tokenWhatsapp: encrypt('token-de-pruebas'), phoneNumberId: `99${account.seq}`, waBusinessId,
+    });
+    await syncLinesFromOwner(account.accountId);
+};
 
 /**
  * Una petición con la sesión de `account`. `body` puede ser un objeto (JSON)

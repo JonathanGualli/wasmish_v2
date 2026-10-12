@@ -24,6 +24,13 @@ const accountSchema = new mongoose.Schema({
         maxLines: { type: Number, default: 1 },
         maxUsers: { type: Number, default: 1 },
     },
+    // La línea del número actual (Fase 2a de multi-línea: se guarda, todavía
+    // no se usa para enrutar; la escribe `syncLinesFromOwner`).
+    defaultLineId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Line',
+        default: null,
+    },
 }, {
     timestamps: true,
 });

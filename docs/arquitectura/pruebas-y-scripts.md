@@ -54,12 +54,17 @@ cd Backend && npm run backfill:contacts -- --dry-run # informa, no escribe
 cd Backend && npm run backfill:contacts              # aplica
 cd Backend && npm run migrate:accounts -- --dry-run  # informa, no escribe
 cd Backend && npm run migrate:accounts               # aplica
+cd Backend && npm run migrate:lines -- --dry-run     # informa, no escribe
+cd Backend && npm run migrate:lines -- --check       # informa, y sale con 1 si queda algo
+cd Backend && npm run migrate:lines                  # aplica
 ```
 `scripts/backfill-contacts.js` crea un `Contact` por cada conversación anterior a los contactos, la enlaza (`contactId`) y pasa su `contactName` al contacto; al final borra el índice viejo `userId_1_contactPhone_1`. Idempotente (solo toca las conversaciones sin `contactId`). **Ya corrido en producción** el 2026-10-01: 453 contactos, ninguna conversación sin enlazar.
 
 `scripts/backfill-last-inbound.js` rellena `Conversation.lastInboundAt` en las conversaciones anteriores al campo, tomando el último `Message` entrante de cada una. Es idempotente y solo escribe si el valor falta o es más viejo, así que nunca pisa lo que el webhook haya puesto mientras corría.
 
 `scripts/migrate-accounts.js` (2026-10-11, Fase 1 de multi-línea) crea la `Account` de cada usuario que no la tiene, **con su mismo `_id`**, y lo deja de owner (`accountId`, `role: 'owner'`, `isSuperadmin` a partir del `rol` viejo). Idempotente: no toca a quien ya tiene `accountId`, y si una pasada se corta entre crear la cuenta y actualizar al usuario, la siguiente lo termina. Un usuario `rol: 'agent'` sin cuenta lo **para entero**, sin escribir nada y con su correo en la salida, porque no hay forma de saber de qué cuenta es (la lógica, pura y con test: `planAccountMigration` en `utils/account.js`). En producción corre **antes** de arrancar la imagen que lo necesita, y la pasada final con la API vieja parada: la imagen nueva responde 401 a un usuario sin cuenta.
+
+`scripts/migrate-lines.js` (2026-10-11, Fase 2a de multi-línea; la lógica en `services/line.migration.service.js`, `runLineMigration`) crea las líneas de los datos de hoy. La del número actual de cada cuenta, con su `Waba`, la deja `syncLinesFromOwner` como dice `User`. Cada **número anterior** que aparece en sus conversaciones recibe una línea `disconnected` y sin WABA, y cada conversación recibe la línea de **su propio** `phoneNumberId`, no la del número actual, así que el historial y la ventana de un número viejo no pasan al nuevo. Las campañas reciben la línea por defecto de su cuenta. Idempotente, y se puede correr **con la API en marcha**, porque la conexión actual se lee de `User` en el momento de escribir. **Para sin escribir nada** si un WABA está en dos cuentas (en `User` o en `Waba`) o si una conversación no tiene número. `--check` dice lo pendiente y las cuentas cuya proyección no cuadra con `User` (`lineStateIssues`), y sale con 1 si queda algo.
 
 `scripts/check-duplicate-messages.js` busca `Message` que compartan `waMessageId`. Hay que correrlo **antes de desplegar** en una BD que pueda traer duplicados: si los hay, Mongo no puede crear el índice único (E11000), Mongoose solo lo loguea y la app arranca **sin** la protección.
 
