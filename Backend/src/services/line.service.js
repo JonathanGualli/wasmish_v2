@@ -242,16 +242,43 @@ export const writeLegacyUser = async (accountId) => {
 };
 
 /**
+ * Termina un reemplazo de número que se cortó (revisión de Codex del PR #19):
+ * si el número nuevo quedó activo, desconecta los reemplazados y lo deja por
+ * defecto; si no llegó a activarse, el reemplazo no ocurrió y no se toca nada.
+ * Se llama con el candado tomado, al empezar cada operación de líneas y al
+ * final de cada reemplazo. Sin esto, reintentar la conexión daba «renovar» y
+ * dejaba las dos activas y la por defecto en la vieja.
+ */
+export const finishPendingReplace = async (accountId) => {
+    const account = await Account.findById(accountId).select('pendingReplace').lean();
+    const pending = account?.pendingReplace;
+    if (!pending) return;
+
+    const line = await Line.findOne({ accountId, phoneNumberId: pending.phoneNumberId, status: 'active' }).lean();
+    if (line) {
+        await Line.updateMany(
+            { _id: { $in: pending.replaceLineIds }, accountId, phoneNumberId: { $ne: pending.phoneNumberId } },
+            { $set: { status: 'disconnected' } },
+        );
+        await Account.updateOne({ _id: accountId }, { $set: { defaultLineId: line._id } });
+    }
+    await Account.updateOne({ _id: accountId }, { $set: { pendingReplace: null } });
+    await writeLegacyUser(accountId);
+};
+
+/**
  * Conecta (o renueva) el número `phoneNumberId` del WABA `waBusinessId` en la
  * cuenta, con su token ya cifrado, y devuelve `{ lineId }`. Lo que comparten el
  * Embedded Signup y el formulario manual DESPUÉS de hablar con Meta y de
  * reclamar el WABA (`claimWaba`). `details` = `{ phoneNumberId,
  * displayPhoneNumber, verifiedName }` de Meta.
  *
- * Dentro del candado: el plan (`planConnection`) con las líneas y el límite de
- * ahora (409 si no cabe) y, en este orden, la línea activa (si otra cuenta
- * activó el número a la vez, E11000 y no se cambia nada más), el token del
- * WABA, las líneas reemplazadas, la línea por defecto y la copia en `User`.
+ * Dentro del candado: termina un reemplazo anterior que se cortara, el plan
+ * (`planConnection`) con las líneas y el límite de ahora (409 si no cabe) y, en
+ * este orden, la línea activa (si otra cuenta activó el número a la vez, E11000
+ * y no se cambia nada más), el token del WABA y la línea por defecto con la
+ * copia en `User`. Un reemplazo se apunta en `Account.pendingReplace` antes de
+ * activar el número nuevo, y `finishPendingReplace` desconecta los anteriores.
  * `afterLock` es SOLO para los tests: se llama con el candado tomado.
  */
 export const applyConnection = async (
@@ -259,11 +286,18 @@ export const applyConnection = async (
     { afterLock = null } = {},
 ) => withLineLock(accountId, async () => {
     await afterLock?.();
+    await finishPendingReplace(accountId);
     const account = await Account.findById(accountId).select('limits defaultLineId').lean();
     const maxLines = account?.limits?.maxLines ?? 1;
     const lines = await Line.find({ accountId }).select('_id phoneNumberId status').lean();
     const plan = planConnection({ lines, maxLines, phoneNumberId });
     if (plan.error) throw statusError(409, lineLimitMessage(maxLines));
+
+    // El reemplazo se apunta antes de activar nada: si se corta, la siguiente
+    // operación lo termina.
+    if (plan.action === 'replace') {
+        await Account.updateOne({ _id: accountId }, { $set: { pendingReplace: { phoneNumberId, replaceLineIds: plan.replaceLineIds } } });
+    }
 
     const waba = await Waba.findOneAndUpdate(
         { waBusinessId, accountId },
@@ -281,15 +315,14 @@ export const applyConnection = async (
         { upsert: true, new: true },
     );
     await Waba.updateOne({ _id: waba._id }, { $set: { tokenWhatsapp } });
-    if (plan.action === 'replace') {
-        await Line.updateMany({ _id: { $in: plan.replaceLineIds }, accountId }, { $set: { status: 'disconnected' } });
-    }
 
+    if (plan.action === 'replace') {
+        await finishPendingReplace(accountId);
+        return { lineId: line._id };
+    }
     const defaultIsActive = account?.defaultLineId
         && lines.some(other => String(other._id) === String(account.defaultLineId) && other.status === 'active');
-    if (plan.action === 'replace' || !defaultIsActive) {
-        await Account.updateOne({ _id: accountId }, { $set: { defaultLineId: line._id } });
-    }
+    if (!defaultIsActive) await Account.updateOne({ _id: accountId }, { $set: { defaultLineId: line._id } });
     await writeLegacyUser(accountId);
     return { lineId: line._id };
 });

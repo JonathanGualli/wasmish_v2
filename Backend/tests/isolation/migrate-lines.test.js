@@ -43,7 +43,7 @@ test('una segunda pasada no tiene nada pendiente', async () => {
     const result = await runLineMigration({ check: true });
     assert.deepEqual(result.stop, []);
     assert.deepEqual(result.pending, {
-        oldLines: 0, conversations: 0, campaigns: 0, templates: 0, accountsOutOfSync: 0, legacyUserStale: 0, oldConversationIndex: false,
+        oldLines: 0, conversations: 0, campaigns: 0, templates: 0, accountsOutOfSync: 0, legacyUserStale: 0, pendingReplace: 0, oldConversationIndex: false,
     });
     assert.deepEqual(result.issues, []);
 });
@@ -178,6 +178,37 @@ test('desconectar la última línea, fallar la copia de User y migrar: la línea
     assert.equal((await User.findById(v.userId).lean()).phoneNumberId, null);
     assert.equal((await Account.findById(v.accountId).lean()).legacyUserStale, false);
     assert.equal((await runLineMigration({ check: true })).pending.legacyUserStale, 0);
+});
+
+// Regresión que vigila (Codex, PR #19): una cuenta sin líneas al inspeccionar
+// conectó dos números antes de escribir, y `syncLinesFromOwner` dejaba activa
+// solo la de `User`.
+test('si la cuenta conecta líneas mientras migra, la migración no las toca', async () => {
+    const w = await seedAccount('W', { seq: 10, maxLines: 2 });
+    await setConnection(w, { tokenWhatsapp: 'cifrado-w', phoneNumberId: '7110', waBusinessId: 'waba-W' });
+
+    await runLineMigration({
+        afterInspect: async () => {
+            await connectWhatsapp(w, { phoneNumberId: '7120' });
+            await connectWhatsapp(w, { phoneNumberId: '7121' });
+        },
+    });
+    assert.deepEqual(await activeNumbers(w), ['7120', '7121']);
+});
+
+test('migrar termina un cambio de número que quedó a medias', async () => {
+    const x = await seedAccount('X2', { seq: 11 });
+    await connectWhatsapp(x, { phoneNumberId: '7111' });
+    const old = await Line.findOne({ accountId: x.accountId, phoneNumberId: '7111' }).lean();
+    // El número nuevo llegó a activarse, pero no se desconectó el anterior.
+    await Line.create({ accountId: x.accountId, phoneNumberId: '7112', status: 'active', wabaId: old.wabaId });
+    await Account.updateOne({ _id: x.accountId }, { pendingReplace: { phoneNumberId: '7112', replaceLineIds: [old._id] } });
+
+    assert.equal((await runLineMigration({ check: true })).pending.pendingReplace, 1);
+    await runLineMigration({});
+    assert.deepEqual(await activeNumbers(x), ['7112']);
+    assert.equal((await User.findById(x.userId).lean()).phoneNumberId, '7112');
+    assert.equal((await Account.findById(x.accountId).lean()).pendingReplace, null);
 });
 
 // Regresión que vigila (Codex, plan de la Fase 2a): con `Waba` vacía, dos owners

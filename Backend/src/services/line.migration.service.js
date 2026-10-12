@@ -5,7 +5,7 @@ import Line from '../models/line.model.js';
 import Template from '../models/template.model.js';
 import User from '../models/user.model.js';
 import Waba from '../models/waba.model.js';
-import { syncLinesFromOwner, writeLegacyUser } from './line.service.js';
+import { finishPendingReplace, syncLinesFromOwner, withLineLock, writeLegacyUser } from './line.service.js';
 import { historicalLines, legacyUserIssues, ownerConnection, sharedWabas } from '../utils/line.js';
 
 // La lógica de `migrate:lines` (Fase 2a de multi-línea), aparte del script para
@@ -81,6 +81,7 @@ const inspectAccount = async (owner) => {
         templateWaba = defaultLine?.status === 'active' ? waba?.waBusinessId ?? null : null;
     }
     const stale = !withoutLines && Boolean(account?.legacyUserStale);
+    const replacePending = Boolean(account?.pendingReplace);
 
     return {
         owner,
@@ -88,7 +89,12 @@ const inspectAccount = async (owner) => {
         stale,
         phoneNumberIds: phoneNumberIds.filter(Boolean),
         historical,
-        issues: stale ? [...issues, 'la copia en User falló (legacyUserStale): migrar la rehace desde Line'] : issues,
+        issues: [
+            ...issues,
+            ...(stale ? ['la copia en User falló (legacyUserStale): migrar la rehace desde Line'] : []),
+            ...(replacePending ? ['un cambio de número quedó a medias (pendingReplace): migrar lo termina'] : []),
+        ],
+        replacePending,
         conversations: await Conversation.countDocuments({ userId: accountId, lineId: null }),
         // Solo cuentan las de una cuenta con línea por defecto: sin conexión no
         // hay línea que ponerles.
@@ -102,7 +108,16 @@ const inspectAccount = async (owner) => {
 
 const applyAccount = async ({ owner, withoutLines, stale, phoneNumberIds, historical }) => {
     const accountId = owner.accountId;
-    if (withoutLines && ownerConnection(owner)) await syncLinesFromOwner(accountId);
+    // Con el candado y comprobando OTRA VEZ que no hay líneas: la API pudo
+    // conectar alguna después de la inspección, y `syncLinesFromOwner` dejaría
+    // activa solo la de `User` (revisión de Codex del PR #19). El candado
+    // también termina un reemplazo de número que se cortara.
+    await withLineLock(accountId, async () => {
+        await finishPendingReplace(accountId);
+        if (withoutLines && ownerConnection(owner) && !await Line.exists({ accountId })) {
+            await syncLinesFromOwner(accountId);
+        }
+    });
 
     for (const phoneNumberId of historical.create) {
         await Line.updateOne(
@@ -158,8 +173,9 @@ export const runLineMigration = async ({ dryRun = false, check = false, afterIns
         conversations: inspected.reduce((sum, state) => sum + state.conversations, 0),
         campaigns: inspected.reduce((sum, state) => sum + state.campaigns, 0),
         templates: inspected.reduce((sum, state) => sum + state.templates, 0),
-        accountsOutOfSync: inspected.filter(state => !state.stale && state.issues.length > 0).length,
+        accountsOutOfSync: inspected.filter(state => !state.stale && !state.replacePending && state.issues.length > 0).length,
         legacyUserStale: inspected.filter(state => state.stale).length,
+        pendingReplace: inspected.filter(state => state.replacePending).length,
         oldConversationIndex: await hasOldConversationIndex(),
     };
     const issues = inspected

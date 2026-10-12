@@ -415,3 +415,25 @@ test('si la copia de User falla, legacyUserStale queda en true y la siguiente la
     assert.equal((await Account.findById(u.accountId).lean()).legacyUserStale, false);
     assert.equal((await ownerOf(u)).phoneNumberId, `99${u.seq}`);
 });
+
+// Regresión que vigila (Codex, PR #19): con maxLines 1, activar el número nuevo
+// y desconectar el anterior no es atómico. Si lo segundo fallaba, reintentar
+// daba «renovar»: las dos quedaban activas y la por defecto en la vieja.
+test('un reemplazo de número cortado a medias se termina al reintentar', async (t) => {
+    const v = await seedAccount('V2', { seq: 72 });
+    await connectWhatsapp(v, { phoneNumberId: '7772' });
+    let failed = false;
+    const original = Line.updateMany.bind(Line);
+    t.mock.method(Line, 'updateMany', (...args) => {
+        if (!failed) { failed = true; throw new Error('Mongo caído'); }
+        return original(...args);
+    });
+    await assert.rejects(connectWhatsapp(v, { phoneNumberId: '7773' }), /Mongo caído/);
+    assert.deepEqual(await activeNumbers(v), ['7772', '7773']);   // a medias
+
+    await connectWhatsapp(v, { phoneNumberId: '7773' });
+    assert.deepEqual(await activeNumbers(v), ['7773']);
+    assert.equal((await defaultLineOf(v)).phoneNumberId, '7773');
+    assert.equal((await ownerOf(v)).phoneNumberId, '7773');
+    assert.equal((await Account.findById(v.accountId).lean()).pendingReplace, null);
+});
