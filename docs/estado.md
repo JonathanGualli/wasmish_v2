@@ -21,7 +21,7 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 ## En curso
 
 - **Fase 2b de multi-línea** (enrutar por `Line`), empezada el 2026-10-12 por Claude. Plan: `docs/superpowers/plans/2026-10-12-multi-linea-fase-2b.md`, revisado por Codex. Cuatro PRs y un solo despliegue (1.0.14).
-  Hecho: PR 1 (#13, rama `fase2b-contactos`): un contacto con varias conversaciones y el índice nuevo de conversaciones (`migrate:lines` borra el viejo) · Falta: PR 2 (recibir por línea), PR 3 (enviar por línea), PR 4 (`lineId`/`from` en la API) · Sin probar: nada pendiente del PR 1; no cambia la UI.
+  Hecho: PR 1 (#13): un contacto con varias conversaciones y el índice nuevo de conversaciones (`migrate:lines` borra el viejo); PR 2 (rama `fase2b-recibir`): el webhook enruta por `Line`, una conversación por contacto y línea · Falta: PR 3 (enviar por línea), PR 4 (`lineId`/`from` en la API) · Sin probar: nada pendiente; no cambia la UI. **No desplegar a medias:** la 1.0.14 sale con los cuatro, y antes de arrancarla hay que correr `migrate:lines` (plan, «Antes de desplegar»).
 
 <!-- Formato de una entrada:
 - **<qué>** — rama `<rama>`, PR #<n>, empezado el <fecha> por <Claude|Codex|Jonathan>.

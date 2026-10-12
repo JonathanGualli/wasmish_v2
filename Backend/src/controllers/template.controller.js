@@ -16,6 +16,7 @@ import {
 import { MEDIA_DIR } from "../config.js";
 import { mimeParaServir, rutaDeArchivo } from "../utils/media.storage.js";
 import { assertWhatsappConnected } from "../utils/whatsapp.line.js";
+import { findLineId } from "../services/line.service.js";
 
 
 // ---------------------------------------------------------------------------
@@ -522,8 +523,10 @@ export const processTemplateSending = async ({
     // con dos relojes distintos quedan desfasados unos milisegundos.
     const now = new Date();
 
+    // La línea del número por el que salió (hasta la Tarea 3 de la Fase 2b, el del owner).
+    const line = { lineId: await findLineId(user.accountId, phoneNumberId), phoneNumberId };
     const targetConversation = await getSendingConversation({
-        userId: user.accountId, conversation, contact, recipient, phoneNumberId, contactName, source,
+        userId: user.accountId, conversation, contact, recipient, line, contactName, source,
     });
     targetConversation.lastMessage = storedText;
     targetConversation.lastMessageAt = now;
