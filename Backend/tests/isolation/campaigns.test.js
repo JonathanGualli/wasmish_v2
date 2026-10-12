@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    seedAccount, request, assertNoLeak, assertHasOwn, connectWhatsapp, Campaign, CampaignRecipient, Conversation, Message,
+    seedAccount, request, assertNoLeak, assertHasOwn, connectWhatsapp, Account, Campaign, CampaignRecipient, Conversation, Message,
 } from './helpers.js';
 
 const { processNext } = await import('../../src/workers/campaign.worker.js');
@@ -132,4 +132,16 @@ test('el worker envía la campaña de una cuenta cuyo _id no es el del owner', a
     const sent = await Message.findOne({ campaignId: c.campaignId }).lean();
     assert.ok(sent, 'la campaña no dejó ningún mensaje');
     assert.ok(await Conversation.exists({ _id: sent.conversationId, userId: c.accountId }));
+});
+
+// Fase 2a: la campaña nace con la línea por defecto (el worker todavía no la usa).
+test('una campaña nueva nace con la línea por defecto de su cuenta', async () => {
+    const s = await seedAccount('S', { seq: 5 });
+    await connectWhatsapp(s);
+    const res = await request(s, 'POST', '/campaigns', { ...draft(s), name: 'con línea' });
+    assert.equal(res.status, 201, res.text);
+    const { defaultLineId } = await Account.findById(s.accountId).lean();
+    assert.ok(defaultLineId);
+    const campaign = await Campaign.findOne({ userId: s.accountId, name: 'con línea' }).lean();
+    assert.equal(String(campaign.lineId), String(defaultLineId));
 });

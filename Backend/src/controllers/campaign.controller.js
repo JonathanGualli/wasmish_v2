@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import Account from "../models/account.model.js";
 import Campaign from "../models/campaign.model.js";
 import CampaignRecipient from "../models/campaign.recipient.model.js";
 import Contact from "../models/contact.model.js";
@@ -259,8 +260,12 @@ export const createCampaign = async (req, res) => {
         if (draft.errors.length > 0) return res.status(400).json(draft.errors);
 
         const { template } = draft;
+        // La línea por defecto de la cuenta (Fase 2a: se guarda; el worker sigue
+        // enviando desde el número del owner).
+        const account = await Account.findById(userId).select('defaultLineId').lean();
         const campaign = await Campaign.create({
             userId,
+            lineId: account?.defaultLineId ?? null,
             name: req.body.name,
             template: {
                 templateId: template.templateId,

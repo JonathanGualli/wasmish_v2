@@ -8,6 +8,7 @@ import { getWindowExpiry } from "../utils/whatsapp.window.js";
 import { resolveMarketingPreference } from "../utils/marketing.preference.js";
 import { MAX_TAGS_PER_CONTACT } from "../utils/contact.tags.js";
 import { resolveOwnedTagIds } from "../services/tag.service.js";
+import { findLineId } from "../services/line.service.js";
 
 // ---------------------------------------------------------------------------
 // Contactos y su conversación. Lo usan los sitios por donde entra un número o
@@ -129,6 +130,9 @@ export const findOrCreateConversation = async ({ userId, contact, phoneNumberId 
                 contactId: contact._id,
                 contactPhone: contact.phone,
                 phoneNumberId,
+                // La línea de ese número (Fase 2a: se guarda, todavía no enruta).
+                // null si aún no existe: la pone la siguiente `migrate:lines`.
+                lineId: await findLineId(userId, phoneNumberId),
                 // 0, no 1: el webhook suma el mensaje entrante después, también
                 // para la conversación recién creada.
                 unreadCount: 0,
