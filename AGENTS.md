@@ -85,6 +85,8 @@ Solo cuando Jonathan lo pide, con la skill `deploy` (`.agents/skills/deploy/SKIL
 
 ## Diseño y marca
 
+**La interfaz la diseña Claude Design**, una IA aparte que ya tiene la marca, los colores y las referencias. Ningún agente diseña pantallas por su cuenta: escribe un **brief** (qué tiene que poder hacer el usuario y qué información ve, no cómo se ve) en `docs/superpowers/specs/<fecha>-<tema>-brief-ui.md`, como los que ya hay, y Jonathan se lo pasa. Con el diseño que devuelve (suele quedar en `Design/*.html`), el agente implementa **siguiéndolo**.
+
 **Antes de crear o modificar cualquier componente, página, o estilo, consultar el skill `/brand-guidelines`.**
 
 Esto incluye: nuevos componentes React, modificaciones de clases Tailwind, elección de colores, diseño de páginas, variantes de botones/inputs, layouts, iconografía, o cualquier decisión visual. El skill contiene la paleta de tokens, reglas de componentes, y anti-patterns del proyecto.

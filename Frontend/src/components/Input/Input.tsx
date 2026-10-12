@@ -15,6 +15,8 @@ interface InputProps {
   sendOnEnter?: boolean;
   onEnter?: () => void;
   autoFocus?: boolean;
+  /** El campo tiene el error: borde rojo (el mensaje lo pone quien lo usa). */
+  invalid?: boolean;
 }
 
 // Manual de marca v1.0 · 04 Componentes — campos: alto 42px, radio 8px.
@@ -38,6 +40,7 @@ export const CustomInput: React.FC<InputProps> = ({
   sendOnEnter = false,
   onEnter,
   autoFocus = false,
+  invalid = false,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -77,7 +80,8 @@ export const CustomInput: React.FC<InputProps> = ({
           onChange={onChange}
           onKeyDown={handleKeyDown}
           autoFocus={autoFocus}
-          className={baseInputClasses}
+          aria-invalid={invalid || undefined}
+          className={`${baseInputClasses} ${invalid ? '!border-brand-danger' : ''}`}
         />
       ) : (
         <textarea
@@ -88,7 +92,8 @@ export const CustomInput: React.FC<InputProps> = ({
           onKeyDown={handleKeyDown}
           autoFocus={autoFocus}
           rows={1}
-          className={`${baseInputClasses} resize-none`}
+          aria-invalid={invalid || undefined}
+          className={`${baseInputClasses} resize-none ${invalid ? '!border-brand-danger' : ''}`}
           style={{ lineHeight: '22px' }}
         />
       )}

@@ -1,11 +1,12 @@
  import { useEffect, useState, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useLogin } from "../hooks/useLogin";
 import { AuthContext } from "./auth.context";
 import { clearAllDrafts } from "../utils/conversationDraft";
 import { clearAllCampaignDrafts } from "../utils/campaignDraft";
 import type { User } from "../models/user.mode";
 import type { AxiosError } from "axios";
-import { useVerifyLogin } from "../hooks/useVerifyLogin";
+import { useVerifyLogin, VERIFY_QUERY_KEY } from "../hooks/useVerifyLogin";
 import { useSignUp } from "../hooks/useSignUp";
 import { useLogOut } from "../hooks/useLogOut";
 
@@ -26,6 +27,14 @@ export const AuthProvider = ({ children }: AuthProps) => {
     const loginMutation = useLogin();
     const signUpMutation = useSignUp();
     const logOutMutation = useLogOut();
+    const queryClient = useQueryClient();
+
+    // Lo que se pidió con una sesión (conversaciones, contactos, líneas…) no
+    // puede verlo la siguiente en el mismo navegador, ni un momento mientras
+    // llegan sus datos: la caché se vacía al salir y al entrar. Menos la
+    // verificación de la sesión, que es la que dice quién está dentro.
+    const clearSessionCache = () =>
+        queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== VERIFY_QUERY_KEY[0] });
 
     useEffect(() => {
         if (!isVerifying ) {
@@ -58,6 +67,7 @@ export const AuthProvider = ({ children }: AuthProps) => {
             { email, password },
             {
                 onSuccess: (data: User) => { 
+                    clearSessionCache();
                     setUser(data); 
                     setErrors([]);
                 },
@@ -78,6 +88,7 @@ export const AuthProvider = ({ children }: AuthProps) => {
             { name, email, password },
             {
                 onSuccess: (data: User) => { 
+                    clearSessionCache();
                     setUser(data); 
                     setErrors([]);
                 },
@@ -95,6 +106,7 @@ export const AuthProvider = ({ children }: AuthProps) => {
         // no debe verlos quien entre después en el mismo navegador.
         clearAllDrafts();
         clearAllCampaignDrafts();
+        clearSessionCache();
         setUser(null);
         setErrors([]);
         logOutMutation.mutate();

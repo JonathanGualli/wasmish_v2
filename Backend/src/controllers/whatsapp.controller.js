@@ -4,17 +4,26 @@ import {
     isPhoneNumberTaken, isWabaTaken, checkLineLimit, claimWaba, verifyWabaPhoneNumber, PHONE_NUMBER_TAKEN_MESSAGE, WABA_TAKEN_MESSAGE,
 } from "../services/whatsapp.connection.service.js";
 import { applyConnection } from "../services/line.service.js";
+import { LINE_ERROR_CODES } from "../utils/whatsapp.line.js";
 
 // La respuesta de error de las dos formas de conectar (esta y el formulario
 // manual, en user.controller.js). El 11000 es el índice único de las líneas
 // activas (`line_phoneNumberId_active_unique`): otra cuenta se quedó el número
-// entre la comprobación y el guardado.
+// entre la comprobación y el guardado. `code` es el nuestro (`LINE_ERROR_CODES`,
+// para que el front sepa dónde enseñarlo); `errorCode`, el de Meta.
 export const connectionErrorResponse = (res, error) => {
-    if (error.code === 11000) return res.status(409).json([{ message: PHONE_NUMBER_TAKEN_MESSAGE }]);
+    if (error.code === 11000) return sendPhoneNumberTaken(res);
     const status = error.statusCode || (error.waErrorCode ? 502 : 500);
     if (status >= 500) console.error('Conectar WhatsApp falló:', error.waErrorDetail ?? error.message);
-    return res.status(status).json([{ message: error.message, errorCode: error.waErrorCode ?? null }]);
+    const code = typeof error.code === 'string' ? error.code : null;
+    return res.status(status).json([{ message: error.message, code, errorCode: error.waErrorCode ?? null }]);
 };
+
+export const sendPhoneNumberTaken = (res) =>
+    res.status(409).json([{ message: PHONE_NUMBER_TAKEN_MESSAGE, code: LINE_ERROR_CODES.phoneNumberTaken }]);
+
+export const sendWabaTaken = (res) =>
+    res.status(409).json([{ message: WABA_TAKEN_MESSAGE, code: LINE_ERROR_CODES.wabaTaken }]);
 
 export const connectWhatsappEmbedded = async (req, res) => {
     try {
@@ -24,10 +33,10 @@ export const connectWhatsappEmbedded = async (req, res) => {
         // 1. Lo que se sabe sin molestar a Meta: el número y el WABA no pueden
         //    estar en otra cuenta, y el número tiene que caber en el plan.
         if (await isPhoneNumberTaken(accountId, phoneNumberId)) {
-            return res.status(409).json([{ message: PHONE_NUMBER_TAKEN_MESSAGE }]);
+            return sendPhoneNumberTaken(res);
         }
         if (await isWabaTaken(accountId, waBusinessId)) {
-            return res.status(409).json([{ message: WABA_TAKEN_MESSAGE }]);
+            return sendWabaTaken(res);
         }
         await checkLineLimit(accountId, phoneNumberId);
 

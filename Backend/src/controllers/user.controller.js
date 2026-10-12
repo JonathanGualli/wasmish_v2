@@ -1,9 +1,9 @@
 import { encrypt } from "../utils/crypto.js";
 import {
-    isPhoneNumberTaken, isWabaTaken, checkLineLimit, claimWaba, verifyWabaPhoneNumber, PHONE_NUMBER_TAKEN_MESSAGE, WABA_TAKEN_MESSAGE,
+    isPhoneNumberTaken, isWabaTaken, checkLineLimit, claimWaba, verifyWabaPhoneNumber,
 } from "../services/whatsapp.connection.service.js";
 import { applyConnection } from "../services/line.service.js";
-import { connectionErrorResponse } from "./whatsapp.controller.js";
+import { connectionErrorResponse, sendPhoneNumberTaken, sendWabaTaken } from "./whatsapp.controller.js";
 
 
 // El formulario manual de Ajustes: las mismas comprobaciones que el Embedded
@@ -14,10 +14,10 @@ export const updateUserTokenWhatsapp = async (req, res) => {
 
     try {
         if (await isPhoneNumberTaken(accountId, phoneNumberId)) {
-            return res.status(409).json([{ message: PHONE_NUMBER_TAKEN_MESSAGE }]);
+            return sendPhoneNumberTaken(res);
         }
         if (await isWabaTaken(accountId, waBusinessId)) {
-            return res.status(409).json([{ message: WABA_TAKEN_MESSAGE }]);
+            return sendWabaTaken(res);
         }
         await checkLineLimit(accountId, phoneNumberId);
 

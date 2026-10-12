@@ -22,7 +22,7 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 ## En curso
 
 - **Multi-línea · Fase 2c** (plan: `docs/superpowers/plans/2026-10-12-multi-linea-fase-2c.md`), empezada el 2026-10-12 por Claude. Cuatro PRs y un solo despliegue (1.0.15).
-  Hecho: Tarea 1, `Line` como fuente de la conexión (PR #19, unido). En curso: Tarea 2, la API de líneas y el límite del superadmin (rama `fase2c-lineas-api`). Falta: Tarea 3 (Ajustes → Líneas y el panel) y Tarea 4 (elegir la línea en la UI).
+  Hecho: Tarea 1, `Line` como fuente de la conexión (PR #19), y Tarea 2, la API de líneas y el límite del superadmin (PR #20), unidos. En curso: Tarea 3, Ajustes → Líneas y el panel (rama `fase2c-ajustes`, con el diseño de Claude Design). Falta: Tarea 4 (elegir la línea en la UI; el brief ya cubre su parte).
   Sin probar: conectar un segundo número contra Meta de verdad (espera a la prueba del token en WasmishTest). `maxLines` sigue en 1 en todas las cuentas reales.
 
 <!-- Formato de una entrada:

@@ -1,5 +1,5 @@
-import { useState } from 'react';
 import { Check, Copy } from 'lucide-react';
+import { useCopyToClipboard } from '../../../hooks/useCopyToClipboard';
 
 interface Props {
     code: string;
@@ -13,17 +13,8 @@ interface Props {
  * en gris frío 50, respetando la jerarquía de superficies.
  */
 export const CodeBlock = ({ code, lang }: Props) => {
-    const [copied, setCopied] = useState(false);
-
-    const copy = async () => {
-        try {
-            await navigator.clipboard.writeText(code);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1600);
-        } catch {
-            /* clipboard no disponible */
-        }
-    };
+    const { copied, copy: copyText } = useCopyToClipboard();
+    const copy = () => copyText(code);
 
     return (
         <div className="rounded-xl border border-brand-border bg-brand-bg overflow-hidden">

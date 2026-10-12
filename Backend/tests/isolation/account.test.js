@@ -268,4 +268,12 @@ test('GET /admin/clients cuenta las líneas activas de cada cuenta', async () =>
     const entry = res.body.clients.find(client => client.email === 'm@pruebas.local');
     assert.deepEqual(entry.lines, { active: 2, max: 2 });
     assert.equal(entry.accountId, m.accountId);
+    assert.equal(entry.whatsappConnected, true);
+    assert.equal(entry.extraWabas, 0);
+
+    await Account.updateOne({ _id: m.accountId }, { 'limits.maxLines': 3 });
+    await connectWhatsapp(m, { phoneNumberId: '7583', waBusinessId: 'waba-M2' });
+    const after = (await request(admin, 'GET', '/admin/clients?limit=50')).body.clients.find(client => client.email === 'm@pruebas.local');
+    assert.equal(after.extraWabas, 1);
+    assert.ok(!JSON.stringify(after).includes('token'));
 });

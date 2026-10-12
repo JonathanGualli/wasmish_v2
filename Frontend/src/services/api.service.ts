@@ -6,6 +6,7 @@ import type { ImportBatchResult, ImportInput, ImportPreview } from '../models/co
 import type { BulkTagResult, Tag, TagSelectionSummary } from '../models/tag.model';
 import type { CampaignAudienceInput, CampaignDraftInput, CampaignRecipientsInput, CreateCampaignInput, RecipientState } from '../models/campaign.model';
 import type { Message } from '../models/message.mode';
+import type { Line, LineUpdate, LinesResponse } from '../models/line.model';
 
 const API_URL = '/api'; // configuracion puesta en vite.config.ts
 // const API_URL = 'https://wasmish-api.solventyc.com/api';
@@ -241,6 +242,28 @@ export const revokeApiKeyService = async (id: string) => {
 export const connectWhatsappService = async (code: string, phoneNumberId: string, waBusinessId: string) => {
     const { data } = await axios.post(`${API_URL}/whatsapp/connect`, { code, phoneNumberId, waBusinessId }, { withCredentials: true });
     return data;
+};
+
+// Las líneas de WhatsApp de la cuenta (Fase 2c).
+export const getLinesService = async (): Promise<LinesResponse> => {
+    const { data } = await axios.get(`${API_URL}/lines`, { withCredentials: true });
+    return data;
+};
+
+export const updateLineService = async (id: string, update: LineUpdate): Promise<Line> => {
+    const { data } = await axios.patch(`${API_URL}/lines/${id}`, update, { withCredentials: true });
+    return data;
+};
+
+export const disconnectLineService = async (id: string): Promise<Line> => {
+    const { data } = await axios.post(`${API_URL}/lines/${id}/disconnect`, {}, { withCredentials: true });
+    return data;
+};
+
+// Cuántas líneas puede tener una cuenta (superadmin).
+export const updateAccountLimitsService = async (accountId: string, maxLines: number) => {
+    const { data } = await axios.patch(`${API_URL}/admin/accounts/${accountId}/limits`, { maxLines }, { withCredentials: true });
+    return data as { accountId: string; maxLines: number };
 };
 
 // Servicio para obtener metricas globales de la plataforma (superadmin)

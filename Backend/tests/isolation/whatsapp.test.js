@@ -213,7 +213,7 @@ test('un WABA de otra cuenta → 409 sin llamar a Meta', async () => {
     const before = metaCalls.length;
     const res = await connectManual(y, '9922', 'waba-de-a');
     assert.equal(res.status, 409, res.text);
-    assert.deepEqual(res.body, [{ message: WABA_TAKEN_MESSAGE }]);
+    assert.deepEqual(res.body, [{ message: WABA_TAKEN_MESSAGE, code: 'waba_taken' }]);
     assert.equal(metaCalls.length, before);
     assert.equal((await User.findById(y.userId).lean()).phoneNumberId, null);
     assert.equal(await Line.countDocuments({ accountId: y.accountId }), 0);

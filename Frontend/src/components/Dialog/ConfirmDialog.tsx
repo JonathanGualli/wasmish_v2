@@ -16,6 +16,8 @@ interface ConfirmDialogProps {
     /** Algo más entre el texto y los botones: una tarjeta, un resumen. */
     children?: ReactNode;
     isLoading?: boolean;
+    /** El botón de confirmar no se puede pulsar todavía (p. ej. falta marcar una casilla). */
+    confirmDisabled?: boolean;
     onConfirm: () => void;
     /** Cerrar sin hacer nada: el botón secundario, Escape o pulsar fuera. */
     onCancel: () => void;
@@ -32,7 +34,7 @@ interface ConfirmDialogProps {
  */
 export const ConfirmDialog = ({
     open, title, description, confirmLabel, cancelLabel = 'Cancelar', tone = 'default', icon, children,
-    isLoading = false, onConfirm, onCancel, onSecondary,
+    isLoading = false, confirmDisabled = false, onConfirm, onCancel, onSecondary,
 }: ConfirmDialogProps) => {
     const { state: notificationVisible } = useNoticeContext();
 
@@ -62,7 +64,7 @@ export const ConfirmDialog = ({
                     <div className="mt-1.5 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
                         <div className="h-10"><CustomButton variant="outline" onClick={onSecondary ?? handleClose} disabled={isLoading}>{cancelLabel}</CustomButton></div>
                         <div className="h-10">
-                            <CustomButton variant={tone === 'danger' ? 'danger' : 'secondary'} onClick={onConfirm} isLoading={isLoading}>
+                            <CustomButton variant={tone === 'danger' ? 'danger' : 'secondary'} onClick={onConfirm} isLoading={isLoading} disabled={confirmDisabled}>
                                 {confirmLabel}
                             </CustomButton>
                         </div>

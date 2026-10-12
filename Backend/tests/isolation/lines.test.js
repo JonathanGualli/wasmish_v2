@@ -279,13 +279,15 @@ test('GET /lines: B no ve las líneas de A, y nunca sale el token', async () => 
     const b = await newAccount('LB');
     const asB = await request(b, 'GET', '/lines');
     assert.equal(asB.status, 200, asB.text);
-    assert.deepEqual(asB.body, { lines: [], maxLines: 1 });
+    assert.deepEqual(asB.body, { lines: [], maxLines: 1, nextDefaultLineId: null });
 
     const asA = await request(a, 'GET', '/lines');
     assert.equal(asA.status, 200, asA.text);
     assert.deepEqual(asA.body.lines.map(line => line.id), [a.first, a.second]);
     assert.equal(asA.body.maxLines, 2);
     assert.equal(asA.body.lines[0].isDefault, true);
+    assert.equal(asA.body.nextDefaultLineId, a.second);
+    assert.ok(asA.body.lines.every(line => line.connectedAt && line.createdAt && line.disconnectedAt === null));
     assert.ok(!/token/i.test(asA.text), 'la respuesta lleva el token');
     const waba = await Waba.findOne({ accountId: a.accountId }).lean();
     assert.ok(!asA.text.includes(waba.tokenWhatsapp));
@@ -315,6 +317,7 @@ test('POST /lines/:id/disconnect: B no desconecta una línea de A (404, sigue ac
     const b = await newAccount('LF');
     const res = await request(b, 'POST', `/lines/${a.second}/disconnect`);
     assert.equal(res.status, 404, res.text);
+    assert.equal(res.body[0].code, 'line_not_found');
     assert.equal((await lineFor(a.second)).status, 'active');
     assert.equal((await request(b, 'POST', '/lines/no-es-un-id/disconnect')).status, 404);
 });
@@ -327,6 +330,7 @@ test('isDefault en una línea desconectada → 409, y el nombre no cambia', asyn
     const res = await request(a, 'PATCH', `/lines/${a.second}`, { name: 'Nuevo', isDefault: true });
     assert.equal(res.status, 409, res.text);
     assert.equal(res.body[0].message, DEFAULT_LINE_INACTIVE_MESSAGE);
+    assert.equal(res.body[0].code, 'default_line_inactive');
     assert.equal((await lineFor(a.second)).name, null);
     assert.equal(String((await Account.findById(a.accountId).lean()).defaultLineId), a.first);
 });
@@ -337,6 +341,7 @@ test('con el candado ocupado, PATCH /lines/:id → 409 y el nombre no cambia', a
     const res = await request(a, 'PATCH', `/lines/${a.second}`, { name: 'Nuevo' });
     assert.equal(res.status, 409, res.text);
     assert.equal(res.body[0].message, LINE_BUSY_MESSAGE);
+    assert.equal(res.body[0].code, 'line_busy');
     assert.equal((await lineFor(a.second)).name, null);
     await Account.updateOne({ _id: a.accountId }, { lineLock: null });
 });
@@ -350,6 +355,7 @@ test('desconectar la línea por defecto: /v1 sin lineId sale por la otra y User 
     assert.equal(res.status, 200, res.text);
     assert.equal(res.body.status, 'disconnected');
     assert.equal(res.body.isDefault, false);
+    assert.ok(res.body.disconnectedAt);
     assert.equal(String((await Account.findById(a.accountId).lean()).defaultLineId), a.second);
     assert.equal((await User.findById(a.userId).lean()).phoneNumberId, '7552');
 
@@ -390,4 +396,32 @@ test('bajar maxLines por debajo de las activas no desconecta nada y bloquea cone
     }
     await assert.rejects(connectWhatsapp(a, { phoneNumberId: '7573' }),
         (error) => error.statusCode === 409 && error.message === lineLimitMessage(1));
+});
+
+// Regresión que vigila (Tarea 3 de la 2c): la siguiente por defecto se elegía
+// por `updatedAt`, así que renombrar una línea la colaba delante.
+test('renombrar una línea no cambia cuál pasa a ser la por defecto', async () => {
+    const a = await seedAccount('LL', { seq: seq++, maxLines: 3 });
+    const { lineId: first } = await connectWhatsapp(a, { phoneNumberId: '7591' });
+    const { lineId: older } = await connectWhatsapp(a, { phoneNumberId: '7592' });
+    const { lineId: newer } = await connectWhatsapp(a, { phoneNumberId: '7593' });
+    assert.equal((await request(a, 'PATCH', `/lines/${older}`, { name: 'Renombrada' })).status, 200);
+
+    assert.equal((await request(a, 'GET', '/lines')).body.nextDefaultLineId, String(newer));
+    assert.equal((await request(a, 'POST', `/lines/${first}/disconnect`)).status, 200);
+    assert.equal(String((await Account.findById(a.accountId).lean()).defaultLineId), String(newer));
+});
+
+test('renovar el token no cambia la fecha de conexión; reconectar una desconectada, sí', async () => {
+    const a = await seedAccount('LM', { seq: seq++, maxLines: 2 });
+    const { lineId } = await connectWhatsapp(a, { phoneNumberId: '7594' });
+    const connectedAt = (await lineFor(lineId)).connectedAt;
+    await connectWhatsapp(a, { phoneNumberId: '7594' });   // renovar
+    assert.equal((await lineFor(lineId)).connectedAt.getTime(), connectedAt.getTime());
+
+    await request(a, 'POST', `/lines/${lineId}/disconnect`);
+    await connectWhatsapp(a, { phoneNumberId: '7594' });   // reactivar
+    const line = await lineFor(lineId);
+    assert.ok(line.connectedAt > connectedAt);
+    assert.equal(line.disconnectedAt, null);
 });

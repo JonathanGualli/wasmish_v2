@@ -34,7 +34,7 @@ export const getPlatformStats = async (req, res) => {
 }
 
 // Listado paginado de clientes con sus agregados.
-// NUNCA devuelve tokenWhatsapp, texto de mensajes ni teléfonos de contactos.
+// NUNCA devuelve tokenWhatsapp (ni lo lee), texto de mensajes ni teléfonos de contactos.
 export const listClients = async (req, res) => {
     try {
         const page  = Math.max(parseInt(req.query.page) || 1, 1);
@@ -43,7 +43,7 @@ export const listClients = async (req, res) => {
 
         const [users, totalCount] = await Promise.all([
             User.find({})
-                .select('name email rol status accountId tokenWhatsapp waBusinessId createdAt')
+                .select('name email rol status accountId waBusinessId createdAt')
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit)
@@ -60,11 +60,11 @@ export const listClients = async (req, res) => {
             Account.find({ _id: { $in: accountIds } }).select('limits').lean(),
             Line.aggregate([
                 { $match: { accountId: { $in: accountIds.filter(Boolean) }, status: 'active' } },
-                { $group: { _id: '$accountId', active: { $sum: 1 } } },
+                { $group: { _id: '$accountId', active: { $sum: 1 }, wabas: { $addToSet: '$wabaId' } } },
             ]),
         ]);
         const maxLinesOf = new Map(accounts.map(a => [String(a._id), a.limits?.maxLines ?? 1]));
-        const activeLinesOf = new Map(activeLines.map(l => [String(l._id), l.active]));
+        const activeLinesOf = new Map(activeLines.map(l => [String(l._id), l]));
 
         // Conversaciones solo de las cuentas de ESTA página (usa el índice userId)
         const conversations = await Conversation.find({ userId: { $in: accountIds } })
@@ -111,6 +111,7 @@ export const listClients = async (req, res) => {
 
         const clients = users.map(u => {
             const entry = perUser.get(String(u.accountId));
+            const lines = activeLinesOf.get(String(u.accountId));
             return {
                 id: String(u._id),
                 accountId: u.accountId ? String(u.accountId) : null,
@@ -118,9 +119,12 @@ export const listClients = async (req, res) => {
                 email: u.email,
                 rol: u.rol,
                 status: u.status,
-                whatsappConnected: Boolean(u.tokenWhatsapp), // el token se lee pero NO se devuelve
+                // Conectado = con alguna línea activa (Fase 2c: `Line` es la fuente).
+                whatsappConnected: Boolean(lines),
+                // El WABA de la línea por defecto (la copia en User) y cuántos más tiene.
                 waBusinessId: maskId(u.waBusinessId),
-                lines: { active: activeLinesOf.get(String(u.accountId)) ?? 0, max: maxLinesOf.get(String(u.accountId)) ?? 1 },
+                extraWabas: Math.max((lines?.wabas.filter(Boolean).length ?? 0) - 1, 0),
+                lines: { active: lines?.active ?? 0, max: maxLinesOf.get(String(u.accountId)) ?? 1 },
                 conversations: entry.conversations,
                 messages: entry.messages,
                 failed: entry.failed,
