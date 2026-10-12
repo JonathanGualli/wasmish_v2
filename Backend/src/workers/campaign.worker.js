@@ -1,20 +1,21 @@
+import Account from "../models/account.model.js";
 import Campaign from "../models/campaign.model.js";
 import CampaignRecipient from "../models/campaign.recipient.model.js";
 import Contact from "../models/contact.model.js";
-import { findAccountOwner } from "../services/account.service.js";
+import { findSendingLine } from "../services/line.service.js";
 import { processTemplateSending } from "../controllers/template.controller.js";
 import { emitCampaignProgress } from "../services/campaign.service.js";
 import { buildContactParameters } from "../utils/campaign.message.js";
-import { recipientSkipReason, stoppingErrorMessage, THROTTLE_ERROR } from "../utils/campaign.status.js";
+import { pickCampaignPerLine, recipientSkipReason, stoppingErrorMessage, THROTTLE_ERROR } from "../utils/campaign.status.js";
 import { CAMPAIGN_DRY_RUN, CAMPAIGN_RATE_PER_SECOND } from "../config.js";
 
 // ---------------------------------------------------------------------------
 // Worker de las campañas. Corre dentro del proceso de la API: la cola es
 // la colección CampaignRecipient, así que no hace falta Redis ni otro servicio.
 //
-// En cada vuelta toma UNA campaña activa por cuenta y le envía UN mensaje a
-// cada una, con una pausa entre envíos que fija el ritmo total. Así una campaña
-// grande de una cuenta no deja esperando a la de otra.
+// En cada vuelta toma UNA campaña activa por línea (Fase 2b; antes, por cuenta)
+// y le envía UN mensaje a cada una, con una pausa entre envíos que fija el
+// ritmo total. Así una campaña grande de una línea no deja esperando a la de otra.
 //
 // Supone UNA sola instancia de la API (como hoy en el compose): al arrancar da
 // por muertos los envíos a medias. Con dos réplicas, una marcaría como
@@ -40,16 +41,16 @@ const idle = (ms) => new Promise(resolve => {
 
 export const wakeCampaignWorker = () => wakeIdle?.();
 
-// Una por cuenta: la que ya está enviando o, si no hay, la más antigua en cola.
+// Una por línea (`pickCampaignPerLine`). Las anteriores a las líneas, sin
+// `lineId`, cuentan como la línea por defecto de su cuenta.
 const pickActiveCampaigns = async () => {
     const candidates = await Campaign.find({ status: { $in: ['sending', 'queued'] } }).sort({ createdAt: 1 }).lean();
-    const byUser = new Map();
-    for (const campaign of candidates) {
-        const key = String(campaign.userId);
-        const current = byUser.get(key);
-        if (!current || (current.status === 'queued' && campaign.status === 'sending')) byUser.set(key, campaign);
-    }
-    return [...byUser.values()];
+    const accountIds = [...new Set(candidates.filter(c => !c.lineId).map(c => String(c.userId)))];
+    const accounts = accountIds.length > 0
+        ? await Account.find({ _id: { $in: accountIds } }).select('defaultLineId').lean()
+        : [];
+    const defaultLineByAccount = new Map(accounts.map(account => [String(account._id), account.defaultLineId]));
+    return pickCampaignPerLine(candidates, defaultLineByAccount);
 };
 
 const autoPause = async (campaign, code, message) => {
@@ -118,13 +119,13 @@ export const processNext = async (campaign) => {
         return 'skipped';
     }
 
-    // `campaign.userId` es la cuenta; la conexión de WhatsApp la guarda su owner.
-    const user = await findAccountOwner(campaign.userId);
-
     try {
+        // La línea de la campaña (sin `lineId`, la por defecto). Dentro del try:
+        // si ya no está conectada (409), se pausa como cualquier cuenta sin WhatsApp.
+        const line = await findSendingLine(campaign.userId, { lineId: campaign.lineId });
         const { parameters, buttons } = buildContactParameters(campaign.template, campaign, contact);
         const result = await processTemplateSending({
-            user,
+            line,
             contact,
             templateName: campaign.template.name,
             language: campaign.template.language,

@@ -166,3 +166,22 @@ test('un entrante a A2 no toca el historial ni la ventana de la conversación de
     const inA2 = await Conversation.findOne({ userId: c.accountId, contactId: contact._id, lineId: a2._id }).lean();
     assert.ok(await Message.exists({ conversationId: inA2._id, text: 'a la línea A2' }));
 });
+
+// Regresión que vigila (Codex, PR #15): con la reserva, la línea es null, y la
+// conversación sin línea de OTRO número del contacto se llevaba el entrante.
+test('con la reserva, un entrante no cae en la conversación sin línea de otro número', async () => {
+    const g = await seedAccount('G', { seq: 7 });
+    await connectWhatsapp(g);
+    const contact = await Contact.create({ userId: g.accountId, phone: '593990002006', name: 'sin línea' });
+    const old = await Conversation.create({
+        userId: g.accountId, contactId: contact._id, contactPhone: contact.phone,
+        phoneNumberId: '8816', lineId: null, lastMessage: 'del número viejo',
+    });
+    await User.updateOne({ _id: g.userId }, { phoneNumberId: '8817' });   // solo User: reserva sin línea
+
+    assert.equal((await postWebhook('8817', textMessage(contact.phone, 'al número nuevo'))).status, 200);
+
+    assert.equal((await Conversation.findById(old._id).lean()).lastMessage, 'del número viejo');
+    const fresh = await Conversation.findOne({ userId: g.accountId, contactId: contact._id, phoneNumberId: '8817' }).lean();
+    assert.ok(await Message.exists({ conversationId: fresh._id, text: 'al número nuevo' }));
+});

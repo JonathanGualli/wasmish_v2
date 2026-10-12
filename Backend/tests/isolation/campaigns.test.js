@@ -4,7 +4,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    seedAccount, request, assertNoLeak, assertHasOwn, connectWhatsapp, Account, Campaign, CampaignRecipient, Conversation, Message,
+    seedAccount, request, assertNoLeak, assertHasOwn, connectWhatsapp,
+    Account, Campaign, CampaignRecipient, Conversation, Line, Message, Template,
 } from './helpers.js';
 
 const { processNext } = await import('../../src/workers/campaign.worker.js');
@@ -132,6 +133,26 @@ test('el worker envía la campaña de una cuenta cuyo _id no es el del owner', a
     const sent = await Message.findOne({ campaignId: c.campaignId }).lean();
     assert.ok(sent, 'la campaña no dejó ningún mensaje');
     assert.ok(await Conversation.exists({ _id: sent.conversationId, userId: c.accountId }));
+    // Regresión que vigila (plan de la 2b, Review Focus 6): la campaña sembrada no
+    // tiene `lineId` (anterior a las líneas) y sale por la línea del número actual.
+    const line = await Line.findOne({ accountId: c.accountId, phoneNumberId: `99${c.seq}` }).lean();
+    assert.equal(String((await Conversation.findById(sent.conversationId).lean()).lineId), String(line._id));
+});
+
+test('una campaña de una línea desconectada se pausa con whatsapp_disconnected', async () => {
+    const w = await seedAccount('W', { seq: 6 });
+    await connectWhatsapp(w);
+    const old = await Line.create({ accountId: w.accountId, phoneNumberId: '8814', status: 'disconnected' });
+    await Campaign.updateOne({ _id: w.campaignId }, { lineId: old._id });
+
+    let campaign = await Campaign.findById(w.campaignId).lean();
+    for (let i = 0; i < 3 && campaign.status !== 'paused'; i++) {
+        await processNext(campaign);
+        campaign = await Campaign.findById(w.campaignId).lean();
+    }
+    assert.equal(campaign.status, 'paused');
+    assert.equal(campaign.pauseReason.code, 'whatsapp_disconnected');
+    assert.equal(await Message.countDocuments({ campaignId: w.campaignId }), 0);
 });
 
 // Fase 2a: la campaña nace con la línea por defecto (el worker todavía no la usa).
@@ -144,4 +165,18 @@ test('una campaña nueva nace con la línea por defecto de su cuenta', async () 
     assert.ok(defaultLineId);
     const campaign = await Campaign.findOne({ userId: s.accountId, name: 'con línea' }).lean();
     assert.equal(String(campaign.lineId), String(defaultLineId));
+});
+
+// Regresión que vigila (Codex, PR #15): la campaña aceptaba una plantilla de un
+// WABA anterior, y el worker la enviaba por la línea nueva sin volver a buscarla.
+test('una campaña con una plantilla de otro WABA → 400', async () => {
+    const y = await seedAccount('Y', { seq: 7 });
+    await connectWhatsapp(y);
+    await Template.updateOne({ templateId: y.templateId }, { waBusinessId: 'waba-anterior' });
+    const before = await Campaign.countDocuments({ userId: y.accountId });
+
+    const res = await request(y, 'POST', '/campaigns', { ...draft(y), name: 'otro WABA' });
+    assert.equal(res.status, 400, res.text);
+    assert.ok(res.body.some(error => error.field === 'templateId'), res.text);
+    assert.equal(await Campaign.countDocuments({ userId: y.accountId }), before);
 });

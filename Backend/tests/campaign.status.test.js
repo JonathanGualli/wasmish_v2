@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { recipientSkipReason, shouldExcludeOptedOut, stoppingErrorMessage, buildCampaignStats } from '../src/utils/campaign.status.js';
+import {
+    recipientSkipReason, shouldExcludeOptedOut, stoppingErrorMessage, buildCampaignStats, pickCampaignPerLine,
+} from '../src/utils/campaign.status.js';
 
 // --- a quién no se le envía ----------------------------------------------------
 
@@ -65,4 +67,33 @@ test('las estadísticas suman la cola y los mensajes sin contar nada dos veces',
 test('una campaña sin datos da todo en cero', () => {
     assert.equal(buildCampaignStats().total, 0);
     assert.equal(buildCampaignStats(undefined, undefined).failed, 0);
+});
+
+// Fase 2b: el worker envía una campaña a la vez por LÍNEA (antes, por cuenta).
+const campaign = (id, fields) => ({ _id: id, userId: 'cuenta-1', lineId: null, status: 'queued', ...fields });
+
+test('pickCampaignPerLine: una por línea, la que envía antes que la que está en cola', () => {
+    const queued = campaign('c1', { lineId: 'l1' });
+    const sending = campaign('c2', { lineId: 'l1', status: 'sending' });
+    assert.deepEqual(pickCampaignPerLine([queued, sending], new Map()), [sending]);
+});
+
+test('pickCampaignPerLine: dos líneas de la misma cuenta envían a la vez', () => {
+    const first = campaign('c1', { lineId: 'l1' });
+    const second = campaign('c2', { lineId: 'l2' });
+    assert.deepEqual(pickCampaignPerLine([first, second], new Map()), [first, second]);
+});
+
+test('pickCampaignPerLine: sin lineId ni línea por defecto, cuenta como su cuenta', () => {
+    const first = campaign('c1');
+    const second = campaign('c2');
+    assert.deepEqual(pickCampaignPerLine([first, second], new Map()), [first]);
+});
+
+// Regresión que vigila (Codex, plan de la 2b): una campaña vieja sin lineId y
+// una nueva de la línea por defecto son la MISMA línea, y avanzaban a la vez.
+test('pickCampaignPerLine: campaña vieja sin lineId y nueva de la línea por defecto → solo una', () => {
+    const old = campaign('c1', { status: 'sending' });
+    const fresh = campaign('c2', { lineId: 'l1' });
+    assert.deepEqual(pickCampaignPerLine([old, fresh], new Map([['cuenta-1', 'l1']])), [old]);
 });

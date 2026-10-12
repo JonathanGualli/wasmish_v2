@@ -52,7 +52,7 @@ Sin cambio de comportamiento con una conversación por contacto; prepara el índ
   - Un contacto serializado lleva `conversations` (los `items`) y conserva `conversationId`, `lastInteractionAt` y `windowExpiresAt`, que pasan a ser **los de la más reciente** (compatibilidad con el front hasta la 2c).
   - `contactSelectionStages` deja en cada contacto `conversations` (solo `_id`, `lineId`, `lastMessageAt`, `lastInboundAt`) y `conversation` = la más reciente. Los filtros «con» y «sin conversación» y el orden por actividad (`conversation.lastMessageAt`) no cambian de significado.
   - `getContact`: `activity` suma los mensajes de **todas** sus conversaciones.
-  - Índice nuevo `conversation_line_contact_unique` = `{ userId: 1, lineId: 1, contactId: 1 }` único **parcial** `{ contactId: { $type: 'objectId' }, lineId: { $type: 'objectId' } }`; el viejo `conversation_contact_unique` sale del esquema. Con el código de la 2a sigue protegiendo la misma carrera (dos entrantes a la vez de un contacto nuevo), porque las conversaciones nuevas ya nacen con `lineId`. Las que nacen sin línea (si la proyección falló) las cubre `conversation_contact_without_line_unique` (`{ userId, contactId, lineId }`, parcial con `lineId: { $type: 'null' }`; revisión de Codex del PR 1).
+  - Índice nuevo `conversation_line_contact_unique` = `{ userId: 1, lineId: 1, contactId: 1 }` único **parcial** `{ contactId: { $type: 'objectId' }, lineId: { $type: 'objectId' } }`; el viejo `conversation_contact_unique` sale del esquema. Con el código de la 2a sigue protegiendo la misma carrera (dos entrantes a la vez de un contacto nuevo), porque las conversaciones nuevas ya nacen con `lineId`. Las que nacen sin línea (la reserva) las cubre `conversation_contact_number_without_line_unique` (`{ userId, contactId, phoneNumberId }`, parcial con `lineId: { $type: 'null' }`: una por contacto y número; revisiones de Codex de los PRs 1 y 3).
   - `runLineMigration` añade `pending.oldConversationIndex` (`true` si `conversation_contact_unique` existe; `--check` sale con 1) y, al aplicar, **primero** `Conversation.createIndexes()` (los nuevos) y **después** `Conversation.collection.dropIndex('conversation_contact_unique')`. Idempotente.
 
 - [ ] **Step 1: Tests puros que fallan** en `tests/contact.query.test.js`
@@ -157,12 +157,12 @@ git commit -m "líneas: el webhook enruta por Line y cada línea tiene su conver
 - Consumes: `findOrCreateConversation({ …, line })` (Tarea 2).
 - Produces:
   - `SendingLine = { accountId, lineId, phoneNumberId, waBusinessId, tokenWhatsapp }` (token cifrado).
-  - `sendingLineIssue({ line, waba }) → null | 'not_connected' | 'disconnected'` (pura, `utils/line.js`): sin línea, o su `Waba` sin token → `'not_connected'`; línea `disconnected` → `'disconnected'`.
-  - `findSendingLine(accountId, lineId = null) → Promise<SendingLine>` en `line.service.js`. Con `lineId`: esa línea **de esa cuenta** (`{ _id: lineId, accountId }`), o 404 `'La línea no existe en tu cuenta.'`. Sin él: `Account.defaultLineId`. `sendingLineIssue` → 409 con `WHATSAPP_NOT_CONNECTED_MESSAGE` o `LINE_DISCONNECTED_MESSAGE` (exportada desde `utils/whatsapp.line.js`). Reserva: **sin `lineId`**, si la línea por defecto falta o no sirve (`sendingLineIssue` no es `null`) y el owner tiene `ownerConnection(owner)` → la conexión del owner con `lineId: await findLineId(...)` y `console.error('Envío por la reserva de User', …)`. En la 2b `User` sigue siendo la fuente: si la proyección no lo refleja (un cambio de número a medias, una sincronización que falló), manda `User`. Con `lineId` explícito no hay reserva.
+  - `sendingLineFor({ owner, line, waba, phoneNumberId }) → { line: SendingLine, fallback } | { issue: 'not_connected' | 'disconnected' }` (pura, `utils/line.js`). `User` decide qué número está conectado: sin conexión → `not_connected`; la línea pedida (o el número de una conversación sin línea) es de otro número → `disconnected`; si `lineMatchesOwner` (Tarea 2), la línea y el token de su WABA; si no, la reserva: la conexión de `User` con la línea si existe (`fallback: true`).
+  - `findSendingLine(accountId, { lineId = null, phoneNumberId = null } = {}) → Promise<SendingLine>` en `line.service.js`. Con `lineId`: esa línea **de esa cuenta**, o 404 `LINE_NOT_FOUND_MESSAGE` = `'La línea no existe en tu cuenta.'`. Sin él: la del número `phoneNumberId` o, sin él, la del número de `User` (la por defecto; **no** se usa `Account.defaultLineId`, que tras un cambio de número a medias apunta al anterior). `issue` → 409 con `WHATSAPP_NOT_CONNECTED_MESSAGE` o `LINE_DISCONNECTED_MESSAGE` (en `utils/whatsapp.line.js`); `fallback` → `console.error('Envío por la reserva de User', …)`. `findConversationLine(conversation)` = `findSendingLine(conversation.userId, { lineId, phoneNumberId })` de la conversación.
   - `processMessageSending({ line, conversation, … })` y `processTemplateSending({ line, … })`: `line` (un `SendingLine`) reemplaza a `user`. El número sale **siempre** de `line.phoneNumberId` (desaparece `conversation?.phoneNumberId || user.phoneNumberId`).
   - `syncTemplatesForWaba({ accountId, waBusinessId, tokenWhatsapp })` reemplaza a `syncTemplatesForUser(user)`. Las búsquedas de plantillas por nombre llevan `waBusinessId: line.waBusinessId`; una con `waBusinessId: null` no se encuentra (la sincronización JIT se lo pone).
   - `pickCampaignPerLine(candidates, defaultLineByAccount) → campaign[]` (pura, `utils/campaign.status.js`): la lógica de hoy de `pickActiveCampaigns`, agrupando por la **línea efectiva**: `String(campaign.lineId ?? defaultLineByAccount.get(String(campaign.userId)) ?? campaign.userId)`. `pickActiveCampaigns` lee el `defaultLineId` de las cuentas de los candidatos (un `Account.find` con `$in`) y arma el `Map`.
-  - `writeProjection` (en `line.service.js`) cambia de orden: primero activa la línea del número actual y pone `Account.defaultLineId`, y **después** desconecta las demás. Así la línea por defecto nunca apunta a una desconectada; durante un instante puede haber dos activas en la cuenta (números distintos, el índice lo admite), y la siguiente escritura lo deja en una. `syncLinesFromOwner` admite `beforeDisconnect`, como `afterRead` **solo para los tests**: se llama justo antes de desconectar las demás.
+  - `migrate:lines` pone a las plantillas sin WABA (sincronizadas antes de la 2a) el WABA actual de su cuenta, y `--check` las cuenta (`pending.templates`): sin esto, el primer envío de cada una dependería de una sincronización con Meta.
 
 Quién pide qué línea:
 
@@ -172,20 +172,21 @@ Quién pide qué línea:
 | `POST /chats/messages`, `/chats/template` (conversación nueva) | la por defecto (el `lineId` del cuerpo llega en la Tarea 4) |
 | worker | `campaign.lineId` (sin ella, la por defecto) |
 | `POST /campaigns` | la por defecto: 409 si no hay; `campaign.lineId` = la suya |
-| `GET /templates/sync` | todos los `Waba` de la cuenta con token |
+| `GET /templates/sync` | el WABA de la línea por defecto (con `maxLines: 1`, el único); sin WhatsApp, el 400 de siempre |
 | `GET /templates` | las del WABA de la línea por defecto (sin línea, todas las de la cuenta, como hoy); si alguna de la cuenta tiene `waBusinessId: null`, se sincroniza una vez antes, como hoy con `header` |
 
 El control de la ventana (`findConversationByNumber`) busca dentro de la línea del envío. En los envíos con `:id`, el orden es: conversación (404) → ventana (409) → línea (409).
 
-`syncLinesAfterConnecting` deja de tragarse el error: si la proyección falla, la conexión responde **500** con `'WhatsApp quedó conectado, pero no se pudo terminar de configurar. Vuelve a conectarlo.'` (los envíos ya leen `Waba`: un token sin reflejar dejaría de enviar).
+`syncLinesAfterConnecting` sigue tragándose el error (200 y `console.error`): con la reserva de `sendingLineFor`, una proyección que falle no deja de enviar. `writeProjection` no cambia de orden: `findSendingLine` no lee `defaultLineId`. (Las dos cosas estaban en una versión anterior de esta tarea; la reserva por `User` las hizo innecesarias.)
 
 - [ ] **Step 1: Tests puros que fallan**
 
 ```js
 // line.test.js
-test('sendingLineIssue: línea activa con token → null', ...);
-test('sendingLineIssue: sin línea, o WABA sin token → not_connected', ...);
-test('sendingLineIssue: línea desconectada → disconnected', ...);
+test('sendingLineFor: la línea del número de User, con el token de su WABA', ...);
+test('sendingLineFor: sin WhatsApp conectado → not_connected', ...);
+test('sendingLineFor: la línea de otro número → disconnected', ...);
+test('sendingLineFor: proyección desajustada → la conexión de User, con la línea si existe', ...);
 // campaign.status.test.js
 test('pickCampaignPerLine: una por línea, la que envía antes que la que está en cola', ...);
 test('pickCampaignPerLine: dos líneas de la misma cuenta envían a la vez', ...);
@@ -200,30 +201,25 @@ test('pickCampaignPerLine: campaña vieja sin lineId y nueva de la línea por de
 // chats.test.js
 // Regresión que vigila (Review Focus 4)
 test('responder en una conversación de una línea desconectada → 409 sin llamar a Meta', ...);   // 0 metaCalls, 0 Message nuevos
-test('el envío sale con el número de la línea y el token de su WABA', ...);
-// metaCalls[0]: url con el phoneNumberId de la línea, Authorization con el token del Waba (distinto del de User a propósito)
-test('ventana por línea: abierta en A1 y cerrada en A2 → 409 en A2', ...);
-// maxLines 2 y dos Line activas puestas a mano; conversación del contacto en A1 con lastInboundAt reciente
+test('el envío sale con el número de la línea de la conversación', ...);
+test('ventana por línea: abierta en el número anterior y cerrada en el actual → 409', ...);
+test('con la proyección desajustada, el envío sale con el token de User', ...);   // Waba con un token viejo
 // templates.test.js
 // Regresión que vigila (Review Focus 5)
 test('una plantilla sin WABA se sincroniza y sale', ...);
 test('GET /templates solo lista las del WABA de la línea', ...);
 // campaigns.test.js
-// Regresión que vigila (Review Focus 6)
-test('una campaña sin lineId sale por la línea por defecto', ...);
+// Regresión que vigila (Review Focus 6): la campaña sembrada no tiene lineId y sale por la línea actual
+test('el worker envía la campaña de una cuenta cuyo _id no es el del owner', ...);   // ampliado
 test('una campaña de una línea desconectada se pausa con whatsapp_disconnected', ...);
-// lines.test.js
+// account.test.js
 // Regresión que vigila (Review Focus 3)
-test('cambio de número a medias: /v1 sin línea sigue enviando', ...);
-// estado puesto a mano: línea nueva activa, defaultLineId apuntando a la vieja ya desconectada, User con el número nuevo
-// → POST /v1/templates/send 200 por la reserva, con el número de User
-test('sincronizar un número nuevo nunca deja defaultLineId en una línea desconectada', ...);
-// beforeDisconnect del sync: en ese momento la línea de defaultLineId ya es la nueva y está activa
-// whatsapp.test.js
-test('si la proyección falla tras conectar, 500 y el mensaje para reintentar', ...);
+test('POST /v1/templates/send con un cambio de número a medias sigue saliendo', ...);   // solo User cambió
+// migrate-lines.test.js
+test('migrar pone el WABA actual a las plantillas que no lo tienen', ...);
 ```
 
-`connectWhatsapp` (helpers) guarda en `User` un token distinto del que el test pone en el `Waba` cuando necesite distinguirlos: el envío tiene que usar el del `Waba`.
+Las plantillas sembradas (`seedAccount`) llevan `waBusinessId: waba-<label>`, el que deja `connectWhatsapp`, como las deja `migrate:lines`.
 
 - [ ] **Step 3: Ejecutarlos y ver que fallan.** Run: `cd Backend && npm test && npm run test:isolation` · Expected: FAIL.
 
@@ -306,9 +302,10 @@ git commit -m "líneas: la API pública y la conversación nueva eligen la líne
 - **Cuatro PRs y un solo despliegue (1.0.14).** Por el tamaño (unas 400–500 líneas cada uno) y porque cada uno se revisa solo: contactos (sin cambio de comportamiento), recibir, enviar y elegir la línea.
 - **Los campos sueltos del contacto se quedan** (`conversationId`, `lastInteractionAt`, `windowExpiresAt`, los de la conversación más reciente) junto al `conversations` nuevo. El spec decía «en lugar de una sola»; quitarlos rompería el front, que se cambia en la 2c.
 - **Responder desde un número desconectado da 409.** Hoy esa respuesta saldría con el número viejo y el token nuevo, y Meta la rechazaría con un `Message` fallido.
-- **Conectar responde 500 si la proyección falla** (en la 2a era 200 con `console.error`): desde la 2b los envíos leen el token del `Waba`.
+- **Conectar sigue respondiendo 200 si la proyección falla** (con `console.error`), como en la 2a: los envíos y el webhook comprueban que la proyección cuadra con `User` y, si no, usan la reserva. (Una versión anterior del plan proponía 500.)
 - **El índice de conversaciones se cambia en el PR 1 y en producción antes de arrancar la 1.0.14** (`migrate:lines` con la imagen nueva, con la 1.0.13 en marcha). Así nunca corre el código que enruta por línea con el índice viejo, y no hace falta ninguna reserva que mezcle conversaciones de líneas distintas (revisión de Codex del plan).
-- **Al enviar sin línea explícita, si la proyección no refleja `User`, manda `User`** (la reserva), y `writeProjection` activa la línea nueva antes de desconectar la vieja (revisión de Codex del plan).
+- **Mientras `User` sea la fuente, manda `User`:** la cuenta y el número conectado salen de él, y la proyección solo se usa si cuadra (`lineMatchesOwner`); si no, la reserva (revisiones de Codex del plan y del PR 2). Por eso `findSendingLine` no lee `Account.defaultLineId` y `writeProjection` no cambia de orden.
+- **`migrate:lines` pone el WABA actual a las plantillas que no lo tienen**, para que el primer envío de cada una (el OTP del cliente de la API) no dependa de una sincronización con Meta. En la base local había 7.
 - **`GET /templates` sin línea lista todas las de la cuenta**, como hoy; con línea, solo las de su WABA.
 - **El panel de superadmin no cuenta líneas todavía:** va con la 2c, junto a la UI.
 

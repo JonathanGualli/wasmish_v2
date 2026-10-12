@@ -87,3 +87,37 @@ export const lineMatchesOwner = ({ owner, line, waba }) => {
         && waba.waBusinessId === connection.waBusinessId
         && waba.tokenWhatsapp === connection.tokenWhatsapp;
 };
+
+/**
+ * Por qué línea sale un envío (Fase 2b): `{ line, fallback }` o `{ issue }`.
+ * `line` es un SendingLine: `{ accountId, lineId, phoneNumberId, waBusinessId,
+ * tokenWhatsapp }` (token cifrado). `User` sigue siendo la fuente hasta la
+ * 2c: decide qué número está conectado. `line` es la `Line` pedida (la de la
+ * conversación, o la del número de `User`); `phoneNumberId`, el número de una
+ * conversación sin línea.
+ *
+ * - Sin WhatsApp conectado → `{ issue: 'not_connected' }`.
+ * - Otro número que el de `User` → `{ issue: 'disconnected' }`: una conversación
+ *   de un número anterior ya no puede responderse desde él.
+ * - La proyección cuadra (`lineMatchesOwner`) → la línea y el token de su WABA.
+ * - Si no, la reserva: la conexión de `User`, con la línea si existe
+ *   (`fallback: true`, quien llama lo deja en el log).
+ */
+export const sendingLineFor = ({ owner, line, waba, phoneNumberId = null }) => {
+    const connection = ownerConnection(owner);
+    if (!connection) return { issue: 'not_connected' };
+
+    const wanted = line?.phoneNumberId ?? phoneNumberId ?? connection.phoneNumberId;
+    if (wanted !== connection.phoneNumberId) return { issue: 'disconnected' };
+
+    if (lineMatchesOwner({ owner, line, waba })) {
+        return {
+            line: {
+                accountId: owner.accountId, lineId: line._id, phoneNumberId: line.phoneNumberId,
+                waBusinessId: waba.waBusinessId, tokenWhatsapp: waba.tokenWhatsapp,
+            },
+            fallback: false,
+        };
+    }
+    return { line: { accountId: owner.accountId, lineId: line?._id ?? null, ...connection }, fallback: true };
+};

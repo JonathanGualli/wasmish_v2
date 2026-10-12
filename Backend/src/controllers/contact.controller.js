@@ -110,6 +110,14 @@ export const getConversationContact = async (conversation) => {
 };
 
 /**
+ * El filtro de «las conversaciones de esta línea». Sin línea (la reserva: la
+ * proyección falló), las sin línea DE ESE NÚMERO: una sin línea de otro número
+ * tiene otro historial y otra ventana.
+ */
+export const conversationLineFilter = ({ lineId = null, phoneNumberId }) =>
+    (lineId ? { lineId } : { lineId: null, phoneNumberId });
+
+/**
  * La conversación de un contacto en una línea, creándola si no existe. Puede
  * volver con cambios sin guardar: quien la llama le pone el último mensaje y
  * la guarda.
@@ -121,10 +129,11 @@ export const getConversationContact = async (conversation) => {
  */
 export const findOrCreateConversation = async ({ userId, contact, line }) => {
     const { lineId = null, phoneNumberId } = line;
-    let conversation = await Conversation.findOne({ userId, lineId, contactId: contact._id });
+    const inLine = conversationLineFilter(line);
+    let conversation = await Conversation.findOne({ userId, ...inLine, contactId: contact._id });
 
     if (!conversation && contact.phone) {
-        conversation = await Conversation.findOne({ userId, lineId, contactPhone: contact.phone, contactId: null });
+        conversation = await Conversation.findOne({ userId, ...inLine, contactPhone: contact.phone, contactId: null });
         if (conversation) await linkConversation(conversation, contact);
     }
 
@@ -143,7 +152,7 @@ export const findOrCreateConversation = async ({ userId, contact, line }) => {
         } catch (error) {
             // Mismo caso que en resolveContact: otra petición la creó a la vez.
             if (error.code !== 11000) throw error;
-            conversation = await Conversation.findOne({ userId, lineId, contactId: contact._id });
+            conversation = await Conversation.findOne({ userId, ...inLine, contactId: contact._id });
             if (!conversation) throw error;
         }
     }

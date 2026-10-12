@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { seedAccount, mongoUri, Account, Campaign, Conversation, Line, User, Waba } from './helpers.js';
+import { seedAccount, mongoUri, Account, Campaign, Conversation, Line, Template, User, Waba } from './helpers.js';
 
 const { runLineMigration } = await import('../../src/services/line.migration.service.js');
 
@@ -43,7 +43,7 @@ test('una segunda pasada no tiene nada pendiente', async () => {
     const result = await runLineMigration({ check: true });
     assert.deepEqual(result.stop, []);
     assert.deepEqual(result.pending, {
-        oldLines: 0, conversations: 0, campaigns: 0, accountsOutOfSync: 0, oldConversationIndex: false,
+        oldLines: 0, conversations: 0, campaigns: 0, templates: 0, accountsOutOfSync: 0, oldConversationIndex: false,
     });
     assert.deepEqual(result.issues, []);
 });
@@ -102,6 +102,33 @@ test('--check no escribe y dice lo pendiente', async () => {
     assert.equal(result.pending.accountsOutOfSync, 1);
     assert.equal(result.pending.conversations, 1);
     assert.equal(await Line.countDocuments({ accountId: p.accountId }), 0);
+});
+
+// Fase 2b: las plantillas se buscan en el WABA de la línea. Las sincronizadas
+// antes de la 2a no lo tienen: sin esto, el primer envío de cada una (el OTP
+// del cliente de la API) dependería de una sincronización con Meta.
+test('migrar pone el WABA actual a las plantillas que no lo tienen', async () => {
+    const x = await seedAccount('X', { seq: 5 });
+    await setConnection(x, { tokenWhatsapp: 'cifrado-x', phoneNumberId: '105', waBusinessId: 'waba-x' });
+    await Template.updateMany({ userId: x.accountId }, { $set: { waBusinessId: null } });
+
+    assert.equal((await runLineMigration({ check: true })).pending.templates, 2);
+    await runLineMigration({});
+    assert.deepEqual(await Template.distinct('waBusinessId', { userId: x.accountId }), ['waba-x']);
+    assert.equal((await runLineMigration({ check: true })).pending.templates, 0);
+});
+
+// Regresión que vigila (Codex, PR #15): las plantillas recibían el WABA de la
+// lectura del principio aunque la cuenta cambiara de WABA mientras corría.
+test('si el WABA cambia mientras migra, las plantillas reciben el actual', async () => {
+    const z = await seedAccount('Z', { seq: 6 });
+    await setConnection(z, { tokenWhatsapp: 'cifrado-z', phoneNumberId: '106', waBusinessId: 'waba-z-viejo' });
+    await Template.updateMany({ userId: z.accountId }, { $set: { waBusinessId: null } });
+
+    await runLineMigration({
+        afterInspect: () => setConnection(z, { waBusinessId: 'waba-z-nuevo' }),
+    });
+    assert.deepEqual(await Template.distinct('waBusinessId', { userId: z.accountId }), ['waba-z-nuevo']);
 });
 
 // Regresión que vigila (Codex, plan de la Fase 2a): con `Waba` vacía, dos owners

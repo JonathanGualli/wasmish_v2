@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
-import { ownerConnection, lineStateIssues, sharedWabas, historicalLines, lineMatchesOwner } from '../src/utils/line.js';
+import {
+    ownerConnection, lineStateIssues, sharedWabas, historicalLines, lineMatchesOwner, sendingLineFor,
+} from '../src/utils/line.js';
 
 const newId = () => new mongoose.Types.ObjectId();
 
@@ -105,4 +107,39 @@ test('lineMatchesOwner: un WABA que no es el de la línea o no tiene el token de
     assert.equal(lineMatchesOwner({ owner, line, waba: { ...waba, _id: newId() } }), false);
     assert.equal(lineMatchesOwner({ owner: { ...owner, waBusinessId: 'w2' }, line, waba }), false);
     assert.equal(lineMatchesOwner({ owner, line, waba: null }), false);
+});
+
+// Fase 2b: por qué línea sale un envío. `User` sigue siendo la fuente: decide
+// qué número está conectado; la línea y el WABA dan el id y el token si cuadran.
+test('sendingLineFor: la línea del número de User, con el token de su WABA', () => {
+    assert.deepEqual(sendingLineFor({ owner, line, waba }), {
+        line: { accountId, lineId: line._id, phoneNumberId: '111', waBusinessId: 'w1', tokenWhatsapp: 'cifrado-1' },
+        fallback: false,
+    });
+});
+
+test('sendingLineFor: sin WhatsApp conectado → not_connected', () => {
+    assert.deepEqual(sendingLineFor({ owner: { accountId }, line: null, waba: null }), { issue: 'not_connected' });
+});
+
+// Regresión que vigila: una conversación de un número anterior respondía con
+// ese número y el token del actual, y Meta la rechazaba.
+test('sendingLineFor: la línea de otro número → disconnected', () => {
+    const old = { ...line, _id: newId(), phoneNumberId: '000', status: 'disconnected' };
+    assert.deepEqual(sendingLineFor({ owner, line: old, waba: null }), { issue: 'disconnected' });
+    // Una conversación sin línea, de otro número: igual.
+    assert.deepEqual(sendingLineFor({ owner, line: null, waba: null, phoneNumberId: '000' }), { issue: 'disconnected' });
+});
+
+// La reserva: si la proyección no cuadra (token viejo, línea que falta), sale
+// con la conexión de User, que es la buena.
+test('sendingLineFor: proyección desajustada → la conexión de User, con la línea si existe', () => {
+    const stale = sendingLineFor({ owner, line, waba: { ...waba, tokenWhatsapp: 'cifrado-viejo' } });
+    assert.equal(stale.fallback, true);
+    assert.deepEqual(stale.line, { accountId, lineId: line._id, tokenWhatsapp: 'cifrado-1', phoneNumberId: '111', waBusinessId: 'w1' });
+
+    const missing = sendingLineFor({ owner, line: null, waba: null });
+    assert.equal(missing.fallback, true);
+    assert.equal(missing.line.lineId, null);
+    assert.equal(missing.line.phoneNumberId, '111');
 });

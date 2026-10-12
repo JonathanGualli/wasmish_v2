@@ -1,6 +1,5 @@
 import fs from "node:fs";
 import mongoose from "mongoose";
-import { findAccountOwner } from "../services/account.service.js";
 import Template from "../models/template.model.js";
 import Message from "../models/message.model.js";
 import { decrypt } from "../utils/crypto.js";
@@ -15,28 +14,26 @@ import {
 } from "../services/template.media.service.js";
 import { MEDIA_DIR } from "../config.js";
 import { mimeParaServir, rutaDeArchivo } from "../utils/media.storage.js";
-import { assertWhatsappConnected } from "../utils/whatsapp.line.js";
-import { findLineId } from "../services/line.service.js";
+import { findSendingLine } from "../services/line.service.js";
 
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-// Trae las plantillas del WABA del usuario y las upsertea en la BD.
+// Trae las plantillas de un WABA y las upsertea en la BD, en su cuenta.
 // La usan el sync manual (endpoint) y el sync just-in-time del envío.
-// Devuelve cuántas plantillas se procesaron. `user` es el owner de la cuenta,
-// que guarda la conexión de WhatsApp; las plantillas son de su cuenta.
-export const syncTemplatesForUser = async (user) => {
+// Devuelve cuántas plantillas se procesaron. Recibe un SendingLine
+// (`findSendingLine`): de él salen la cuenta, el WABA y su token.
+export const syncTemplatesForWaba = async ({ accountId, waBusinessId, tokenWhatsapp }) => {
     // Se comprueba ANTES de descifrar: decrypt(null) revienta y daba un 500.
-    if (!user.tokenWhatsapp || !user.waBusinessId) {
+    if (!tokenWhatsapp || !waBusinessId) {
         const error = new Error("Token or Business ID is required");
         error.statusCode = 400;
         throw error;
     }
 
-    const token = decrypt(user.tokenWhatsapp);
-    const waBusinessId = user.waBusinessId;
+    const token = decrypt(tokenWhatsapp);
 
     const dataMeta = await getTemplates({ token, waBusinessId });
     const templates = dataMeta?.data?.data;
@@ -60,8 +57,8 @@ export const syncTemplatesForUser = async (user) => {
                 filter: { templateId: tpl.id },
                 update: {
                     $set: {
-                        userId: user.accountId,
-                        // El WABA de la plantilla (Fase 2a: se guarda, todavía no se busca por él).
+                        userId: accountId,
+                        // El WABA de la plantilla: desde la Fase 2b se busca por él.
                         waBusinessId,
                         name: tpl.name,
                         category: tpl.category,
@@ -215,12 +212,19 @@ export const fakeTemplateSend = ({ contact, template }) => {
 // Controllers
 // ---------------------------------------------------------------------------
 
+// La línea por defecto, o null sin WhatsApp conectado (para lo que no envía).
+const findDefaultLine = (accountId) => findSendingLine(accountId).catch((error) => {
+    if (error.statusCode === 409) return null;
+    throw error;
+});
+
 export const syncTemplatesController = async (req, res) => {
     try {
-        const owner = await findAccountOwner(req.auth.accountId);
-        if (!owner) return res.status(404).json([{ message: "User not found" }]);
+        // Las del WABA de la línea por defecto (con `maxLines: 1`, el único).
+        const line = await findDefaultLine(req.auth.accountId);
+        if (!line) return res.status(400).json([{ message: "Token or Business ID is required" }]);
 
-        const total = await syncTemplatesForUser(owner);
+        const total = await syncTemplatesForWaba(line);
 
         return res.status(200).json({
             success: true,
@@ -247,24 +251,29 @@ const serializeTemplate = (template) => ({
     headerMedia: serializeHeaderMedia(template.headerMedia),
 });
 
-const findUserTemplates = (userId) =>
-    Template.find({ userId }).populate('headerMedia', 'mimeType filename size').lean();
+// Las de la cuenta en el WABA de la línea (Fase 2b). Sin línea (sin WhatsApp
+// conectado), todas las de la cuenta, como antes.
+const findUserTemplates = (userId, line) =>
+    Template.find({ userId, ...(line && { waBusinessId: line.waBusinessId }) })
+        .populate('headerMedia', 'mimeType filename size').lean();
 
 export const getTemplatesController = async (req, res) => {
     try {
         const userId = req.auth.accountId;
-        const owner = await findAccountOwner(userId);
-        if (!owner) return res.status(404).json([{ message: "User not found" }]);
+        const line = await findDefaultLine(userId);
 
-        let templates = await findUserTemplates(userId);
+        let templates = await findUserTemplates(userId, line);
 
-        // Sincronizadas antes de guardar la cabecera: se vuelven a sincronizar
-        // una vez, para saber cuáles piden un archivo. Si Meta falla, se
-        // devuelven como están: la lista no puede depender de Meta.
-        if (templates.some(t => t.header === undefined) && owner.tokenWhatsapp) {
+        // Sincronizadas antes de guardar la cabecera o el WABA: se vuelven a
+        // sincronizar una vez, para saber cuáles piden un archivo y de qué WABA
+        // son. Si Meta falla, se devuelven como están: la lista no puede
+        // depender de Meta.
+        const outdated = templates.some(t => t.header === undefined)
+            || Boolean(line && await Template.exists({ userId, waBusinessId: null }));
+        if (outdated && line) {
             try {
-                await syncTemplatesForUser(owner);
-                templates = await findUserTemplates(userId);
+                await syncTemplatesForWaba(line);
+                templates = await findUserTemplates(userId, line);
             } catch (syncError) {
                 console.error('Sync de plantillas (cabeceras) falló:', syncError.message);
             }
@@ -389,11 +398,12 @@ export const getHeaderMediaFileController = async (req, res) => {
  * `campaignId` queda en el Message, y `dryRun` no llama a Meta (ver
  * `fakeTemplateSend`).
  *
- * `user` es el owner de la cuenta: de él salen el token y el número (hasta la
- * Fase 2 de multi-línea), y de su `accountId`, el dueño de lo que se guarda.
+ * `line` es la línea por la que sale (`findSendingLine` o `findConversationLine`,
+ * Fase 2b de multi-línea): su número, su WABA (donde se busca la plantilla), el
+ * token y la cuenta dueña de lo que se guarda. Ya comprobada: está conectada.
  */
 export const processTemplateSending = async ({
-    user,
+    line,
     conversation = null,
     contact = null,
     destinationNumber,
@@ -407,18 +417,18 @@ export const processTemplateSending = async ({
     campaignId = null,
     dryRun = false,
 }) => {
-    // Cuenta sin WhatsApp conectado: antes reventaba dentro de decrypt()
-    assertWhatsappConnected(user);
-
-    const token = decrypt(user.tokenWhatsapp);
-    const phoneNumberId = user.phoneNumberId;
+    const token = decrypt(line.tokenWhatsapp);
+    const { accountId, phoneNumberId, waBusinessId } = line;
     const recipient = contact
         ? { phone: contact.phone, waUserId: contact.waUserId }
         : await getSendingRecipient(conversation, destinationNumber);
 
     // 1. Plantilla: la buscamos ANTES de enviar, para validar que existe
     //    y para saber en qué idioma está registrada.
-    let template = resolvedTemplate ?? await Template.findOne({ userId: user.accountId, name: templateName });
+    //    En el WABA de la línea: una sin WABA (sincronizada antes de la Fase
+    //    2a) no se encuentra, y la sincronización de abajo se lo pone.
+    const findTemplate = () => Template.findOne({ userId: accountId, waBusinessId, name: templateName });
+    let template = resolvedTemplate ?? await findTemplate();
     let syncOk = true;
 
     // Re-sincronizamos también si el documento es anterior a que guardáramos
@@ -427,8 +437,8 @@ export const processTemplateSending = async ({
     // vieja» de «plantilla sincronizada que legítimamente no tiene botones».
     if (!resolvedTemplate && (!template || template.parameterFormat === undefined || template.header === undefined)) {
         try {
-            await syncTemplatesForUser(user);
-            template = await Template.findOne({ userId: user.accountId, name: templateName });
+            await syncTemplatesForWaba(line);
+            template = await findTemplate();
         } catch (syncError) {
             // Si el sync falló no podemos afirmar que la plantilla no exista:
             // dejamos que Meta decida, en vez de bloquear un envío válido.
@@ -462,7 +472,7 @@ export const processTemplateSending = async ({
         throw error;
     }
     const headerMedia = headerMediaRule(template)
-        ? await TemplateMedia.findOne({ _id: template.headerMedia, userId: user.accountId })
+        ? await TemplateMedia.findOne({ _id: template.headerMedia, userId: accountId })
         : null;
     if (headerMediaRule(template) && !(headerMedia && await headerMediaFileExists(headerMedia))) {
         const error = new Error('El archivo de la cabecera de la plantilla ya no está en el servidor. Vuelve a subirlo en Plantillas.');
@@ -523,10 +533,8 @@ export const processTemplateSending = async ({
     // con dos relojes distintos quedan desfasados unos milisegundos.
     const now = new Date();
 
-    // La línea del número por el que salió (hasta la Tarea 3 de la Fase 2b, el del owner).
-    const line = { lineId: await findLineId(user.accountId, phoneNumberId), phoneNumberId };
     const targetConversation = await getSendingConversation({
-        userId: user.accountId, conversation, contact, recipient, line, contactName, source,
+        userId: accountId, conversation, contact, recipient, line, contactName, source,
     });
     targetConversation.lastMessage = storedText;
     targetConversation.lastMessageAt = now;
@@ -552,7 +560,7 @@ export const processTemplateSending = async ({
 
     // 7. SSE en vivo → aparece en la UI de wasmish. `campaignId` deja al
     //    frontend agrupar los cientos de eventos de una campaña.
-    sendToAccount(String(user.accountId), 'message_created', {
+    sendToAccount(String(accountId), 'message_created', {
         id: String(msg._id), conversationId: String(targetConversation._id), sender: 'me',
         text: storedText, timestamp: msg.timestamp.toISOString(),
         status, errorCode, errorDetail, templateName,
@@ -569,13 +577,12 @@ export const sendTemplateController = async (req, res) => {
     try {
         const { destinationNumber, templateName, contactName } = req.body;
 
-        // La cuenta de la API key (validateApiKey) y quien guarda su conexión.
-        const owner = await findAccountOwner(req.auth.accountId);
-        if (!owner) return res.status(404).json([{ message: "User not found" }]);
+        // La línea por defecto de la cuenta de la API key (validateApiKey).
+        const line = await findSendingLine(req.auth.accountId);
 
         const { waMessageId, conversation, status, errorCode, errorDetail } =
             await processTemplateSending({
-                user: owner,
+                line,
                 destinationNumber,
                 templateName,
                 language: req.body.language,

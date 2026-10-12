@@ -1,11 +1,10 @@
 import mongoose from "mongoose";
-import Account from "../models/account.model.js";
 import Campaign from "../models/campaign.model.js";
 import CampaignRecipient from "../models/campaign.recipient.model.js";
 import Contact from "../models/contact.model.js";
 import Template from "../models/template.model.js";
 import TemplateMedia from "../models/template.media.model.js";
-import { findAccountOwner } from "../services/account.service.js";
+import { findSendingLine } from "../services/line.service.js";
 import Message from "../models/message.model.js";
 import { selectionQueryStages } from "./contact.controller.js";
 import { renderTemplateBody } from "./template.controller.js";
@@ -21,6 +20,7 @@ import { contactDisplayName } from "../utils/contact.identity.js";
 import { headerMediaMismatch } from "../utils/template.header.js";
 import { headerMediaFileExists } from "../services/template.media.service.js";
 import { matchesContactSearch } from "../utils/contact.query.js";
+import { WHATSAPP_NOT_CONNECTED_MESSAGE } from "../utils/whatsapp.line.js";
 import { CAMPAIGN_DRY_RUN, CAMPAIGN_MAX_RECIPIENTS, CAMPAIGN_RATE_PER_SECOND } from "../config.js";
 
 const PAGE_SIZE = 20;
@@ -251,21 +251,29 @@ export const previewCampaignRecipients = async (req, res) => {
 export const createCampaign = async (req, res) => {
     try {
         const userId = req.auth.accountId;
-        const owner = await findAccountOwner(userId).select('tokenWhatsapp phoneNumberId').lean();
-        if (!owner?.tokenWhatsapp || !owner?.phoneNumberId) {
-            return sendError(res, 409, 'La cuenta no tiene WhatsApp conectado. Conéctala desde Ajustes antes de enviar.');
-        }
+        // La línea por la que saldrá (la por defecto): 409 sin WhatsApp conectado.
+        const line = await findSendingLine(userId).catch((error) => {
+            if (error.statusCode === 409) return null;
+            throw error;
+        });
+        if (!line) return sendError(res, 409, WHATSAPP_NOT_CONNECTED_MESSAGE);
 
         const draft = await buildDraft(userId, req.body);
         if (draft.errors.length > 0) return res.status(400).json(draft.errors);
 
         const { template } = draft;
-        // La línea por defecto de la cuenta (Fase 2a: se guarda; el worker sigue
-        // enviando desde el número del owner).
-        const account = await Account.findById(userId).select('defaultLineId').lean();
+        // La plantilla tiene que ser del WABA de la línea: el worker envía la
+        // copia guardada en la campaña y ya no la vuelve a buscar.
+        if (template.waBusinessId !== line.waBusinessId) {
+            return res.status(400).json([{
+                field: 'templateId',
+                message: 'La plantilla no es de la cuenta de WhatsApp Business conectada. Sincroniza tus plantillas y elige otra.',
+            }]);
+        }
+        // El worker la envía por esta línea (Fase 2b).
         const campaign = await Campaign.create({
             userId,
-            lineId: account?.defaultLineId ?? null,
+            lineId: line.lineId,
             name: req.body.name,
             template: {
                 templateId: template.templateId,

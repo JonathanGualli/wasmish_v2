@@ -143,7 +143,7 @@ test('POST /chats/:id/media sin WhatsApp: 409 y no guarda el archivo', async () 
     assert.deepEqual(await fs.readdir(process.env.MEDIA_DIR, { recursive: true }), before);
 });
 
-// Regresión que vigila: syncTemplatesForUser descifraba antes de comprobar el token y respondía 500.
+// Regresión que vigila: la sincronización de plantillas (hoy `syncTemplatesForWaba`) descifraba antes de comprobar el token y respondía 500.
 test('GET /templates/sync sin WhatsApp: 400, sin llamar a Meta', async () => {
     const before = metaCalls.length;
     const res = await request(b, 'GET', '/templates/sync');
