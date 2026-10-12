@@ -17,6 +17,13 @@ const campaignSchema = new mongoose.Schema({
         ref: 'User',
         required: true,
     },
+    // La línea desde la que sale (Fase 2a de multi-línea: se guarda, todavía
+    // no se usa para enviar; el worker usa el número del owner).
+    lineId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Line',
+        default: null,
+    },
     name: {
         type: String,
         required: true,

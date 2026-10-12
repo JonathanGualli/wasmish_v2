@@ -12,6 +12,12 @@ const templateSchema = new mongoose.Schema({
         required: true,
         unique: true,
     },
+    // El WABA del que es la plantilla (Fase 2a de multi-línea: se guarda al
+    // sincronizar, todavía no se usa para buscarlas).
+    waBusinessId: {
+        type: String,
+        default: null,
+    },
     name: {
         type: String,
         required: true,
