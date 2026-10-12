@@ -1,13 +1,15 @@
 import Account from '../models/account.model.js';
 import Line from '../models/line.model.js';
+import User from '../models/user.model.js';
 import Waba from '../models/waba.model.js';
 import { findAccountOwner } from './account.service.js';
-import { ownerConnection } from '../utils/line.js';
+import { ownerConnection, lineMatchesOwner } from '../utils/line.js';
 
 // Fase 2a de multi-línea: `Waba`, `Line` y `Account.defaultLineId` son una
 // proyección de la conexión que guarda el owner en `User` (ver utils/line.js).
-// Solo esta función los escribe (más las líneas de números anteriores que crea
-// `migrate:lines`).
+// Solo `syncLinesFromOwner` los escribe (más las líneas de números anteriores
+// que crea `migrate:lines`). Desde la 2b, lo que entra y sale de WhatsApp los
+// LEE (`findInboundLine`); `User` sigue siendo la fuente hasta la 2c.
 
 const MAX_SYNC_ATTEMPTS = 3;
 
@@ -86,4 +88,35 @@ export const syncLinesFromOwner = async (accountId, { details = null, afterRead 
 export const findLineId = async (accountId, phoneNumberId) => {
     const line = await Line.findOne({ accountId, phoneNumberId }).select('_id').lean();
     return line?._id ?? null;
+};
+
+/**
+ * A qué cuenta y línea va lo que llega al webhook por `phoneNumberId`:
+ * `{ accountId, lineId, phoneNumberId, tokenWhatsapp }`, con el token (cifrado)
+ * para bajar los adjuntos.
+ *
+ * Mientras `User` sea la fuente de la conexión (hasta la Fase 2c), la cuenta
+ * sale del `User` que tiene el número (es único) y la línea, de esa cuenta y
+ * ese número: una línea activa obsoleta de otra cuenta no se queda nada. Si la
+ * proyección coincide con `User` (`lineMatchesOwner`), el token es el del WABA
+ * de la línea. Si no (la proyección falló o se cortó), la reserva del spec: el
+ * token de `User` y la línea de ese número en la cuenta si existe (o null),
+ * nunca la de otro número, con aviso en el log. Un número que ningún `User`
+ * tiene no es de nadie: null.
+ */
+export const findInboundLine = async (phoneNumberId) => {
+    const owner = await User.findOne({ phoneNumberId }).select('accountId tokenWhatsapp phoneNumberId waBusinessId').lean();
+    if (!owner) return null;
+
+    const line = await Line.findOne({ accountId: owner.accountId, phoneNumberId }).lean();
+    const waba = line?.wabaId ? await Waba.findById(line.wabaId).lean() : null;
+
+    if (lineMatchesOwner({ owner, line, waba })) {
+        return { accountId: owner.accountId, lineId: line._id, phoneNumberId, tokenWhatsapp: waba.tokenWhatsapp };
+    }
+
+    console.error('Webhook por la reserva de User: la línea no refleja la conexión', {
+        accountId: String(owner.accountId), phoneNumberId, lineId: line ? String(line._id) : null,
+    });
+    return { accountId: owner.accountId, lineId: line?._id ?? null, phoneNumberId, tokenWhatsapp: owner.tokenWhatsapp ?? null };
 };

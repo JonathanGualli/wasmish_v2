@@ -4,8 +4,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    seedAccount, connectWhatsapp, postWebhook, openStream, Contact, Conversation, Line, Message,
+    seedAccount, connectWhatsapp, postWebhook, openStream, Contact, Conversation, Line, Message, User,
 } from './helpers.js';
+
+const { syncLinesFromOwner } = await import('../../src/services/line.service.js');
 
 const a = await seedAccount('A', { seq: 1 });
 const b = await seedAccount('B', { seq: 2 });
@@ -116,4 +118,51 @@ test('una conversación nueva nace con la línea de su número', async () => {
     assert.equal((await postWebhook(A_NUMBER, textMessage('593990005555', 'con línea'))).status, 200);
     const conversation = await Conversation.findOne({ userId: a.accountId, contactPhone: '593990005555' }).lean();
     assert.equal(String(conversation.lineId), String(line._id));
+});
+
+// Fase 2b: una conversación por contacto y línea.
+// Regresión que vigila: antes, el contacto seguía en su conversación del número
+// anterior, y la respuesta salía con ese número y el token del nuevo.
+test('el contacto con conversación en otro número estrena una conversación en la línea actual', async () => {
+    const contact = await Contact.create({ userId: a.accountId, phone: '593990004444', name: 'número anterior' });
+    const oldLine = await Line.create({ accountId: a.accountId, phoneNumberId: '8811', status: 'disconnected' });
+    const old = await Conversation.create({
+        userId: a.accountId, contactId: contact._id, contactPhone: contact.phone, phoneNumberId: '8811',
+        lineId: oldLine._id, lastMessage: 'en el número anterior',
+    });
+
+    assert.equal((await postWebhook(A_NUMBER, textMessage(contact.phone, 'al número actual'))).status, 200);
+
+    const current = await Line.findOne({ accountId: a.accountId, phoneNumberId: A_NUMBER }).lean();
+    const fresh = await Conversation.findOne({ userId: a.accountId, contactId: contact._id, lineId: current._id }).lean();
+    assert.ok(fresh, 'no nació la conversación de la línea actual');
+    assert.ok(await Message.exists({ conversationId: fresh._id, text: 'al número actual' }));
+    assert.equal((await Conversation.findById(old._id).lean()).lastMessage, 'en el número anterior');
+});
+
+// Regresión que vigila (Codex, plan de la 2b): un entrante a A2 abría la
+// ventana de la conversación de A1 si caía en ella.
+test('un entrante a A2 no toca el historial ni la ventana de la conversación de A1', async () => {
+    const c = await seedAccount('C', { seq: 3 });
+    await connectWhatsapp(c);
+    const a1 = await Line.findOne({ accountId: c.accountId, status: 'active' }).lean();
+    const contact = await Contact.create({ userId: c.accountId, phone: '593990003333', name: 'dos líneas' });
+    const lastInboundAt = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+    const inA1 = await Conversation.create({
+        userId: c.accountId, contactId: contact._id, contactPhone: contact.phone, phoneNumberId: a1.phoneNumberId,
+        lineId: a1._id, lastMessage: 'en A1', lastInboundAt,
+    });
+    // C pasa al número A2 (con `maxLines: 1`, A1 queda desconectada con su historial).
+    await User.updateOne({ _id: c.userId }, { phoneNumberId: '8833' });
+    await syncLinesFromOwner(c.accountId);
+    const a2 = await Line.findOne({ accountId: c.accountId, phoneNumberId: '8833' }).lean();
+
+    assert.equal((await postWebhook('8833', textMessage(contact.phone, 'a la línea A2'))).status, 200);
+
+    const after = await Conversation.findById(inA1._id).lean();
+    assert.equal(after.lastMessage, 'en A1');
+    assert.equal(after.lastInboundAt.getTime(), lastInboundAt.getTime());
+    assert.equal(await Message.countDocuments({ conversationId: inA1._id }), 0);
+    const inA2 = await Conversation.findOne({ userId: c.accountId, contactId: contact._id, lineId: a2._id }).lean();
+    assert.ok(await Message.exists({ conversationId: inA2._id, text: 'a la línea A2' }));
 });

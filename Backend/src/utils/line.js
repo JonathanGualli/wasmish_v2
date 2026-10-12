@@ -71,3 +71,19 @@ export const historicalLines = (conversationPhoneIds, existingPhoneIds, currentP
             phoneNumberId !== currentPhoneNumberId && !existing.has(phoneNumberId)),
     };
 };
+
+// Si una línea sirve para recibir o enviar (Fase 2b). Mientras `User` sea la
+// fuente de la conexión, solo si la proyección coincide con él: la línea
+// activa del número del owner, en su cuenta, con su WABA y el token de `User`.
+// Si no (una sincronización que falló o se cortó), quien llama usa la reserva
+// de `User` en vez de una línea o un token obsoletos.
+export const lineMatchesOwner = ({ owner, line, waba }) => {
+    const connection = ownerConnection(owner);
+    return Boolean(connection && line && waba)
+        && line.status === 'active'
+        && sameId(line.accountId, owner.accountId)
+        && line.phoneNumberId === connection.phoneNumberId
+        && sameId(line.wabaId, waba._id)
+        && waba.waBusinessId === connection.waBusinessId
+        && waba.tokenWhatsapp === connection.tokenWhatsapp;
+};

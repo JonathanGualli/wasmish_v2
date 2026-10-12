@@ -7,7 +7,6 @@ import { pickContactFields, buildContactMatch, CONTACT_FILTERS, summarizeConvers
 import { resolveMarketingPreference } from "../utils/marketing.preference.js";
 import { MAX_TAGS_PER_CONTACT } from "../utils/contact.tags.js";
 import { resolveOwnedTagIds } from "../services/tag.service.js";
-import { findLineId } from "../services/line.service.js";
 
 // ---------------------------------------------------------------------------
 // Contactos y su conversación. Lo usan los sitios por donde entra un número o
@@ -111,14 +110,21 @@ export const getConversationContact = async (conversation) => {
 };
 
 /**
- * La conversación de un contacto, creándola si no existe. Puede volver con
- * cambios sin guardar: quien la llama le pone el último mensaje y la guarda.
+ * La conversación de un contacto en una línea, creándola si no existe. Puede
+ * volver con cambios sin guardar: quien la llama le pone el último mensaje y
+ * la guarda.
+ *
+ * `line` = `{ lineId, phoneNumberId }`. Una por contacto y LÍNEA (Fase 2b de
+ * multi-línea): nunca devuelve la de otra línea, porque su historial y su
+ * ventana son de ese número. `lineId` null solo por la reserva (la proyección
+ * de la línea falló): la pone la siguiente `migrate:lines`.
  */
-export const findOrCreateConversation = async ({ userId, contact, phoneNumberId }) => {
-    let conversation = await Conversation.findOne({ userId, contactId: contact._id });
+export const findOrCreateConversation = async ({ userId, contact, line }) => {
+    const { lineId = null, phoneNumberId } = line;
+    let conversation = await Conversation.findOne({ userId, lineId, contactId: contact._id });
 
     if (!conversation && contact.phone) {
-        conversation = await Conversation.findOne({ userId, contactPhone: contact.phone, contactId: null });
+        conversation = await Conversation.findOne({ userId, lineId, contactPhone: contact.phone, contactId: null });
         if (conversation) await linkConversation(conversation, contact);
     }
 
@@ -129,9 +135,7 @@ export const findOrCreateConversation = async ({ userId, contact, phoneNumberId 
                 contactId: contact._id,
                 contactPhone: contact.phone,
                 phoneNumberId,
-                // La línea de ese número (Fase 2a: se guarda, todavía no enruta).
-                // null si aún no existe: la pone la siguiente `migrate:lines`.
-                lineId: await findLineId(userId, phoneNumberId),
+                lineId,
                 // 0, no 1: el webhook suma el mensaje entrante después, también
                 // para la conversación recién creada.
                 unreadCount: 0,
@@ -139,7 +143,7 @@ export const findOrCreateConversation = async ({ userId, contact, phoneNumberId 
         } catch (error) {
             // Mismo caso que en resolveContact: otra petición la creó a la vez.
             if (error.code !== 11000) throw error;
-            conversation = await Conversation.findOne({ userId, contactId: contact._id });
+            conversation = await Conversation.findOne({ userId, lineId, contactId: contact._id });
             if (!conversation) throw error;
         }
     }
@@ -161,12 +165,13 @@ export const findOrCreateConversation = async ({ userId, contact, phoneNumberId 
 export const getSendingRecipient = (conversation, destinationNumber) =>
     conversation ? getConversationContact(conversation) : { phone: destinationNumber };
 
-// La conversación donde se guarda un envío ya hecho (haya salido o no). Con
-// `contact` (campaña) el contacto ya existe: no hay que resolverlo.
-export const getSendingConversation = async ({ userId, conversation, contact = null, recipient, phoneNumberId, contactName, source }) => {
+// La conversación donde se guarda un envío ya hecho (haya salido o no), en la
+// línea por la que salió (`line` = `{ lineId, phoneNumberId }`). Con `contact`
+// (campaña) el contacto ya existe: no hay que resolverlo.
+export const getSendingConversation = async ({ userId, conversation, contact = null, recipient, line, contactName, source }) => {
     if (conversation) return conversation;
     const target = contact ?? await resolveContact(userId, recipient, { name: contactName, source });
-    return findOrCreateConversation({ userId, contact: target, phoneNumberId });
+    return findOrCreateConversation({ userId, contact: target, line });
 };
 
 /**

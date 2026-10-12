@@ -1,5 +1,4 @@
 import { WHATSAPP_VERIFY_TOKEN } from '../config.js';
-import User from "../models/user.model.js";
 import Message from "../models/message.model.js";
 import { sendToAccount } from './stream.controller.js';
 import Conversation from "../models/conversation.model.js";
@@ -16,18 +15,21 @@ import { TIPOS_CON_ARCHIVO, nombreDeArchivo, guardarArchivo } from '../utils/med
 import { getMediaInfo, downloadMedia } from '../libs/whatsapp.js';
 import { decrypt } from '../utils/crypto.js';
 import { MEDIA_DIR, MEDIA_MAX_BYTES } from '../config.js';
+import { findInboundLine } from '../services/line.service.js';
 
 // Baja el adjunto y lo deja en disco. Devuelve SIEMPRE un objeto: si algo falla
 // —token caducado, archivo enorme, Meta caída— sale con mediaFile en null y el
 // mensaje se guarda igual con su etiqueta. Perder la foto es un problema;
 // perder el mensaje entero sería mucho peor.
-const descargarAdjunto = async (user, entrante) => {
+const descargarAdjunto = async (inbound, entrante) => {
     const vacio = { mediaFile: null, mediaFilename: null, mediaSize: null, mimeType: entrante.mimeType };
 
     if (!entrante.mediaId || !TIPOS_CON_ARCHIVO.has(entrante.type)) return vacio;
+    // El token es el del WABA de la línea; sin él no hay con qué pedir el archivo.
+    if (!inbound.tokenWhatsapp) return vacio;
 
     try {
-        const token = decrypt(user.tokenWhatsapp);
+        const token = decrypt(inbound.tokenWhatsapp);
         if (!token) return vacio;
 
         const info = await getMediaInfo({ token, mediaId: entrante.mediaId });
@@ -74,8 +76,10 @@ export const verifyWebhook = (req, res) => {
 // SSE. Vive fuera de handleWebhook para poder envolver cada mensaje en su
 // propio try/catch — ver el comentario del bucle.
 //
-// `contacts` es el `value.contacts` del mismo lote: el perfil del remitente.
-const procesarEntrante = async (user, phoneNumberId, messageData, contacts) => {
+// `inbound` es la línea que lo recibe (`findInboundLine`): su cuenta, su línea
+// y el token de su WABA. `contacts` es el `value.contacts` del mismo lote: el
+// perfil del remitente.
+const procesarEntrante = async (inbound, messageData, contacts) => {
     // Traduce la forma que manda Meta (image.caption, button.text…)
     // a { type, text, mediaId, mimeType }. Devuelve null en los que
     // no son mensajes de la conversación, como los 'system'.
@@ -101,11 +105,13 @@ const procesarEntrante = async (user, phoneNumberId, messageData, contacts) => {
 
     const timestamp = messageData.timestamp ? new Date(parseInt(messageData.timestamp) * 1000) : new Date();
 
-    const contact = await resolveContact(user.accountId, identity, {
+    const contact = await resolveContact(inbound.accountId, identity, {
         source: identity.referral ? 'ad' : 'inbound',
         referral: identity.referral,
     });
-    const conversation = await findOrCreateConversation({ userId: user.accountId, contact, phoneNumberId });
+    // La conversación del contacto EN ESTA LÍNEA: la de otro número tiene su
+    // propio historial y su propia ventana.
+    const conversation = await findOrCreateConversation({ userId: inbound.accountId, contact, line: inbound });
 
     // La ventana nunca retrocede: Meta no garantiza el orden de los
     // webhooks, y un entrante viejo que llegue tarde la cerraría antes
@@ -117,7 +123,7 @@ const procesarEntrante = async (user, phoneNumberId, messageData, contacts) => {
     // El archivo se baja ANTES de crear el mensaje para que, cuando este llegue
     // por SSE, la foto ya se pueda pintar. Añade unos cientos de ms al webhook; a
     // cambio no hace falta ni cola ni un segundo evento avisando de que ya está.
-    const adjunto = await descargarAdjunto(user, entrante);
+    const adjunto = await descargarAdjunto(inbound, entrante);
 
     // Create message inbound
     let messageCreated;
@@ -156,7 +162,7 @@ const procesarEntrante = async (user, phoneNumberId, messageData, contacts) => {
     await conversation.save();
 
     sendToAccount(
-        String(user.accountId),
+        String(inbound.accountId),
         'message_created', {
             id: String(messageCreated._id),
             conversationId: String(conversation._id),
@@ -197,8 +203,8 @@ const procesarEntrante = async (user, phoneNumberId, messageData, contacts) => {
 
 // Avisa a la UI de que un contacto se dio de baja o de alta de la publicidad.
 // La ficha y la lista de Contactos se refrescan con él.
-const avisarPreferencia = (user, contact) => {
-    sendToAccount(String(user.accountId), 'contact_updated', {
+const avisarPreferencia = (inbound, contact) => {
+    sendToAccount(String(inbound.accountId), 'contact_updated', {
         id: String(contact._id),
         marketingOptOut: contact.marketingOptOut,
         marketingOptOutAt: contact.marketingOptOutAt ? contact.marketingOptOutAt.toISOString() : null,
@@ -212,7 +218,7 @@ const avisarPreferencia = (user, contact) => {
 
 // Procesa UN aviso de `user_preferences`: la persona pidió dejar de recibir
 // publicidad, o volver a recibirla.
-const procesarPreferencia = async (user, preferenceData) => {
+const procesarPreferencia = async (inbound, preferenceData) => {
     const preference = describeUserPreference(preferenceData);
     if (!preference) return;
 
@@ -224,44 +230,44 @@ const procesarPreferencia = async (user, preferenceData) => {
     // No se crea el contacto: para darse de baja tuvo que recibir una plantilla
     // nuestra, y cada envío ya deja su contacto. Si no está, es de otra
     // herramienta que comparte el número, y no hay nada que marcar.
-    const contact = await findContactByIdentity(user.accountId, preference);
+    const contact = await findContactByIdentity(inbound.accountId, preference);
     if (!contact) {
         console.warn('Preferencia de marketing de un contacto que no existe; se ignora.');
         return;
     }
 
     const updated = await applyMarketingPreference(contact, preference);
-    if (updated) avisarPreferencia(user, updated);
+    if (updated) avisarPreferencia(inbound, updated);
 };
 
 // Procesa UN aviso de `user_id_update`: la persona cambió de número y WhatsApp
 // le dio otro BSUID. Sin aplicarlo, su siguiente mensaje sin teléfono abriría
 // un contacto y una conversación nuevos, separados de su historial.
-const procesarCambioDeNumero = async (user, updateData) => {
+const procesarCambioDeNumero = async (inbound, updateData) => {
     const update = describeUserIdUpdate(updateData);
     if (!update) return;
 
-    const contact = await applyUserIdUpdate(user.accountId, update);
+    const contact = await applyUserIdUpdate(inbound.accountId, update);
     if (!contact) return;
 
-    sendToAccount(String(user.accountId), 'contact_updated', { id: String(contact._id) });
+    sendToAccount(String(inbound.accountId), 'contact_updated', { id: String(contact._id) });
     console.log('Cambio de número aplicado:', { contactId: String(contact._id) });
 };
 
 // El 131050 dice que la persona está dada de baja aunque el webhook de
 // `user_preferences` no haya llegado (no estar suscrito a ese campo, o que se
 // perdiera). Se marca con la hora del acuse.
-const marcarBajaPorFallo = async (user, message, timestamp) => {
-    const conversation = await Conversation.findOne({ _id: message.conversationId, userId: user.accountId });
+const marcarBajaPorFallo = async (inbound, message, timestamp) => {
+    const conversation = await Conversation.findOne({ _id: message.conversationId, userId: inbound.accountId });
     if (!conversation) return;
 
     const contact = await getConversationContact(conversation);
     const updated = await applyMarketingPreference(contact, { optOut: true, at: timestamp });
-    if (updated) avisarPreferencia(user, updated);
+    if (updated) avisarPreferencia(inbound, updated);
 };
 
 // Procesa UN acuse de recibo (entregado / leído / fallido).
-const procesarEstado = async (user, statusData) => {
+const procesarEstado = async (inbound, statusData) => {
 
     const waMessageId = statusData.id;
     const status = statusData.status; // 'send' | 'delivered' | 'read' | 'failed'
@@ -295,7 +301,7 @@ const procesarEstado = async (user, statusData) => {
     await message.save();
 
     sendToAccount(
-        String(user.accountId),
+        String(inbound.accountId),
         'message_status', {
             id: String(message._id),
             conversationId: String(message.conversationId),
@@ -325,7 +331,7 @@ const procesarEstado = async (user, statusData) => {
         });
 
         if (isMarketingOptOutFailure(statusData.errors)) {
-            await marcarBajaPorFallo(user, message, timestamp);
+            await marcarBajaPorFallo(inbound, message, timestamp);
         }
     }
 };
@@ -343,11 +349,12 @@ export const handleWebhook = async (req, res) => {
 
                 if(!phoneNumberId) continue;
 
-                // El owner que tiene conectado ese número (hasta la Fase 2 de
-                // multi-línea). Todo lo que llega es de su CUENTA (`user.accountId`);
-                // de `user` solo sale el token, para descargar los adjuntos.
-                const user = await User.findOne({ phoneNumberId });
-                if (!user) continue;
+                // La línea activa de ese número (Fase 2b de multi-línea), con
+                // la reserva de `User` si la proyección falló. Todo lo que llega
+                // es de su CUENTA (`inbound.accountId`) y va a su conversación
+                // en esa línea; el token de su WABA baja los adjuntos.
+                const inbound = await findInboundLine(phoneNumberId);
+                if (!inbound) continue;
 
                 const messages = value?.messages ?? [];
 
@@ -358,7 +365,7 @@ export const handleWebhook = async (req, res) => {
                     // sí se guardaron se duplicarían en el chat del cliente. Ahora Meta
                     // recibe 200 y como mucho se pierde el mensaje que venía roto.
                     try {
-                        await procesarEntrante(user, phoneNumberId, messageData, value.contacts);
+                        await procesarEntrante(inbound, messageData, value.contacts);
                     } catch (error) {
                         console.error("Entrante descartado por error:", {
                             waMessageId: messageData?.id,
@@ -372,7 +379,7 @@ export const handleWebhook = async (req, res) => {
                 const statuses = value?.statuses ?? [];
                 for(const statusData of statuses) {
                     try {
-                        await procesarEstado(user, statusData);
+                        await procesarEstado(inbound, statusData);
                     } catch (error) {
                         console.error("Acuse descartado por error:", {
                             waMessageId: statusData?.id,
@@ -388,7 +395,7 @@ export const handleWebhook = async (req, res) => {
                 const preferences = value?.user_preferences ?? [];
                 for(const preferenceData of preferences) {
                     try {
-                        await procesarPreferencia(user, preferenceData);
+                        await procesarPreferencia(inbound, preferenceData);
                     } catch (error) {
                         console.error("Preferencia descartada por error:", {
                             category: preferenceData?.category,
@@ -403,7 +410,7 @@ export const handleWebhook = async (req, res) => {
                 const userIdUpdates = value?.user_id_update ?? [];
                 for(const updateData of userIdUpdates) {
                     try {
-                        await procesarCambioDeNumero(user, updateData);
+                        await procesarCambioDeNumero(inbound, updateData);
                     } catch (error) {
                         // Sin BSUID ni teléfono: solo el error.
                         console.error("Cambio de número descartado por error:", { error: error.message });
