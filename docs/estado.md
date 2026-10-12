@@ -19,7 +19,7 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 ## En curso
 
 - **Multi-línea · Fase 1: la cuenta, separada del usuario** — rama `fase1-cuenta`, empezado el 2026-10-11 por Claude.
-  Hecho: el plan, revisado por Codex, y las tareas 1 a 4 (tests en verde; migración probada en el Mongo local). · Falta: la revisión de Codex del código, el ensayo de vuelta atrás con `v1.0.11` y que Jonathan lo una. · Sin probar: login y Ajustes en el navegador con la BD local migrada.
+  Hecho: el plan y el código, revisados por Codex (sin hallazgos en el código); tests y CI en verde; migración y ensayo de vuelta atrás con `v1.0.11` en el Mongo local. · Falta: que Jonathan lo revise y lo una, y después el despliegue (con la API vieja parada durante la migración final: ver el plan). · Sin probar: la UI en el navegador (la sesión sí, por API, contra la BD local) y renovar el token de WhatsApp contra Meta.
 
 <!-- Formato de una entrada:
 - **<qué>** — rama `<rama>`, PR #<n>, empezado el <fecha> por <Claude|Codex|Jonathan>.
