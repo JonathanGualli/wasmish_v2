@@ -228,3 +228,13 @@ test('conversación nueva con el lineId de otra cuenta → 404', async () => {
     assert.equal(text.status, 404, text.text);
     assert.equal(metaCalls.length, calls);
 });
+
+// Fase 2c: la bandeja enseña la línea de cada conversación y filtra por ella.
+test('GET /chats devuelve el lineId de cada conversación', async () => {
+    const conversation = await openConversation(d, await currentLineOf(d), '593990002011');
+    const res = await request(d, 'GET', '/chats');
+    assert.equal(res.status, 200, res.text);
+    const entry = res.body.find(item => item.id === String(conversation._id));
+    assert.equal(entry.lineId, String(conversation.lineId));
+    assert.ok(res.body.some(item => item.lineId === null));   // la sembrada, anterior a las líneas
+});

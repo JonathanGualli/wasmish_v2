@@ -36,3 +36,6 @@ export const lineLimitMessage = (maxLines) => (maxLines === 1
 
 // Otro cambio en las líneas de la misma cuenta a la vez (`withLineLock`).
 export const LINE_BUSY_MESSAGE = 'Hay otro cambio en las líneas de esta cuenta en curso. Inténtalo de nuevo en unos segundos.';
+
+// Hacer por defecto una línea desconectada (Fase 2c).
+export const DEFAULT_LINE_INACTIVE_MESSAGE = 'Solo una línea conectada puede ser la línea por defecto.';

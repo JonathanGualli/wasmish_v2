@@ -5,10 +5,14 @@
 // entra (desde la 2c, por la línea activa del número).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { seedAccount, connectWhatsapp, Account, Line, User, Waba } from './helpers.js';
+import {
+    seedAccount, connectWhatsapp, request, onMeta, metaCalls, ANONYMOUS, Account, ApiKey, Line, User, Waba,
+} from './helpers.js';
 
 const { syncLinesFromOwner, findInboundLine } = await import('../../src/services/line.service.js');
 const { lineStateIssues } = await import('../../src/utils/line.js');
+const { hashApiKey } = await import('../../src/utils/crypto.js');
+const { DEFAULT_LINE_INACTIVE_MESSAGE, LINE_BUSY_MESSAGE, WHATSAPP_NOT_CONNECTED_MESSAGE, lineLimitMessage } = await import('../../src/utils/whatsapp.line.js');
 
 await Waba.init();
 await Line.init();
@@ -241,4 +245,149 @@ test('findInboundLine: la reserva nunca usa la línea de otro número', async (t
     assert.equal(String(inbound.accountId), v.accountId);
     assert.equal(inbound.lineId, null);
     assert.equal(inbound.phoneNumberId, '7071');
+});
+
+// --- Fase 2c: la API de líneas -------------------------------------------------
+
+/** Una cuenta con dos líneas activas (`<base>1` por defecto y `<base>2`) y una API key. */
+const twoLines = async (label, base) => {
+    const account = await seedAccount(label, { seq: seq++, maxLines: 2 });
+    const { lineId: first } = await connectWhatsapp(account, { phoneNumberId: `${base}1` });
+    const { lineId: second } = await connectWhatsapp(account, { phoneNumberId: `${base}2` });
+    const key = `wm_${label.toLowerCase()}`;
+    await ApiKey.create({ userId: account.accountId, keyHash: hashApiKey(key), keyPreview: 'wm_', name: 'v1' });
+    return { ...account, first: String(first), second: String(second), key };
+};
+
+/** `/v1/templates/send` con la key de la cuenta; responde OK a cualquier envío. */
+const sendOtp = async (account, body = {}) => {
+    onMeta(async (config) => (config.method === 'post' && config.url.endsWith('/messages')
+        ? { data: { messages: [{ id: `wamid.${config.url}` }] } }
+        : undefined));
+    try {
+        return await request(ANONYMOUS, 'POST', '/v1/templates/send',
+            { destinationNumber: account.phone, templateName: account.templateName, ...body }, { Authorization: `Bearer ${account.key}` });
+    } finally {
+        onMeta(null);
+    }
+};
+
+const lineFor = (id) => Line.findById(id).lean();
+
+test('GET /lines: B no ve las líneas de A, y nunca sale el token', async () => {
+    const a = await twoLines('LA', '751');
+    const b = await newAccount('LB');
+    const asB = await request(b, 'GET', '/lines');
+    assert.equal(asB.status, 200, asB.text);
+    assert.deepEqual(asB.body, { lines: [], maxLines: 1 });
+
+    const asA = await request(a, 'GET', '/lines');
+    assert.equal(asA.status, 200, asA.text);
+    assert.deepEqual(asA.body.lines.map(line => line.id), [a.first, a.second]);
+    assert.equal(asA.body.maxLines, 2);
+    assert.equal(asA.body.lines[0].isDefault, true);
+    assert.ok(!/token/i.test(asA.text), 'la respuesta lleva el token');
+    const waba = await Waba.findOne({ accountId: a.accountId }).lean();
+    assert.ok(!asA.text.includes(waba.tokenWhatsapp));
+});
+
+test('PATCH /lines/:id: B no renombra ni hace por defecto una línea de A (404, sin cambios)', async () => {
+    const a = await twoLines('LC', '752');
+    const b = await newAccount('LD');
+    for (const body of [{ name: 'de B' }, { isDefault: true }]) {
+        const res = await request(b, 'PATCH', `/lines/${a.second}`, body);
+        assert.equal(res.status, 404, res.text);
+    }
+    assert.equal((await lineFor(a.second)).name, null);
+    assert.equal(String((await Account.findById(a.accountId).lean()).defaultLineId), a.first);
+    assert.equal((await request(b, 'PATCH', '/lines/no-es-un-id', { name: 'x' })).status, 404);
+
+    // A sí: le pone nombre y la hace por defecto (User la copia).
+    const asA = await request(a, 'PATCH', `/lines/${a.second}`, { name: '  Ventas  ', isDefault: true });
+    assert.equal(asA.status, 200, asA.text);
+    assert.equal(asA.body.name, 'Ventas');
+    assert.equal(asA.body.isDefault, true);
+    assert.equal((await User.findById(a.userId).lean()).phoneNumberId, '7522');
+});
+
+test('POST /lines/:id/disconnect: B no desconecta una línea de A (404, sigue activa)', async () => {
+    const a = await twoLines('LE', '753');
+    const b = await newAccount('LF');
+    const res = await request(b, 'POST', `/lines/${a.second}/disconnect`);
+    assert.equal(res.status, 404, res.text);
+    assert.equal((await lineFor(a.second)).status, 'active');
+    assert.equal((await request(b, 'POST', '/lines/no-es-un-id/disconnect')).status, 404);
+});
+
+// Regresión que vigila (Codex, PR #20): el nombre se guardaba antes de
+// comprobar la línea, así que una petición que respondía 409 lo cambiaba igual.
+test('isDefault en una línea desconectada → 409, y el nombre no cambia', async () => {
+    const a = await twoLines('LG', '754');
+    assert.equal((await request(a, 'POST', `/lines/${a.second}/disconnect`)).status, 200);
+    const res = await request(a, 'PATCH', `/lines/${a.second}`, { name: 'Nuevo', isDefault: true });
+    assert.equal(res.status, 409, res.text);
+    assert.equal(res.body[0].message, DEFAULT_LINE_INACTIVE_MESSAGE);
+    assert.equal((await lineFor(a.second)).name, null);
+    assert.equal(String((await Account.findById(a.accountId).lean()).defaultLineId), a.first);
+});
+
+test('con el candado ocupado, PATCH /lines/:id → 409 y el nombre no cambia', async () => {
+    const a = await twoLines('LK', '758');
+    await Account.updateOne({ _id: a.accountId }, { lineLock: { token: 'otro', expiresAt: new Date(Date.now() + 60_000) } });
+    const res = await request(a, 'PATCH', `/lines/${a.second}`, { name: 'Nuevo' });
+    assert.equal(res.status, 409, res.text);
+    assert.equal(res.body[0].message, LINE_BUSY_MESSAGE);
+    assert.equal((await lineFor(a.second)).name, null);
+    await Account.updateOne({ _id: a.accountId }, { lineLock: null });
+});
+
+// Regresión que vigila (plan de la 2c, Review Focus 4): al desconectar la por
+// defecto, el OTP del cliente (sin lineId) tiene que seguir saliendo por la otra,
+// y la imagen anterior (que lee User) también.
+test('desconectar la línea por defecto: /v1 sin lineId sale por la otra y User la copia', async () => {
+    const a = await twoLines('LH', '755');
+    const res = await request(a, 'POST', `/lines/${a.first}/disconnect`);
+    assert.equal(res.status, 200, res.text);
+    assert.equal(res.body.status, 'disconnected');
+    assert.equal(res.body.isDefault, false);
+    assert.equal(String((await Account.findById(a.accountId).lean()).defaultLineId), a.second);
+    assert.equal((await User.findById(a.userId).lean()).phoneNumberId, '7552');
+
+    const sent = await sendOtp(a);
+    assert.equal(sent.status, 200, sent.text);
+    assert.deepEqual(metaCalls.at(-1), { method: 'post', url: '/7552/messages' });
+});
+
+test('desconectar la única línea: /v1 da el 409 de sin WhatsApp y User queda vacío', async () => {
+    const a = await twoLines('LI', '756');
+    await request(a, 'POST', `/lines/${a.second}/disconnect`);
+    await request(a, 'POST', `/lines/${a.first}/disconnect`);
+    // Idempotente.
+    assert.equal((await request(a, 'POST', `/lines/${a.first}/disconnect`)).status, 200);
+    assert.equal((await Account.findById(a.accountId).lean()).defaultLineId, null);
+    assert.equal((await User.findById(a.userId).lean()).phoneNumberId, null);
+
+    const calls = metaCalls.length;
+    const sent = await sendOtp(a);
+    assert.equal(sent.status, 409, sent.text);
+    assert.equal(sent.body[0].message, WHATSAPP_NOT_CONNECTED_MESSAGE);
+    assert.equal(metaCalls.length, calls);
+});
+
+// Regresión que vigila (plan de la 2c, Review Focus 5): bajar el plan nunca
+// desconecta; solo impide conectar otra.
+test('bajar maxLines por debajo de las activas no desconecta nada y bloquea conectar otra', async () => {
+    const a = await twoLines('LJ', '757');
+    const admin = await seedAccount('LADMIN', { seq: seq++, isSuperadmin: true });
+    const res = await request(admin, 'PATCH', `/admin/accounts/${a.accountId}/limits`, { maxLines: 1 });
+    assert.equal(res.status, 200, res.text);
+    assert.deepEqual(res.body, { accountId: a.accountId, maxLines: 1 });
+
+    for (const lineId of [a.first, a.second]) {
+        assert.equal((await lineFor(lineId)).status, 'active');
+        const sent = await sendOtp(a, { lineId });
+        assert.equal(sent.status, 200, sent.text);
+    }
+    await assert.rejects(connectWhatsapp(a, { phoneNumberId: '7573' }),
+        (error) => error.statusCode === 409 && error.message === lineLimitMessage(1));
 });

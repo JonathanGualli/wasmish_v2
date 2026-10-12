@@ -4,9 +4,10 @@ import Line from '../models/line.model.js';
 import User from '../models/user.model.js';
 import Waba from '../models/waba.model.js';
 import { findAccountOwner } from './account.service.js';
-import { legacyUserFields, ownerConnection, planConnection, sendingLineFor } from '../utils/line.js';
+import { legacyUserFields, nextDefaultLine, ownerConnection, planConnection, sendingLineFor } from '../utils/line.js';
 import {
-    LINE_BUSY_MESSAGE, LINE_DISCONNECTED_MESSAGE, LINE_NOT_FOUND_MESSAGE, WHATSAPP_NOT_CONNECTED_MESSAGE, lineLimitMessage,
+    DEFAULT_LINE_INACTIVE_MESSAGE, LINE_BUSY_MESSAGE, LINE_DISCONNECTED_MESSAGE, LINE_NOT_FOUND_MESSAGE, WHATSAPP_NOT_CONNECTED_MESSAGE,
+    lineLimitMessage,
 } from '../utils/whatsapp.line.js';
 
 // Las líneas de WhatsApp de una cuenta. Desde la Fase 2c de multi-línea,
@@ -326,3 +327,59 @@ export const applyConnection = async (
     await writeLegacyUser(accountId);
     return { lineId: line._id };
 });
+
+const findAccountLine = async (accountId, lineId) => {
+    const line = await Line.findOne({ _id: lineId, accountId }).lean();
+    if (!line) throw statusError(404, LINE_NOT_FOUND_MESSAGE);
+    return line;
+};
+
+/**
+ * Cambia el nombre interno de una línea de la cuenta y/o la hace por defecto
+ * (la de la API pública sin `lineId`, y la que se copia en `User`). `name`:
+ * undefined = no se toca; null = sin nombre. Todo con el candado, y
+ * comprobando ANTES de escribir nada: 404 si no es de la cuenta, 409 si se
+ * pide hacer por defecto una que no está activa (revisión de Codex del PR #20:
+ * el nombre se guardaba aunque la petición respondiera 409).
+ */
+export const updateLineSettings = (accountId, lineId, { name, makeDefault = false } = {}) => withLineLock(accountId, async () => {
+    await finishPendingReplace(accountId);
+    const line = await findAccountLine(accountId, lineId);
+    if (makeDefault && line.status !== 'active') throw statusError(409, DEFAULT_LINE_INACTIVE_MESSAGE);
+
+    if (name !== undefined) await Line.updateOne({ _id: line._id }, { $set: { name } });
+    if (makeDefault) {
+        await Account.updateOne({ _id: accountId }, { $set: { defaultLineId: line._id } });
+        await writeLegacyUser(accountId);
+    }
+});
+
+/**
+ * Desconecta una línea de la cuenta: deja de enviar y de recibir, y conserva
+ * su historial. Idempotente. Si era la por defecto, pasa a serlo la activa más
+ * reciente (`nextDefaultLine`) o ninguna. No llama a Meta ni borra el token del
+ * `Waba`: otras líneas del WABA lo usan. 404 si no es de la cuenta.
+ */
+export const disconnectLine = (accountId, lineId) => withLineLock(accountId, async () => {
+    await finishPendingReplace(accountId);
+    const line = await findAccountLine(accountId, lineId);
+    if (line.status === 'active') await Line.updateOne({ _id: line._id }, { $set: { status: 'disconnected' } });
+
+    const account = await Account.findById(accountId).select('defaultLineId').lean();
+    if (account?.defaultLineId && String(account.defaultLineId) === String(line._id)) {
+        const lines = await Line.find({ accountId }).select('_id status updatedAt').lean();
+        await Account.updateOne({ _id: accountId }, { $set: { defaultLineId: nextDefaultLine(lines, line._id)?._id ?? null } });
+    }
+    await writeLegacyUser(accountId);
+});
+
+/**
+ * Los WABA de la cuenta con alguna línea activa, como `{ accountId,
+ * waBusinessId, tokenWhatsapp }` (token cifrado): lo que necesita
+ * `syncTemplatesForWaba`. Las plantillas se listan y se sincronizan de todos.
+ */
+export const findAccountWabas = async (accountId) => {
+    const wabaIds = await Line.distinct('wabaId', { accountId, status: 'active', wabaId: { $ne: null } });
+    const wabas = await Waba.find({ _id: { $in: wabaIds }, accountId }).lean();
+    return wabas.map(waba => ({ accountId, waBusinessId: waba.waBusinessId, tokenWhatsapp: waba.tokenWhatsapp }));
+};

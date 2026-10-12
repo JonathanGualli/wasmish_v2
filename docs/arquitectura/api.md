@@ -49,11 +49,14 @@ No se aplica a `/api/webhook` (Meta manda ráfagas) ni a `/api/stream` (conexió
 | GET | `/api/verify` | No | Verifica cookie JWT activa |
 | GET | `/api/profile` | JWT | Perfil del usuario autenticado |
 | PUT | `/api/users/update-user-token-whatsapp` | JWT | Guarda token WA cifrado (carga manual). Pide `tokenWhatsapp`, `phoneNumberId` y `waBusinessId` (400 si falta alguno); 409 si el número está en otra cuenta, 400 si no es del WABA ([Un número, una cuenta](whatsapp-envio.md#embedded-signup-objetivo-central--saas-multi-cliente)) |
-| POST | `/api/whatsapp/connect` | JWT | Embedded Signup: canjea el `code` de Meta → token permanente, comprueba el número en el WABA, suscribe webhook, guarda credenciales. 409 si el número está en otra cuenta, 400 si no es del WABA |
+| POST | `/api/whatsapp/connect` | JWT | Embedded Signup: canjea el `code` de Meta → token permanente, comprueba el número en el WABA, suscribe webhook, guarda la línea (añade, renueva o reemplaza según `maxLines`). 409 si el número está en otra cuenta o no cabe en el plan, 400 si no es del WABA. Responde también `lineId` |
+| GET | `/api/lines` | JWT | Las líneas de la cuenta: `{ lines: [{ id, name, phoneNumberId, displayPhoneNumber, verifiedName, status, isDefault, waBusinessId }], maxLines }`, también las desconectadas; la por defecto, la primera. Nunca el token (Fase 2c) |
+| PATCH | `/api/lines/:id` | JWT | `{ name?, isDefault?: true }`: el nombre interno (máx. 40; vacío lo quita) y/o hacerla la por defecto (409 si está desconectada). 404 si es ajena |
+| POST | `/api/lines/:id/disconnect` | JWT | Desconecta la línea (deja de enviar y recibir; conserva el historial). Idempotente. Si era la por defecto, pasa a serlo la activa más reciente. 404 si es ajena |
 | POST | `/api/chats/messages` | JWT | Enviar mensaje por número (reutiliza su conversación en esa línea). `lineId?` elige la línea (404 si es de otra cuenta; sin él, la por defecto). **409** si el contacto nunca escribió o la ventana está cerrada: hay que empezar con una plantilla |
 | POST | `/api/chats/:id/messages` | JWT | Enviar mensaje a conversación existente. **409** (`code: window_closed`) si la ventana de 24 h está cerrada, sin llamar a Meta |
 | POST | `/api/chats/:id/media` | JWT | Enviar un archivo a una conversación. Cuerpo = el archivo crudo (Content-Type = su tipo); `X-Filename`, `X-Caption` (URI-encoded) y `X-Temporal-Id` en cabeceras, `X-Send-As: document` para una imagen como documento. 400 si no vale, **409** fuera de la ventana. Responde el mensaje (`201`) aunque Meta lo rechace |
-| GET | `/api/chats` | JWT | Listar conversaciones del usuario |
+| GET | `/api/chats` | JWT | Listar conversaciones de la cuenta, cada una con su `lineId` (`null` si es anterior a las líneas) |
 | GET | `/api/chats/:id/messages` | JWT | Mensajes paginados (cursor-based) |
 | POST | `/api/chats/:id/template` | JWT | Enviar plantilla a una conversación existente (para reabrir la ventana de 24 h). Body: `{ templateName, language?, parameters?, buttons? }` |
 | POST | `/api/chats/template` | JWT | Iniciar conversación con plantilla desde la bandeja. Body: `{ destinationNumber, contactName?, templateName, language?, parameters?, buttons?, lineId? }` — el número solo dígitos (8–15); `lineId` elige la línea (404 si es de otra cuenta; sin él, la por defecto) |
@@ -73,15 +76,15 @@ No se aplica a `/api/webhook` (Meta manda ráfagas) ni a `/api/stream` (conexió
 | DELETE | `/api/tags/:id` | JWT | Borrar: se quita de sus contactos (`{ removedFrom }`) |
 | POST | `/api/campaigns/preview` | JWT | Campaña, sin crear nada (`templateId` opcional: sin él solo cuenta destinatarios, para el paso 1 del asistente): destinatarios (a enviar, de baja, sin teléfono, repetidos), cuántos usarán cada reserva, mensaje de ejemplo de los primeros (con `values`: el valor de cada variable y si usó la reserva, para resaltarlo), `estimatedSeconds` y `errors`. Responde 200 aunque haya errores |
 | POST | `/api/campaigns/preview/recipients` | JWT | Quién recibiría el borrador (`{ recipients, excludeOptedOut }`), por orden alfabético y paginado (`?page`, `?limit`, `?search` — la misma búsqueda que Contactos, en memoria con `matchesContactSearch`), con el `skipReason` de los que se omitirán. Es «Ver los N» del paso 1 |
-| POST | `/api/campaigns` | JWT | Crea la campaña y congela la lista. Body: `{ name, templateId, variables, buttons, excludeOptedOut, recipients, headerMediaId?, saveHeaderAsDefault? }` (`headerMediaId` también en la vista previa). 400 con los errores, 409 sin WhatsApp conectado |
+| POST | `/api/campaigns` | JWT | Crea la campaña y congela la lista. Body: `{ name, templateId, variables, buttons, excludeOptedOut, recipients, headerMediaId?, saveHeaderAsDefault?, lineId? }` (`lineId`: la línea por la que sale; sin él, la por defecto; 404 si es ajena) (`headerMediaId` también en la vista previa). 400 con los errores, 409 sin WhatsApp conectado |
 | GET | `/api/campaigns` | JWT | Campañas paginadas (`?page`, `?limit` máx 50), con estadísticas |
 | GET | `/api/campaigns/:id` | JWT | Una campaña con sus estadísticas |
 | GET | `/api/campaigns/:id/failures` | JWT | Fallidos agrupados por código de error (`{ reasons: [{ code, detail, count }] }`): junta los rechazados por Meta y los que fallaron antes de llamarla |
 | GET | `/api/campaigns/:id/recipients` | JWT | Destinatarios paginados (`?state=pending\|sent\|delivered\|read\|failed\|skipped\|cancelled\|interrupted`), con error y conversación |
 | POST | `/api/campaigns/:id/pause \| resume \| cancel` | JWT | Control de la campaña. 409 si el estado ya no lo permite |
 | GET | `/api/stream` | JWT | SSE stream del usuario |
-| GET | `/api/templates/sync` | JWT | Sincronizar plantillas desde Meta API → MongoDB |
-| GET | `/api/templates` | JWT | Listar plantillas guardadas en DB (con `header` y `headerMedia` resumido). Si alguna se sincronizó antes de guardar la cabecera, re-sincroniza una vez |
+| GET | `/api/templates/sync` | JWT | Sincronizar plantillas desde Meta API → MongoDB, de cada WABA con alguna línea activa |
+| GET | `/api/templates` | JWT | Listar plantillas guardadas en DB (con `header`, `headerMedia` resumido y `waBusinessId`): las de los WABA con alguna línea activa o, con `?lineId=`, las del WABA de esa línea (404 si es ajena). Si alguna se sincronizó antes de guardar la cabecera, re-sincroniza una vez |
 | PUT | `/api/templates/:templateId/header-media` | JWT | Archivo de la cabecera. Cuerpo = el archivo crudo (Content-Type = su tipo), nombre en `X-Filename` (URI-encoded). Valida formato, tamaño y firma de bytes. No llama a Meta |
 | POST | `/api/templates/:templateId/header-media/files` | JWT | Archivo de la cabecera para **un envío** (una campaña), sin tocar el de la plantilla. Mismo cuerpo y validación que el `PUT`; devuelve el archivo (`{ id, mimeType, filename, size }`) para pasarlo como `headerMediaId` |
 | DELETE | `/api/templates/:templateId/header-media` | JWT | La plantilla se queda sin archivo (el archivo no se borra: una campaña puede usarlo) |
@@ -90,7 +93,8 @@ No se aplica a `/api/webhook` (Meta manda ráfagas) ni a `/api/stream` (conexió
 | GET | `/api/api-key` | JWT | Listar API keys (preview, estado, último uso; nunca el hash) |
 | DELETE | `/api/api-key/:id` | JWT | Revocar (eliminar) una API key |
 | POST | `/api/v1/templates/send` | **API key** | **API pública:** enviar plantilla. Body: `{ destinationNumber, templateName, language?, parameters?, contactName?, buttons?, lineId?, from? }`. `lineId` o `from` (el número de la línea; desde la Fase 2b) eligen la línea; sin ellos, la por defecto y todo igual que antes ([whatsapp-envio.md § API pública](whatsapp-envio.md#api-pública-de-plantillas-sendtemplatecontroller)) |
-| GET | `/api/admin/stats` | JWT + superadmin | Métricas de plataforma: clientes totales/conectados, mensajes y fallos de 7 días |
-| GET | `/api/admin/clients` | JWT + superadmin | Listado paginado de clientes (`?page`, `?limit` máx 50). Nunca devuelve token WA, texto de mensajes ni teléfonos |
+| GET | `/api/admin/stats` | JWT + superadmin | Métricas de plataforma: clientes totales/conectados (con alguna línea activa), mensajes y fallos de 7 días |
+| GET | `/api/admin/clients` | JWT + superadmin | Listado paginado de clientes (`?page`, `?limit` máx 50), con su `accountId` y `lines: { active, max }`. Nunca devuelve token WA, texto de mensajes ni teléfonos |
+| PATCH | `/api/admin/accounts/:accountId/limits` | JWT + superadmin | `{ maxLines }` (entero de 1 a 50): cuántas líneas puede tener la cuenta. Bajarlo no desconecta nada, solo impide conectar otra. 404 si la cuenta no existe |
 | GET | `/api/webhook` | No | Verificación webhook Meta (hub.challenge) |
 | POST | `/api/webhook` | **Firma HMAC** | Recibir mensajes/status de WhatsApp |

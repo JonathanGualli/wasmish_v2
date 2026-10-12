@@ -180,3 +180,45 @@ test('una campaña con una plantilla de otro WABA → 400', async () => {
     assert.ok(res.body.some(error => error.field === 'templateId'), res.text);
     assert.equal(await Campaign.countDocuments({ userId: y.accountId }), before);
 });
+
+// --- Fase 2c: la campaña elige su línea -----------------------------------------
+
+test('crear una campaña con el lineId de otra cuenta → 404 y sin campaña', async () => {
+    const x = await seedAccount('X', { seq: 8 });
+    await connectWhatsapp(x);
+    const { lineId: foreign } = await connectWhatsapp(b);
+    const before = await Campaign.countDocuments({ userId: x.accountId });
+    const res = await request(x, 'POST', '/campaigns', { ...draft(x), name: 'línea ajena', lineId: String(foreign) });
+    assert.equal(res.status, 404, res.text);
+    assert.equal(await Campaign.countDocuments({ userId: x.accountId }), before);
+});
+
+// Regresión que vigila (plan de la 2c, Review Focus 6): las plantillas son de
+// cada WABA; la de la primera línea no sale por la de otro WABA.
+test('crear una campaña en la línea de otro WABA con una plantilla del primero → 400', async () => {
+    const z = await seedAccount('Z', { seq: 9, maxLines: 2 });
+    await connectWhatsapp(z);
+    const { lineId: other } = await connectWhatsapp(z, { phoneNumberId: '7602', waBusinessId: 'waba-Z2' });
+    const res = await request(z, 'POST', '/campaigns', { ...draft(z), name: 'otro WABA', lineId: String(other) });
+    assert.equal(res.status, 400, res.text);
+    assert.ok(res.body.some(error => error.field === 'templateId'), res.text);
+});
+
+test('la campaña sale por la línea elegida', async () => {
+    const q = await seedAccount('Q', { seq: 10, maxLines: 2 });
+    await connectWhatsapp(q);
+    const { lineId: second } = await connectWhatsapp(q, { phoneNumberId: '7612' });   // mismo WABA: mismas plantillas
+    const res = await request(q, 'POST', '/campaigns', { ...draft(q), name: 'por la segunda', lineId: String(second) });
+    assert.equal(res.status, 201, res.text);
+    const created = await Campaign.findOne({ userId: q.accountId, name: 'por la segunda' }).lean();
+    assert.equal(String(created.lineId), String(second));
+
+    let campaign = created;
+    for (let i = 0; i < 5; i++) {
+        if (await processNext(campaign) === 'idle') break;
+        campaign = await Campaign.findById(created._id).lean();
+    }
+    const sent = await Message.findOne({ campaignId: created._id }).lean();
+    assert.ok(sent, 'la campaña no dejó ningún mensaje');
+    assert.equal(String((await Conversation.findById(sent.conversationId).lean()).lineId), String(second));
+});

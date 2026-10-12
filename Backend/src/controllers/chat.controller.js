@@ -334,6 +334,8 @@ export const listConversations = async (req, res) => {
                 // La ficha del contacto en el chat. `null` en una conversación
                 // anterior a los contactos que aún no se enlazó.
                 contactId: item.contactId?._id ? String(item.contactId._id) : null,
+                // La línea de la conversación (Fase 2c: la bandeja la enseña y filtra por ella).
+                lineId: item.lineId ? String(item.lineId) : null,
                 title: contactDisplayName(contact),
                 phone: contact.phone ?? null,
                 username: contact.username ?? null,

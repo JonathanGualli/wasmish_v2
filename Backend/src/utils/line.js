@@ -172,3 +172,17 @@ export const resolveApiLine = (lines, { lineId = null, from = null } = {}) => {
     const line = byId ?? byNumber;
     return { lineId: line ? String(line._id) : null };
 };
+
+// La línea que pasa a ser la por defecto cuando se desconecta la que lo era
+// (Fase 2c): la activa conectada más recientemente (`updatedAt`), o null.
+export const nextDefaultLine = (lines, removedLineId) => lines
+    .filter(line => line.status === 'active' && !sameId(line._id, removedLineId))
+    .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))[0] ?? null;
+
+export const LINE_NAME_MAX = 40;
+
+// El nombre interno de una línea («Ventas»), sin espacios de sobra; vacío → null.
+export const cleanLineName = (name) => {
+    const clean = String(name ?? '').replace(/\s+/g, ' ').trim();
+    return clean ? clean : null;
+};

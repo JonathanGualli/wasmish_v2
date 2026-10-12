@@ -14,8 +14,10 @@ import {
 } from "../services/template.media.service.js";
 import { MEDIA_DIR } from "../config.js";
 import { mimeParaServir, rutaDeArchivo } from "../utils/media.storage.js";
-import { findSendingLine } from "../services/line.service.js";
+import { findAccountWabas, findSendingLine } from "../services/line.service.js";
 import Line from "../models/line.model.js";
+import Waba from "../models/waba.model.js";
+import { LINE_NOT_FOUND_MESSAGE } from "../utils/whatsapp.line.js";
 import { resolveApiLine } from "../utils/line.js";
 
 
@@ -214,19 +216,14 @@ export const fakeTemplateSend = ({ contact, template }) => {
 // Controllers
 // ---------------------------------------------------------------------------
 
-// La línea por defecto, o null sin WhatsApp conectado (para lo que no envía).
-const findDefaultLine = (accountId) => findSendingLine(accountId).catch((error) => {
-    if (error.statusCode === 409) return null;
-    throw error;
-});
-
 export const syncTemplatesController = async (req, res) => {
     try {
-        // Las del WABA de la línea por defecto (con `maxLines: 1`, el único).
-        const line = await findDefaultLine(req.auth.accountId);
-        if (!line) return res.status(400).json([{ message: "Token or Business ID is required" }]);
+        // Las de cada WABA con alguna línea activa (Fase 2c).
+        const wabas = await findAccountWabas(req.auth.accountId);
+        if (wabas.length === 0) return res.status(400).json([{ message: "Token or Business ID is required" }]);
 
-        const total = await syncTemplatesForWaba(line);
+        let total = 0;
+        for (const waba of wabas) total += await syncTemplatesForWaba(waba);
 
         return res.status(200).json({
             success: true,
@@ -253,29 +250,51 @@ const serializeTemplate = (template) => ({
     headerMedia: serializeHeaderMedia(template.headerMedia),
 });
 
-// Las de la cuenta en el WABA de la línea (Fase 2b). Sin línea (sin WhatsApp
-// conectado), todas las de la cuenta, como antes.
-const findUserTemplates = (userId, line) =>
-    Template.find({ userId, ...(line && { waBusinessId: line.waBusinessId }) })
+// Las de la cuenta en estos WABA. Sin ninguno (sin WhatsApp conectado), todas
+// las de la cuenta, como antes.
+const findUserTemplates = (userId, wabas) =>
+    Template.find({ userId, ...(wabas && { waBusinessId: { $in: wabas.map(waba => waba.waBusinessId) } }) })
         .populate('headerMedia', 'mimeType filename size').lean();
 
+// Los WABA cuyas plantillas se listan: el de la línea `lineId` (404 si no es de
+// la cuenta), o los de todas las líneas activas (Fase 2c). null = ninguno.
+const templateWabasFor = async (accountId, lineId) => {
+    if (lineId === undefined) {
+        const wabas = await findAccountWabas(accountId);
+        return wabas.length > 0 ? wabas : null;
+    }
+    const line = mongoose.isValidObjectId(lineId) ? await Line.findOne({ _id: lineId, accountId }).lean() : null;
+    if (!line) {
+        const error = new Error(LINE_NOT_FOUND_MESSAGE);
+        error.statusCode = 404;
+        throw error;
+    }
+    // Una línea sin WABA (la de un número anterior a las líneas) no tiene plantillas.
+    const waba = line.wabaId ? await Waba.findOne({ _id: line.wabaId, accountId }).lean() : null;
+    return waba ? [{ accountId, waBusinessId: waba.waBusinessId, tokenWhatsapp: waba.tokenWhatsapp }] : [];
+};
+
+// GET /templates[?lineId=] — las del WABA de esa línea o, sin ella, las de
+// todos los WABA con línea activa. Cada una lleva su `waBusinessId`: la UI
+// filtra por el de la línea elegida.
 export const getTemplatesController = async (req, res) => {
     try {
         const userId = req.auth.accountId;
-        const line = await findDefaultLine(userId);
+        const wabas = await templateWabasFor(userId, req.query.lineId);
 
-        let templates = await findUserTemplates(userId, line);
+        let templates = await findUserTemplates(userId, wabas);
 
         // Sincronizadas antes de guardar la cabecera o el WABA: se vuelven a
         // sincronizar una vez, para saber cuáles piden un archivo y de qué WABA
         // son. Si Meta falla, se devuelven como están: la lista no puede
         // depender de Meta.
+        const syncable = (wabas ?? []).filter(waba => waba.tokenWhatsapp && waba.waBusinessId);
         const outdated = templates.some(t => t.header === undefined)
-            || Boolean(line && await Template.exists({ userId, waBusinessId: null }));
-        if (outdated && line) {
+            || Boolean(syncable.length > 0 && await Template.exists({ userId, waBusinessId: null }));
+        if (outdated && syncable.length > 0) {
             try {
-                await syncTemplatesForWaba(line);
-                templates = await findUserTemplates(userId, line);
+                for (const waba of syncable) await syncTemplatesForWaba(waba);
+                templates = await findUserTemplates(userId, wabas);
             } catch (syncError) {
                 console.error('Sync de plantillas (cabeceras) falló:', syncError.message);
             }
@@ -283,7 +302,8 @@ export const getTemplatesController = async (req, res) => {
 
         return res.json(templates.map(serializeTemplate));
     } catch (error) {
-        return res.status(500).json([{ message: error.message }]);
+        const status = error.statusCode || 500;
+        return res.status(status).json([{ message: error.message }]);
     }
 }
 
