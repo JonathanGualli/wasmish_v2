@@ -41,9 +41,9 @@ export const useTemplateForm = (initial?: InitialValues, waBusinessId?: string |
         [allApproved, waBusinessId],
     );
 
-    /** La elegida también está en esa cuenta de WhatsApp Business (al cambiar de línea, se queda). */
-    const selectedExistsIn = (otherWabaId: string | null) =>
-        allApproved.some(t => t.name === selectedName && t.waBusinessId === otherWabaId);
+    /** Esa cuenta de WhatsApp Business tiene una aprobada con ese nombre (al cambiar de línea, se queda). */
+    const existsIn = (templateName: string, wabaId: string | null) =>
+        allApproved.some(t => t.name === templateName && t.waBusinessId === wabaId);
 
     const selected = useMemo(
         () => approved.find(t => t.name === selectedName),
@@ -102,7 +102,7 @@ export const useTemplateForm = (initial?: InitialValues, waBusinessId?: string |
         selectedName,
         approved, isLoading, selected, placeholders, buttonFields,
         values, setValues, buttonValues, setButtonValues,
-        selectTemplate, selectedExistsIn, missing, headerIssue,
+        selectTemplate, existsIn, missing, headerIssue,
         reset: () => selectTemplate(''),
         buildPayload,
     };

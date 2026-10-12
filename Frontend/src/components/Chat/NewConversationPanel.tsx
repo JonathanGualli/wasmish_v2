@@ -65,8 +65,11 @@ export const NewConversationPanel = ({ initialDraft, onClose, onBack, onCreated,
   const { setState, setContent } = useNoticeContext();
 
   // La elegida si sigue conectada; si no (o sin elegir), la por defecto.
-  const { hasManyLines, activeLines, defaultLine, lineById } = useLines();
+  const { hasManyLines, activeLines, defaultLine, lineById, isLoading: linesLoading, isError: linesError } = useLines();
   const line = activeLines.find(l => l.id === lineId) ?? defaultLine ?? undefined;
+  // Un borrador con su línea no se envía hasta saber cuál es: sin `lineId`,
+  // el backend usaría la por defecto, que puede ser otro número.
+  const lineUnresolved = Boolean(lineId) && (linesLoading || linesError);
 
   const form = useTemplateForm(initialDraft, line ? line.waBusinessId : undefined);
   const startConversation = useStartConversation();
@@ -87,22 +90,36 @@ export const NewConversationPanel = ({ initialDraft, onClose, onBack, onCreated,
     onDraftChange({ phone, name, lineId, templateName: selectedName, values, buttonValues });
   }, [phone, name, lineId, selectedName, values, buttonValues, onDraftChange]);
 
+  const restore = (template: RemovedTemplate) => {
+    form.selectTemplate(template.templateName);
+    form.setValues(template.values);
+    form.setButtonValues(template.buttonValues);
+    setRemoved(null);
+  };
+
   const changeLine = (nextId: string) => {
     const next = lineById(nextId);
     if (!next || !line || next.id === line.id) return;
-    const keepsTemplate = !selectedName || form.selectedExistsIn(next.waBusinessId);
-    setRemoved(keepsTemplate ? null : { templateName: selectedName, values, buttonValues, from: line, to: next });
-    if (!keepsTemplate) form.reset();
     setLineId(next.id);
+    // Lo quitado en un cambio anterior se guarda hasta elegir otra plantilla:
+    // vuelve solo si la nueva línea tiene esa plantilla.
+    if (removed && !selectedName) {
+      if (form.existsIn(removed.templateName, next.waBusinessId)) restore(removed);
+      else setRemoved({ ...removed, to: next });
+      return;
+    }
+    if (!selectedName || form.existsIn(selectedName, next.waBusinessId)) {
+      setRemoved(null);
+      return;
+    }
+    setRemoved({ templateName: selectedName, values, buttonValues, from: line, to: next });
+    form.reset();
   };
 
   const undoLineChange = () => {
     if (!removed) return;
     setLineId(removed.from.id);
-    form.selectTemplate(removed.templateName);
-    form.setValues(removed.values);
-    form.setButtonValues(removed.buttonValues);
-    setRemoved(null);
+    restore(removed);
   };
 
   const selectTemplate = (templateName: string) => {
@@ -112,6 +129,7 @@ export const NewConversationPanel = ({ initialDraft, onClose, onBack, onCreated,
 
   const status = !digits ? 'Escribe el número de destino.'
     : !phoneValid ? 'El número parece incompleto: lleva código de país.'
+    : lineUnresolved ? (linesError ? 'No se pudieron cargar las líneas. Recarga la página.' : 'Cargando las líneas…')
     : form.isLoading ? 'Cargando plantillas…'
     : form.approved.length === 0 ? 'Necesitas una plantilla aprobada.'
     : !form.selected ? 'Elige una plantilla.'
@@ -119,7 +137,7 @@ export const NewConversationPanel = ({ initialDraft, onClose, onBack, onCreated,
     : form.missing === 1 ? 'Falta 1 valor por completar.'
     : form.missing > 1 ? `Faltan ${form.missing} valores por completar.`
     : 'Listo para enviar.';
-  const ready = phoneValid && Boolean(form.selected) && form.missing === 0 && !form.headerIssue;
+  const ready = phoneValid && !lineUnresolved && Boolean(form.selected) && form.missing === 0 && !form.headerIssue;
 
   const handleClose = () => {
     if (!startConversation.isPending) onClose();
@@ -172,16 +190,6 @@ export const NewConversationPanel = ({ initialDraft, onClose, onBack, onCreated,
     }
     return (
       <div className="grid gap-3.5">
-        {removed && (
-          <Callout tone="warning" icon={<AlertCircle size={16} />} title={`Quitamos «${removed.templateName}».`}
-            action={<button type="button" onClick={undoLineChange}
-              className="text-[13px] font-semibold text-brand-accent-strong hover:underline cursor-pointer">
-              Volver a {lineLabel(removed.from)}
-            </button>}>
-            Es de otra cuenta de WhatsApp Business y no se puede enviar por {lineLabel(removed.to)}.
-            Elige una de las de {lineLabel(removed.to)}.
-          </Callout>
-        )}
         <TemplatePicker templates={form.approved} selected={form.selected} onSelect={t => selectTemplate(t.name)}
           disabledReason={templateHeaderIssue}
           hint={hasManyLines && line ? `${form.approved.length} de ${lineLabel(line)}` : undefined} />
@@ -301,6 +309,18 @@ export const NewConversationPanel = ({ initialDraft, onClose, onBack, onCreated,
       {/* Composer: la plantilla */}
       <div className="bg-brand-surface border-t border-brand-border px-4 md:px-6 py-3.5 flex-none
         max-h-[60%] overflow-y-auto">
+        {removed && (
+          <div className="mb-3.5">
+            <Callout tone="warning" icon={<AlertCircle size={16} />} title={`Quitamos «${removed.templateName}».`}
+              action={<button type="button" onClick={undoLineChange}
+                className="text-[13px] font-semibold text-brand-accent-strong hover:underline cursor-pointer">
+                Volver a {lineLabel(removed.from)}
+              </button>}>
+              Es de otra cuenta de WhatsApp Business y no se puede enviar por {lineLabel(removed.to)}.
+              {form.approved.length > 0 && ` Elige una de las de ${lineLabel(removed.to)}.`}
+            </Callout>
+          </div>
+        )}
         {renderComposer()}
 
         <div className="flex flex-wrap items-center gap-2.5 mt-3.5">
