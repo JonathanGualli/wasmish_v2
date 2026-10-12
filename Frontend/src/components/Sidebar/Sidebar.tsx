@@ -47,12 +47,12 @@ export const Sidebar = ({ collapsed, toggle, isMobile }: Props) => {
 
     // Solo el operador del SaaS ve el back-office. Ocultarlo es cosmético:
     // quien lo bloquea de verdad es requireSuperadmin en el backend.
-    if (user?.rol === 'superadmin') {
+    if (user?.isSuperadmin) {
       items.push({ icon: <ShieldCheck size={18} />, text: 'Administración', value: 'admin', path: `${AppRoutes.private.root}/${AppRoutes.private.admin}`, badge: undefined });
     }
 
     return items;
-  }, [user?.rol, unread]);
+  }, [user?.isSuperadmin, unread]);
 
   const allItems = useMemo(
     () => [...navItems, { value: 'settings', path: `${AppRoutes.private.root}/${AppRoutes.private.settings}` }],

@@ -19,11 +19,11 @@ export const publicApiIpLimiter = rateLimit({
     message: [{ message: 'Límite de peticiones excedido. Inténtalo en un minuto.' }],
 });
 
-// API pública, segunda capa: por usuario dueño de la key.
+// API pública, segunda capa: por cuenta dueña de la key.
 export const publicApiUserLimiter = rateLimit({
     windowMs: 60 * 1000,
     limit: 60,
-    keyGenerator: (req) => req.user.id,
+    keyGenerator: (req) => req.auth.accountId,
     standardHeaders: true,
     legacyHeaders: false,
     message: [{ message: 'Límite de envíos excedido. Inténtalo en un minuto.' }],

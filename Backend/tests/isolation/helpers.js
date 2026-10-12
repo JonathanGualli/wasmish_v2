@@ -91,14 +91,14 @@ const writeMedia = async (file) => {
  * `SECRETO-<label>`: si aparece en una respuesta de la otra cuenta, se filtró.
  * `seq` separa los teléfonos y los nombres de archivo de las dos cuentas.
  */
-export const seedAccount = async (label, { rol = 'admin', seq = 1 } = {}) => {
+export const seedAccount = async (label, { isSuperadmin = false, seq = 1 } = {}) => {
     const marker = `SECRETO-${label}`;
     // La cuenta y su owner comparten `_id`, como en producción.
     const _id = new mongoose.Types.ObjectId();
     await Account.create({ _id, name: marker, ownerId: _id });
     const user = await User.create({
-        _id, name: marker, email: `${label.toLowerCase()}@pruebas.local`, password: 'x', rol,
-        accountId: _id, role: 'owner', isSuperadmin: rol === 'superadmin',
+        _id, name: marker, email: `${label.toLowerCase()}@pruebas.local`, password: 'x',
+        accountId: _id, role: 'owner', isSuperadmin,
     });
 
     const tag = await Tag.create({ userId: user._id, name: `${marker} etiqueta`, key: `${label.toLowerCase()}-etiqueta` });
@@ -194,8 +194,14 @@ export const request = async (account, method, url, body, headers = {}) => {
     const text = await response.text();
     let json = null;
     try { json = JSON.parse(text); } catch { /* binario o vacío */ }
-    return { status: response.status, body: json, text };
+    return { status: response.status, body: json, text, setCookie: response.headers.get('set-cookie') };
 };
+
+/** La sesión que deja una respuesta con `Set-Cookie: token=…` (registro o login), lista para `request`. */
+export const sessionFrom = (response) => ({ token: /token=([^;]+)/.exec(response.setCookie ?? '')?.[1] ?? '' });
+
+/** Sin sesión: registro, login y la API pública. */
+export const ANONYMOUS = { token: '' };
 
 /** Ni la marca ni ningún id de `owner` aparecen en la respuesta. */
 export const assertNoLeak = (response, owner) => {

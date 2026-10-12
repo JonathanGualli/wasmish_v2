@@ -1,6 +1,8 @@
 import { TOKEN_SECRET } from '../config.js';
 import { createAccessToken } from '../libs/jwt.js';
 import User from '../models/user.model.js'
+import { createAccountWithOwner } from '../services/account.service.js';
+import { sessionAuthFor } from '../utils/account.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'node:crypto';
@@ -19,26 +21,29 @@ const CREDENCIALES_INVALIDAS = [{ message: 'Correo o contraseña incorrectos' }]
 // conoce, así que jamás puede casar con una contraseña real.
 const HASH_DE_DESCARTE = bcrypt.hashSync(crypto.randomBytes(32).toString('hex'), 10);
 
+const EMAIL_EN_USO = [{ message: 'the email is already in use' }];
+
 
 export const register = async (req, res) => {
         
     try {
-        const { name, email, password, rol, status } = req.body;
+        // Solo estos tres: el rol, el estado y la cuenta no los elige quien se
+        // registra. Siempre es el owner de una cuenta nueva.
+        const { name, email, password } = req.body;
         const userFound = await User.findOne({email});
 
-        if (userFound) return res.status(400).json([{message: 'the email is already in use'}]);
+        if (userFound) return res.status(400).json(EMAIL_EN_USO);
 
         const passwordHash = await bcrypt.hash(password, 10);
 
-        const newUser = new User({
-            name, 
-            email, 
-            password: passwordHash,
-            rol,
-            status, 
-        });
-
-        const userSaved = await newUser.save();
+        let userSaved;
+        try {
+            userSaved = await createAccountWithOwner({ name, email, password: passwordHash });
+        } catch (error) {
+            // El mismo correo registrándose a la vez: el índice único frena al segundo.
+            if (error.code === 11000) return res.status(400).json(EMAIL_EN_USO);
+            throw error;
+        }
 
         const token = await createAccessToken({ id: userSaved._id });
 
@@ -53,6 +58,7 @@ export const register = async (req, res) => {
             name: userSaved.name,
             email: userSaved.email,
             rol: userSaved.rol,
+            isSuperadmin: userSaved.isSuperadmin,
             status: userSaved.status,
             createdAt: userSaved.createdAt,
             updatedAt: userSaved.updatedAt,
@@ -76,6 +82,12 @@ export const login = async (req, res) => {
 
         if(!userFound || !isMatch) return res.status(400).json(CREDENCIALES_INVALIDAS);
 
+        // Solo después de comprobar la contraseña: con una incorrecta, un usuario
+        // desactivado recibe lo mismo que un correo que no existe.
+        if (userFound.status === 'inactive') {
+            return res.status(403).json([{ message: 'Tu usuario está desactivado. Habla con el administrador de tu cuenta.' }]);
+        }
+
         const token = await createAccessToken({ id: userFound._id });
 
         res.cookie('token', token, {
@@ -89,6 +101,8 @@ export const login = async (req, res) => {
             name: userFound.name,
             email: userFound.email,
             rol: userFound.rol,
+            isSuperadmin: userFound.isSuperadmin,
+            // Hasta la Fase 2 todo usuario es owner y guarda la conexión él mismo.
             whatsappConnected: Boolean(userFound.tokenWhatsapp),
             phoneNumberId: userFound.phoneNumberId ?? "",
             waBusinessId: userFound.waBusinessId ?? "",
@@ -117,6 +131,7 @@ export const profile = async (req, res) => {
         name: userFound.name,
         email: userFound.email,
         rol: userFound.rol,
+        isSuperadmin: userFound.isSuperadmin,
         status: userFound.status,
         createdAt: userFound.createdAt,
         updatedAt: userFound.updatedAt,
@@ -131,13 +146,15 @@ export const verifyToken = async (req, res) => {
         if(err) return res.status(401).json([{message: 'Unauthorized'}]);
 
         const userFound = await User.findById(user.id);
-        if(!userFound) return res.status(401).json([{message: 'Unauthorized'}]);
+        // Lo mismo que authRequired: inexistente, desactivado o sin cuenta, fuera.
+        if(!sessionAuthFor(userFound)) return res.status(401).json([{message: 'Unauthorized'}]);
         
         return res.json({
             id: userFound._id,
             name: userFound.name,
             email: userFound.email,
             rol: userFound.rol,
+            isSuperadmin: userFound.isSuperadmin,
             status: userFound.status,
             whatsappConnected: Boolean(userFound.tokenWhatsapp),
             phoneNumberId: userFound.phoneNumberId ?? "",
