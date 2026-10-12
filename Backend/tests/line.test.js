@@ -219,12 +219,16 @@ test('resolveApiLine: un lineId en mayúsculas es la misma línea', () => {
 });
 
 // Fase 2c: al desconectar la línea por defecto, la siguiente.
-test('nextDefaultLine: la activa más reciente que no es la quitada', () => {
-    const removed = { _id: newId(), status: 'active', updatedAt: new Date('2026-10-12') };
-    const older = { _id: newId(), status: 'active', updatedAt: new Date('2026-10-01') };
-    const newer = { _id: newId(), status: 'active', updatedAt: new Date('2026-10-10') };
-    const off = { _id: newId(), status: 'disconnected', updatedAt: new Date('2026-10-11') };
+test('nextDefaultLine: la activa conectada más recientemente que no es la quitada', () => {
+    const removed = { _id: newId(), status: 'active', connectedAt: new Date('2026-10-12') };
+    const older = { _id: newId(), status: 'active', connectedAt: new Date('2026-10-01'), updatedAt: new Date('2026-10-12') };
+    const newer = { _id: newId(), status: 'active', connectedAt: new Date('2026-10-10') };
+    const off = { _id: newId(), status: 'disconnected', connectedAt: new Date('2026-10-11') };
+    // Regresión que vigila (Tarea 3 de la 2c): con `updatedAt`, renombrar una línea la volvía «la más reciente».
     assert.equal(nextDefaultLine([removed, older, newer, off], removed._id), newer);
+    // Una línea anterior a `connectedAt` cuenta por su `createdAt`.
+    const legacy = { _id: newId(), status: 'active', connectedAt: null, createdAt: new Date('2026-10-11') };
+    assert.equal(nextDefaultLine([removed, older, newer, legacy], removed._id), legacy);
 });
 
 test('nextDefaultLine: sin otra activa → null', () => {

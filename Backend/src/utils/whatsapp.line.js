@@ -29,6 +29,19 @@ export const LINE_DISCONNECTED_MESSAGE = 'Esta conversación es de un número de
 
 export const LINE_NOT_FOUND_MESSAGE = 'La línea no existe en tu cuenta.';
 
+// El `code` de los errores de conectar y de gestionar líneas (Fase 2c): el front
+// decide con él dónde y cómo enseñarlos (ámbar con «Reintentar» si la línea
+// está ocupada, marcar el campo del formulario manual…), sin comparar textos.
+export const LINE_ERROR_CODES = {
+    notFound: 'line_not_found',
+    busy: 'line_busy',
+    limit: 'line_limit',
+    defaultInactive: 'default_line_inactive',
+    phoneNumberTaken: 'phone_number_taken',
+    phoneNumberNotInWaba: 'phone_number_not_in_waba',
+    wabaTaken: 'waba_taken',
+};
+
 // Conectar otro número con la cuenta en el límite de su plan (Fase 2c).
 export const lineLimitMessage = (maxLines) => (maxLines === 1
     ? 'Tu plan permite 1 línea conectada. Desconéctala antes de conectar otra, o pide más líneas.'

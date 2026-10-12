@@ -6,7 +6,7 @@ import Waba from '../models/waba.model.js';
 import { findAccountOwner } from './account.service.js';
 import { legacyUserFields, nextDefaultLine, ownerConnection, planConnection, sendingLineFor } from '../utils/line.js';
 import {
-    DEFAULT_LINE_INACTIVE_MESSAGE, LINE_BUSY_MESSAGE, LINE_DISCONNECTED_MESSAGE, LINE_NOT_FOUND_MESSAGE, WHATSAPP_NOT_CONNECTED_MESSAGE,
+    DEFAULT_LINE_INACTIVE_MESSAGE, LINE_BUSY_MESSAGE, LINE_ERROR_CODES, LINE_DISCONNECTED_MESSAGE, LINE_NOT_FOUND_MESSAGE, WHATSAPP_NOT_CONNECTED_MESSAGE,
     lineLimitMessage,
 } from '../utils/whatsapp.line.js';
 
@@ -133,7 +133,7 @@ export const rememberDisplayPhoneNumber = async (lineId, displayPhoneNumber) => 
     await Line.updateOne({ _id: lineId, displayPhoneNumber: null }, { $set: { displayPhoneNumber: String(displayPhoneNumber) } });
 };
 
-const statusError = (statusCode, message) => Object.assign(new Error(message), { statusCode });
+const statusError = (statusCode, message, code = null) => Object.assign(new Error(message), { statusCode, code });
 
 /**
  * La línea por la que sale un envío de la cuenta: un SendingLine
@@ -151,7 +151,7 @@ export const findSendingLine = async (accountId, { lineId = null, phoneNumberId 
     let line = null;
     if (lineId) {
         line = await Line.findOne({ _id: lineId, accountId }).lean();
-        if (!line) throw statusError(404, LINE_NOT_FOUND_MESSAGE);
+        if (!line) throw statusError(404, LINE_NOT_FOUND_MESSAGE, LINE_ERROR_CODES.notFound);
     } else if (phoneNumberId) {
         line = await Line.findOne({ accountId, phoneNumberId }).lean();
     } else {
@@ -188,7 +188,7 @@ export const withLineLock = async (accountId, fn) => {
         { $set: { lineLock: { token, expiresAt: new Date(now.getTime() + LOCK_MS) } } },
         { projection: { _id: 1 } },
     );
-    if (!taken) throw statusError(409, LINE_BUSY_MESSAGE);
+    if (!taken) throw statusError(409, LINE_BUSY_MESSAGE, LINE_ERROR_CODES.busy);
     try {
         return await fn();
     } finally {
@@ -258,8 +258,8 @@ export const finishPendingReplace = async (accountId) => {
     const line = await Line.findOne({ accountId, phoneNumberId: pending.phoneNumberId, status: 'active' }).lean();
     if (line) {
         await Line.updateMany(
-            { _id: { $in: pending.replaceLineIds }, accountId, phoneNumberId: { $ne: pending.phoneNumberId } },
-            { $set: { status: 'disconnected' } },
+            { _id: { $in: pending.replaceLineIds }, accountId, phoneNumberId: { $ne: pending.phoneNumberId }, status: 'active' },
+            { $set: { status: 'disconnected', disconnectedAt: new Date() } },
         );
         await Account.updateOne({ _id: accountId }, { $set: { defaultLineId: line._id } });
     }
@@ -292,7 +292,7 @@ export const applyConnection = async (
     const maxLines = account?.limits?.maxLines ?? 1;
     const lines = await Line.find({ accountId }).select('_id phoneNumberId status').lean();
     const plan = planConnection({ lines, maxLines, phoneNumberId });
-    if (plan.error) throw statusError(409, lineLimitMessage(maxLines));
+    if (plan.error) throw statusError(409, lineLimitMessage(maxLines), LINE_ERROR_CODES.limit);
 
     // El reemplazo se apunta antes de activar nada: si se corta, la siguiente
     // operación lo termina.
@@ -311,6 +311,8 @@ export const applyConnection = async (
         { $set: {
             wabaId: waba._id,
             status: 'active',
+            // Renovar el token no es conectar: la fecha se queda.
+            ...(plan.action !== 'renew' && { connectedAt: new Date(), disconnectedAt: null }),
             ...(freshDetails && { displayPhoneNumber: freshDetails.displayPhoneNumber ?? null, verifiedName: freshDetails.verifiedName ?? null }),
         } },
         { upsert: true, new: true },
@@ -330,7 +332,7 @@ export const applyConnection = async (
 
 const findAccountLine = async (accountId, lineId) => {
     const line = await Line.findOne({ _id: lineId, accountId }).lean();
-    if (!line) throw statusError(404, LINE_NOT_FOUND_MESSAGE);
+    if (!line) throw statusError(404, LINE_NOT_FOUND_MESSAGE, LINE_ERROR_CODES.notFound);
     return line;
 };
 
@@ -345,7 +347,7 @@ const findAccountLine = async (accountId, lineId) => {
 export const updateLineSettings = (accountId, lineId, { name, makeDefault = false } = {}) => withLineLock(accountId, async () => {
     await finishPendingReplace(accountId);
     const line = await findAccountLine(accountId, lineId);
-    if (makeDefault && line.status !== 'active') throw statusError(409, DEFAULT_LINE_INACTIVE_MESSAGE);
+    if (makeDefault && line.status !== 'active') throw statusError(409, DEFAULT_LINE_INACTIVE_MESSAGE, LINE_ERROR_CODES.defaultInactive);
 
     if (name !== undefined) await Line.updateOne({ _id: line._id }, { $set: { name } });
     if (makeDefault) {
@@ -363,11 +365,11 @@ export const updateLineSettings = (accountId, lineId, { name, makeDefault = fals
 export const disconnectLine = (accountId, lineId) => withLineLock(accountId, async () => {
     await finishPendingReplace(accountId);
     const line = await findAccountLine(accountId, lineId);
-    if (line.status === 'active') await Line.updateOne({ _id: line._id }, { $set: { status: 'disconnected' } });
+    if (line.status === 'active') await Line.updateOne({ _id: line._id }, { $set: { status: 'disconnected', disconnectedAt: new Date() } });
 
     const account = await Account.findById(accountId).select('defaultLineId').lean();
     if (account?.defaultLineId && String(account.defaultLineId) === String(line._id)) {
-        const lines = await Line.find({ accountId }).select('_id status updatedAt').lean();
+        const lines = await Line.find({ accountId }).select('_id status connectedAt createdAt').lean();
         await Account.updateOne({ _id: accountId }, { $set: { defaultLineId: nextDefaultLine(lines, line._id)?._id ?? null } });
     }
     await writeLegacyUser(accountId);

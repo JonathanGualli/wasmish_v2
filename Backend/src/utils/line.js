@@ -173,11 +173,15 @@ export const resolveApiLine = (lines, { lineId = null, from = null } = {}) => {
     return { lineId: line ? String(line._id) : null };
 };
 
+// Cuándo se conectó una línea: `connectedAt` o, en las anteriores a ese campo, `createdAt`.
+const connectedTime = (line) => new Date(line.connectedAt ?? line.createdAt ?? 0).getTime();
+
 // La línea que pasa a ser la por defecto cuando se desconecta la que lo era
-// (Fase 2c): la activa conectada más recientemente (`updatedAt`), o null.
+// (Fase 2c): la activa conectada más recientemente, o null. No `updatedAt`:
+// renombrar una línea la cambia.
 export const nextDefaultLine = (lines, removedLineId) => lines
     .filter(line => line.status === 'active' && !sameId(line._id, removedLineId))
-    .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))[0] ?? null;
+    .sort((a, b) => connectedTime(b) - connectedTime(a))[0] ?? null;
 
 export const LINE_NAME_MAX = 40;
 

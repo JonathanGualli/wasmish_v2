@@ -33,6 +33,11 @@ const lineSchema = new mongoose.Schema({
         enum: ['active', 'disconnected'],
         default: 'active',
     },
+    // Cuándo se conectó (o reactivó) y cuándo se desconectó por última vez
+    // (Fase 2c). null en las líneas anteriores a estos campos. `connectedAt`
+    // decide la siguiente línea por defecto (`nextDefaultLine`).
+    connectedAt: { type: Date, default: null },
+    disconnectedAt: { type: Date, default: null },
 }, {
     timestamps: true,
 });

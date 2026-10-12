@@ -4,7 +4,7 @@ import User from "../models/user.model.js";
 import Waba from "../models/waba.model.js";
 import { getWabaPhoneNumbers } from "../libs/whatsapp.js";
 import { planConnection } from "../utils/line.js";
-import { describeWabaPhoneNumber, lineLimitMessage, nextPageCursor } from "../utils/whatsapp.line.js";
+import { LINE_ERROR_CODES, describeWabaPhoneNumber, lineLimitMessage, nextPageCursor } from "../utils/whatsapp.line.js";
 
 // Lo que comparten las dos formas de conectar un número (Embedded Signup y el
 // formulario manual de Ajustes). El webhook enruta cada mensaje por su
@@ -34,6 +34,7 @@ export const claimWaba = async (accountId, waBusinessId) => {
         if (error.code !== 11000) throw error;
         const taken = new Error(WABA_TAKEN_MESSAGE);
         taken.statusCode = 409;
+        taken.code = LINE_ERROR_CODES.wabaTaken;
         throw taken;
     }
 };
@@ -61,6 +62,7 @@ export const checkLineLimit = async (accountId, phoneNumberId) => {
     if (planConnection({ lines, maxLines, phoneNumberId }).error) {
         const error = new Error(lineLimitMessage(maxLines));
         error.statusCode = 409;
+        error.code = LINE_ERROR_CODES.limit;
         throw error;
     }
 };
@@ -84,6 +86,7 @@ export const verifyWabaPhoneNumber = async ({ token, waBusinessId, phoneNumberId
     if (!line) {
         const error = new Error('Ese número no pertenece a la cuenta de WhatsApp Business conectada.');
         error.statusCode = 400;
+        error.code = LINE_ERROR_CODES.phoneNumberNotInWaba;
         throw error;
     }
     return line;
