@@ -239,3 +239,33 @@ test('GET /admin/clients cuenta la actividad de una cuenta cuyo _id no es el del
     assert.ok(entry.conversations >= 1, res.text);
     assert.ok(entry.messages >= 1, res.text);
 });
+
+// Fase 2c: el superadmin decide cuántas líneas puede tener cada cuenta.
+test('PATCH /admin/accounts/:id/limits: solo el superadmin (403), y una cuenta inexistente → 404', async () => {
+    const asB = await request(b, 'PATCH', `/admin/accounts/${b.accountId}/limits`, { maxLines: 5 });
+    assert.equal(asB.status, 403, asB.text);
+    assert.equal((await Account.findById(b.accountId).lean()).limits.maxLines, 1);
+
+    const missing = await request(admin, 'PATCH', `/admin/accounts/${new mongoose.Types.ObjectId()}/limits`, { maxLines: 2 });
+    assert.equal(missing.status, 404, missing.text);
+    assert.equal((await request(admin, 'PATCH', '/admin/accounts/no-es-un-id/limits', { maxLines: 2 })).status, 404);
+    for (const maxLines of [0, 51, 1.5, '2']) {
+        assert.equal((await request(admin, 'PATCH', `/admin/accounts/${b.accountId}/limits`, { maxLines })).status, 400, String(maxLines));
+    }
+
+    const res = await request(admin, 'PATCH', `/admin/accounts/${b.accountId}/limits`, { maxLines: 3 });
+    assert.equal(res.status, 200, res.text);
+    assert.equal((await Account.findById(b.accountId).lean()).limits.maxLines, 3);
+    await Account.updateOne({ _id: b.accountId }, { 'limits.maxLines': 1 });
+});
+
+test('GET /admin/clients cuenta las líneas activas de cada cuenta', async () => {
+    const m = await seedAccount('M', { seq: 8, maxLines: 2 });
+    await connectWhatsapp(m, { phoneNumberId: '7581' });
+    await connectWhatsapp(m, { phoneNumberId: '7582' });
+    const res = await request(admin, 'GET', '/admin/clients?limit=50');
+    assert.equal(res.status, 200, res.text);
+    const entry = res.body.clients.find(client => client.email === 'm@pruebas.local');
+    assert.deepEqual(entry.lines, { active: 2, max: 2 });
+    assert.equal(entry.accountId, m.accountId);
+});

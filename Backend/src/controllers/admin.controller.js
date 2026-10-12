@@ -1,3 +1,6 @@
+import mongoose from "mongoose";
+import Account from "../models/account.model.js";
+import Line from "../models/line.model.js";
 import User from "../models/user.model.js";
 import Conversation from "../models/conversation.model.js";
 import Message from "../models/message.model.js";
@@ -18,7 +21,8 @@ export const getPlatformStats = async (req, res) => {
 
         const [totalClients, connectedClients, messages7d, failed7d] = await Promise.all([
             User.countDocuments({}),
-            User.countDocuments({ tokenWhatsapp: { $ne: null } }),
+            // Las cuentas con alguna línea activa (Fase 2c: `Line` es la fuente).
+            Line.distinct('accountId', { status: 'active' }).then(ids => ids.length),
             Message.countDocuments({ timestamp: { $gte: desde } }),
             Message.countDocuments({ status: 'failed', timestamp: { $gte: desde } }),
         ]);
@@ -50,6 +54,17 @@ export const listClients = async (req, res) => {
         // Los datos cuelgan de la cuenta (`userId` = cuenta), no del usuario: en
         // una cuenta migrada coinciden, pero no tienen por qué.
         const accountIds = users.map(u => u.accountId);
+
+        // Las líneas activas y el máximo de cada cuenta (Fase 2c).
+        const [accounts, activeLines] = await Promise.all([
+            Account.find({ _id: { $in: accountIds } }).select('limits').lean(),
+            Line.aggregate([
+                { $match: { accountId: { $in: accountIds.filter(Boolean) }, status: 'active' } },
+                { $group: { _id: '$accountId', active: { $sum: 1 } } },
+            ]),
+        ]);
+        const maxLinesOf = new Map(accounts.map(a => [String(a._id), a.limits?.maxLines ?? 1]));
+        const activeLinesOf = new Map(activeLines.map(l => [String(l._id), l.active]));
 
         // Conversaciones solo de las cuentas de ESTA página (usa el índice userId)
         const conversations = await Conversation.find({ userId: { $in: accountIds } })
@@ -98,12 +113,14 @@ export const listClients = async (req, res) => {
             const entry = perUser.get(String(u.accountId));
             return {
                 id: String(u._id),
+                accountId: u.accountId ? String(u.accountId) : null,
                 name: u.name,
                 email: u.email,
                 rol: u.rol,
                 status: u.status,
                 whatsappConnected: Boolean(u.tokenWhatsapp), // el token se lee pero NO se devuelve
                 waBusinessId: maskId(u.waBusinessId),
+                lines: { active: activeLinesOf.get(String(u.accountId)) ?? 0, max: maxLinesOf.get(String(u.accountId)) ?? 1 },
                 conversations: entry.conversations,
                 messages: entry.messages,
                 failed: entry.failed,
@@ -113,6 +130,27 @@ export const listClients = async (req, res) => {
         });
 
         return res.json({ clients, totalCount, page, limit });
+    } catch (error) {
+        return res.status(500).json([{ message: error.message }]);
+    }
+}
+
+// PATCH /admin/accounts/:accountId/limits — cuántas líneas puede tener la cuenta
+// (el plan comercial: el cobro va fuera de Wasmish). Bajarlo no desconecta
+// nada: solo impide conectar otra mientras esté por encima.
+export const updateAccountLimits = async (req, res) => {
+    try {
+        const { accountId } = req.params;
+        const account = mongoose.isValidObjectId(accountId)
+            ? await Account.findOneAndUpdate(
+                { _id: accountId },
+                { $set: { 'limits.maxLines': req.body.maxLines } },
+                { new: true, projection: { limits: 1 } },
+            ).lean()
+            : null;
+        if (!account) return res.status(404).json([{ message: 'La cuenta no existe.' }]);
+
+        return res.json({ accountId: String(account._id), maxLines: account.limits.maxLines });
     } catch (error) {
         return res.status(500).json([{ message: error.message }]);
     }

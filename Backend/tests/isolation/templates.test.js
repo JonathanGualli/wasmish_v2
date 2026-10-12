@@ -2,7 +2,7 @@
 // ni les quita el archivo, no sube archivos a su nombre ni descarga los suyos.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { seedAccount, request, assertNoLeak, assertHasOwn, connectWhatsapp, onMeta, Template, TemplateMedia, PNG } from './helpers.js';
+import { seedAccount, request, assertNoLeak, assertHasOwn, connectWhatsapp, onMeta, Line, Template, TemplateMedia, PNG } from './helpers.js';
 
 const a = await seedAccount('A', { seq: 1 });
 const b = await seedAccount('B', { seq: 2 });
@@ -115,4 +115,42 @@ test('una plantilla sin WABA se sincroniza y sale', async () => {
         onMeta(null);
     }
     assert.equal((await Template.findOne({ templateId: v.templateId }).lean()).waBusinessId, 'waba-V');
+});
+
+// Fase 2c: una cuenta con dos líneas de WABA distintos.
+const w = await seedAccount('W', { seq: 6, maxLines: 2 });
+const { lineId: wFirst } = await connectWhatsapp(w, { phoneNumberId: '7591' });          // waba-W, el de las sembradas
+const { lineId: wSecond } = await connectWhatsapp(w, { phoneNumberId: '7592', waBusinessId: 'waba-W2' });
+await Template.create({
+    userId: w.accountId, waBusinessId: 'waba-W2', templateId: 'tpl-w2', name: 'del_segundo_waba',
+    language: 'es', category: 'MARKETING', status: 'APPROVED', bodyText: 'w2', header: null, buttons: [],
+});
+await Template.create({
+    userId: w.accountId, waBusinessId: 'waba-sin-linea', templateId: 'tpl-w3', name: 'de_un_waba_sin_linea',
+    language: 'es', category: 'MARKETING', status: 'APPROVED', bodyText: 'w3', header: null, buttons: [],
+});
+const namesOf = (res) => res.body.map(template => template.name).sort();
+
+test('GET /templates?lineId=: solo las del WABA de esa línea; de otra cuenta → 404', async () => {
+    const second = await request(w, 'GET', `/templates?lineId=${wSecond}`);
+    assert.equal(second.status, 200, second.text);
+    assert.deepEqual(namesOf(second), ['del_segundo_waba']);
+    const first = await request(w, 'GET', `/templates?lineId=${wFirst}`);
+    assert.ok(namesOf(first).includes(w.templateName));
+    assert.ok(!namesOf(first).includes('del_segundo_waba'));
+
+    const asB = await request(b, 'GET', `/templates?lineId=${wSecond}`);
+    assert.equal(asB.status, 404, asB.text);
+    assert.equal((await request(b, 'GET', '/templates?lineId=no-es-un-id')).status, 404);
+});
+
+test('GET /templates sin lineId: las de los WABA con línea activa, cada una con su waBusinessId', async () => {
+    const res = await request(w, 'GET', '/templates');
+    assert.equal(res.status, 200, res.text);
+    const names = namesOf(res);
+    assert.ok(names.includes(w.templateName));
+    assert.ok(names.includes('del_segundo_waba'));
+    assert.ok(!names.includes('de_un_waba_sin_linea'));
+    assert.equal(res.body.find(template => template.name === 'del_segundo_waba').waBusinessId, 'waba-W2');
+    assert.ok(await Line.exists({ _id: wSecond, status: 'active' }));
 });

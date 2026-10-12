@@ -25,6 +25,8 @@ export const campaignDraftSchema = z.object({
     recipients: recipientsSchema,
     // El archivo de la cabecera elegido para esta campaña; sin él, el de la plantilla.
     headerMediaId: objectIdSchema.nullish(),
+    // La línea por la que sale (Fase 2c); sin ella, la por defecto.
+    lineId: objectIdSchema.nullish(),
 });
 
 export const createCampaignSchema = campaignDraftSchema.extend({

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
 import {
-    ownerConnection, lineStateIssues, sharedWabas, historicalLines, legacyUserFields, legacyUserIssues, planConnection, sendingLineFor, resolveApiLine,
+    ownerConnection, lineStateIssues, sharedWabas, historicalLines, legacyUserFields, legacyUserIssues, planConnection, sendingLineFor, resolveApiLine, nextDefaultLine, cleanLineName,
 } from '../src/utils/line.js';
 
 const newId = () => new mongoose.Types.ObjectId();
@@ -216,4 +216,24 @@ test('resolveApiLine: lineId y from de la misma línea → esa línea', () => {
 test('resolveApiLine: un lineId en mayúsculas es la misma línea', () => {
     const upper = String(lines[0]._id).toUpperCase();
     assert.deepEqual(resolveApiLine(lines, { lineId: upper }), { lineId: String(lines[0]._id) });
+});
+
+// Fase 2c: al desconectar la línea por defecto, la siguiente.
+test('nextDefaultLine: la activa más reciente que no es la quitada', () => {
+    const removed = { _id: newId(), status: 'active', updatedAt: new Date('2026-10-12') };
+    const older = { _id: newId(), status: 'active', updatedAt: new Date('2026-10-01') };
+    const newer = { _id: newId(), status: 'active', updatedAt: new Date('2026-10-10') };
+    const off = { _id: newId(), status: 'disconnected', updatedAt: new Date('2026-10-11') };
+    assert.equal(nextDefaultLine([removed, older, newer, off], removed._id), newer);
+});
+
+test('nextDefaultLine: sin otra activa → null', () => {
+    const removed = { _id: newId(), status: 'active', updatedAt: new Date() };
+    assert.equal(nextDefaultLine([removed, { _id: newId(), status: 'disconnected', updatedAt: new Date() }], removed._id), null);
+});
+
+test('cleanLineName: sin espacios de sobra; vacío → null', () => {
+    assert.equal(cleanLineName('  Ventas   Quito '), 'Ventas Quito');
+    assert.equal(cleanLineName('   '), null);
+    assert.equal(cleanLineName(null), null);
 });

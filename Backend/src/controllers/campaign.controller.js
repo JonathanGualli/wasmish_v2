@@ -20,7 +20,6 @@ import { contactDisplayName } from "../utils/contact.identity.js";
 import { headerMediaMismatch } from "../utils/template.header.js";
 import { headerMediaFileExists } from "../services/template.media.service.js";
 import { matchesContactSearch } from "../utils/contact.query.js";
-import { WHATSAPP_NOT_CONNECTED_MESSAGE } from "../utils/whatsapp.line.js";
 import { CAMPAIGN_DRY_RUN, CAMPAIGN_MAX_RECIPIENTS, CAMPAIGN_RATE_PER_SECOND } from "../config.js";
 
 const PAGE_SIZE = 20;
@@ -251,12 +250,15 @@ export const previewCampaignRecipients = async (req, res) => {
 export const createCampaign = async (req, res) => {
     try {
         const userId = req.auth.accountId;
-        // La línea por la que saldrá (la por defecto): 409 sin WhatsApp conectado.
-        const line = await findSendingLine(userId).catch((error) => {
-            if (error.statusCode === 409) return null;
-            throw error;
-        });
-        if (!line) return sendError(res, 409, WHATSAPP_NOT_CONNECTED_MESSAGE);
+        // La línea por la que saldrá: la elegida o la por defecto. 404 si es de
+        // otra cuenta; 409 si está desconectada o no hay WhatsApp conectado.
+        let line;
+        try {
+            line = await findSendingLine(userId, { lineId: req.body.lineId ?? null });
+        } catch (error) {
+            if (!error.statusCode) throw error;
+            return sendError(res, error.statusCode, error.message);
+        }
 
         const draft = await buildDraft(userId, req.body);
         if (draft.errors.length > 0) return res.status(400).json(draft.errors);
