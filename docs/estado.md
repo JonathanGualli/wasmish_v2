@@ -20,7 +20,7 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 ## En curso
 
 - **Multi-línea · Fase 2a: líneas, ampliar y migrar** — rama `fase2a-lineas`, PR #9, empezado el 2026-10-11 por Claude.
-  Hecho: el plan, revisado por Codex (6 hallazgos aceptados: líneas como proyección de `User`). · Falta: el visto bueno de Jonathan al plan revisado y las tareas 1 a 4. · Sin probar: nada todavía.
+  Hecho: el plan (revisado por Codex) y las tareas 1 a 4; tests en verde; `migrate:lines` probada en el Mongo local, también con un número anterior; ensayo de vuelta atrás con `v1.0.12`. · Falta: la revisión de Codex del código, que Jonathan lo una y desplegarlo (sin parar la API: plan, «Antes de desplegar»). · Sin probar: la migración contra una copia del `mongodump` de producción (paso 1 del despliegue) y conectar un número contra Meta de verdad.
 
 <!-- Formato de una entrada:
 - **<qué>** — rama `<rama>`, PR #<n>, empezado el <fecha> por <Claude|Codex|Jonathan>.
