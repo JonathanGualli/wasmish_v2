@@ -4,8 +4,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    seedAccount, connectWhatsapp, postWebhook, openStream, Contact, Conversation, Line, Message, Waba,
+    seedAccount, connectWhatsapp, postWebhook, openStream, Contact, Conversation, Line, Message, User,
 } from './helpers.js';
+
+const { syncLinesFromOwner } = await import('../../src/services/line.service.js');
 
 const a = await seedAccount('A', { seq: 1 });
 const b = await seedAccount('B', { seq: 2 });
@@ -143,15 +145,17 @@ test('el contacto con conversación en otro número estrena una conversación en
 test('un entrante a A2 no toca el historial ni la ventana de la conversación de A1', async () => {
     const c = await seedAccount('C', { seq: 3 });
     await connectWhatsapp(c);
-    const waba = await Waba.findOne({ accountId: c.accountId }).lean();
     const a1 = await Line.findOne({ accountId: c.accountId, status: 'active' }).lean();
-    const a2 = await Line.create({ accountId: c.accountId, phoneNumberId: '8833', wabaId: waba._id, status: 'active' });
     const contact = await Contact.create({ userId: c.accountId, phone: '593990003333', name: 'dos líneas' });
     const lastInboundAt = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
     const inA1 = await Conversation.create({
         userId: c.accountId, contactId: contact._id, contactPhone: contact.phone, phoneNumberId: a1.phoneNumberId,
         lineId: a1._id, lastMessage: 'en A1', lastInboundAt,
     });
+    // C pasa al número A2 (con `maxLines: 1`, A1 queda desconectada con su historial).
+    await User.updateOne({ _id: c.userId }, { phoneNumberId: '8833' });
+    await syncLinesFromOwner(c.accountId);
+    const a2 = await Line.findOne({ accountId: c.accountId, phoneNumberId: '8833' }).lean();
 
     assert.equal((await postWebhook('8833', textMessage(contact.phone, 'a la línea A2'))).status, 200);
 

@@ -178,31 +178,32 @@ test('el número actual activo en otra cuenta (obsoleto) se desconecta allí', a
     assert.equal((await Line.findOne({ accountId: n.accountId, phoneNumberId: '7020' }).lean()).status, 'disconnected');
 });
 
-// Fase 2b: el webhook encuentra la cuenta por la línea activa del número, y el
-// token (para bajar adjuntos) sale del WABA de esa línea, no del owner.
-test('findInboundLine: la línea activa del número, con el token de su WABA', async () => {
+// Fase 2b: el webhook encuentra la cuenta por el número (`User`, que sigue siendo
+// la fuente) y la línea por cuenta y número; el token sale del WABA de la línea
+// cuando la proyección coincide con `User`.
+test('findInboundLine: la línea del número, con el token de su WABA', async (t) => {
     const p = await newAccount('P');
     await setConnection(p, { tokenWhatsapp: 'cifrado-p', phoneNumberId: '7030', waBusinessId: 'waba-p' });
     await syncLinesFromOwner(p.accountId);
-    // Distinto del de User a propósito: tiene que salir el del Waba.
-    await Waba.updateOne({ waBusinessId: 'waba-p' }, { tokenWhatsapp: 'cifrado-del-waba' });
     const line = await Line.findOne({ accountId: p.accountId, phoneNumberId: '7030' }).lean();
+    const logged = t.mock.method(console, 'error', () => {});
 
     const inbound = await findInboundLine('7030');
     assert.equal(String(inbound.accountId), p.accountId);
     assert.equal(String(inbound.lineId), String(line._id));
     assert.equal(inbound.phoneNumberId, '7030');
-    assert.equal(inbound.tokenWhatsapp, 'cifrado-del-waba');
+    assert.equal(inbound.tokenWhatsapp, 'cifrado-p');
+    assert.equal(logged.mock.callCount(), 0);
 });
 
-test('findInboundLine: una línea desconectada no recibe', async () => {
+test('findInboundLine: un número que ningún User tiene no es de nadie, aunque quede una línea', async () => {
     const q = await newAccount('Q');
     await Line.create({ accountId: q.accountId, phoneNumberId: '7040', status: 'disconnected' });
     assert.equal(await findInboundLine('7040'), null);
 });
 
 // La reserva del spec: un número que `User` tiene y la proyección no (una
-// sincronización que falló) se procesa por el camino viejo, nunca se descarta.
+// sincronización que falló) se procesa con `User`, nunca se descarta.
 test('findInboundLine: sin Line pero con User, la reserva y su console.error', async (t) => {
     const r = await newAccount('R');
     await setConnection(r, { tokenWhatsapp: 'cifrado-r', phoneNumberId: '7050', waBusinessId: 'waba-r' });
@@ -214,4 +215,36 @@ test('findInboundLine: sin Line pero con User, la reserva y su console.error', a
     assert.equal(inbound.phoneNumberId, '7050');
     assert.equal(inbound.tokenWhatsapp, 'cifrado-r');
     assert.equal(logged.mock.callCount(), 1);
+});
+
+// Regresión que vigila (Codex, PR #14): A cambió de número sin que la proyección
+// lo reflejara, B conectó el número viejo de A, y la línea activa obsoleta de A
+// se quedaba los entrantes de B.
+test('findInboundLine: una línea activa obsoleta de otra cuenta no se queda el número', async (t) => {
+    const s = await newAccount('S');
+    const u = await newAccount('U');
+    await setConnection(s, { tokenWhatsapp: 'cifrado-s', phoneNumberId: '7060', waBusinessId: 'waba-s' });
+    await syncLinesFromOwner(s.accountId);
+    await setConnection(s, { phoneNumberId: '7061' });   // solo User: la proyección no lo sabe
+    await setConnection(u, { tokenWhatsapp: 'cifrado-u', phoneNumberId: '7060', waBusinessId: 'waba-u' });
+    t.mock.method(console, 'error', () => {});
+
+    const inbound = await findInboundLine('7060');
+    assert.equal(String(inbound.accountId), u.accountId);
+    assert.equal(inbound.tokenWhatsapp, 'cifrado-u');
+});
+
+// Regresión que vigila (Codex, PR #14): la reserva usaba la línea por defecto,
+// que tras un cambio de número a medias es la del número ANTERIOR.
+test('findInboundLine: la reserva nunca usa la línea de otro número', async (t) => {
+    const v = await newAccount('V');
+    await setConnection(v, { tokenWhatsapp: 'cifrado-v', phoneNumberId: '7070', waBusinessId: 'waba-v' });
+    await syncLinesFromOwner(v.accountId);
+    await setConnection(v, { phoneNumberId: '7071' });   // defaultLineId sigue en la de 7070
+    t.mock.method(console, 'error', () => {});
+
+    const inbound = await findInboundLine('7071');
+    assert.equal(String(inbound.accountId), v.accountId);
+    assert.equal(inbound.lineId, null);
+    assert.equal(inbound.phoneNumberId, '7071');
 });

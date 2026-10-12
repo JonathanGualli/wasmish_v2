@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
-import { ownerConnection, lineStateIssues, sharedWabas, historicalLines } from '../src/utils/line.js';
+import { ownerConnection, lineStateIssues, sharedWabas, historicalLines, lineMatchesOwner } from '../src/utils/line.js';
 
 const newId = () => new mongoose.Types.ObjectId();
 
@@ -83,4 +83,26 @@ test('historicalLines: solo los números anteriores que aún no tienen línea', 
 test('historicalLines: una conversación sin número para la migración', () => {
     assert.ok(historicalLines(['111', null], [], '111').stop);
     assert.ok(historicalLines([''], [], null).stop);
+});
+
+// Fase 2b: mientras `User` sea la fuente, una línea solo sirve para recibir o
+// enviar si la proyección coincide con él. Si no, la reserva usa `User`.
+test('lineMatchesOwner: la línea activa del número de User con su WABA y su token', () => {
+    assert.equal(lineMatchesOwner({ owner, line, waba }), true);
+});
+
+// Regresión que vigila (Codex, PR #14): una línea activa obsoleta (la cuenta
+// cambió de número y la proyección falló) se llevaba los entrantes.
+test('lineMatchesOwner: una línea que no es la del número de User no sirve', () => {
+    assert.equal(lineMatchesOwner({ owner: { ...owner, phoneNumberId: '222' }, line, waba }), false);
+    assert.equal(lineMatchesOwner({ owner: { ...owner, accountId: newId() }, line, waba }), false);
+    assert.equal(lineMatchesOwner({ owner, line: { ...line, status: 'disconnected' }, waba }), false);
+    assert.equal(lineMatchesOwner({ owner, line: null, waba }), false);
+});
+
+test('lineMatchesOwner: un WABA que no es el de la línea o no tiene el token de User no sirve', () => {
+    assert.equal(lineMatchesOwner({ owner, line, waba: { ...waba, tokenWhatsapp: 'cifrado-viejo' } }), false);
+    assert.equal(lineMatchesOwner({ owner, line, waba: { ...waba, _id: newId() } }), false);
+    assert.equal(lineMatchesOwner({ owner: { ...owner, waBusinessId: 'w2' }, line, waba }), false);
+    assert.equal(lineMatchesOwner({ owner, line, waba: null }), false);
 });
