@@ -21,9 +21,22 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En curso
 
-- **Multi-línea · Fase 2c** (plan: `docs/superpowers/plans/2026-10-12-multi-linea-fase-2c.md`), empezada el 2026-10-12 por Claude. Un solo despliegue (1.0.15).
-  Hecho: Tareas 1 a 3 (PRs #19, #20 y #21), unidos. En curso: Tarea 4, elegir y ver la línea en la UI (diseño de Claude Design, `Design/Wasmish Líneas - Chats, campañas y ficha.html`), partida en dos PRs: Chats y fichas (rama `fase2c-elegir-linea`) y después Campañas (asistente con «Enviar desde», borrador, revisar, lista y detalle, y `lineId` en `serializeCampaign`).
-  Sin probar: conectar un segundo número contra Meta de verdad (espera a la prueba del token en WasmishTest). `maxLines` sigue en 1 en todas las cuentas reales.
+- **Desplegar la 1.0.15** (Fase 2c de multi-línea completa, PRs #19 a #23), por Jonathan con `/deploy`, cuando él decida. La versión ya está subida; **aún no se despliega**. Lleva:
+  - `Line` y `Waba` como fuente de la conexión; `User` queda como copia de la línea por defecto (#19).
+  - La API de líneas (`GET /lines`, renombrar, hacer por defecto, desconectar) y el límite `maxLines` del superadmin (#20).
+  - Ajustes → Líneas y el límite en el panel de superadmin (#21).
+  - Elegir y ver la línea en Chats, en las fichas y en Campañas (#22 y #23).
+  - Con `maxLines: 1` (todas las cuentas hoy), se ve y funciona como la 1.0.14.
+
+  **Antes de desplegar** (plan de la 2c, «Antes de desplegar»): no hay migración de datos.
+  1. `mongodump`.
+  2. Compilar la imagen **sin arrancarla** y, con la 1.0.14 en marcha, `docker compose run --rm --no-deps wasmish-api npm run migrate:lines -- --check` → 0.
+  3. `up` de la 1.0.15 y otra vez `--check` → 0.
+  4. Comprobar un entrante en vivo, una respuesta desde el chat, `POST /api/v1/templates/send` con 200 en los logs y, en Ajustes, la línea de cada cuenta.
+
+  **Volver atrás:** las imágenes `:1.0.14` leen `User`, que es copia de la línea por defecto. Vale mientras ninguna cuenta tenga más de una línea activa.
+
+  **Sin probar:** conectar un segundo número contra Meta de verdad, que espera a la prueba del token en WasmishTest. Envíos reales por una segunda línea: en local se probaron con datos sembrados y token falso.
 
 <!-- Formato de una entrada:
 - **<qué>** — rama `<rama>`, PR #<n>, empezado el <fecha> por <Claude|Codex|Jonathan>.
@@ -32,7 +45,12 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## Lo siguiente
 
-- **Multi-línea y multi-agente, fases 1 a 4** (diseño aprobado, sin preguntas abiertas: `docs/superpowers/specs/2026-10-11-multi-linea-multi-agente-design.md`). Fases 1, 2a y 2b en producción (la 2b, enrutar por línea, desde la 1.0.14). Sigue la **Fase 2c**: la UI de líneas (lista, nombre, añadir, desconectar), `maxLines > 1`, la escritura de la conexión con `Line` como fuente y `User` como copia (`legacyUserFields`), el panel de superadmin con líneas y elegir la línea en la conversación nueva y en las campañas (plan de la 2b, «Lo que este plan no cubre»). **Antes de la 2c** (o de dar `maxLines > 1` a una cuenta): comprobar en WasmishTest si repetir el Embedded Signup en el mismo WABA invalida el token anterior (spec § 2.2). Hace falta un número de pruebas, que Jonathan aún no tiene: una línea fija sin WhatsApp (se verifica por llamada) o un chip prepago.
+- **Multi-línea y multi-agente, fases 1 a 4** (diseño aprobado, sin preguntas abiertas: `docs/superpowers/specs/2026-10-11-multi-linea-multi-agente-design.md`). Fases 1, 2a y 2b en producción (la 2b, enrutar por línea, desde la 1.0.14). La **Fase 2c** está terminada y sale en la 1.0.15 (ver «En curso»).
+  - **Después de desplegarla, para encender varias líneas** (plan de la 2c, «Después de desplegar»):
+    1. La prueba del token en WasmishTest: ¿repetir el Embedded Signup en el mismo WABA invalida el token anterior? (spec § 2.2). Hace falta un número de pruebas, que Jonathan aún no tiene: una línea fija sin WhatsApp (se verifica por llamada) o un chip prepago.
+    2. El ensayo de la vuelta atrás con dos líneas en local.
+    3. `maxLines: 2` en una cuenta de prueba desde el panel.
+  - Sigue la **Fase 3**: equipo, roles y acceso por línea.
 - **Próximo módulo: un chatbot.** Jonathan aún no decidió de qué tipo. La propuesta sobre la mesa: empezar por respuestas automáticas (bienvenida, fuera de horario, palabras clave) como un motor de «respuestas» en el webhook, con traspaso a una persona (el bot se calla si alguien responde a mano) y la marca «Bot» en el chat; después, flujos con botones (requiere enviar mensajes interactivos) o IA. Antes de empezar: preguntar el tipo y qué problema concreto del cliente resuelve.
 - El campo de archivo de cabecera al enviar una plantilla a **un solo contacto** (`SendTemplateDialog` y `NewConversationPanel`); hoy solo existe en las campañas.
 - En la API pública: el campo `header`, la cabecera de texto con variable y las plantillas de carrusel. Toca al cliente de la API: con cuidado.
