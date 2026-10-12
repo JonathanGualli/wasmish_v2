@@ -13,6 +13,11 @@ const { LINE_DISCONNECTED_MESSAGE } = await import('../../src/utils/whatsapp.lin
 
 const a = await seedAccount('A', { seq: 1 });
 const b = await seedAccount('B', { seq: 2 });
+// La cuenta de los tests de la Fase 2b, preparada aquí y no junto a ellos: un
+// `await` de primer nivel entre dos `test()` hace que node:test pueda cerrar el
+// archivo (y su `after`, que cierra Mongo) antes de registrar los de abajo.
+const d = await seedAccount('D', { seq: 4 });
+await connectWhatsapp(d);
 
 const messagesIn = (account) => Message.countDocuments({ conversationId: account.conversationId });
 const unreadOf = async (account) => (await Conversation.findById(account.conversationId).lean()).unreadCount;
@@ -88,8 +93,6 @@ test('GET /media/:id: B no descarga el adjunto de un mensaje de A', async () => 
 });
 
 // Fase 2b: los envíos salen por la línea de la conversación.
-const d = await seedAccount('D', { seq: 4 });
-await connectWhatsapp(d);
 const D_NUMBER = `99${d.seq}`;
 const currentLineOf = (account) => Line.findOne({ accountId: account.accountId, phoneNumberId: `99${account.seq}` }).lean();
 
