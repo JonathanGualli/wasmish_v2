@@ -1,0 +1,44 @@
+# Webhook entrante y adjuntos
+
+Lo que entra desde Meta: firma, estados de los mensajes, tipos de mensaje, adjuntos descargados y cómo se sirven.
+
+> Parte de la documentación de Wasmish: el mapa de todos los temas está en el [AGENTS.md](../../AGENTS.md) de la raíz.
+> Las decisiones de producto con fecha están en [decisiones.md](../decisiones.md).
+
+## Contenido
+
+- [Adjuntos (fotos, audios, documentos)](#adjuntos-fotos-audios-documentos)
+- [Servir los adjuntos (`GET /api/media/:id`)](#servir-los-adjuntos-get-apimediaid)
+- [`caption` vs `text`](#caption-vs-text)
+- [Webhook entrante (`webhook.controller.js`)](#webhook-entrante-webhookcontrollerjs)
+
+---
+
+### Adjuntos (fotos, audios, documentos)
+
+**Adjuntos (fotos, audios, documentos):** Meta no manda el archivo en el webhook, manda un `mediaId`. `descargarAdjunto` (en `webhook.controller.js`) resuelve `GET /{media-id}` → URL temporal, baja los bytes y los guarda en `MEDIA_DIR` con el nombre `<mediaId>.<ext>`. Se hace **síncrono, antes de crear el `Message`**, para que cuando el mensaje llegue por SSE la foto ya se pueda pintar — cuesta unos cientos de ms de webhook y ahorra una cola y un segundo evento. **Nunca tumba el mensaje**: si la descarga falla (token caducado, archivo enorme, Meta caída) devuelve `mediaFile: null` y el mensaje se guarda igual con su etiqueta.
+
+El webhook trae también una `url` ya resuelta, pero **caduca en horas** mientras que el `mediaId` sirve los 30 días que Meta guarda el archivo; por eso se pasa siempre por el id, y así el mismo código sirve para reintentar una descarga vieja. El tope es `MEDIA_MAX_BYTES` (25 MB) y se comprueba con el `file_size` que devuelve Meta **antes** de bajar nada.
+
+### Servir los adjuntos (`GET /api/media/:id`)
+
+**Servir los adjuntos (`GET /api/media/:id`):** el `:id` es el del **mensaje**, no el del archivo, para que la comprobación de propietario sea la de siempre (mensaje → conversación → `userId`) y no se pueda pedir el archivo de otro conociendo su `mediaId` — que viaja en los payloads de Meta. Un usuario ajeno recibe **404, no 403**: un 403 confirmaría que ese mensaje existe. `utils/media.storage.js` es el único sitio que construye rutas: el nombre sale del `mediaId` validado contra `/^\d{1,64}$/` y `rutaDeArchivo` vuelve a comprobar que no se ha salido del directorio. Un mime desconocido se guarda como `.bin` y se sirve como `application/octet-stream`, para que el navegador lo descargue en vez de interpretarlo.
+
+### `caption` vs `text`
+
+**`caption` vs `text`:** `text` cae a la etiqueta («Imagen») cuando el contacto no escribió nada, porque es lo que se ve en la bandeja. `caption` guarda **solo** lo que escribió de verdad, y es `null` si no escribió. Sin esa distinción la UI pondría «Imagen» debajo de una imagen que ya se está viendo.
+
+### Webhook entrante (`webhook.controller.js`)
+
+**Webhook entrante (`webhook.controller.js`):**
+- **Firma obligatoria.** `POST /api/webhook` pasa por `verifyWebhookSignature`: HMAC-SHA256 del **cuerpo crudo** (`req.rawBody`, guardado en el `verify` de `express.json` en `app.js`) con `META_APP_SECRET`, comparado con `X-Hub-Signature-256` usando `timingSafeEqual`. Hay que validar sobre los bytes originales: re-serializar `req.body` cambia el orden de claves y la firma nunca cuadra. **Falla cerrado** — si `META_APP_SECRET` falta, rechaza todo con 401 (y avisa por `console.error` al arrancar). Confirmar esa variable en el `.env` del servidor antes de desplegar, o los clientes dejan de recibir mensajes.
+- **Transiciones de estado monótonas.** La lógica vive en `utils/message.status.js` (`resolveStatusTransition`, función pura y testeada; devuelve `null` si no hay que hacer nada). `STATUS_RANK = { sent: 0, delivered: 1, read: 2, failed: 3 }`: un webhook solo se aplica si **sube** de rango. Meta no garantiza orden ni unicidad, así que un `delivered` que llega después de un `read` haría retroceder el estado. Si `read` llega sin `delivered` previo, se infiere `deliveredAt` con el mismo timestamp (leído implica entregado). Si el estado no avanza, se hace `continue` — tampoco se emite `message_status`.
+- **Se guarda todo entrante, no solo el texto.** `utils/inbound.message.js` (`describeInboundMessage`, pura y testeada) traduce la forma que manda Meta — `image.caption`, `document.filename`, `button.text`, `interactive.button_reply.title`… — a `{ type, text, mediaId, mimeType }`, y a partir de ahí **todos los tipos siguen el mismo camino**: `Message`, `lastMessage`, `unreadCount++` y `message_created`. Es el único sitio que conoce esas formas.
+- **`text` nunca sale vacío.** `Message.text` es `required`, y un throw dentro del webhook hace que Meta reintente y que el mensaje del cliente acabe perdiéndose. Por eso todo tipo tiene etiqueta de reserva («Imagen», «Nota de voz», el nombre del archivo) y hasta un tipo que Meta invente mañana cae en «Mensaje no compatible». Es el test que más importa de `inbound.message.test.js`.
+- **Lo que Meta no entrega, lo nombra igual.** Una encuesta llega como `{ type:'unsupported', errors:[…], unsupported:{ type:'poll_creation' } }` — comprobado con un webhook real. `ETIQUETAS_NO_SOPORTADO` traduce ese subtipo («Encuesta») y, si no lo conoce, cae al genérico antes que enseñar el nombre en inglés de Meta. La lista crece según aparezcan tipos nuevos en producción.
+- **Un mensaje roto no tumba el lote.** El cuerpo de cada bucle vive en `procesarEntrante` / `procesarEstado`, y `handleWebhook` los llama envueltos en `try/catch`. Si el error subiera, la respuesta sería 500 y **Meta reintentaría el lote entero** y habría que volver a procesar lo que ya se guardó (el índice único de `waMessageId` evita el duplicado, pero no el trabajo ni el ruido). Con el catch, Meta recibe 200 y como mucho se pierde el que venía mal, con su `waMessageId` y su `type` en el log.
+- **Cuatro listas por `value`:** `messages`, `statuses`, `user_preferences` (bajas de publicidad) y `user_id_update` (cambios de número), las dos últimas en Contactos; cada elemento en su propio `try/catch`.
+- **Los `system` se ignoran** (avisos del tipo «este contacto cambió de número»): `describeInboundMessage` devuelve `null`, no se guardan y **no abren la ventana**.
+- **`lastInboundAt` solo avanza**, igual que el estado: `if (!conversation.lastInboundAt || timestamp > conversation.lastInboundAt)`. Un webhook viejo que llegue tarde cerraría la ventana antes de tiempo.
+- **Quién escribe sale de `value.contacts`**, no solo de `messages[].from`: `describeInboundContact` casa el perfil por teléfono o BSUID (con varios remitentes en un lote, coger el primero pondría el nombre de otra persona). Un entrante **sin teléfono ni BSUID** se descarta con un `warn`. Antes, uno sin teléfono reventaba al crear la conversación (`contactPhone` era `required`) y el mensaje se perdía.
+- La conversación nueva (`findOrCreateConversation`) se crea con **`unreadCount: 0`**, no 1: el `+1` de más abajo corre también para ella y el primer mensaje de un contacto nuevo salía con badge 2. Si Meta revela el teléfono de alguien que antes escribió solo con usuario, se copia a `contactPhone`.
