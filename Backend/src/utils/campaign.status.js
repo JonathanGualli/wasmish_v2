@@ -78,3 +78,23 @@ export const buildCampaignStats = (recipients = {}, messages = {}) => {
         interrupted: r('interrupted'),
     };
 };
+
+/**
+ * Qué campañas avanzan en esta vuelta del worker: una por LÍNEA (Fase 2b), la
+ * que ya está enviando o, si no hay, la más antigua en cola (`candidates`
+ * llegan de la más antigua a la más nueva). Así una campaña grande de una
+ * línea no deja esperando a la de otra.
+ *
+ * La línea de una campaña sin `lineId` (anterior a las líneas) es la por
+ * defecto de su cuenta (`defaultLineByAccount`: cuenta → línea), o la propia
+ * cuenta si no tiene: así no avanza a la vez que otra de esa misma línea.
+ */
+export const pickCampaignPerLine = (candidates, defaultLineByAccount) => {
+    const byLine = new Map();
+    for (const campaign of candidates) {
+        const key = String(campaign.lineId ?? defaultLineByAccount.get(String(campaign.userId)) ?? campaign.userId);
+        const current = byLine.get(key);
+        if (!current || (current.status === 'queued' && campaign.status === 'sending')) byLine.set(key, campaign);
+    }
+    return [...byLine.values()];
+};
