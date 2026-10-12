@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { TemplateBubble, TemplateButtons, ValueHighlightLegend, type ValueHighlight } from "../../../../components/Chat/TemplatePreview";
 import type { CampaignSample, CampaignVariable } from "../../../../models/campaign.model";
 import type { Template } from "../../../../models/template.model";
@@ -16,6 +16,8 @@ interface MessagePreviewProps {
     selectable?: boolean;
     /** De dónde sale el archivo de la cabecera («Imagen de la plantilla»). */
     headerNote?: string | null;
+    /** Con varias líneas, desde qué número llega: «Llega desde Ferretería La Estrella». */
+    from?: ReactNode;
 }
 
 const sampleBubble = (sample: CampaignSample) => {
@@ -33,7 +35,7 @@ const sampleBubble = (sample: CampaignSample) => {
  * dónde salió. Mientras falte algo por completar no hay ejemplos: se ve la
  * plantilla con los textos fijos puestos y los huecos a la vista.
  */
-export const MessagePreview = ({ template, variables, samples, fallbacks, selectable = true, headerNote }: MessagePreviewProps) => {
+export const MessagePreview = ({ template, variables, samples, fallbacks, selectable = true, headerNote, from }: MessagePreviewProps) => {
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const sample = samples.find(s => s.contactId === selectedId) ?? samples[0];
 
@@ -57,6 +59,7 @@ export const MessagePreview = ({ template, variables, samples, fallbacks, select
             <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-brand-muted">
                 {selectable || !sample ? 'Vista previa' : `Así le llega a ${sample.displayName}`}
             </span>
+            {from && <span className="flex flex-wrap items-center gap-1.5 text-[12.5px] text-brand-gray-600">Llega desde {from}</span>}
 
             {selectable && samples.length > 1 && (
                 <div className="grid gap-1.5">

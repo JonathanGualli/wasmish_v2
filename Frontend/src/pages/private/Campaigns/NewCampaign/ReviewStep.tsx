@@ -11,6 +11,9 @@ import { VARIABLE_SOURCE_LABEL, pluralize } from "../../../../utils/campaignDisp
 import { HEADER_SOURCE_LABEL, headerMediaRule } from "../../../../utils/templateHeader";
 import type { CampaignWizard } from "./useCampaignWizard";
 import { MessagePreview } from "./MessagePreview";
+import { LineSwatch } from "../../../../components/Line/LineSwatch";
+import { useLines } from "../../../../hooks/useLines";
+import { lineLabel, lineNumber } from "../../../../utils/lineDisplay";
 
 /** «"herramientas" para todos» o «Nombre del contacto, o "cliente"». */
 const describeFill = (fill: CampaignFill) =>
@@ -27,8 +30,9 @@ const SummaryRow = ({ label, children }: { label: string; children: React.ReactN
 
 /** Paso 3: el nombre de la campaña y lo que se va a mandar, antes de mandarlo. */
 export const ReviewStep = ({ wizard }: { wizard: CampaignWizard }) => {
-    const { draft, template, preview, update, fieldError, headerMedia, headerSource } = wizard;
+    const { draft, template, preview, update, fieldError, headerMedia, headerSource, line } = wizard;
     const { data: allTags = [] } = useTags();
+    const { hasManyLines, colorOf } = useLines();
     if (!draft || !template || !preview) return null;
 
     // Solo si se eligió «todos los que coinciden» con un filtro de etiquetas; marcados uno a uno, no.
@@ -52,6 +56,20 @@ export const ReviewStep = ({ wizard }: { wizard: CampaignWizard }) => {
 
                 <dl className="grid grid-cols-[110px_minmax(0,1fr)] sm:grid-cols-[130px_minmax(0,1fr)] gap-x-4 gap-y-3.5
                     items-baseline border-t border-brand-border pt-5">
+                    {hasManyLines && line && (
+                        <SummaryRow label="Sale por">
+                            <span className="inline-flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                                <LineSwatch colorClass={colorOf(line.id)} />
+                                <span className="font-semibold text-brand-text">{lineLabel(line)}</span>
+                                <span className="font-mono text-[13px] text-brand-muted tabular-nums">{lineNumber(line)}</span>
+                                {line.verifiedName && <span className="text-[13px] text-brand-muted">· la ven como «{line.verifiedName}»</span>}
+                            </span>
+                            <span className="block mt-1.5 text-[12.5px] leading-[1.5] text-brand-muted">
+                                Las respuestas llegan a la bandeja como conversaciones de {lineLabel(line)}. Si alguien ya hablaba
+                                por otra línea, esa conversación no cambia.
+                            </span>
+                        </SummaryRow>
+                    )}
                     <SummaryRow label="Plantilla">
                         <span className="inline-flex flex-wrap items-center gap-2">
                             <span className="font-mono font-semibold text-brand-text">{template.name}</span>

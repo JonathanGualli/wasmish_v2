@@ -14,6 +14,9 @@ import {
 } from "../../../../hooks/useCampaigns";
 import { CampaignPaths, ChatsPath, SettingsPath, TemplatesPath } from "../../../../models/routes.models";
 import type { Campaign, CampaignRecipient, RecipientState } from "../../../../models/campaign.model";
+import { LineSwatch } from "../../../../components/Line/LineSwatch";
+import { useLines } from "../../../../hooks/useLines";
+import { lineLabel } from "../../../../utils/lineDisplay";
 import type { ChatsNavigationState } from "../../../../models/conversation.mode";
 import type { PillTone } from "../../../../components/Pill/Pill";
 import {
@@ -45,6 +48,23 @@ const DryRunNotice = () => (
         los mensajes quedan como enviados y solo se simula el rechazo de quien pidió no recibir publicidad.
     </Callout>
 );
+
+/** Con más de una línea, por cuál sale: «· ■ Sale por Soporte» (o «Salió», si ya terminó). */
+const CampaignLine = ({ campaign: { lineId, status } }: { campaign: Campaign }) => {
+    const { showLines, lineById, colorOf } = useLines();
+    const line = lineById(lineId);
+    if (!showLines || !line) return null;
+    const disconnected = line.status === 'disconnected';
+    return (
+        <>
+            <span>·</span>
+            <span className="inline-flex items-center gap-1.5 font-semibold text-brand-strong">
+                <LineSwatch colorClass={colorOf(line.id)} disconnected={disconnected} size="sm" />
+                {status === 'completed' || status === 'cancelled' ? 'Salió' : 'Sale'} por {lineLabel(line)}{disconnected && <span className="font-normal text-brand-muted">(desconectada)</span>}
+            </span>
+        </>
+    );
+};
 
 /** Por qué está pausado o cancelado, y qué hacer. */
 const StatusNotice = ({ campaign }: { campaign: Campaign }) => {
@@ -160,6 +180,7 @@ export const CampaignDetailPage = () => {
                     <div className="flex flex-wrap items-center gap-2 text-[13px] text-brand-muted">
                         <span className="font-mono text-brand-strong">{campaign.template.name}</span>
                         <CategoryPill category={campaign.template.category} />
+                        <CampaignLine campaign={campaign} />
                         <span>·</span>
                         <span className="font-mono text-brand-strong">{formatDateTime(campaign.createdAt)}</span>
                     </div>

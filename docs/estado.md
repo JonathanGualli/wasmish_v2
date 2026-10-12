@@ -22,7 +22,7 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 ## En curso
 
 - **Multi-línea · Fase 2c** (plan: `docs/superpowers/plans/2026-10-12-multi-linea-fase-2c.md`), empezada el 2026-10-12 por Claude. Un solo despliegue (1.0.15).
-  Hecho: Tareas 1 a 3 (PRs #19, #20 y #21), unidos. En curso: Tarea 4, elegir y ver la línea en la UI (diseño de Claude Design, `Design/Wasmish Líneas - Chats, campañas y ficha.html`), partida en dos PRs: Chats y fichas (rama `fase2c-elegir-linea`) y después Campañas (asistente con «Enviar desde», borrador, revisar, lista y detalle, y `lineId` en `serializeCampaign`).
+  Hecho: Tareas 1 a 3 (PRs #19, #20 y #21), unidos. En curso: Tarea 4, elegir y ver la línea en la UI (diseño de Claude Design, `Design/Wasmish Líneas - Chats, campañas y ficha.html`), partida en dos PRs: Chats y fichas (PR #22, rama `fase2c-elegir-linea`) y Campañas (rama `fase2c-campanas-linea`, sobre la anterior). Al unir los dos, falta el PR de la versión 1.0.15.
   Sin probar: conectar un segundo número contra Meta de verdad (espera a la prueba del token en WasmishTest). `maxLines` sigue en 1 en todas las cuentas reales.
 
 <!-- Formato de una entrada:
