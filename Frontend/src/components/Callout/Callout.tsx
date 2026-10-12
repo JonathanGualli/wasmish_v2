@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-type CalloutTone = 'info' | 'warning' | 'danger';
+type CalloutTone = 'info' | 'warning' | 'danger' | 'neutral';
 
 const TONES: Record<CalloutTone, { bar: string; icon: string; bg: string }> = {
     // Reutiliza el patrón de «nota interna» del manual: barra de 3px a la
@@ -8,6 +8,8 @@ const TONES: Record<CalloutTone, { bar: string; icon: string; bg: string }> = {
     info:    { bar: 'border-l-brand-accent',  icon: 'text-brand-accent-strong', bg: 'bg-brand-bg' },
     warning: { bar: 'border-l-brand-warning', icon: 'text-brand-warning',       bg: 'bg-brand-warning-soft' },
     danger:  { bar: 'border-l-brand-danger',  icon: 'text-brand-danger',        bg: 'bg-brand-danger-soft' },
+    // Lo que ya no se puede usar y solo se consulta (una línea desconectada): sin acento.
+    neutral: { bar: 'border-l-brand-muted',   icon: 'text-brand-muted',         bg: 'bg-brand-bg' },
 };
 
 export const Callout = ({

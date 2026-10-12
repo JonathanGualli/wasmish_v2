@@ -40,6 +40,8 @@ export interface Template {
     /** `null` = sin cabecera; `undefined` = sincronizada antes de guardarla. */
     header?: TemplateHeader | null,
     headerMedia?: TemplateHeaderMedia | null,
+    /** Su cuenta de WhatsApp Business: solo se envía por una línea de esa cuenta. `null` = sincronizada antes de guardarla. */
+    waBusinessId: string | null,
     /** Última vez que la tocó una sincronización con Meta. */
     updatedAt?: string,
 }

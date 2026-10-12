@@ -17,6 +17,13 @@ export const lineLabel = (line: Line) =>
 export const lineNumber = (line: Line) => line.displayPhoneNumber ?? line.phoneNumberId;
 
 /**
+ * La etiqueta donde hay poco sitio (la bandeja, la lista de campañas): una
+ * línea que se llama por su número se acorta a sus 4 últimas cifras, «···1122».
+ */
+export const shortLineLabel = (line: Line) =>
+    (line.name ?? line.verifiedName ? lineLabel(line) : `···${lineNumber(line).replace(/\D/g, '').slice(-4)}`);
+
+/**
  * El color de cada línea, por orden de conexión (la primera, verde): lo asigna
  * Wasmish y no cambia al renombrar ni al desconectar otra. Si hay más líneas
  * que colores, se repiten.
