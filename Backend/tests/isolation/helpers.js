@@ -83,6 +83,11 @@ const baseUrl = `http://127.0.0.1:${server.address().port}/api`;
 
 after(async () => {
     server.close();
+    // Mongoose crea los índices de cada modelo en segundo plano la primera vez
+    // que se usa. Si el archivo termina antes, esa creación choca con el
+    // cliente ya cerrado y el runner da el archivo por fallido, solo a veces
+    // (en el CI, tests/isolation/chats.test.js con MongoClientClosedError).
+    await Promise.allSettled(Object.values(mongoose.models).map(model => model.init()));
     await mongoose.disconnect();
     await mongod.stop();
     await fs.rm(process.env.MEDIA_DIR, { recursive: true, force: true });
