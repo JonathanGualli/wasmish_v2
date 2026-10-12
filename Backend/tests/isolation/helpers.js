@@ -52,6 +52,7 @@ whatsappApi.defaults.adapter = async (config) => {
 };
 const load = async (file) => (await import(`../../src/models/${file}`)).default;
 
+export const Account = await load('account.model.js');
 export const User = await load('user.model.js');
 export const Contact = await load('contact.model.js');
 export const Tag = await load('tag.model.js');
@@ -92,7 +93,13 @@ const writeMedia = async (file) => {
  */
 export const seedAccount = async (label, { rol = 'admin', seq = 1 } = {}) => {
     const marker = `SECRETO-${label}`;
-    const user = await User.create({ name: marker, email: `${label.toLowerCase()}@pruebas.local`, password: 'x', rol });
+    // La cuenta y su owner comparten `_id`, como en producción.
+    const _id = new mongoose.Types.ObjectId();
+    await Account.create({ _id, name: marker, ownerId: _id });
+    const user = await User.create({
+        _id, name: marker, email: `${label.toLowerCase()}@pruebas.local`, password: 'x', rol,
+        accountId: _id, role: 'owner', isSuperadmin: rol === 'superadmin',
+    });
 
     const tag = await Tag.create({ userId: user._id, name: `${marker} etiqueta`, key: `${label.toLowerCase()}-etiqueta` });
     const contact = await Contact.create({
