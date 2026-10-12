@@ -68,9 +68,8 @@ ssh megaserver
 mkdir -p /opt/docker-projects/prod-wasmish-main/{config,app/Backend,app/Frontend}
 ```
 
-Desde **tu máquina local** (raíz del repo), sube el compose y las plantillas de env:
+Desde **tu máquina local**, en la raíz del repo, sube el compose y las plantillas de env:
 ```bash
-cd /home/jonathan/Proyects/wasmish_v2
 scp deploy/compose.yml            megaserver:/opt/docker-projects/prod-wasmish-main/
 scp deploy/build.env.example      megaserver:/opt/docker-projects/prod-wasmish-main/.env
 scp deploy/config/api.env.example megaserver:/opt/docker-projects/prod-wasmish-main/config/api.env
@@ -105,12 +104,14 @@ curl -sI https://wasmish.solventyc.com   # HTTP/2 200
 
 ## 5. Despliegue de una actualización (flujo normal)
 
-El código de la app se sincroniza con **`tar` sobre SSH** (la máquina local no tiene `rsync`).
+> **Se hace con la skill `deploy`** (`.agents/skills/deploy/SKILL.md`; en Claude Code, `/deploy`), que sigue estos pasos con una confirmación en cada comando del servidor. Esta sección es la referencia de qué hace cada paso. **Solo se despliega desde `master` limpio, al día y con el CI en verde**, y lo desplegado queda registrado con una **etiqueta de git `vX.Y.Z`**: el último despliegue es `git describe --tags --abbrev=0 --match 'v*'`.
+
+El código de la app se sincroniza con **`git archive` sobre SSH** (la máquina local no tiene `rsync`): exporta solo los archivos **versionados** del commit, así que nada sin seguimiento (`.env*`, `media/`, `node_modules`, claves `*.pem`) puede colarse. `set -o pipefail` hace que una subida a medias falle en vez de dar éxito. Hasta el 2026-10-11 se usaba `tar` sobre la carpeta, con `--exclude`; la revisión de Codex encontró que subiría cualquier archivo ignorado por git que no estuviera en la lista.
 La compilación (tanto del front como del back) ocurre **dentro de Docker**, no en local.
 
 **Regla práctica: reconstruye solo lo que cambió.**
 
-> ⚠️ **Si cambió `deploy/compose.yml`, hay que subirlo aparte.** El `tar` solo
+> ⚠️ **Si cambió `deploy/compose.yml`, hay que subirlo aparte.** La subida solo
 > sincroniza `app/Backend` y `app/Frontend`; el compose vive un nivel más arriba
 > y no viaja con él. Se olvida fácil y falla en silencio: el despliegue funciona
 > pero sin el volumen o la red nueva que acabas de añadir.
@@ -122,16 +123,16 @@ La compilación (tanto del front como del back) ocurre **dentro de Docker**, no 
 
 ### 5.0 Subir la versión (antes de desplegar)
 
-La versión se cambia en **un solo sitio**, en local:
+La versión se cambia en **un solo sitio**, y como `master` está protegido, **en un PR**: rama, y en ella
 ```bash
-cd /home/jonathan/Proyects/wasmish_v2/Backend
-npm run version:bump 1.0.8    # o patch | minor | major
+cd Backend
+npm run version:bump patch    # o minor | major | 1.0.11
 ```
-Escribe `version` en los **dos** `package.json` a la vez (los valida antes de tocar ninguno). No hay que editar nada más: Vite la inyecta en el front al compilar y el Backend la publica en `GET /api/version`. Después, commitea (`v1.0.8`) y despliega.
+Escribe `version` en los **dos** `package.json` a la vez (los valida antes de tocar ninguno). No hay que editar nada más: Vite la inyecta en el front al compilar y el Backend la publica en `GET /api/version`. En el mismo PR, la versión nueva en «En producción» de `docs/estado.md`. Cuando el PR está unido, se despliega.
 
 ### Antes de subir el código
 
-1. **Archivos borrados.** El `tar` no borra (ver notas): lo que se eliminó o renombró en el repo sigue en el servidor, y si el build del front compila un archivo que importa algo que ya no existe, falla. Lístalos desde el commit desplegado la última vez y bórralos en `app/Backend` o `app/Frontend` antes del `up --build`:
+1. **Archivos borrados.** La subida no borra (ver notas): lo que se eliminó o renombró en el repo sigue en el servidor, y si el build del front compila un archivo que importa algo que ya no existe, falla. Lístalos desde la última etiqueta desplegada (`<commit desplegado>` = `git describe --tags --abbrev=0 --match 'v*'`) y bórralos en `app/Backend` o `app/Frontend` antes del `up --build`:
    ```bash
    git diff --no-renames --diff-filter=D --name-only <commit desplegado> HEAD
    ```
@@ -144,10 +145,9 @@ Escribe `version` en los **dos** `package.json` a la vez (los valida antes de to
 
 ### 5.1 Solo cambió el Backend
 ```bash
-# 1) LOCAL — subir código del backend
-cd /home/jonathan/Proyects/wasmish_v2
-tar czf - -C Backend --exclude=node_modules --exclude=.git --exclude='.env*' --exclude=./media . \
-  | ssh megaserver 'tar xzf - -C /opt/docker-projects/prod-wasmish-main/app/Backend'
+# 1) LOCAL (raíz del repo) — subir código del backend
+set -o pipefail
+git archive HEAD:Backend | ssh megaserver 'tar xf - -C /opt/docker-projects/prod-wasmish-main/app/Backend'
 
 # 2) SERVER — reconstruir SOLO la api
 ssh megaserver
@@ -157,10 +157,9 @@ docker compose up -d --build wasmish-api
 
 ### 5.2 Solo cambió el Frontend
 ```bash
-# 1) LOCAL — subir código del frontend
-cd /home/jonathan/Proyects/wasmish_v2
-tar czf - -C Frontend --exclude=node_modules --exclude=dist --exclude=.git --exclude='.env*' . \
-  | ssh megaserver 'tar xzf - -C /opt/docker-projects/prod-wasmish-main/app/Frontend'
+# 1) LOCAL (raíz del repo) — subir código del frontend
+set -o pipefail
+git archive HEAD:Frontend | ssh megaserver 'tar xf - -C /opt/docker-projects/prod-wasmish-main/app/Frontend'
 
 # 2) SERVER — reconstruir SOLO la web
 ssh megaserver
@@ -170,12 +169,10 @@ docker compose up -d --build wasmish-web
 
 ### 5.3 Cambiaron ambos
 ```bash
-# 1) LOCAL — subir backend y frontend
-cd /home/jonathan/Proyects/wasmish_v2
-tar czf - -C Backend  --exclude=node_modules --exclude=.git --exclude='.env*' --exclude=./media . \
-  | ssh megaserver 'tar xzf - -C /opt/docker-projects/prod-wasmish-main/app/Backend'
-tar czf - -C Frontend --exclude=node_modules --exclude=dist --exclude=.git --exclude='.env*' . \
-  | ssh megaserver 'tar xzf - -C /opt/docker-projects/prod-wasmish-main/app/Frontend'
+# 1) LOCAL (raíz del repo) — subir backend y frontend
+set -o pipefail
+git archive HEAD:Backend  | ssh megaserver 'tar xf - -C /opt/docker-projects/prod-wasmish-main/app/Backend'
+git archive HEAD:Frontend | ssh megaserver 'tar xf - -C /opt/docker-projects/prod-wasmish-main/app/Frontend'
 
 # 2) SERVER — reconstruir todo
 ssh megaserver
@@ -197,16 +194,16 @@ En el navegador: recarga forzada **Ctrl + Shift + R** (los assets tienen hash y 
 
 ## 6. Notas importantes
 
-- **Nunca subas tu `.env` local.** Por eso los `tar` de arriba llevan `--exclude='.env*'`, que deja fuera también `.env.local` y compañía (un `--exclude=.env` a secas los dejaba pasar). Hoy no rompería nada — el `.dockerignore` de cada workspace lo excluye de la imagen, y el contenedor lee `config/api.env` — pero deja un archivo con secretos de desarrollo en el disco de producción, y hace que toda la protección dependa de un único `.dockerignore` que alguien podría editar sin darse cuenta. En local ese `.env` puede apuntar a la app de pruebas de Meta (WasmishTest), que no tiene nada que hacer en el servidor.
+- **Nunca subas tu `.env` local.** `git archive` ya no puede: solo exporta lo versionado, y los `.env` reales están en el `.gitignore` (solo viajan los `.env.example`, que no llevan secretos). Hasta el 2026-10-11, con `tar` sobre la carpeta, dependía de un `--exclude='.env*'`; uno anterior, `--exclude=.env` a secas, dejó pasar `.env.local`. Un `.env` en el servidor no rompería nada (el `.dockerignore` lo deja fuera de la imagen y el contenedor lee `config/api.env`), pero deja secretos de desarrollo en el disco de producción. En local, además, puede apuntar a la app de pruebas de Meta.
   Si en algún despliegue anterior se subió, se borra así:
   ```bash
   ssh megaserver 'rm -f /opt/docker-projects/prod-wasmish-main/app/Backend/.env* \
                         /opt/docker-projects/prod-wasmish-main/app/Frontend/.env*'
   ```
-- **Tampoco sube `Backend/media/`** (`--exclude=./media`): son los adjuntos de tus pruebas locales. Sin excluirlo acababan en `app/Backend/media` y dentro de la imagen (tapados por el volumen, pero ocupando sitio). El `./` hace que solo se excluya la carpeta de la raíz del Backend.
+- **Tampoco sube `Backend/media/`** (los adjuntos de tus pruebas locales): está en el `.gitignore`, así que `git archive` no lo exporta. Con el `tar` viejo había que excluirlo a mano; sin hacerlo, acababa en `app/Backend/media` y dentro de la imagen (tapado por el volumen, pero ocupando sitio).
 - **Los adjuntos viven en un volumen, no en la imagen.** El servicio `wasmish-api` monta `prod-wasmish-main-media` en `/app/media`, y `MEDIA_DIR` en `config/api.env` tiene que apuntar ahí. Sin el volumen, cada `up --build` borraría todas las fotos y audios recibidos. **Al desplegar por primera vez esta versión hay que añadir `MEDIA_DIR=/app/media` al `config/api.env` del servidor** — si falta, la api escribe en `media/` dentro del contenedor y se pierde en el siguiente rebuild.
   Para ver cuánto ocupa: `docker run --rm -v prod-wasmish-main-media:/m alpine du -sh /m`
-- **`tar` sobreescribe, no borra.** Si eliminaste archivos en local, no desaparecen del server automáticamente: el `git diff` de «Antes de subir el código» (sección 5) dice cuáles borrar. Para una limpieza total de un lado, borra el contenido de `app/Backend` o `app/Frontend` en el server antes de re-subir.
+- **La subida sobreescribe, no borra.** Si eliminaste archivos en local, no desaparecen del server automáticamente: el `git diff` de «Antes de subir el código» (sección 5) dice cuáles borrar. Para una limpieza total de un lado, borra el contenido de `app/Backend` o `app/Frontend` en el server antes de re-subir.
 - **Cambios solo en `config/api.env`** (sin cambio de código): basta reiniciar la api sin rebuild →
   `docker compose up -d wasmish-api` (Compose detecta el env_file y recrea el contenedor).
 - **Cambios en los `VITE_*` del `.env`**: sí requieren **rebuild del front** (`--build wasmish-web`), porque Vite los embebe en tiempo de compilación.
@@ -247,10 +244,10 @@ docker tag prod-wasmish-main-web:1.0.9 prod-wasmish-main-web:local
 docker compose up -d --no-build wasmish-api wasmish-web
 ```
 Ojo: el código en `app/` sigue siendo el nuevo, así que el siguiente `up --build` lo volvería a desplegar. Para dejarlo también:
-1. Restaura la versión anterior del código en local (git checkout del commit previo).
-2. Re-sube con `tar` (sección 5) y reconstruye.
+1. En local, `git switch --detach v<versión anterior>` (la etiqueta del despliegue anterior).
+2. Re-sube con `tar` (sección 5), reconstruye y vuelve a `master`.
 
-> Recomendado: **commitear en git** antes de cada deploy, para poder volver a un estado conocido.
+Un despliegue revertido **no** recibe su etiqueta `vX.Y.Z`.
 
 ---
 
