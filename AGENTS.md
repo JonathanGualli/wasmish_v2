@@ -30,6 +30,47 @@ Monorepo con dos workspaces independientes: `Backend/` y `Frontend/`. Cada uno t
 10. **Commits sin coautor ni atribución** a ningún agente, tampoco en los PRs. Y nada de push directo a `master` (ver «Flujo con git»).
 11. **La documentación se mantiene al día**: al cambiar un comportamiento, se corrige su sección en `docs/arquitectura/`; un tema nuevo entra en el mapa de abajo. Si un documento contradice el código, manda el código y se corrige el documento.
 
+## Cómo trabajar en este proyecto
+
+Jonathan es el único desarrollador. Lo que espera de cualquier agente:
+
+- **Responder siempre en español.** Los identificadores nuevos van en inglés; los comentarios, los commits, los PRs y la documentación, en español. Lo que ya existe con nombre en español (`procesarEntrante`, `descargarAdjunto`) no se renombra sin que lo pida.
+- **Por defecto, guiar sin editar**: explicar qué hacer y por qué, paso a paso, y dar el código para que él lo escriba. **Si dice «aplícalo tú»**, el agente escribe: una rama, commits pequeños, el PR, y espera el CI. **El PR no lo une el agente**: revisar y unir es de Jonathan, salvo que diga lo contrario.
+- **Al darle un bloque de código, completo y ejecutable.** Lo pega tal cual: un comentario como `// ← sin tocar` o `/* …lo que ya tenías… */` en lugar del código borra lo que funcionaba, y los tests no lo detectan. Si es largo, se parte en pasos.
+- **Código limpio y reutilizar** lo que ya hay antes de crear algo nuevo. Ninguna carpeta nueva sin preguntar (`Backend/src/services/` ya está aprobada).
+- **Al terminar algo**, un resumen con lo reutilizado, lo nuevo y las decisiones que el agente tomó por su cuenta, para que las revise.
+- **Probar de verdad antes de decir «hecho»** (tests, `tsc`, lint y, si toca la UI, el navegador: ver [pruebas-y-scripts.md](docs/arquitectura/pruebas-y-scripts.md)). Si algo no se pudo probar, decirlo.
+- **Lo decidido no se vuelve a proponer**: está en [docs/decisiones.md](docs/decisiones.md).
+
+## Claude y Codex: un solo sitio para cada cosa
+
+Los dos agentes trabajan en este repo. Para que no se desfasen, cada cosa vive en **un solo sitio**, que los dos leen y escriben:
+
+| Qué | Dónde | Cuándo se actualiza |
+|---|---|---|
+| Reglas e instrucciones | este `AGENTS.md` y el de cada carpeta | Al cambiar una regla. `CLAUDE.md` solo importa este archivo y lleva lo propio de Claude; **una regla nueva nunca va en `CLAUDE.md`** |
+| Cómo funciona cada módulo | `docs/arquitectura/` | **En el mismo PR** que cambia el comportamiento |
+| Decisiones de Jonathan | `docs/decisiones.md` | Cuando decide algo |
+| Qué está en producción, qué falta y **qué hay en curso** | `docs/estado.md` | Al empezar o terminar un trabajo, y al desplegar |
+| Skills | `.agents/skills/` | — |
+| Lo privado (servidor, cuentas y datos de Meta, deuda de seguridad) | la memoria privada, **fuera de este repo**, que es público | Cada agente sabe dónde está por su configuración personal |
+
+- **Al empezar una sesión:** `git pull` y leer «En curso» de `docs/estado.md`. Si el otro agente dejó algo a medias, sigue en su rama y su PR.
+- **Al terminar:** si el trabajo queda a medias, «En curso» dice en qué rama está, qué falta y qué no se probó.
+- **Nada del proyecto se guarda solo en la memoria de un agente**: si el otro lo necesitaría, va a estos documentos.
+- El CI tiene un check de documentación: falla si un enlace se rompe, si un archivo de `docs/arquitectura/` no está en el mapa o si un `CLAUDE.md` deja de importar su `AGENTS.md`.
+
+## Revisión cruzada
+
+Todo PR que toque código lo revisa **el agente que no lo escribió**, en **una sola ronda**. Un PR que solo cambia documentación no la necesita.
+
+1. **Revisar**, desde la rama del PR y con los criterios de [.github/revision-cruzada.md](.github/revision-cruzada.md):
+   - si escribió Claude, revisa Codex: `codex exec -s read-only --ephemeral -o /tmp/revision.md "$(cat .github/revision-cruzada.md)"` (solo lectura: no puede tocar nada). `codex review --base master` no admite instrucciones propias; por eso `exec`;
+   - si escribió Codex, revisa Claude, con `/code-review` o con el mismo prompt.
+2. **Publicar** la revisión tal cual como comentario del PR, titulado «Revisión de Codex» o «Revisión de Claude».
+3. **Responder** el autor punto por punto en otro comentario: *aceptado*, con el commit que lo arregla, o *rechazado*, con el motivo comprobado en el código.
+4. **Sin segunda ronda**: Jonathan lee los dos comentarios y decide si se une.
+
 ## Diseño y marca
 
 **Antes de crear o modificar cualquier componente, página, o estilo, consultar el skill `/brand-guidelines`.**
@@ -62,6 +103,7 @@ Cada archivo de `docs/arquitectura/` empieza con su índice. Las secciones son t
 | Probar y mantener | [pruebas-y-scripts.md](docs/arquitectura/pruebas-y-scripts.md) | `webhook:simulate`, `seed:contacts`, backfills, `check:duplicates`, `version:bump`, tests de aislamiento |
 | Reglas del backend | [Backend/AGENTS.md](Backend/AGENTS.md) | estructura, configuración, tests, índices de MongoDB |
 | Reglas del frontend | [Frontend/AGENTS.md](Frontend/AGENTS.md) | providers, rutas, flujo de datos, caché de React Query, componentes compartidos |
+| Estado del proyecto | [docs/estado.md](docs/estado.md) | versión en producción, trabajo en curso, lo siguiente, cabos sueltos conocidos |
 | Decisiones de producto | [docs/decisiones.md](docs/decisiones.md) | lo que Jonathan decidió y por qué, con fecha |
 | Diseños y briefs | `Design/*.html`, `docs/superpowers/specs/` | diseños exportados de Claude Design; briefs de UI y specs técnicas de cada módulo |
 | Producción | `deploy/README.md` | compose, Traefik, despliegue con `tar`, volver a una versión anterior |

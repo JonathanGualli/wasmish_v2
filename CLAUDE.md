@@ -28,4 +28,4 @@ Si hay archivos nuevos, actualizar el grafo con `/graphify --update` antes de co
 
 ## Memoria
 
-La memoria de Claude es privada (se sincroniza en un repo aparte) y Codex no la ve. Lo que sea **del proyecto** va en estos documentos, no en la memoria: así lo leen los dos.
+La memoria de Claude es privada: se sincroniza entre las dos computadoras en un repo aparte, y Codex la lee desde su configuración personal (`~/.codex/AGENTS.md`), nunca desde este repo, que es público. En ella va **solo lo privado** (servidor, cuentas y datos de Meta, deuda de seguridad) y lo de cómo trabaja Claude. Lo que sea **del proyecto** va en `AGENTS.md` y `docs/`, aunque se aprenda en una sesión de Claude: si no, Codex no lo ve.
