@@ -143,8 +143,10 @@ export const seedAccount = async (label, { isSuperadmin = false, seq = 1 } = {})
     const headerMedia = await TemplateMedia.create({
         userId: accountId, file: headerFile, mimeType: 'image/png', filename: `${marker}.png`, size: PNG.length,
     });
+    // Con el WABA que deja `connectWhatsapp` (como las deja `migrate:lines`):
+    // desde la Fase 2b las plantillas se buscan en el WABA de la línea.
     const templateFields = {
-        userId: accountId, language: 'es', category: 'MARKETING', status: 'APPROVED',
+        userId: accountId, waBusinessId: `waba-${label}`, language: 'es', category: 'MARKETING', status: 'APPROVED',
         parameterFormat: 'POSITIONAL', buttons: [],
     };
     const template = await Template.create({

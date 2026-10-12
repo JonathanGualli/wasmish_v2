@@ -3,7 +3,10 @@ import Line from '../models/line.model.js';
 import User from '../models/user.model.js';
 import Waba from '../models/waba.model.js';
 import { findAccountOwner } from './account.service.js';
-import { ownerConnection, lineMatchesOwner } from '../utils/line.js';
+import { ownerConnection, lineMatchesOwner, sendingLineFor } from '../utils/line.js';
+import {
+    LINE_DISCONNECTED_MESSAGE, LINE_NOT_FOUND_MESSAGE, WHATSAPP_NOT_CONNECTED_MESSAGE,
+} from '../utils/whatsapp.line.js';
 
 // Fase 2a de multi-línea: `Waba`, `Line` y `Account.defaultLineId` son una
 // proyección de la conexión que guarda el owner en `User` (ver utils/line.js).
@@ -84,12 +87,6 @@ export const syncLinesFromOwner = async (accountId, { details = null, afterRead 
     throw new Error(`La conexión de la cuenta ${accountId} cambió ${MAX_SYNC_ATTEMPTS} veces durante la sincronización`);
 };
 
-// La línea de ese número en esa cuenta (activa o no), o null.
-export const findLineId = async (accountId, phoneNumberId) => {
-    const line = await Line.findOne({ accountId, phoneNumberId }).select('_id').lean();
-    return line?._id ?? null;
-};
-
 /**
  * A qué cuenta y línea va lo que llega al webhook por `phoneNumberId`:
  * `{ accountId, lineId, phoneNumberId, tokenWhatsapp }`, con el token (cifrado)
@@ -120,3 +117,46 @@ export const findInboundLine = async (phoneNumberId) => {
     });
     return { accountId: owner.accountId, lineId: line?._id ?? null, phoneNumberId, tokenWhatsapp: owner.tokenWhatsapp ?? null };
 };
+
+const statusError = (statusCode, message) => Object.assign(new Error(message), { statusCode });
+
+/**
+ * La línea por la que sale un envío de la cuenta: un SendingLine
+ * `{ accountId, lineId, phoneNumberId, waBusinessId, tokenWhatsapp }` (token
+ * cifrado; ver `sendingLineFor`). `User` sigue siendo la fuente de la conexión.
+ *
+ * - `lineId`: esa línea de la cuenta; si no es suya, 404.
+ * - Si no, la del número `phoneNumberId` (una conversación sin línea) o, sin él,
+ *   la del número conectado: la línea por defecto.
+ *
+ * Errores con `statusCode`: 409 sin WhatsApp conectado o si la línea es de un
+ * número que ya no está conectado. La reserva (la proyección no cuadra con
+ * `User`) envía igual y deja un `console.error`.
+ */
+export const findSendingLine = async (accountId, { lineId = null, phoneNumberId = null } = {}) => {
+    const owner = await findAccountOwner(accountId).lean();
+
+    let line = null;
+    if (lineId) {
+        line = await Line.findOne({ _id: lineId, accountId }).lean();
+        if (!line) throw statusError(404, LINE_NOT_FOUND_MESSAGE);
+    } else {
+        const number = phoneNumberId ?? owner?.phoneNumberId;
+        line = number ? await Line.findOne({ accountId, phoneNumberId: number }).lean() : null;
+    }
+    const waba = line?.wabaId ? await Waba.findById(line.wabaId).lean() : null;
+
+    const result = sendingLineFor({ owner, line, waba, phoneNumberId });
+    if (result.issue === 'not_connected') throw statusError(409, WHATSAPP_NOT_CONNECTED_MESSAGE);
+    if (result.issue === 'disconnected') throw statusError(409, LINE_DISCONNECTED_MESSAGE);
+    if (result.fallback) {
+        console.error('Envío por la reserva de User: la línea no refleja la conexión', {
+            accountId: String(accountId), lineId: line ? String(line._id) : null,
+        });
+    }
+    return result.line;
+};
+
+// La línea de una conversación: la suya o, si es anterior a las líneas, la de su número.
+export const findConversationLine = (conversation) =>
+    findSendingLine(conversation.userId, { lineId: conversation.lineId, phoneNumberId: conversation.phoneNumberId });

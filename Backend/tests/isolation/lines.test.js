@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { seedAccount, Account, Line, User, Waba } from './helpers.js';
 
-const { syncLinesFromOwner, findLineId, findInboundLine } = await import('../../src/services/line.service.js');
+const { syncLinesFromOwner, findInboundLine } = await import('../../src/services/line.service.js');
 const { lineStateIssues } = await import('../../src/utils/line.js');
 
 await Waba.init();
@@ -148,13 +148,6 @@ test('un número activo en una cuenta y desconectado en otra conviven; dos activ
     await Line.create({ accountId: k.accountId, phoneNumberId: '7555', status: 'disconnected' });
     const l = await newAccount('L');
     await assert.rejects(Line.create({ accountId: l.accountId, phoneNumberId: '7555', status: 'active' }), (error) => error.code === 11000);
-});
-
-test('findLineId: la línea del número en esa cuenta, activa o no; si no, null', async () => {
-    const m = await newAccount('M');
-    const line = await Line.create({ accountId: m.accountId, phoneNumberId: '7010', status: 'disconnected' });
-    assert.equal(String(await findLineId(m.accountId, '7010')), String(line._id));
-    assert.equal(await findLineId(m.accountId, '0000'), null);
 });
 
 // Regresión que vigila (Codex, código de la 2a): tras una vuelta atrás, A pasó de

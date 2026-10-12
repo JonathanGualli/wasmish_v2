@@ -74,3 +74,45 @@ test('sincronizar guarda el WABA en cada plantilla', async () => {
     assert.equal(String(template.userId), t.accountId);
     assert.equal(template.waBusinessId, 'waba-T');
 });
+
+// Fase 2b: las plantillas se buscan en el WABA de la línea.
+test('GET /templates solo lista las del WABA de la línea', async () => {
+    const u = await seedAccount('U', { seq: 4 });
+    await connectWhatsapp(u);
+    await Template.create({
+        userId: u.accountId, waBusinessId: 'waba-otro', templateId: 'tpl-otro-U', name: 'de_otro_waba',
+        language: 'es', category: 'MARKETING', status: 'APPROVED', bodyText: 'otro', header: null, buttons: [],
+    });
+
+    const res = await request(u, 'GET', '/templates');
+    assert.equal(res.status, 200, res.text);
+    const names = res.body.map(template => template.name);
+    assert.ok(names.includes(u.templateName), res.text);
+    assert.ok(!names.includes('de_otro_waba'), res.text);
+});
+
+// Regresión que vigila (plan de la 2b, Review Focus 5): una plantilla
+// sincronizada antes de la 2a no tiene WABA, no aparece en la búsqueda, y el
+// envío tiene que sincronizarla y salir igual.
+test('una plantilla sin WABA se sincroniza y sale', async () => {
+    const v = await seedAccount('V', { seq: 5 });
+    await connectWhatsapp(v);
+    await Template.updateOne({ templateId: v.templateId }, { $set: { waBusinessId: null } });
+    onMeta(async (config) => {
+        if (config.method === 'get' && config.url === '/waba-V/message_templates') {
+            return { data: { data: [{
+                id: v.templateId, name: v.templateName, category: 'MARKETING', status: 'APPROVED', language: 'es',
+                parameter_format: 'POSITIONAL', components: [{ type: 'BODY', text: 'hola' }],
+            }] } };
+        }
+        if (config.method === 'post' && config.url === `/99${v.seq}/messages`) return { data: { messages: [{ id: 'wamid.jit' }] } };
+        return undefined;
+    });
+    try {
+        const res = await request(v, 'POST', '/chats/template', { templateName: v.templateName, destinationNumber: '593990001234' });
+        assert.equal(res.status, 200, res.text);
+    } finally {
+        onMeta(null);
+    }
+    assert.equal((await Template.findOne({ templateId: v.templateId }).lean()).waBusinessId, 'waba-V');
+});

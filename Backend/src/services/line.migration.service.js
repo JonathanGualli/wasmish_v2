@@ -2,6 +2,7 @@ import Account from '../models/account.model.js';
 import Campaign from '../models/campaign.model.js';
 import Conversation from '../models/conversation.model.js';
 import Line from '../models/line.model.js';
+import Template from '../models/template.model.js';
 import User from '../models/user.model.js';
 import Waba from '../models/waba.model.js';
 import { syncLinesFromOwner } from './line.service.js';
@@ -62,6 +63,9 @@ const inspectAccount = async (owner) => {
         // Solo cuentan las de una cuenta con línea por defecto: sin conexión no
         // hay línea que ponerles.
         campaigns: connection ? await Campaign.countDocuments({ userId: accountId, lineId: null }) : 0,
+        // Las sincronizadas antes de la 2a no tienen WABA, y desde la 2b se
+        // buscan por él. Reciben el actual, que es con el que se usan hoy.
+        templates: connection ? await Template.countDocuments({ userId: accountId, waBusinessId: null }) : 0,
     };
 };
 
@@ -86,6 +90,11 @@ const applyAccount = async ({ owner, phoneNumberIds, historical }) => {
 
     const { defaultLineId } = await Account.findById(accountId).select('defaultLineId').lean();
     if (defaultLineId) await Campaign.updateMany({ userId: accountId, lineId: null }, { $set: { lineId: defaultLineId } });
+
+    const connection = ownerConnection(owner);
+    if (connection) {
+        await Template.updateMany({ userId: accountId, waBusinessId: null }, { $set: { waBusinessId: connection.waBusinessId } });
+    }
 };
 
 /**
@@ -114,6 +123,7 @@ export const runLineMigration = async ({ dryRun = false, check = false } = {}) =
         oldLines: inspected.reduce((sum, state) => sum + (state.historical.create?.length ?? 0), 0),
         conversations: inspected.reduce((sum, state) => sum + state.conversations, 0),
         campaigns: inspected.reduce((sum, state) => sum + state.campaigns, 0),
+        templates: inspected.reduce((sum, state) => sum + state.templates, 0),
         accountsOutOfSync: inspected.filter(state => state.issues.length > 0).length,
         oldConversationIndex: await hasOldConversationIndex(),
     };

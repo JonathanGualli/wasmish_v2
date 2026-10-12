@@ -24,11 +24,7 @@ export const nextPageCursor = (body) =>
 
 export const WHATSAPP_NOT_CONNECTED_MESSAGE = 'La cuenta no tiene WhatsApp conectado. Conéctala desde Ajustes antes de enviar.';
 
-// Para enviar hace falta el token y el número. Sin esto, `decrypt(null)`
-// revienta y el envío responde un 500 que no explica nada.
-export const assertWhatsappConnected = (user) => {
-    if (user?.tokenWhatsapp && user?.phoneNumberId) return;
-    const error = new Error(WHATSAPP_NOT_CONNECTED_MESSAGE);
-    error.statusCode = 409;
-    throw error;
-};
+// Una conversación de un número que ya no está conectado (Fase 2b de multi-línea).
+export const LINE_DISCONNECTED_MESSAGE = 'Esta conversación es de un número de WhatsApp que ya no está conectado. Para escribirle, inicia una conversación nueva desde tu número actual.';
+
+export const LINE_NOT_FOUND_MESSAGE = 'La línea no existe en tu cuenta.';

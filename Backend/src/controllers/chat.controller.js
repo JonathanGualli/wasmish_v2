@@ -1,4 +1,3 @@
-import { findAccountOwner } from "../services/account.service.js";
 import Conversation from "../models/conversation.model.js";
 import Contact from "../models/contact.model.js";
 import Message from "../models/message.model.js";
@@ -15,8 +14,7 @@ import {
 import { mimeBase, saveByContentHash } from "../utils/media.storage.js";
 import { cleanFilename } from "../services/template.media.service.js";
 import { MEDIA_DIR } from "../config.js";
-import { assertWhatsappConnected } from "../utils/whatsapp.line.js";
-import { findLineId } from "../services/line.service.js";
+import { findConversationLine, findSendingLine } from "../services/line.service.js";
 
 /**
  * Un mensaje tal como lo ve el frontend: la lista del chat, la respuesta de un
@@ -80,11 +78,12 @@ const attachmentFields = ({ kind, mimeType, file, filename, size, caption }) => 
  * `attachment` = `{ kind, buffer, mimeType, file, filename, size, caption }`:
  * ya validado (`outboundMediaIssue`) y guardado en MEDIA_DIR (`file`).
  *
- * `user` es el owner de la cuenta: de él salen el token y el número (hasta la
- * Fase 2 de multi-línea), y de su `accountId`, el dueño de lo que se guarda.
+ * `line` es la línea por la que sale (`findSendingLine` o `findConversationLine`,
+ * Fase 2b de multi-línea): su número, el token de su WABA y la cuenta dueña de
+ * lo que se guarda. Ya comprobada: está conectada.
  */
 export const processMessageSending = async ({
-    user,
+    line,
     conversation,
     text,
     temporalId,
@@ -92,13 +91,8 @@ export const processMessageSending = async ({
     contactName,
     attachment = null }) => {
 
-    // Sin esto, decrypt(null) revienta y el envío responde un 500 sin explicación.
-    assertWhatsappConnected(user);
-
-    const token = decrypt(user.tokenWhatsapp);
-    const phoneNumberId = conversation?.phoneNumberId || user.phoneNumberId;
-
-    if (!phoneNumberId) throw new Error("Phone number ID is required");
+    const token = decrypt(line.tokenWhatsapp);
+    const { phoneNumberId } = line;
 
     const recipient = await getSendingRecipient(conversation, destinationNumber);
 
@@ -121,10 +115,8 @@ export const processMessageSending = async ({
 
     // Si no hay conversación (mensaje nuevo), la creamos; si existe, la actualizamos
     const now = new Date();
-    // La línea del número por el que salió (hasta la Tarea 3 de la Fase 2b, el del owner).
-    const line = { lineId: await findLineId(user.accountId, phoneNumberId), phoneNumberId };
     const targetConversation = await getSendingConversation({
-        userId: user.accountId, conversation, recipient, line, contactName, source: 'manual',
+        userId: line.accountId, conversation, recipient, line, contactName, source: 'manual',
     });
     targetConversation.lastMessage = messageText;
     targetConversation.lastMessageAt = now;
@@ -146,7 +138,7 @@ export const processMessageSending = async ({
         failedAt: status === 'failed' ? now : null,
     });
 
-    sendToAccount(String(user.accountId), 'message_created', serializeMessage(msg));
+    sendToAccount(String(line.accountId), 'message_created', serializeMessage(msg));
 
     return { msg, waMessageId, status, errorCode, errorDetail };
 };
@@ -157,12 +149,14 @@ const WINDOW_BLOCK_MESSAGES = {
     never: 'Este contacto todavía no te ha escrito: para empezar la conversación, envíale una plantilla.',
 };
 
-// La conversación de un número, sin crear nada (el envío puede no salir). Por
-// el contacto, o por `contactPhone` si es anterior a los contactos y no se enlazó.
-const findConversationByNumber = async (userId, phone) => {
+// La conversación de un número EN UNA LÍNEA, sin crear nada (el envío puede no
+// salir): la ventana es de cada línea. Por el contacto, o por `contactPhone` si
+// es anterior a los contactos y no se enlazó.
+const findConversationByNumber = async (userId, phone, lineId) => {
     const contact = await Contact.findOne({ userId, phone }).select('_id').lean();
     return Conversation.findOne({
         userId,
+        lineId,
         $or: [...(contact ? [{ contactId: contact._id }] : []), { contactPhone: phone }],
     }).lean();
 };
@@ -206,9 +200,6 @@ export const sendMessageController = async (req, res) => {
         const { text, temporalId, destinationNumber, contactName } = req.body;
 
         const accountId = req.auth.accountId;
-        // Quien guarda la conexión de WhatsApp (hasta la Fase 2, el owner).
-        const owner = await findAccountOwner(accountId);
-        if (!owner) return res.status(404).json([{ message: "User not found" }]);
 
         if (!id && !destinationNumber) {
             return res.status(400).json([{ message: "Conversation ID or Destination Number is required" }]);
@@ -224,18 +215,23 @@ export const sendMessageController = async (req, res) => {
             if (!conversation) return res.status(404).json([{ message: "Conversation not found" }]);
         }
 
+        // Sin conversación, la línea va primero (la por defecto): la ventana es
+        // de la conversación del contacto EN ESA LÍNEA.
+        let line = conversation ? null : await findSendingLine(accountId);
+
         // Fuera de la ventana de 24 h, Meta no entrega texto libre (131047): se
         // rechaza aquí, sin llamarla y sin dejar un mensaje fallido. La interfaz
         // ya lo frena; esto cubre lo que se cuele (otra pestaña, la ventana que
         // se cierra mientras se escribe). Lo que sí pasa al chat es el aviso.
-        const target = conversation ?? await findConversationByNumber(accountId, destinationNumber);
+        const target = conversation ?? await findConversationByNumber(accountId, destinationNumber, line.lineId);
         const blocked = freeTextBlockReason(await lastInboundOf(target));
         if (blocked) return res.status(409).json([{ message: WINDOW_BLOCK_MESSAGES[blocked], code: 'window_closed' }]);
-        assertWhatsappConnected(owner);
+        // Con conversación, su línea: 409 si es de un número que ya no está conectado.
+        line ??= await findConversationLine(conversation);
 
         // Llamamos al servicio (que ahora persiste incluso si el envío falla)
         const { msg } = await processMessageSending({
-            user: owner,
+            line,
             conversation,
             text,
             temporalId,
@@ -281,13 +277,10 @@ export const sendMediaMessageController = async (req, res) => {
         const conversation = await Conversation.findOne({ _id: req.params.id, userId });
         if (!conversation) return res.status(404).json([{ message: "Conversation not found" }]);
 
-        const owner = await findAccountOwner(userId);
-        if (!owner) return res.status(404).json([{ message: "User not found" }]);
-
         const blocked = freeTextBlockReason(await lastInboundOf(conversation));
         if (blocked) return res.status(409).json([{ message: WINDOW_BLOCK_MESSAGES[blocked], code: 'window_closed' }]);
         // Antes de guardar el archivo: si no puede salir, no se queda en disco.
-        assertWhatsappConnected(owner);
+        const line = await findConversationLine(conversation);
 
         const buffer = Buffer.isBuffer(req.body) ? req.body : null;
         const mimeType = mimeBase(req.headers['content-type']);
@@ -303,7 +296,7 @@ export const sendMediaMessageController = async (req, res) => {
 
         const file = await saveByContentHash(MEDIA_DIR, 'outbound', buffer, mimeType);
         const { msg } = await processMessageSending({
-            user: owner,
+            line,
             conversation,
             temporalId: String(req.headers['x-temporal-id'] ?? '').slice(0, 64) || undefined,
             attachment: {
@@ -434,11 +427,11 @@ export const sendConversationTemplateController = async (req, res) => {
         const conversation = await Conversation.findOne({ _id: id, userId });
         if (!conversation) return res.status(404).json([{ message: "Conversation not found" }]);
 
-        const owner = await findAccountOwner(userId);
-        if (!owner) return res.status(404).json([{ message: "User not found" }]);
+        // La línea de la conversación: 409 si es de un número que ya no está conectado.
+        const line = await findConversationLine(conversation);
 
         const resultado = await processTemplateSending({
-            user: owner,
+            line,
             conversation,
             templateName: req.body.templateName,
             language: req.body.language,
@@ -461,11 +454,10 @@ export const sendConversationTemplateController = async (req, res) => {
 // la filtra por la cuenta de la sesión: no hay conversación ajena que comprobar.
 export const startConversationTemplateController = async (req, res) => {
     try {
-        const owner = await findAccountOwner(req.auth.accountId);
-        if (!owner) return res.status(404).json([{ message: "User not found" }]);
+        const line = await findSendingLine(req.auth.accountId);
 
         const resultado = await processTemplateSending({
-            user: owner,
+            line,
             destinationNumber: req.body.destinationNumber,
             contactName: req.body.contactName || undefined,
             source: 'manual',

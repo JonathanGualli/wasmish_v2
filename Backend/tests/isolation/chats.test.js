@@ -3,7 +3,13 @@
 // controlador del chat; sin él, cualquier sesión escribiría en la de otro.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { seedAccount, request, assertNoLeak, assertHasOwn, Conversation, Message, PNG } from './helpers.js';
+import {
+    seedAccount, request, assertNoLeak, assertHasOwn, connectWhatsapp, onMeta, metaCalls,
+    Contact, Conversation, Line, Message, Waba, PNG,
+} from './helpers.js';
+
+const { encrypt } = await import('../../src/utils/crypto.js');
+const { LINE_DISCONNECTED_MESSAGE } = await import('../../src/utils/whatsapp.line.js');
 
 const a = await seedAccount('A', { seq: 1 });
 const b = await seedAccount('B', { seq: 2 });
@@ -79,4 +85,84 @@ test('GET /media/:id: B no descarga el adjunto de un mensaje de A', async () => 
     const asA = await request(a, 'GET', `/media/${a.messageId}`);
     assert.equal(asA.status, 200, asA.text);
     assert.equal(asA.text.slice(1, 4), 'PNG');
+});
+
+// Fase 2b: los envíos salen por la línea de la conversación.
+const d = await seedAccount('D', { seq: 4 });
+await connectWhatsapp(d);
+const D_NUMBER = `99${d.seq}`;
+const currentLineOf = (account) => Line.findOne({ accountId: account.accountId, phoneNumberId: `99${account.seq}` }).lean();
+
+/** Una conversación de `account` con la ventana abierta, en la línea `line`. */
+const openConversation = async (account, line, phone) => {
+    const contact = await Contact.create({ userId: account.accountId, phone, name: `contacto ${phone}` });
+    return Conversation.create({
+        userId: account.accountId, contactId: contact._id, contactPhone: phone,
+        phoneNumberId: line.phoneNumberId, lineId: line._id, lastInboundAt: new Date(),
+    });
+};
+
+// Regresión que vigila: una conversación de un número anterior respondía con ese
+// número y el token del actual, y quedaba un Message fallido.
+test('responder en una conversación de una línea desconectada → 409 sin llamar a Meta', async () => {
+    const old = await Line.create({ accountId: d.accountId, phoneNumberId: '8812', status: 'disconnected' });
+    const conversation = await openConversation(d, old, '593990002001');
+    const calls = metaCalls.length;
+
+    const text = await request(d, 'POST', `/chats/${conversation._id}/messages`, { text: 'hola', temporalId: 't-d' });
+    assert.equal(text.status, 409, text.text);
+    assert.equal(text.body[0].message, LINE_DISCONNECTED_MESSAGE);
+    const template = await request(d, 'POST', `/chats/${conversation._id}/template`, { templateName: d.templateName });
+    assert.equal(template.status, 409, template.text);
+
+    assert.equal(metaCalls.length, calls);
+    assert.equal(await Message.countDocuments({ conversationId: conversation._id }), 0);
+});
+
+test('el envío sale con el número de la línea de la conversación', async () => {
+    const conversation = await openConversation(d, await currentLineOf(d), '593990002002');
+    onMeta(async (config) => (config.method === 'post' && config.url === `/${D_NUMBER}/messages`
+        ? { data: { messages: [{ id: 'wamid.linea' }] } }
+        : undefined));
+    try {
+        const res = await request(d, 'POST', `/chats/${conversation._id}/messages`, { text: 'hola', temporalId: 't-l' });
+        assert.equal(res.status, 201, res.text);
+        assert.equal(metaCalls.at(-1).url, `/${D_NUMBER}/messages`);
+    } finally {
+        onMeta(null);
+    }
+});
+
+// Regresión que vigila (Codex, plan de la 2b): la ventana es de cada línea. Un
+// contacto que escribió hace poco a un número anterior no tiene la ventana
+// abierta en el actual.
+test('ventana por línea: abierta en el número anterior y cerrada en el actual → 409', async () => {
+    const e = await seedAccount('E', { seq: 5 });
+    await connectWhatsapp(e);
+    const old = await Line.create({ accountId: e.accountId, phoneNumberId: '8813', status: 'disconnected' });
+    const conversation = await openConversation(e, old, '593990002003');
+
+    const res = await request(e, 'POST', '/chats/messages', { text: 'hola', destinationNumber: conversation.contactPhone });
+    assert.equal(res.status, 409, res.text);
+    assert.equal(res.body[0].code, 'window_closed');
+});
+
+// La reserva: si la proyección no cuadra con `User` (aquí, el token del Waba
+// quedó viejo), el envío sale con la conexión de `User`, que es la buena.
+test('con la proyección desajustada, el envío sale con el token de User', async () => {
+    const conversation = await openConversation(d, await currentLineOf(d), '593990002004');
+    await Waba.updateOne({ accountId: d.accountId }, { tokenWhatsapp: encrypt('token-viejo') });
+    let authorization = null;
+    onMeta(async (config) => {
+        if (config.method !== 'post' || config.url !== `/${D_NUMBER}/messages`) return undefined;
+        authorization = config.headers?.Authorization;
+        return { data: { messages: [{ id: 'wamid.reserva' }] } };
+    });
+    try {
+        const res = await request(d, 'POST', `/chats/${conversation._id}/messages`, { text: 'hola', temporalId: 't-r' });
+        assert.equal(res.status, 201, res.text);
+        assert.equal(authorization, 'Bearer token-de-pruebas');
+    } finally {
+        onMeta(null);
+    }
 });

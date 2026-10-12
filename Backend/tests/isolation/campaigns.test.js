@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    seedAccount, request, assertNoLeak, assertHasOwn, connectWhatsapp, Account, Campaign, CampaignRecipient, Conversation, Message,
+    seedAccount, request, assertNoLeak, assertHasOwn, connectWhatsapp, Account, Campaign, CampaignRecipient, Conversation, Line, Message,
 } from './helpers.js';
 
 const { processNext } = await import('../../src/workers/campaign.worker.js');
@@ -132,6 +132,26 @@ test('el worker envía la campaña de una cuenta cuyo _id no es el del owner', a
     const sent = await Message.findOne({ campaignId: c.campaignId }).lean();
     assert.ok(sent, 'la campaña no dejó ningún mensaje');
     assert.ok(await Conversation.exists({ _id: sent.conversationId, userId: c.accountId }));
+    // Regresión que vigila (plan de la 2b, Review Focus 6): la campaña sembrada no
+    // tiene `lineId` (anterior a las líneas) y sale por la línea del número actual.
+    const line = await Line.findOne({ accountId: c.accountId, phoneNumberId: `99${c.seq}` }).lean();
+    assert.equal(String((await Conversation.findById(sent.conversationId).lean()).lineId), String(line._id));
+});
+
+test('una campaña de una línea desconectada se pausa con whatsapp_disconnected', async () => {
+    const w = await seedAccount('W', { seq: 6 });
+    await connectWhatsapp(w);
+    const old = await Line.create({ accountId: w.accountId, phoneNumberId: '8814', status: 'disconnected' });
+    await Campaign.updateOne({ _id: w.campaignId }, { lineId: old._id });
+
+    let campaign = await Campaign.findById(w.campaignId).lean();
+    for (let i = 0; i < 3 && campaign.status !== 'paused'; i++) {
+        await processNext(campaign);
+        campaign = await Campaign.findById(w.campaignId).lean();
+    }
+    assert.equal(campaign.status, 'paused');
+    assert.equal(campaign.pauseReason.code, 'whatsapp_disconnected');
+    assert.equal(await Message.countDocuments({ campaignId: w.campaignId }), 0);
 });
 
 // Fase 2a: la campaña nace con la línea por defecto (el worker todavía no la usa).

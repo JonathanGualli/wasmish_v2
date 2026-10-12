@@ -25,7 +25,7 @@ const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/wasmish';
 const safeUri = MONGO_URI.replace(/\/\/[^/]*@/, '//***:***@');
 
 const printPending = ({ pending, issues }) => {
-    console.log(`Líneas anteriores por crear: ${pending.oldLines} · conversaciones sin línea: ${pending.conversations} · campañas sin línea: ${pending.campaigns}`);
+    console.log(`Líneas anteriores por crear: ${pending.oldLines} · conversaciones sin línea: ${pending.conversations} · campañas sin línea: ${pending.campaigns} · plantillas sin WABA: ${pending.templates}`);
     console.log(`Cuentas con WABA o líneas desajustados respecto a User: ${pending.accountsOutOfSync}`);
     console.log(`Índice viejo de conversaciones (uno por contacto, sin línea): ${pending.oldConversationIndex ? 'sigue, se cambia' : 'ya no está'}`);
     issues.forEach(({ account, issues }) => console.log(`  ${account}: ${issues.join('; ')}`));
@@ -64,7 +64,7 @@ const main = async () => {
 
     if (check) {
         const { pending } = result;
-        const left = pending.oldLines + pending.conversations + pending.campaigns + pending.accountsOutOfSync
+        const left = pending.oldLines + pending.conversations + pending.campaigns + pending.templates + pending.accountsOutOfSync
             + (pending.oldConversationIndex ? 1 : 0);
         if (left > 0) process.exit(1);
     }

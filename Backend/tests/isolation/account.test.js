@@ -142,6 +142,25 @@ test('POST /v1/templates/send con la key de A: sale del número de A y responde 
     }
 });
 
+// Regresión que vigila (Codex, plan de la 2b, Review Focus 3): un cambio de número
+// que la proyección no reflejó (aquí, solo en `User`) dejaba al OTP del cliente
+// sin línea. Sale por la reserva, con el número de `User`.
+test('POST /v1/templates/send con un cambio de número a medias sigue saliendo', async () => {
+    await User.updateOne({ _id: a.userId }, { phoneNumberId: `98${a.seq}` });
+    onMeta(async (config) => (config.method === 'post' && config.url === `/98${a.seq}/messages`
+        ? { data: { messages: [{ id: 'wamid.reserva' }] } }
+        : undefined));
+    try {
+        const res = await request(ANONYMOUS, 'POST', '/v1/templates/send',
+            { destinationNumber: a.phone, templateName: a.templateName }, { Authorization: 'Bearer wm_prueba_a' });
+        assert.equal(res.status, 200, res.text);
+        assert.deepEqual(metaCalls.at(-1), { method: 'post', url: `/98${a.seq}/messages` });
+    } finally {
+        onMeta(null);
+        await User.updateOne({ _id: a.userId }, { phoneNumberId: `99${a.seq}` });
+    }
+});
+
 // Regresión que vigila: el panel buscaba la actividad por el `_id` del usuario.
 test('GET /admin/clients cuenta la actividad de una cuenta cuyo _id no es el del owner', async () => {
     const res = await request(admin, 'GET', '/admin/clients?limit=50');
