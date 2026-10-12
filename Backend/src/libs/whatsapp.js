@@ -106,6 +106,18 @@ export const getTemplates = async ({token, waBusinessId}) => {
     );
 }
 
+// Los números de un WABA. Sirve para comprobar que un número es de ese WABA
+// antes de conectarlo (ver `describeWabaPhoneNumber`).
+export const getWabaPhoneNumbers = async ({ token, waBusinessId }) => {
+    return whatsappApi.get(
+        `/${waBusinessId}/phone_numbers`,
+        {
+            params: { fields: 'id,display_phone_number,verified_name', limit: 100 },
+            headers: { Authorization: `Bearer ${token}` },
+        }
+    );
+};
+
 export const exchangeCodeForToken = async (code) => {
     const res = await whatsappApi.get('/oauth/access_token', {
         params: {
