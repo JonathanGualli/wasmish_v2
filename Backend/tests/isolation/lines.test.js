@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { seedAccount, Account, Line, User, Waba } from './helpers.js';
 
-const { syncLinesFromOwner, findLineId } = await import('../../src/services/line.service.js');
+const { syncLinesFromOwner, findLineId, findInboundLine } = await import('../../src/services/line.service.js');
 const { lineStateIssues } = await import('../../src/utils/line.js');
 
 await Waba.init();
@@ -176,4 +176,42 @@ test('el número actual activo en otra cuenta (obsoleto) se desconecta allí', a
     assert.deepEqual(await issuesOf(o), []);
     assert.deepEqual(await issuesOf(n), []);
     assert.equal((await Line.findOne({ accountId: n.accountId, phoneNumberId: '7020' }).lean()).status, 'disconnected');
+});
+
+// Fase 2b: el webhook encuentra la cuenta por la línea activa del número, y el
+// token (para bajar adjuntos) sale del WABA de esa línea, no del owner.
+test('findInboundLine: la línea activa del número, con el token de su WABA', async () => {
+    const p = await newAccount('P');
+    await setConnection(p, { tokenWhatsapp: 'cifrado-p', phoneNumberId: '7030', waBusinessId: 'waba-p' });
+    await syncLinesFromOwner(p.accountId);
+    // Distinto del de User a propósito: tiene que salir el del Waba.
+    await Waba.updateOne({ waBusinessId: 'waba-p' }, { tokenWhatsapp: 'cifrado-del-waba' });
+    const line = await Line.findOne({ accountId: p.accountId, phoneNumberId: '7030' }).lean();
+
+    const inbound = await findInboundLine('7030');
+    assert.equal(String(inbound.accountId), p.accountId);
+    assert.equal(String(inbound.lineId), String(line._id));
+    assert.equal(inbound.phoneNumberId, '7030');
+    assert.equal(inbound.tokenWhatsapp, 'cifrado-del-waba');
+});
+
+test('findInboundLine: una línea desconectada no recibe', async () => {
+    const q = await newAccount('Q');
+    await Line.create({ accountId: q.accountId, phoneNumberId: '7040', status: 'disconnected' });
+    assert.equal(await findInboundLine('7040'), null);
+});
+
+// La reserva del spec: un número que `User` tiene y la proyección no (una
+// sincronización que falló) se procesa por el camino viejo, nunca se descarta.
+test('findInboundLine: sin Line pero con User, la reserva y su console.error', async (t) => {
+    const r = await newAccount('R');
+    await setConnection(r, { tokenWhatsapp: 'cifrado-r', phoneNumberId: '7050', waBusinessId: 'waba-r' });
+    const logged = t.mock.method(console, 'error', () => {});
+
+    const inbound = await findInboundLine('7050');
+    assert.equal(String(inbound.accountId), r.accountId);
+    assert.equal(inbound.lineId, null);
+    assert.equal(inbound.phoneNumberId, '7050');
+    assert.equal(inbound.tokenWhatsapp, 'cifrado-r');
+    assert.equal(logged.mock.callCount(), 1);
 });
