@@ -19,9 +19,15 @@ const NO_TEMPLATE: Partial<CampaignDraft> = {
     templateId: null, templateName: null, variables: [], buttons: [], headerMedia: null, saveHeaderAsDefault: false,
 };
 
-/** El borrador volvió con su línea desconectada: se pasó a la por defecto, y quizá se quitó la plantilla. */
+/**
+ * El borrador volvió y su línea cambió: la suya se desconectó
+ * (`disconnected`), o era uno sin línea guardada y la por defecto pasó a otra
+ * cuenta de WhatsApp Business (`defaultChanged`). Ahora sale por la por
+ * defecto, quizá sin la plantilla.
+ */
 export interface LineResumeNotice {
-    /** La etiqueta de la que tenía; `null` si ya no existe. */
+    reason: 'disconnected' | 'defaultChanged';
+    /** La etiqueta de la que tenía; `null` si ya no existe o no la guardó. */
     from: string | null;
     to: string;
     droppedTemplate: string | null;
@@ -73,24 +79,36 @@ export const useCampaignWizard = () => {
         if (draft) save({ ...draft, ...changes });
     }, [draft, save]);
 
-    // El borrador volvió y su línea ya no está conectada: pasa a la por
-    // defecto, sin la plantilla si es de otra cuenta, y se dice por qué. Espera
-    // a las líneas y a las plantillas para no decidirlo a ciegas.
+    // Desde el paso del mensaje, el borrador guarda la línea por la que sale,
+    // también si es la por defecto sin tocar el selector: si después cambia la
+    // por defecto, la campaña no cambia de número sin decirlo.
+    //
+    // Si al volver su línea ya no está conectada, o es uno sin línea guardada
+    // y la por defecto es ahora de otra cuenta, pasa a la por defecto, sin la
+    // plantilla si no sale por ella, y vuelve al paso del mensaje con un aviso:
+    // el remitente cambió y hay que verlo antes de enviar (Codex, PR #23).
+    // Espera a las líneas y a las plantillas para no decidirlo a ciegas.
     useEffect(() => {
-        if (!draft?.lineId || linesLoading || linesError || templatesLoading || !defaultLine) return;
-        if (activeLines.some(l => l.id === draft.lineId)) return;
-        const previous = lineById(draft.lineId);
+        if (!draft || draft.step < 2 || linesLoading || linesError || templatesLoading || !defaultLine) return;
+        if (draft.lineId && activeLines.some(l => l.id === draft.lineId)) return;
+        const disconnected = Boolean(draft.lineId);
         const chosen = allApproved.find(t => t.templateId === draft.templateId);
         const dropsTemplate = Boolean(draft.templateId) && chosen?.waBusinessId !== defaultLine.waBusinessId;
-        setLineNotice({
-            from: previous ? lineLabel(previous) : null,
-            to: lineLabel(defaultLine),
-            droppedTemplate: dropsTemplate ? draft.templateName : null,
-        });
+        const changed = disconnected || dropsTemplate;
+        if (changed) {
+            const previous = lineById(draft.lineId);
+            setLineNotice({
+                reason: disconnected ? 'disconnected' : 'defaultChanged',
+                from: previous ? lineLabel(previous) : null,
+                to: lineLabel(defaultLine),
+                droppedTemplate: dropsTemplate ? draft.templateName : null,
+            });
+        }
         save({
             ...draft,
             lineId: defaultLine.id,
-            ...(dropsTemplate ? { ...NO_TEMPLATE, step: Math.min(draft.step, 2) as CampaignDraft['step'] } : {}),
+            ...(dropsTemplate ? NO_TEMPLATE : {}),
+            ...(changed ? { step: 2 as const } : {}),
         });
     }, [draft, save, activeLines, defaultLine, lineById, allApproved, linesLoading, linesError, templatesLoading]);
 

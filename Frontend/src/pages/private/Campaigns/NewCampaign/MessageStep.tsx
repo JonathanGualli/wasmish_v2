@@ -18,15 +18,22 @@ import { lineLabel } from "../../../../utils/lineDisplay";
 import { LineChangeDialog } from "./LineChangeDialog";
 import type { LineResumeNotice } from "./useCampaignWizard";
 
-/** El borrador volvió con su línea desconectada: qué se cambió y por qué. */
+/** El borrador volvió y su línea cambió: qué se cambió y por qué. */
 const LineResumeCallout = ({ notice }: { notice: LineResumeNotice }) => {
+    const dropped = notice.droppedTemplate
+        ? `, y quitamos «${notice.droppedTemplate}», que era de otra cuenta de WhatsApp Business. Elige una plantilla de ${notice.to}.`
+        : '. Revisa el mensaje antes de enviar.';
+    if (notice.reason === 'defaultChanged') {
+        return (
+            <Callout tone="warning" icon={<Unplug size={16} />} title="Cambió la línea por defecto.">
+                Este borrador salía por la línea por defecto, que ahora es {notice.to}{dropped}
+            </Callout>
+        );
+    }
     const from = notice.from ?? 'la línea del borrador';
     return (
         <Callout tone="warning" icon={<Unplug size={16} />} title={`${notice.from ?? 'La línea del borrador'} ya no está conectada.`}>
-            Guardaste el borrador para enviar por {from}, pero esa línea se desconectó. Lo pasamos a {notice.to}, la línea por defecto
-            {notice.droppedTemplate
-                ? `, y quitamos «${notice.droppedTemplate}», que era de otra cuenta de WhatsApp Business. Elige una plantilla de ${notice.to}.`
-                : '.'}
+            Guardaste el borrador para enviar por {from}, pero esa línea se desconectó. Lo pasamos a {notice.to}, la línea por defecto{dropped}
         </Callout>
     );
 };
