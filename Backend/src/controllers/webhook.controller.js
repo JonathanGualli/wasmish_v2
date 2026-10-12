@@ -15,7 +15,7 @@ import { TIPOS_CON_ARCHIVO, nombreDeArchivo, guardarArchivo } from '../utils/med
 import { getMediaInfo, downloadMedia } from '../libs/whatsapp.js';
 import { decrypt } from '../utils/crypto.js';
 import { MEDIA_DIR, MEDIA_MAX_BYTES } from '../config.js';
-import { findInboundLine } from '../services/line.service.js';
+import { findInboundLine, rememberDisplayPhoneNumber } from '../services/line.service.js';
 
 // Baja el adjunto y lo deja en disco. Devuelve SIEMPRE un objeto: si algo falla
 // —token caducado, archivo enorme, Meta caída— sale con mediaFile en null y el
@@ -355,6 +355,13 @@ export const handleWebhook = async (req, res) => {
                 // en esa línea; el token de su WABA baja los adjuntos.
                 const inbound = await findInboundLine(phoneNumberId);
                 if (!inbound) continue;
+                // El número visible de la línea, si no lo tenía (lo usa `from` en
+                // la API). Es secundario: si falla, el lote sigue.
+                try {
+                    await rememberDisplayPhoneNumber(inbound.lineId, value?.metadata?.display_phone_number);
+                } catch (error) {
+                    console.error("No se pudo guardar el número visible de la línea:", { error: error.message });
+                }
 
                 const messages = value?.messages ?? [];
 

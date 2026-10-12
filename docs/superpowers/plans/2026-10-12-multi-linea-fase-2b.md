@@ -253,6 +253,7 @@ git commit -m "líneas: los envíos, las plantillas y el worker salen por la lí
   - `resolveApiLine(lines, { lineId, from }) → { lineId: string | null } | { statusCode, message }` (pura). `lines`: las de la cuenta (`_id`, `displayPhoneNumber`). `from` se compara con `displayPhoneNumber` dejando solo los dígitos de los dos. Sin ninguno → `{ lineId: null }` (la por defecto). `lineId` que no está → 404 `'La línea no existe en tu cuenta.'`; `from` que no está → 404 `'Ningún número de tu cuenta es ese.'`; los dos y no coinciden → 400 `'lineId y from no son la misma línea.'`.
   - `sendTemplateSchema`: `lineId` (`objectIdSchema`) y `from` (`z.string().trim().min(6)`), los dos opcionales. `startConversationTemplateSchema` y `sendMessageSchema`: `lineId` opcional (para la 2c; el front no lo manda todavía).
   - La respuesta de `POST /api/v1/templates/send` **no cambia**.
+  - `rememberDisplayPhoneNumber(lineId, displayPhoneNumber)` (`line.service.js`): el webhook guarda `metadata.display_phone_number` en la línea si no lo tiene. Las líneas que creó `migrate:lines` no saben su número visible (solo se guarda al conectar), y sin él `from` no las encontraría. Un fallo ahí se loguea y el lote sigue. `webhook:simulate` manda el número visible, como Meta (`--display-number`). (Añadido al implementar la tarea.)
 
 - [ ] **Step 1: Tests puros que fallan** en `tests/line.test.js`
 

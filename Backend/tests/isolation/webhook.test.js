@@ -185,3 +185,13 @@ test('con la reserva, un entrante no cae en la conversación sin línea de otro 
     const fresh = await Conversation.findOne({ userId: g.accountId, contactId: contact._id, phoneNumberId: '8817' }).lean();
     assert.ok(await Message.exists({ conversationId: fresh._id, text: 'al número nuevo' }));
 });
+
+// Fase 2b: `from` en la API busca la línea por su número visible, y las líneas
+// que creó la migración no lo tienen. Meta lo manda en cada webhook.
+test('el webhook guarda el número visible de la línea si no lo tenía', async () => {
+    await Line.updateOne({ accountId: a.accountId, phoneNumberId: A_NUMBER }, { displayPhoneNumber: null });
+    const value = textMessage('593990002008', 'con número visible');
+    const res = await postWebhook(A_NUMBER, { ...value, metadata: { phone_number_id: A_NUMBER, display_phone_number: '15550000991' } });
+    assert.equal(res.status, 200);
+    assert.equal((await Line.findOne({ accountId: a.accountId, phoneNumberId: A_NUMBER }).lean()).displayPhoneNumber, '15550000991');
+});
