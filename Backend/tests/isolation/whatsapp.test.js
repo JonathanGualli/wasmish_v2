@@ -2,9 +2,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
-import { seedAccount, request, connectWhatsapp, metaCalls, onMeta, User, Conversation, PNG } from './helpers.js';
+import { seedAccount, request, connectWhatsapp, metaCalls, onMeta, Account, Line, User, Waba, Conversation, PNG } from './helpers.js';
 
-const { isPhoneNumberTaken } = await import('../../src/services/whatsapp.connection.service.js');
+const { isPhoneNumberTaken, WABA_TAKEN_MESSAGE } = await import('../../src/services/whatsapp.connection.service.js');
+const { lineStateIssues } = await import('../../src/utils/line.js');
 
 const a = await seedAccount('A', { seq: 1 });
 const b = await seedAccount('B', { seq: 2 });
@@ -16,7 +17,7 @@ const fakeMeta = (numbers, { onPhoneNumbers } = {}) => onMeta(async (config) => 
     if (config.url === '/oauth/access_token') return { data: { access_token: 'token-nuevo' } };
     if (config.url.endsWith('/phone_numbers')) {
         await onPhoneNumbers?.();
-        return { data: { data: numbers.map(id => ({ id })) } };
+        return { data: { data: numbers.map(id => ({ id, display_phone_number: `+1 555 ${id}`, verified_name: `Negocio ${id}` })) } };
     }
     if (config.url.endsWith('/subscribed_apps')) return { data: { success: true } };
 });
@@ -87,6 +88,7 @@ test('dos conexiones a la vez: la segunda recibe 409, no 500, y no guarda nada',
     onMeta(null);
     assert.equal(res.status, 409, res.text);
     assert.equal((await User.findById(f.userId).lean()).phoneNumberId, null);
+    assert.equal(await Line.countDocuments({ accountId: f.accountId, status: 'active' }), 0);
 });
 
 // Regresión que vigila: solo se miraba la primera página de /phone_numbers.
@@ -147,4 +149,77 @@ test('GET /templates/sync sin WhatsApp: 400, sin llamar a Meta', async () => {
     const res = await request(b, 'GET', '/templates/sync');
     assert.equal(res.status, 400, res.text);
     assert.equal(metaCalls.length, before);
+});
+
+// --- Fase 2a: Waba y Line, proyección de User -------------------------------
+
+const connectManual = (account, phoneNumberId, waBusinessId) => request(account, 'PUT', '/users/update-user-token-whatsapp',
+    { tokenWhatsapp: 'token-manual', phoneNumberId, waBusinessId });
+
+/** Lo que falta para que Waba/Line coincidan con User; [] = al día. */
+const issuesOf = async (account) => {
+    const owner = await User.findById(account.userId).lean();
+    return lineStateIssues({
+        owner,
+        account: await Account.findById(account.accountId).lean(),
+        lines: await Line.find({ accountId: account.accountId }).lean(),
+        waba: owner.waBusinessId ? await Waba.findOne({ waBusinessId: owner.waBusinessId }).lean() : null,
+    });
+};
+
+test('conectar deja Waba y Line al día con User, con el número y el nombre que da Meta', async () => {
+    await Waba.init();
+    await Line.init();
+    const w = await seedAccount('W', { seq: 20 });
+    fakeMeta(['9920']);
+    const res = await connectManual(w, '9920', 'waba-w');
+    onMeta(null);
+    assert.equal(res.status, 200, res.text);
+    assert.deepEqual(await issuesOf(w), []);
+    const line = await Line.findOne({ accountId: w.accountId, status: 'active' }).lean();
+    assert.equal(line.displayPhoneNumber, '+1 555 9920');
+    assert.equal(line.verifiedName, 'Negocio 9920');
+});
+
+test('POST /whatsapp/connect también deja Waba y Line al día', async () => {
+    const x = await seedAccount('X', { seq: 21 });
+    fakeMeta(['9921']);
+    const res = await request(x, 'POST', '/whatsapp/connect', { code: 'x', phoneNumberId: '9921', waBusinessId: 'waba-x' });
+    onMeta(null);
+    assert.equal(res.status, 200, res.text);
+    assert.deepEqual(await issuesOf(x), []);
+});
+
+test('un WABA de otra cuenta → 409 sin llamar a Meta', async () => {
+    const y = await seedAccount('Y', { seq: 22 });
+    await Waba.create({ accountId: a.accountId, waBusinessId: 'waba-de-a' });
+    const before = metaCalls.length;
+    const res = await connectManual(y, '9922', 'waba-de-a');
+    assert.equal(res.status, 409, res.text);
+    assert.deepEqual(res.body, [{ message: WABA_TAKEN_MESSAGE }]);
+    assert.equal(metaCalls.length, before);
+    assert.equal((await User.findById(y.userId).lean()).phoneNumberId, null);
+    assert.equal(await Line.countDocuments({ accountId: y.accountId }), 0);
+});
+
+// Regresión que vigila (hueco de despliegue): antes de migrar, el WABA de una
+// cuenta solo está en su `User`, y `Waba` está vacía para ella.
+test('un WABA que otra cuenta tiene solo en User → 409 sin llamar a Meta', async () => {
+    const z = await seedAccount('Z', { seq: 23 });
+    await User.updateOne({ _id: b.userId }, { waBusinessId: 'waba-solo-en-user' });
+    const before = metaCalls.length;
+    const res = await request(z, 'POST', '/whatsapp/connect', { code: 'x', phoneNumberId: '9923', waBusinessId: 'waba-solo-en-user' });
+    assert.equal(res.status, 409, res.text);
+    assert.equal(metaCalls.length, before);
+    assert.equal(await Waba.countDocuments({ accountId: z.accountId }), 0);
+});
+
+test('si Meta rechaza el número, ni WABA ni línea', async () => {
+    const v = await seedAccount('V', { seq: 24 });
+    fakeMeta(['9924-otro']);
+    const res = await connectManual(v, '9924', 'waba-v');
+    onMeta(null);
+    assert.equal(res.status, 400, res.text);
+    assert.equal(await Waba.countDocuments({ accountId: v.accountId }), 0);
+    assert.equal(await Line.countDocuments({ accountId: v.accountId }), 0);
 });

@@ -1,6 +1,8 @@
 import { findAccountOwner } from "../services/account.service.js";
 import { encrypt } from "../utils/crypto.js";
-import { isPhoneNumberTaken, verifyWabaPhoneNumber, PHONE_NUMBER_TAKEN_MESSAGE } from "../services/whatsapp.connection.service.js";
+import {
+    isPhoneNumberTaken, isWabaTaken, verifyWabaPhoneNumber, syncLinesAfterConnecting, PHONE_NUMBER_TAKEN_MESSAGE, WABA_TAKEN_MESSAGE,
+} from "../services/whatsapp.connection.service.js";
 import { connectionErrorResponse } from "./whatsapp.controller.js";
 
 
@@ -20,8 +22,11 @@ export const updateUserTokenWhatsapp = async (req, res) => {
         if (await isPhoneNumberTaken(userFound._id, phoneNumberId)) {
             return res.status(409).json([{ message: PHONE_NUMBER_TAKEN_MESSAGE }]);
         }
+        if (await isWabaTaken(req.auth.accountId, waBusinessId)) {
+            return res.status(409).json([{ message: WABA_TAKEN_MESSAGE }]);
+        }
 
-        await verifyWabaPhoneNumber({ token: tokenWhatsapp, waBusinessId, phoneNumberId });
+        const line = await verifyWabaPhoneNumber({ token: tokenWhatsapp, waBusinessId, phoneNumberId });
 
         // Encript the token before saving
         userFound.tokenWhatsapp = encrypt(tokenWhatsapp);
@@ -29,6 +34,7 @@ export const updateUserTokenWhatsapp = async (req, res) => {
         userFound.waBusinessId = waBusinessId;
 
         await userFound.save();
+        await syncLinesAfterConnecting(req.auth.accountId, line);
 
         return res.json({ message: 'Token updated successfully' });
     } catch (error) {

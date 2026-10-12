@@ -1,4 +1,6 @@
 import User from "../models/user.model.js";
+import Waba from "../models/waba.model.js";
+import { syncLinesFromOwner } from "./line.service.js";
 import { getWabaPhoneNumbers } from "../libs/whatsapp.js";
 import { describeWabaPhoneNumber, nextPageCursor } from "../utils/whatsapp.line.js";
 
@@ -8,6 +10,27 @@ import { describeWabaPhoneNumber, nextPageCursor } from "../utils/whatsapp.line.
 // WABA cuyo token se guarda.
 
 export const PHONE_NUMBER_TAKEN_MESSAGE = 'Ese número de WhatsApp ya está conectado a otra cuenta de Wasmish.';
+
+export const WABA_TAKEN_MESSAGE = 'Esa cuenta de WhatsApp Business ya está conectada a otra cuenta de Wasmish.';
+
+// Si el WABA ya es de OTRA cuenta: sus plantillas no se pueden repartir entre
+// dos (`Template.templateId` es único global). Mira `User` además de `Waba`:
+// entre desplegar la Fase 2a y migrar, el WABA de una cuenta solo está en su `User`.
+export const isWabaTaken = async (accountId, waBusinessId) => Boolean(
+    await User.exists({ waBusinessId, accountId: { $ne: accountId } })
+    || await Waba.exists({ waBusinessId, accountId: { $ne: accountId } })
+);
+
+// Tras guardar la conexión en `User`, refleja `Waba` y `Line`. Si falla, la
+// conexión NO se deshace: el enrutado lee `User`, que ya está bien, y la
+// siguiente sincronización (o `migrate:lines`) completa la proyección.
+export const syncLinesAfterConnecting = async (accountId, details) => {
+    try {
+        await syncLinesFromOwner(accountId, { details });
+    } catch (error) {
+        console.error('No se pudieron sincronizar las líneas tras conectar:', { accountId: String(accountId), error: error.message });
+    }
+};
 
 // Si el número ya está en OTRA cuenta. El propio no cuenta: volver a conectarlo
 // (para renovar el token) tiene que poder hacerse.

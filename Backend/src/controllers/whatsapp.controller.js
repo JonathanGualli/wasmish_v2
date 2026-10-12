@@ -1,7 +1,9 @@
 import { findAccountOwner } from "../services/account.service.js";
 import { encrypt } from "../utils/crypto.js";
 import { exchangeCodeForToken, subscribeAppToWaba } from "../libs/whatsapp.js";
-import { isPhoneNumberTaken, verifyWabaPhoneNumber, PHONE_NUMBER_TAKEN_MESSAGE } from "../services/whatsapp.connection.service.js";
+import {
+    isPhoneNumberTaken, isWabaTaken, verifyWabaPhoneNumber, syncLinesAfterConnecting, PHONE_NUMBER_TAKEN_MESSAGE, WABA_TAKEN_MESSAGE,
+} from "../services/whatsapp.connection.service.js";
 
 // La respuesta de error de las dos formas de conectar (esta y el formulario
 // manual, en user.controller.js). El 11000 es el índice único de
@@ -29,6 +31,9 @@ export const connectWhatsappEmbedded = async (req, res) => {
         if (await isPhoneNumberTaken(user._id, phoneNumberId)) {
             return res.status(409).json([{ message: PHONE_NUMBER_TAKEN_MESSAGE }]);
         }
+        if (await isWabaTaken(req.auth.accountId, waBusinessId)) {
+            return res.status(409).json([{ message: WABA_TAKEN_MESSAGE }]);
+        }
 
         // 2. Canjear el "code" por el token permanente
         const accessToken = await exchangeCodeForToken(code);
@@ -36,7 +41,7 @@ export const connectWhatsappEmbedded = async (req, res) => {
 
         // 3. El número tiene que ser del WABA de ese token. Antes de suscribir
         //    la app: si no lo es, no se toca nada en Meta.
-        await verifyWabaPhoneNumber({ token: accessToken, waBusinessId, phoneNumberId });
+        const line = await verifyWabaPhoneNumber({ token: accessToken, waBusinessId, phoneNumberId });
 
         // 4. Subir la app a los whebhooks del whatsapp del cliente
         await subscribeAppToWaba( { token: accessToken, waBusinessId } );
@@ -46,6 +51,7 @@ export const connectWhatsappEmbedded = async (req, res) => {
         user.phoneNumberId = phoneNumberId;
         user.waBusinessId = waBusinessId;
         await user.save();
+        await syncLinesAfterConnecting(req.auth.accountId, line);
 
         return res.json({
             message: "WhatsApp conectado correctamente",
