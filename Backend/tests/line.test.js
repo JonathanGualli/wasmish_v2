@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
 import {
-    ownerConnection, lineStateIssues, sharedWabas, historicalLines, lineMatchesOwner, sendingLineFor,
+    ownerConnection, lineStateIssues, sharedWabas, historicalLines, lineMatchesOwner, sendingLineFor, resolveApiLine,
 } from '../src/utils/line.js';
 
 const newId = () => new mongoose.Types.ObjectId();
@@ -142,4 +142,41 @@ test('sendingLineFor: proyección desajustada → la conexión de User, con la l
     assert.equal(missing.fallback, true);
     assert.equal(missing.line.lineId, null);
     assert.equal(missing.line.phoneNumberId, '111');
+});
+
+// Fase 2b: la API pública elige la línea con `lineId` o con `from` (su número).
+const lines = [
+    { _id: newId(), displayPhoneNumber: '+593 99 123 4567' },
+    { _id: newId(), displayPhoneNumber: '+1 555-000-0002' },
+    { _id: newId(), displayPhoneNumber: null },   // creada por la migración, sin número todavía
+];
+
+test('resolveApiLine: sin lineId ni from, la línea por defecto', () => {
+    assert.deepEqual(resolveApiLine(lines, {}), { lineId: null });
+});
+
+test('resolveApiLine: lineId de la cuenta → esa línea', () => {
+    assert.deepEqual(resolveApiLine(lines, { lineId: String(lines[1]._id) }), { lineId: String(lines[1]._id) });
+});
+
+test('resolveApiLine: from con +, espacios y guiones encuentra su línea', () => {
+    assert.deepEqual(resolveApiLine(lines, { from: '593991234567' }), { lineId: String(lines[0]._id) });
+    assert.deepEqual(resolveApiLine(lines, { from: '+1 (555) 000-0002' }), { lineId: String(lines[1]._id) });
+});
+
+test('resolveApiLine: lineId que no es de la cuenta → 404', () => {
+    assert.deepEqual(resolveApiLine(lines, { lineId: String(newId()) }), { statusCode: 404, message: 'La línea no existe en tu cuenta.' });
+});
+
+test('resolveApiLine: from que no es de ninguna línea → 404', () => {
+    assert.equal(resolveApiLine(lines, { from: '593990000000' }).statusCode, 404);
+});
+
+test('resolveApiLine: lineId y from de líneas distintas → 400', () => {
+    const result = resolveApiLine(lines, { lineId: String(lines[1]._id), from: '593991234567' });
+    assert.deepEqual(result, { statusCode: 400, message: 'lineId y from no son la misma línea.' });
+});
+
+test('resolveApiLine: lineId y from de la misma línea → esa línea', () => {
+    assert.deepEqual(resolveApiLine(lines, { lineId: String(lines[0]._id), from: '+593991234567' }), { lineId: String(lines[0]._id) });
 });

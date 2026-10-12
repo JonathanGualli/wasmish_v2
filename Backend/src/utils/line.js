@@ -3,6 +3,8 @@
 // (`tokenWhatsapp`, `phoneNumberId`, `waBusinessId`), que es lo que enruta:
 // la escribe `syncLinesFromOwner` y nada lee las líneas para decidir.
 
+import { LINE_NOT_FOUND_MESSAGE } from './whatsapp.line.js';
+
 const sameId = (a, b) => a != null && b != null && String(a) === String(b);
 
 // La conexión que dice `User`, o null si le falta alguno de los tres campos.
@@ -120,4 +122,29 @@ export const sendingLineFor = ({ owner, line, waba, phoneNumberId = null }) => {
         };
     }
     return { line: { accountId: owner.accountId, lineId: line?._id ?? null, ...connection }, fallback: true };
+};
+
+const digitsOf = (text) => String(text ?? '').replace(/\D/g, '');
+
+/**
+ * Qué línea pide quien llama a la API pública (Fase 2b): `{ lineId }` (null =
+ * la por defecto) o `{ statusCode, message }`. Con `lineId`, una línea de la
+ * cuenta; con `from`, la de ese número, comparado solo por sus dígitos con
+ * `displayPhoneNumber` («+593 99 123 4567» ↔ «593991234567»). Con los dos,
+ * tienen que ser la misma. `lines` son las de la cuenta (`_id`,
+ * `displayPhoneNumber`). Si está conectada lo decide después `findSendingLine`.
+ */
+export const resolveApiLine = (lines, { lineId = null, from = null } = {}) => {
+    const byId = lineId ? lines.find(line => String(line._id) === String(lineId)) : null;
+    if (lineId && !byId) return { statusCode: 404, message: LINE_NOT_FOUND_MESSAGE };
+
+    const wanted = from ? digitsOf(from) : null;
+    const byNumber = wanted ? lines.find(line => line.displayPhoneNumber && digitsOf(line.displayPhoneNumber) === wanted) : null;
+    if (from && !byNumber) return { statusCode: 404, message: 'Ningún número de tu cuenta es ese.' };
+
+    if (byId && byNumber && !sameId(byId._id, byNumber._id)) {
+        return { statusCode: 400, message: 'lineId y from no son la misma línea.' };
+    }
+    const line = byId ?? byNumber;
+    return { lineId: line ? String(line._id) : null };
 };
