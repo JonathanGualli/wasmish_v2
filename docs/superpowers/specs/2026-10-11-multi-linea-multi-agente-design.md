@@ -16,7 +16,7 @@ Fuentes: el grafo de graphify (actualizado el 2026-10-11, después del último c
 
 | Entidad | Modelo | Ligada a la cuenta por | Notas |
 |---|---|---|---|
-| Usuario = cuenta = línea | `Backend/src/models/user.model.js` | — | `tokenWhatsapp` (cifrado), `phoneNumberId`, `waBusinessId`: **uno de cada**. `phoneNumberId` **sin índice único** |
+| Usuario = cuenta = línea | `Backend/src/models/user.model.js` | — | `tokenWhatsapp` (cifrado), `phoneNumberId`, `waBusinessId`: **uno de cada**. Desde la Fase 0, `phoneNumberId` es único entre usuarios |
 | Contacto | `contact.model.js` | `userId` | Únicos `{ userId, phone }` y `{ userId, waUserId }` |
 | Conversación | `conversation.model.js` | `userId` | Única `{ userId, contactId }`. Guarda `phoneNumberId` (obligatorio), pero **no es parte de la clave** |
 | Mensaje | `message.model.js` | vía `conversationId` | No guarda quién lo envió |
@@ -36,7 +36,7 @@ Fuentes: el grafo de graphify (actualizado el 2026-10-11, después del último c
 
 | # | Dónde | Qué supone |
 |---|---|---|
-| 1 | `controllers/webhook.controller.js:346` — `User.findOne({ phoneNumberId })` | El número identifica **al usuario**, y nada garantiza que un número esté en una sola cuenta |
+| 1 | `controllers/webhook.controller.js:346` — `User.findOne({ phoneNumberId })` | El número identifica **al usuario** (desde la Fase 0, un número está en una sola cuenta) |
 | 2 | `controllers/whatsapp.controller.js:18-24` y `controllers/user.controller.js:10-17` | Conectar **sobrescribe** token, número y WABA del usuario: un segundo número reemplaza al primero |
 | 3 | `controllers/chat.controller.js:90-91` (`processMessageSending`) | Token del usuario; número de la conversación con reserva en `user.phoneNumberId` |
 | 4 | `controllers/template.controller.js:402-409` (`processTemplateSending`) | **Siempre** `user.phoneNumberId`, aunque la conversación sea de otro número |
@@ -72,7 +72,7 @@ Fuentes: el grafo de graphify (actualizado el 2026-10-11, después del último c
 
 ### 2.2 Riesgos
 
-- **El enrutado por número, primero.** Con varias líneas por cuenta, «este `phone_number_id` es de esta cuenta» se vuelve el centro del sistema, y hoy ni la base de datos ni la conexión lo garantizan del todo. Se refuerza en la **Fase 0**, antes que nada.
+- **El enrutado por número, primero.** Con varias líneas por cuenta, «este `phone_number_id` es de esta cuenta» se vuelve el centro del sistema. La **Fase 0**, antes que nada, lo deja garantizado: un número está en una sola cuenta y Meta confirma que es del WABA del token.
 - **Tokens por WABA.** El token del Embedded Signup es del negocio del cliente y sirve para todos los números de ese WABA. Va **una vez por WABA**, no copiado en cada línea. Las plantillas también son del WABA. **No sé** si repetir el Embedded Signup para un segundo número del mismo WABA invalida el token anterior: hay que comprobarlo en la app WasmishTest antes de la Fase 2.
 - **El webhook es único por app.** No se toca: el enrutado es interno, por `phone_number_id` → línea.
 - **Aislamiento.** Si un controlador sigue usando `req.user.id` como cuenta tras el cambio, para el dueño funcionará «de casualidad» (ver 3.1) y para un agente invitado fallará o filtrará datos. Los tests de aislamiento tienen que usar usuarios cuyo id **no** coincida con el de la cuenta, y sumar una dimensión nueva: un agente de A **sin acceso** a una línea de A.

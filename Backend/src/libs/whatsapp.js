@@ -106,13 +106,13 @@ export const getTemplates = async ({token, waBusinessId}) => {
     );
 }
 
-// Los números de un WABA. Sirve para comprobar que un número es de ese WABA
+// Los números de un WABA, una página (`after` = cursor de la siguiente). Sirve para comprobar que un número es de ese WABA
 // antes de conectarlo (ver `describeWabaPhoneNumber`).
-export const getWabaPhoneNumbers = async ({ token, waBusinessId }) => {
+export const getWabaPhoneNumbers = async ({ token, waBusinessId, after = null }) => {
     return whatsappApi.get(
         `/${waBusinessId}/phone_numbers`,
         {
-            params: { fields: 'id,display_phone_number,verified_name', limit: 100 },
+            params: { fields: 'id,display_phone_number,verified_name', limit: 100, ...(after && { after }) },
             headers: { Authorization: `Bearer ${token}` },
         }
     );

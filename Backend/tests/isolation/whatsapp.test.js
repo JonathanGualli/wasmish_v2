@@ -89,6 +89,21 @@ test('dos conexiones a la vez: la segunda recibe 409, no 500, y no guarda nada',
     assert.equal((await User.findById(f.userId).lean()).phoneNumberId, null);
 });
 
+// Regresión que vigila: solo se miraba la primera página de /phone_numbers.
+test('PUT /users/update-user-token-whatsapp: un número en la segunda página del WABA también vale', async () => {
+    const h = await seedAccount('H', { seq: 8 });
+    onMeta(async (config) => {
+        if (!config.url.endsWith('/phone_numbers')) return undefined;
+        return config.params?.after === 'pagina-2'
+            ? { data: { data: [{ id: '998' }] } }
+            : { data: { data: [{ id: '997' }], paging: { cursors: { after: 'pagina-2' }, next: 'https://graph.facebook.com/…' } } };
+    });
+    const res = await updateToken(h, '998');
+    onMeta(null);
+    assert.equal(res.status, 200, res.text);
+    assert.equal((await User.findById(h.userId).lean()).phoneNumberId, '998');
+});
+
 test('isPhoneNumberTaken: el número propio no cuenta como tomado (reconectar)', async () => {
     assert.equal(await isPhoneNumberTaken(a.userId, A_NUMBER), false);
     assert.equal(await isPhoneNumberTaken(b.userId, A_NUMBER), true);

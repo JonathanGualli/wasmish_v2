@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { describeWabaPhoneNumber, assertWhatsappConnected } from '../src/utils/whatsapp.line.js';
+import { describeWabaPhoneNumber, assertWhatsappConnected, nextPageCursor } from '../src/utils/whatsapp.line.js';
 
 const BODY = { data: [
     { id: '111', display_phone_number: '+1 555 000 0001', verified_name: 'Negocio de prueba' },
@@ -39,4 +39,14 @@ test('sin token o sin número: 409', () => {
 
 test('con token y número no lanza', () => {
     assert.doesNotThrow(() => assertWhatsappConnected({ tokenWhatsapp: 'x', phoneNumberId: '1' }));
+});
+
+test('nextPageCursor: con `paging.next`, el cursor de la página siguiente', () => {
+    assert.equal(nextPageCursor({ data: [], paging: { cursors: { after: 'abc' }, next: 'https://graph…' } }), 'abc');
+});
+
+test('nextPageCursor: sin `paging.next` es la última página, aunque haya cursor', () => {
+    for (const body of [undefined, {}, { paging: { cursors: { after: 'abc' } } }, { paging: { next: 'x', cursors: {} } }]) {
+        assert.equal(nextPageCursor(body), null);
+    }
 });

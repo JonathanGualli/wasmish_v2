@@ -16,6 +16,12 @@ export const describeWabaPhoneNumber = (body, phoneNumberId) => {
     };
 };
 
+// El cursor de la página siguiente de una lista de Meta, o null si es la última.
+// Meta manda `paging.cursors.after` también en la última página: lo que dice que
+// hay más es `paging.next`.
+export const nextPageCursor = (body) =>
+    (body?.paging?.next && body.paging.cursors?.after) || null;
+
 export const WHATSAPP_NOT_CONNECTED_MESSAGE = 'La cuenta no tiene WhatsApp conectado. Conéctala desde Ajustes antes de enviar.';
 
 // Para enviar hace falta el token y el número. Sin esto, `decrypt(null)`
