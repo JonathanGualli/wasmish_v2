@@ -335,16 +335,23 @@ const findAccountLine = async (accountId, lineId) => {
 };
 
 /**
- * Hace por defecto una línea activa de la cuenta (la de la API pública sin
- * `lineId`, y la que se copia en `User`). 404 si no es de la cuenta; 409 si no
- * está activa.
+ * Cambia el nombre interno de una línea de la cuenta y/o la hace por defecto
+ * (la de la API pública sin `lineId`, y la que se copia en `User`). `name`:
+ * undefined = no se toca; null = sin nombre. Todo con el candado, y
+ * comprobando ANTES de escribir nada: 404 si no es de la cuenta, 409 si se
+ * pide hacer por defecto una que no está activa (revisión de Codex del PR #20:
+ * el nombre se guardaba aunque la petición respondiera 409).
  */
-export const setDefaultLine = (accountId, lineId) => withLineLock(accountId, async () => {
+export const updateLineSettings = (accountId, lineId, { name, makeDefault = false } = {}) => withLineLock(accountId, async () => {
     await finishPendingReplace(accountId);
     const line = await findAccountLine(accountId, lineId);
-    if (line.status !== 'active') throw statusError(409, DEFAULT_LINE_INACTIVE_MESSAGE);
-    await Account.updateOne({ _id: accountId }, { $set: { defaultLineId: line._id } });
-    await writeLegacyUser(accountId);
+    if (makeDefault && line.status !== 'active') throw statusError(409, DEFAULT_LINE_INACTIVE_MESSAGE);
+
+    if (name !== undefined) await Line.updateOne({ _id: line._id }, { $set: { name } });
+    if (makeDefault) {
+        await Account.updateOne({ _id: accountId }, { $set: { defaultLineId: line._id } });
+        await writeLegacyUser(accountId);
+    }
 });
 
 /**

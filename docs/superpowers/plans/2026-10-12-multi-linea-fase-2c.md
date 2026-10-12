@@ -14,7 +14,7 @@
 
 - **`maxLines` sigue en 1 en todas las cuentas reales** hasta que se haga la prueba del token en WasmishTest (spec § 2.2) y se ensaye la vuelta atrás en local (spec § 5). Esta fase se puede desplegar antes: con `maxLines: 1`, conectar otro número **reemplaza** al actual, como hoy.
 - **El token, solo del `Waba`.** Conectar un número de un WABA reemplaza el token de ese `Waba`; ninguna línea guarda su propia copia.
-- **Escribe la conexión solo `line.service.js`** (`applyConnection`, `disconnectLine`, `setDefaultLine`), y siempre dentro de `withLineLock`: una operación de líneas a la vez por cuenta. Ningún controlador escribe `User.tokenWhatsapp/phoneNumberId/waBusinessId`: lo hace `writeLegacyUser`, desde la línea por defecto.
+- **Escribe la conexión solo `line.service.js`** (`applyConnection`, `disconnectLine`, `updateLineSettings`), y siempre dentro de `withLineLock`: una operación de líneas a la vez por cuenta. Ningún controlador escribe `User.tokenWhatsapp/phoneNumberId/waBusinessId`: lo hace `writeLegacyUser`, desde la línea por defecto.
 - **Bajar el límite nunca desconecta** una línea: solo impide conectar otra mientras se esté por encima (spec § 3.5).
 - **El cliente de la API no cambia nada:** sin `lineId` ni `from`, la línea por defecto (`Account.defaultLineId`), y la respuesta es idéntica.
 - Una línea de otra cuenta → **404**, nunca 403, con su test en `tests/isolation/`. El token nunca sale en una respuesta.
@@ -155,7 +155,7 @@ git commit -m "líneas: Line es la fuente de la conexión y User su copia"
   - `GET /lines` → `{ lines: SerializedLine[], maxLines }`: todas las de la cuenta (también las desconectadas, con su historial), las activas primero y la por defecto la primera.
   - `PATCH /lines/:id` con `{ name?: string | null, isDefault?: true }` (`updateLineSchema`: `name` recortado, máximo 40, vacío → `null`; al menos uno de los dos). `isDefault` en una línea no activa → 409 `'Solo una línea conectada puede ser la línea por defecto.'`. Responde la línea serializada.
   - `POST /lines/:id/disconnect` → la línea serializada. Idempotente. Si era la por defecto, `defaultLineId` = `nextDefaultLine(...)`; después `writeLegacyUser`. No llama a Meta ni borra el token del `Waba` (otras líneas del WABA lo usan).
-  - `disconnectLine(accountId, lineId)` y `setDefaultLine(accountId, lineId)` en `line.service.js`; los dos dan 404 `LINE_NOT_FOUND_MESSAGE` si la línea no es de la cuenta.
+  - `disconnectLine(accountId, lineId)` y `updateLineSettings(accountId, lineId, { name, makeDefault })` en `line.service.js`; los dos dan 404 `LINE_NOT_FOUND_MESSAGE` si la línea no es de la cuenta.
   - `GET /admin/clients`: cada cliente con `lines: { active, max }` (de su cuenta). `GET /admin/stats`: `connectedClients` = cuentas con al menos una línea activa.
   - `PATCH /admin/accounts/:accountId/limits` con `{ maxLines }` (entero de 1 a 50) → `{ accountId, maxLines }`. Cuenta inexistente → 404. Bajar el límite no desconecta nada.
   - `listConversations`: cada conversación con `lineId` (string o `null`).

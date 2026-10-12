@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import Account from "../models/account.model.js";
 import Line from "../models/line.model.js";
 import Waba from "../models/waba.model.js";
-import { disconnectLine, setDefaultLine } from "../services/line.service.js";
+import { disconnectLine, updateLineSettings } from "../services/line.service.js";
 import { cleanLineName } from "../utils/line.js";
 import { LINE_NOT_FOUND_MESSAGE } from "../utils/whatsapp.line.js";
 
@@ -69,10 +69,10 @@ export const updateLine = async (req, res) => {
         const line = await findOwnedLine(accountId, req.params.id);
         if (!line) return res.status(404).json([{ message: LINE_NOT_FOUND_MESSAGE }]);
 
-        if (req.body.name !== undefined) {
-            await Line.updateOne({ _id: line._id }, { $set: { name: cleanLineName(req.body.name) } });
-        }
-        if (req.body.isDefault) await setDefaultLine(accountId, line._id);
+        await updateLineSettings(accountId, line._id, {
+            name: req.body.name === undefined ? undefined : cleanLineName(req.body.name),
+            makeDefault: Boolean(req.body.isDefault),
+        });
 
         return res.json(await serializeAccountLine(accountId, await Line.findById(line._id).lean()));
     } catch (error) {

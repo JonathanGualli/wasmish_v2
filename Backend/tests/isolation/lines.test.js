@@ -12,7 +12,7 @@ import {
 const { syncLinesFromOwner, findInboundLine } = await import('../../src/services/line.service.js');
 const { lineStateIssues } = await import('../../src/utils/line.js');
 const { hashApiKey } = await import('../../src/utils/crypto.js');
-const { DEFAULT_LINE_INACTIVE_MESSAGE, WHATSAPP_NOT_CONNECTED_MESSAGE, lineLimitMessage } = await import('../../src/utils/whatsapp.line.js');
+const { DEFAULT_LINE_INACTIVE_MESSAGE, LINE_BUSY_MESSAGE, WHATSAPP_NOT_CONNECTED_MESSAGE, lineLimitMessage } = await import('../../src/utils/whatsapp.line.js');
 
 await Waba.init();
 await Line.init();
@@ -319,13 +319,26 @@ test('POST /lines/:id/disconnect: B no desconecta una línea de A (404, sigue ac
     assert.equal((await request(b, 'POST', '/lines/no-es-un-id/disconnect')).status, 404);
 });
 
-test('isDefault en una línea desconectada → 409', async () => {
+// Regresión que vigila (Codex, PR #20): el nombre se guardaba antes de
+// comprobar la línea, así que una petición que respondía 409 lo cambiaba igual.
+test('isDefault en una línea desconectada → 409, y el nombre no cambia', async () => {
     const a = await twoLines('LG', '754');
     assert.equal((await request(a, 'POST', `/lines/${a.second}/disconnect`)).status, 200);
-    const res = await request(a, 'PATCH', `/lines/${a.second}`, { isDefault: true });
+    const res = await request(a, 'PATCH', `/lines/${a.second}`, { name: 'Nuevo', isDefault: true });
     assert.equal(res.status, 409, res.text);
     assert.equal(res.body[0].message, DEFAULT_LINE_INACTIVE_MESSAGE);
+    assert.equal((await lineFor(a.second)).name, null);
     assert.equal(String((await Account.findById(a.accountId).lean()).defaultLineId), a.first);
+});
+
+test('con el candado ocupado, PATCH /lines/:id → 409 y el nombre no cambia', async () => {
+    const a = await twoLines('LK', '758');
+    await Account.updateOne({ _id: a.accountId }, { lineLock: { token: 'otro', expiresAt: new Date(Date.now() + 60_000) } });
+    const res = await request(a, 'PATCH', `/lines/${a.second}`, { name: 'Nuevo' });
+    assert.equal(res.status, 409, res.text);
+    assert.equal(res.body[0].message, LINE_BUSY_MESSAGE);
+    assert.equal((await lineFor(a.second)).name, null);
+    await Account.updateOne({ _id: a.accountId }, { lineLock: null });
 });
 
 // Regresión que vigila (plan de la 2c, Review Focus 4): al desconectar la por
