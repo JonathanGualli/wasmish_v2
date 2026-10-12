@@ -189,6 +189,20 @@ test('POST /v1/templates/send con from elige esa línea; con otro número, 404',
     assert.equal((await sendWithKeyOfA({ from: '+15550000000' })).status, 404);
 });
 
+// Regresión que vigila (Codex, PR #16): un lineId en mayúsculas daba 404.
+test('POST /v1/templates/send con el lineId propio en mayúsculas sale por esa línea', async () => {
+    const own = await Line.findOne({ accountId: a.accountId, phoneNumberId: `99${a.seq}` }).lean();
+    onMeta(async (config) => (config.method === 'post' && config.url === `/99${a.seq}/messages`
+        ? { data: { messages: [{ id: 'wamid.mayusculas' }] } }
+        : undefined));
+    try {
+        const res = await sendWithKeyOfA({ lineId: String(own._id).toUpperCase() });
+        assert.equal(res.status, 200, res.text);
+    } finally {
+        onMeta(null);
+    }
+});
+
 test('POST /v1/templates/send con un lineId mal formado → 400', async () => {
     assert.equal((await sendWithKeyOfA({ lineId: 'no-es-un-id' })).status, 400);
 });

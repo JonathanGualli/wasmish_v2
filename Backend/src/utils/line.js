@@ -5,7 +5,9 @@
 
 import { LINE_NOT_FOUND_MESSAGE } from './whatsapp.line.js';
 
-const sameId = (a, b) => a != null && b != null && String(a) === String(b);
+// Sin distinguir mayúsculas: un ObjectId es hexadecimal, y el que llega en un
+// cuerpo (`lineId`) puede venir en mayúsculas.
+const sameId = (a, b) => a != null && b != null && String(a).toLowerCase() === String(b).toLowerCase();
 
 // La conexión que dice `User`, o null si le falta alguno de los tres campos.
 export const ownerConnection = (owner) => {
@@ -135,7 +137,7 @@ const digitsOf = (text) => String(text ?? '').replace(/\D/g, '');
  * `displayPhoneNumber`). Si está conectada lo decide después `findSendingLine`.
  */
 export const resolveApiLine = (lines, { lineId = null, from = null } = {}) => {
-    const byId = lineId ? lines.find(line => String(line._id) === String(lineId)) : null;
+    const byId = lineId ? lines.find(line => sameId(line._id, lineId)) : null;
     if (lineId && !byId) return { statusCode: 404, message: LINE_NOT_FOUND_MESSAGE };
 
     const wanted = from ? digitsOf(from) : null;

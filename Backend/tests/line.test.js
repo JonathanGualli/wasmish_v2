@@ -180,3 +180,10 @@ test('resolveApiLine: lineId y from de líneas distintas → 400', () => {
 test('resolveApiLine: lineId y from de la misma línea → esa línea', () => {
     assert.deepEqual(resolveApiLine(lines, { lineId: String(lines[0]._id), from: '+593991234567' }), { lineId: String(lines[0]._id) });
 });
+
+// Regresión que vigila (Codex, PR #16): el esquema acepta el id en mayúsculas
+// (y Mongo también), pero la comparación era literal y daba 404.
+test('resolveApiLine: un lineId en mayúsculas es la misma línea', () => {
+    const upper = String(lines[0]._id).toUpperCase();
+    assert.deepEqual(resolveApiLine(lines, { lineId: upper }), { lineId: String(lines[0]._id) });
+});
