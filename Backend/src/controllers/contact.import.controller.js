@@ -106,7 +106,7 @@ const runUpserts = async (operations) => {
  */
 export const previewImport = async (req, res) => {
     try {
-        const userId = new mongoose.Types.ObjectId(req.user.id);
+        const userId = new mongoose.Types.ObjectId(req.auth.accountId);
         const { plan, existingByPhone } = await buildPlan(userId, req.body);
         return res.json({
             summary: plan.summary,
@@ -127,7 +127,7 @@ export const previewImport = async (req, res) => {
  */
 export const importContacts = async (req, res) => {
     try {
-        const userId = new mongoose.Types.ObjectId(req.user.id);
+        const userId = new mongoose.Types.ObjectId(req.auth.accountId);
         const { plan } = await buildPlan(userId, req.body);
 
         const toWrite = plan.entries.filter(entry => entry.action !== 'unchanged');

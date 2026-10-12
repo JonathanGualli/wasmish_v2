@@ -1,7 +1,7 @@
 import Campaign from "../models/campaign.model.js";
 import CampaignRecipient from "../models/campaign.recipient.model.js";
 import Message from "../models/message.model.js";
-import { sendUser } from "../controllers/stream.controller.js";
+import { sendToAccount } from "../controllers/stream.controller.js";
 import { buildCampaignStats } from "../utils/campaign.status.js";
 import { CAMPAIGN_RATE_PER_SECOND } from "../config.js";
 
@@ -123,5 +123,5 @@ export const emitCampaignProgress = async (campaignId, { force = false } = {}) =
     if (['completed', 'cancelled'].includes(campaign.status)) lastProgressAt.delete(key);
 
     const stats = await getCampaignStats(campaign._id);
-    sendUser(String(campaign.userId), 'campaign_progress', serializeCampaign(campaign, stats));
+    sendToAccount(String(campaign.userId), 'campaign_progress', serializeCampaign(campaign, stats));
 };

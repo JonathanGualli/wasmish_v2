@@ -109,6 +109,23 @@ test('isPhoneNumberTaken: el número propio no cuenta como tomado (reconectar)',
     assert.equal(await isPhoneNumberTaken(b.userId, A_NUMBER), true);
 });
 
+// Regresión que vigila: los controladores tienen que pasar el `_id` del usuario
+// que guarda la conexión, no el de la cuenta (en los tests son distintos): con
+// el de la cuenta, el propio número cuenta como «de otro» y renovar da 409.
+for (const [via, reconnect] of [
+    ['PUT /users/update-user-token-whatsapp', (number) => updateToken(a, number)],
+    ['POST /whatsapp/connect', (number) => request(a, 'POST', '/whatsapp/connect', { code: 'x', phoneNumberId: number, waBusinessId: 'waba-A' })],
+]) {
+    test(`${via}: reconectar el propio número (renovar el token) no da 409`, async () => {
+        const current = (await User.findById(a.userId).lean()).phoneNumberId;
+        fakeMeta([current]);
+        const res = await reconnect(current);
+        onMeta(null);
+        assert.equal(res.status, 200, res.text);
+        assert.equal((await User.findById(a.userId).lean()).phoneNumberId, current);
+    });
+}
+
 // Regresión que vigila: processMessageSending llamaba a decrypt(null) y respondía 500 «Cannot read properties of null».
 test('POST /chats/:id/messages sin WhatsApp y con la ventana abierta: 409', async () => {
     await Conversation.updateOne({ _id: b.conversationId }, { lastInboundAt: new Date() });

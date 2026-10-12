@@ -29,7 +29,7 @@ SSE y sus eventos, no leídos, y la UI del chat: hilo, bandeja, conversación nu
 
 ### SSE (`stream.controller.js`)
 
-**SSE (`stream.controller.js`):** `clients` es un `Map<userId, Set<Response>>`. `sendUser(userId, event, data)` escribe a todos los sockets del usuario. Keep-alive cada 25 segundos.
+**SSE (`stream.controller.js`):** `clients` es un `Map<accountId, Set<Response>>`: desde la Fase 1 de multi-línea (2026-10-11) las conexiones se agrupan **por cuenta** (`stream.routes.js` usa `req.auth.accountId`). `sendToAccount(accountId, event, data)` escribe a todas las conexiones abiertas de la cuenta, sin filtro todavía: el filtro por línea y asignación (`canReceive`) llega con los permisos, en la Fase 3. Keep-alive cada 25 segundos.
 
 ### Eventos SSE y sus payloads
 

@@ -195,17 +195,17 @@ const conversationFor = (contact, n, phoneNumberId) => {
 // --- Comandos ----------------------------------------------------------------
 
 const seed = async (user, count) => {
-    const existing = await Contact.find(isSeedFilter(user._id)).select('phone waUserId').lean();
+    const existing = await Contact.find(isSeedFilter(user.accountId)).select('phone waUserId').lean();
     const taken = new Set(existing.flatMap(c => [c.phone, c.waUserId]).filter(Boolean));
 
     const toCreate = [];
     for (let n = 1; n <= count; n++) {
-        const draft = buildContact(user._id, n);
+        const draft = buildContact(user.accountId, n);
         if (!taken.has(draft.phone) && !taken.has(draft.waUserId)) toCreate.push({ n, draft });
     }
     if (toCreate.length === 0) {
         console.log(`Ya existen los ${count} contactos de prueba. Nada que crear.`);
-        const tagged = await tagSeedContacts(user._id);
+        const tagged = await tagSeedContacts(user.accountId);
         if (tagged) console.log(`  Etiquetados ${tagged} que no tenían etiquetas.`);
         return;
     }
@@ -228,7 +228,7 @@ const seed = async (user, count) => {
         conversations++;
     }
 
-    const tagged = await tagSeedContacts(user._id);
+    const tagged = await tagSeedContacts(user.accountId);
     const optedOut = contacts.filter(c => c.marketingOptOut).length;
     const withoutPhone = contacts.filter(c => !c.phone).length;
     console.log(`Creados ${contacts.length} contactos de prueba (${existing.length} ya existían).`);
@@ -256,7 +256,7 @@ const signedPost = async (body) => {
 const simulateAcks = async (user) => {
     if (!process.env.META_APP_SECRET) fail('Falta META_APP_SECRET en el .env: sin él no se puede firmar como Meta.');
 
-    const contactIds = (await Contact.find(isSeedFilter(user._id)).select('_id').lean()).map(c => c._id);
+    const contactIds = (await Contact.find(isSeedFilter(user.accountId)).select('_id').lean()).map(c => c._id);
     const conversationIds = await Conversation.distinct('_id', { contactId: { $in: contactIds } });
     const messages = await Message.find({
         conversationId: { $in: conversationIds },
@@ -302,10 +302,10 @@ const simulateAcks = async (user) => {
  * también tenía contactos reales se conserva.
  */
 const clean = async (user) => {
-    const contactIds = (await Contact.find(isSeedFilter(user._id)).select('_id').lean()).map(c => c._id);
+    const contactIds = (await Contact.find(isSeedFilter(user.accountId)).select('_id').lean()).map(c => c._id);
     if (contactIds.length === 0) {
         console.log('No hay contactos de prueba que borrar.');
-        const tags = await cleanSeedTags(user._id);
+        const tags = await cleanSeedTags(user.accountId);
         if (tags) console.log(`Borradas ${tags} etiquetas de prueba sin contactos.`);
         return;
     }
@@ -320,9 +320,9 @@ const clean = async (user) => {
 
     const stillUsed = await CampaignRecipient.distinct('campaignId', { campaignId: { $in: campaignIds } });
     const emptyCampaigns = campaignIds.filter(id => !stillUsed.some(used => used.equals(id)));
-    const campaigns = await Campaign.deleteMany({ _id: { $in: emptyCampaigns }, userId: user._id });
+    const campaigns = await Campaign.deleteMany({ _id: { $in: emptyCampaigns }, userId: user.accountId });
 
-    const tags = await cleanSeedTags(user._id);
+    const tags = await cleanSeedTags(user.accountId);
 
     console.log(`Borrados: ${contacts.deletedCount} contactos, ${conversations.deletedCount} conversaciones, `
         + `${messages.deletedCount} mensajes, ${campaigns.deletedCount} campañas y ${tags} etiquetas.`);

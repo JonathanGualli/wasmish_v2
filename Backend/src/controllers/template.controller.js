@@ -1,11 +1,11 @@
 import fs from "node:fs";
 import mongoose from "mongoose";
-import User from "../models/user.model.js";
+import { findAccountOwner } from "../services/account.service.js";
 import Template from "../models/template.model.js";
 import Message from "../models/message.model.js";
 import { decrypt } from "../utils/crypto.js";
 import { getTemplates, sendTemplateMessage } from "../libs/whatsapp.js";
-import { sendUser } from "./stream.controller.js";
+import { sendToAccount } from "./stream.controller.js";
 import { getSendingRecipient, getSendingConversation } from "./contact.controller.js";
 import { MARKETING_OPT_OUT_ERROR } from "../utils/marketing.preference.js";
 import TemplateMedia from "../models/template.media.model.js";
@@ -24,7 +24,8 @@ import { assertWhatsappConnected } from "../utils/whatsapp.line.js";
 
 // Trae las plantillas del WABA del usuario y las upsertea en la BD.
 // La usan el sync manual (endpoint) y el sync just-in-time del envío.
-// Devuelve cuántas plantillas se procesaron.
+// Devuelve cuántas plantillas se procesaron. `user` es el owner de la cuenta,
+// que guarda la conexión de WhatsApp; las plantillas son de su cuenta.
 export const syncTemplatesForUser = async (user) => {
     // Se comprueba ANTES de descifrar: decrypt(null) revienta y daba un 500.
     if (!user.tokenWhatsapp || !user.waBusinessId) {
@@ -58,7 +59,7 @@ export const syncTemplatesForUser = async (user) => {
                 filter: { templateId: tpl.id },
                 update: {
                     $set: {
-                        userId: user._id,
+                        userId: user.accountId,
                         name: tpl.name,
                         category: tpl.category,
                         status: tpl.status,
@@ -213,10 +214,10 @@ export const fakeTemplateSend = ({ contact, template }) => {
 
 export const syncTemplatesController = async (req, res) => {
     try {
-        const user = await User.findById(req.user.id);
-        if (!user) return res.status(404).json([{ message: "User not found" }]);
+        const owner = await findAccountOwner(req.auth.accountId);
+        if (!owner) return res.status(404).json([{ message: "User not found" }]);
 
-        const total = await syncTemplatesForUser(user);
+        const total = await syncTemplatesForUser(owner);
 
         return res.status(200).json({
             success: true,
@@ -248,18 +249,18 @@ const findUserTemplates = (userId) =>
 
 export const getTemplatesController = async (req, res) => {
     try {
-        const userId = req.user.id;
-        const user = await User.findById(userId);
-        if (!user) return res.status(404).json([{ message: "User not found" }]);
+        const userId = req.auth.accountId;
+        const owner = await findAccountOwner(userId);
+        if (!owner) return res.status(404).json([{ message: "User not found" }]);
 
         let templates = await findUserTemplates(userId);
 
         // Sincronizadas antes de guardar la cabecera: se vuelven a sincronizar
         // una vez, para saber cuáles piden un archivo. Si Meta falla, se
         // devuelven como están: la lista no puede depender de Meta.
-        if (templates.some(t => t.header === undefined) && user.tokenWhatsapp) {
+        if (templates.some(t => t.header === undefined) && owner.tokenWhatsapp) {
             try {
-                await syncTemplatesForUser(user);
+                await syncTemplatesForUser(owner);
                 templates = await findUserTemplates(userId);
             } catch (syncError) {
                 console.error('Sync de plantillas (cabeceras) falló:', syncError.message);
@@ -285,7 +286,7 @@ const saveUploadedHeaderMedia = async (req, template) => {
     if (issue) return { issue };
 
     const media = await saveHeaderMedia({
-        userId: req.user.id, buffer, mimeType, filename: cleanFilename(req.headers['x-filename']),
+        userId: req.auth.accountId, buffer, mimeType, filename: cleanFilename(req.headers['x-filename']),
     });
     return { media };
 };
@@ -293,7 +294,7 @@ const saveUploadedHeaderMedia = async (req, template) => {
 /** PUT /templates/:templateId/header-media — el archivo de la cabecera de la plantilla. */
 export const uploadHeaderMediaController = async (req, res) => {
     try {
-        const template = await Template.findOne({ userId: req.user.id, templateId: req.params.templateId });
+        const template = await Template.findOne({ userId: req.auth.accountId, templateId: req.params.templateId });
         if (!template) return res.status(404).json([{ message: 'La plantilla no existe en tu cuenta.' }]);
 
         const { issue, media } = await saveUploadedHeaderMedia(req, template);
@@ -317,7 +318,7 @@ export const uploadHeaderMediaController = async (req, res) => {
  */
 export const uploadHeaderMediaFileController = async (req, res) => {
     try {
-        const template = await Template.findOne({ userId: req.user.id, templateId: req.params.templateId }).lean();
+        const template = await Template.findOne({ userId: req.auth.accountId, templateId: req.params.templateId }).lean();
         if (!template) return res.status(404).json([{ message: 'La plantilla no existe en tu cuenta.' }]);
 
         const { issue, media } = await saveUploadedHeaderMedia(req, template);
@@ -337,7 +338,7 @@ export const uploadHeaderMediaFileController = async (req, res) => {
 export const removeHeaderMediaController = async (req, res) => {
     try {
         const template = await Template.findOneAndUpdate(
-            { userId: req.user.id, templateId: req.params.templateId },
+            { userId: req.auth.accountId, templateId: req.params.templateId },
             { $set: { headerMedia: null } },
             { new: true },
         ).lean();
@@ -355,7 +356,7 @@ export const removeHeaderMediaController = async (req, res) => {
 export const getHeaderMediaFileController = async (req, res) => {
     try {
         const media = mongoose.isValidObjectId(req.params.id)
-            ? await TemplateMedia.findOne({ _id: req.params.id, userId: req.user.id }).lean()
+            ? await TemplateMedia.findOne({ _id: req.params.id, userId: req.auth.accountId }).lean()
             : null;
         const ruta = media && rutaDeArchivo(MEDIA_DIR, media.file);
         if (!ruta || !fs.existsSync(ruta)) return res.status(404).json([{ message: 'Media not found' }]);
@@ -384,6 +385,9 @@ export const getHeaderMediaFileController = async (req, res) => {
  * la campaña; así no se busca ni se sincroniza en cada destinatario),
  * `campaignId` queda en el Message, y `dryRun` no llama a Meta (ver
  * `fakeTemplateSend`).
+ *
+ * `user` es el owner de la cuenta: de él salen el token y el número (hasta la
+ * Fase 2 de multi-línea), y de su `accountId`, el dueño de lo que se guarda.
  */
 export const processTemplateSending = async ({
     user,
@@ -411,7 +415,7 @@ export const processTemplateSending = async ({
 
     // 1. Plantilla: la buscamos ANTES de enviar, para validar que existe
     //    y para saber en qué idioma está registrada.
-    let template = resolvedTemplate ?? await Template.findOne({ userId: user._id, name: templateName });
+    let template = resolvedTemplate ?? await Template.findOne({ userId: user.accountId, name: templateName });
     let syncOk = true;
 
     // Re-sincronizamos también si el documento es anterior a que guardáramos
@@ -421,7 +425,7 @@ export const processTemplateSending = async ({
     if (!resolvedTemplate && (!template || template.parameterFormat === undefined || template.header === undefined)) {
         try {
             await syncTemplatesForUser(user);
-            template = await Template.findOne({ userId: user._id, name: templateName });
+            template = await Template.findOne({ userId: user.accountId, name: templateName });
         } catch (syncError) {
             // Si el sync falló no podemos afirmar que la plantilla no exista:
             // dejamos que Meta decida, en vez de bloquear un envío válido.
@@ -455,7 +459,7 @@ export const processTemplateSending = async ({
         throw error;
     }
     const headerMedia = headerMediaRule(template)
-        ? await TemplateMedia.findOne({ _id: template.headerMedia, userId: user._id })
+        ? await TemplateMedia.findOne({ _id: template.headerMedia, userId: user.accountId })
         : null;
     if (headerMediaRule(template) && !(headerMedia && await headerMediaFileExists(headerMedia))) {
         const error = new Error('El archivo de la cabecera de la plantilla ya no está en el servidor. Vuelve a subirlo en Plantillas.');
@@ -517,7 +521,7 @@ export const processTemplateSending = async ({
     const now = new Date();
 
     const targetConversation = await getSendingConversation({
-        userId: user._id, conversation, contact, recipient, phoneNumberId, contactName, source,
+        userId: user.accountId, conversation, contact, recipient, phoneNumberId, contactName, source,
     });
     targetConversation.lastMessage = storedText;
     targetConversation.lastMessageAt = now;
@@ -543,7 +547,7 @@ export const processTemplateSending = async ({
 
     // 7. SSE en vivo → aparece en la UI de wasmish. `campaignId` deja al
     //    frontend agrupar los cientos de eventos de una campaña.
-    sendUser(String(user._id), 'message_created', {
+    sendToAccount(String(user.accountId), 'message_created', {
         id: String(msg._id), conversationId: String(targetConversation._id), sender: 'me',
         text: storedText, timestamp: msg.timestamp.toISOString(),
         status, errorCode, errorDetail, templateName,
@@ -558,15 +562,15 @@ export const processTemplateSending = async ({
 
 export const sendTemplateController = async (req, res) => {
     try {
-        const userId = req.user.id;   // ← viene de validateApiKey
         const { destinationNumber, templateName, contactName } = req.body;
 
-        const user = await User.findById(userId);
-        if (!user) return res.status(404).json([{ message: "User not found" }]);
+        // La cuenta de la API key (validateApiKey) y quien guarda su conexión.
+        const owner = await findAccountOwner(req.auth.accountId);
+        if (!owner) return res.status(404).json([{ message: "User not found" }]);
 
         const { waMessageId, conversation, status, errorCode, errorDetail } =
             await processTemplateSending({
-                user,
+                user: owner,
                 destinationNumber,
                 templateName,
                 language: req.body.language,

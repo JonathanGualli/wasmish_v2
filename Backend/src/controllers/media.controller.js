@@ -10,7 +10,7 @@ import { rutaDeArchivo, mimeParaServir } from '../utils/media.storage.js';
 // aunque se conozca su mediaId, que además viaja en los payloads de Meta.
 export const getMedia = async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = req.auth.accountId;
         const { id } = req.params;
 
         const message = await Message.findById(id).lean();

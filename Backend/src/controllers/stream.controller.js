@@ -3,20 +3,22 @@ import { EventEmitter } from 'events';
 const emitter = new EventEmitter();
 const clients = new Map();
 
-export const addClient = (userId, resp) => {
-    if (!clients.has(userId)) clients.set(userId, new Set());
-    clients.get(userId).add(resp);
+// Conexiones SSE abiertas, por cuenta (`accountId` → sus respuestas abiertas).
+export const addClient = (accountId, resp) => {
+    if (!clients.has(accountId)) clients.set(accountId, new Set());
+    clients.get(accountId).add(resp);
 }
 
-export const removeClient = (userId, resp) => {
-    const set = clients.get(userId);
+export const removeClient = (accountId, resp) => {
+    const set = clients.get(accountId);
     if(!set) return;
     set.delete(resp);
-    if (set.size ===0) clients.delete(userId);
+    if (set.size ===0) clients.delete(accountId);
 }
 
-export const sendUser = (userId, event, data) => { 
-    const set = clients.get(userId);
+// Un evento a todas las conexiones abiertas de la cuenta.
+export const sendToAccount = (accountId, event, data) => { 
+    const set = clients.get(accountId);
     if (!set) return;
     const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
     for (const res of set) {

@@ -26,7 +26,7 @@ export const PrivateRouter = () => {
     return (
         <PrivateLayout>
             <RoutesWithNotFound>
-                {user?.rol === 'superadmin' && (
+                {user?.isSuperadmin && (
                     <Route path={AppRoutes.private.admin} element={<AdminPage />} />
                 )}
                 <Route path="/" element={<Navigate to={AppRoutes.private.quickStart} />} />

@@ -13,11 +13,11 @@ Express 5 app. Entry: `index.js` → `app.js`. Patrón: `routes/` → `controlle
 ## Reglas del backend
 
 - **Una ruta nueva** sigue `routes/` → `controllers/` → `models/`, con el cuerpo validado por un esquema Zod (`validateSchema`) y los errores como array `[{ message }]`.
-- **Propiedad:** el controlador busca con la cuenta de la sesión (`{ _id, userId: req.user.id }`) y responde 404 si no es suya. Su caso va en `tests/isolation/` (cómo: [pruebas-y-scripts.md § Tests de aislamiento](../docs/arquitectura/pruebas-y-scripts.md#tests-de-aislamiento)).
+- **Propiedad:** el controlador busca con la cuenta de la sesión (`{ _id, userId: req.auth.accountId }`) y responde 404 si no es suya. `authRequired` y `validateApiKey` dejan `req.auth` ([api.md § Autenticación](../docs/arquitectura/api.md#autenticación--dos-vías)); `req.user` ya no existe. La conexión de WhatsApp la guarda el owner de la cuenta: `findAccountOwner(accountId)` (`services/account.service.js`), hasta la Fase 2 de multi-línea. Su caso va en `tests/isolation/` (cómo: [pruebas-y-scripts.md § Tests de aislamiento](../docs/arquitectura/pruebas-y-scripts.md#tests-de-aislamiento)).
 - **Lo que no sabe de HTTP** va en `utils/` (puro, con test en `tests/`) o en `services/` (con BD). Los controladores no repiten esa lógica.
 - **Un solo camino por envío:** `processMessageSending` (texto y archivos) y `processTemplateSending` (plantillas, también las campañas y la API pública). No se escribe otro → [whatsapp-envio.md](../docs/arquitectura/whatsapp-envio.md).
 - **A Meta solo se llama desde `libs/whatsapp.js`**, que deja el error de Meta en `err.waErrorCode` / `err.waErrorDetail`. Los tests nunca llaman a Meta.
-- **Tiempo real:** `sendUser(userId, evento, datos)`; los eventos y sus payloads están en [chat.md § Eventos SSE](../docs/arquitectura/chat.md#eventos-sse-y-sus-payloads).
+- **Tiempo real:** `sendToAccount(accountId, evento, datos)`, a todas las pestañas abiertas de la cuenta; los eventos y sus payloads están en [chat.md § Eventos SSE](../docs/arquitectura/chat.md#eventos-sse-y-sus-payloads).
 - **Índices únicos** sobre un campo que puede ser `null`: parciales con `$type`, no `sparse` (ver abajo).
 
 ## Comandos y tests
@@ -33,7 +33,7 @@ cd Backend && npm test         # node --test "tests/*.test.js" — funciones pur
 cd Backend && npm run test:watch
 cd Backend && npm run test:isolation   # aislamiento entre cuentas, con Mongo en memoria
 ```
-Cubren **funciones puras**, sin BD ni red: `utils/crypto.js`, `utils/message.status.js`, `utils/whatsapp.window.js`, `utils/inbound.message.js`, `utils/media.storage.js`, `utils/contact.identity.js`, `utils/contact.query.js`, `utils/marketing.preference.js`, `utils/campaign.message.js`, `utils/campaign.status.js`, `utils/template.header.js`, `utils/contact.tags.js`, `utils/contact.import.js`, `utils/outbound.media.js` (con las firmas de `utils/file.signature.js`) y las de plantillas de `template.controller.js` (`buildButtonComponents`, `renderTemplateBody`). Cada test que corresponde a un bug ya corregido lleva un comentario explicando la regresión que vigila — verificados reintroduciendo el bug a propósito y comprobando que fallan. El Frontend no tiene tests.
+Cubren **funciones puras**, sin BD ni red: `utils/crypto.js`, `utils/message.status.js`, `utils/whatsapp.window.js`, `utils/inbound.message.js`, `utils/media.storage.js`, `utils/contact.identity.js`, `utils/contact.query.js`, `utils/marketing.preference.js`, `utils/campaign.message.js`, `utils/campaign.status.js`, `utils/template.header.js`, `utils/contact.tags.js`, `utils/contact.import.js`, `utils/outbound.media.js` (con las firmas de `utils/file.signature.js`), `utils/whatsapp.line.js`, `utils/account.js` y las de plantillas de `template.controller.js` (`buildButtonComponents`, `renderTemplateBody`). Cada test que corresponde a un bug ya corregido lleva un comentario explicando la regresión que vigila — verificados reintroduciendo el bug a propósito y comprobando que fallan. El Frontend no tiene tests.
 
 Los tests fijan `process.env` **antes** de un `await import(...)` dinámico, porque `crypto.js` y el middleware de firma leen la config al importarse; con un `import` estático la variable llegaría tarde.
 
@@ -44,6 +44,7 @@ Más scripts (webhook simulado, contactos de prueba, backfills, duplicados, vers
 **Índices MongoDB relevantes:**
 - `Conversation`: `conversation_contact_unique` = `{ userId: 1, contactId: 1 }` único **parcial** (`contactId: { $type: 'objectId' }`) — una conversación por contacto; parcial para que las anteriores a los contactos, sin `contactId`, no choquen entre sí. Más `contactId_1` simple, para el `$lookup` de la lista de contactos. El viejo `userId_1_contactPhone_1` ya **no existe** (lo borra `backfill:contacts`): un contacto puede no tener teléfono.
 - `Contact`: `contact_phone_unique` `{ userId, phone }` y `contact_waUserId_unique` `{ userId, waUserId }`, únicos **parciales** por `$type: 'string'` — el mismo motivo que `waMessageId_unico`: los dos campos pueden ser `null`
+- `User`: `user_phoneNumberId_unique` (un número, una cuenta; parcial por `$type: 'string'`) y `user_account_owner_unique` `{ accountId: 1 }`, único **parcial** con `{ role: 'owner' }`: un owner por cuenta
 - `Message`: `{ conversationId: 1, timestamp: 1 }`
 - `Message`: `campaignId_status` `{ campaignId: 1, status: 1 }`, normal (ni parcial ni sparse, ver el comentario en el modelo) — las estadísticas de una campaña
 - `CampaignRecipient`: `{ campaignId, contactId }` único y `{ campaignId, status, _id }` (la cola y los conteos). `Campaign`: `{ userId, createdAt: -1 }` y `{ status, createdAt }` (el worker)

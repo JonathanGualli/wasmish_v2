@@ -5,8 +5,15 @@
 //
 // Nada llega a Meta: A no tiene WhatsApp conectado, el worker de campañas no
 // arranca (vive en index.js) y CAMPAIGN_DRY_RUN está encendido.
+//
+// La cuenta de cada una NO tiene el `_id` de su usuario. En producción
+// coinciden (el owner crea la cuenta con su mismo `_id`), y por eso un
+// `req.user.id` o un `user._id` usado como cuenta funcionaría allí «de
+// casualidad». Aquí no: los datos cuelgan de la cuenta, y el control de cada
+// test (A llega a lo suyo) falla si el código busca por la persona.
 import { after } from 'node:test';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -17,6 +24,8 @@ import { MongoMemoryServer } from 'mongodb-memory-server';
 process.env.NODE_ENV = 'test';
 process.env.TOKEN_SECRET = 'secreto-de-pruebas';
 process.env.CAMPAIGN_DRY_RUN = 'true';
+// Con él, `postWebhook` firma el cuerpo igual que Meta.
+process.env.META_APP_SECRET = 'secreto-meta-pruebas';
 process.env.MEDIA_DIR = await fs.mkdtemp(path.join(os.tmpdir(), 'wasmish-isolation-'));
 
 const mongod = await MongoMemoryServer.create();
@@ -52,6 +61,7 @@ whatsappApi.defaults.adapter = async (config) => {
 };
 const load = async (file) => (await import(`../../src/models/${file}`)).default;
 
+export const Account = await load('account.model.js');
 export const User = await load('user.model.js');
 export const Contact = await load('contact.model.js');
 export const Tag = await load('tag.model.js');
@@ -90,22 +100,29 @@ const writeMedia = async (file) => {
  * `SECRETO-<label>`: si aparece en una respuesta de la otra cuenta, se filtró.
  * `seq` separa los teléfonos y los nombres de archivo de las dos cuentas.
  */
-export const seedAccount = async (label, { rol = 'admin', seq = 1 } = {}) => {
+export const seedAccount = async (label, { isSuperadmin = false, seq = 1 } = {}) => {
     const marker = `SECRETO-${label}`;
-    const user = await User.create({ name: marker, email: `${label.toLowerCase()}@pruebas.local`, password: 'x', rol });
+    // La cuenta y su owner con `_id` distintos (ver la cabecera).
+    const user = new User({
+        name: marker, email: `${label.toLowerCase()}@pruebas.local`, password: 'x',
+        accountId: new mongoose.Types.ObjectId(), role: 'owner', isSuperadmin,
+    });
+    await Account.create({ _id: user.accountId, name: marker, ownerId: user._id });
+    await user.save();
+    const accountId = user.accountId;
 
-    const tag = await Tag.create({ userId: user._id, name: `${marker} etiqueta`, key: `${label.toLowerCase()}-etiqueta` });
+    const tag = await Tag.create({ userId: accountId, name: `${marker} etiqueta`, key: `${label.toLowerCase()}-etiqueta` });
     const contact = await Contact.create({
-        userId: user._id, phone: `59399000000${seq}`, name: `${marker} contacto`, tags: [tag._id], source: 'manual',
+        userId: accountId, phone: `59399000000${seq}`, name: `${marker} contacto`, tags: [tag._id], source: 'manual',
     });
     // Un contacto sin conversación: el único que se puede borrar.
-    const loneContact = await Contact.create({ userId: user._id, phone: `59399000010${seq}`, name: `${marker} suelto` });
+    const loneContact = await Contact.create({ userId: accountId, phone: `59399000010${seq}`, name: `${marker} suelto` });
 
     // Ventana cerrada: el único mensaje del contacto es de hace dos días (sin
     // `lastInboundAt`, el chat lo busca en sus mensajes). Así el texto libre se
     // frena con un 409 antes de llegar al token de WhatsApp, que A no tiene.
     const conversation = await Conversation.create({
-        userId: user._id, contactId: contact._id, contactPhone: contact.phone, phoneNumberId: `10${seq}`,
+        userId: accountId, contactId: contact._id, contactPhone: contact.phone, phoneNumberId: `10${seq}`,
         lastMessage: `${marker} último`, unreadCount: 3,
     });
     const mediaFile = `${seq}000.png`;
@@ -119,10 +136,10 @@ export const seedAccount = async (label, { rol = 'admin', seq = 1 } = {}) => {
     const headerFile = `templates/${label.toLowerCase()}.png`;
     await writeMedia(headerFile);
     const headerMedia = await TemplateMedia.create({
-        userId: user._id, file: headerFile, mimeType: 'image/png', filename: `${marker}.png`, size: PNG.length,
+        userId: accountId, file: headerFile, mimeType: 'image/png', filename: `${marker}.png`, size: PNG.length,
     });
     const templateFields = {
-        userId: user._id, language: 'es', category: 'MARKETING', status: 'APPROVED',
+        userId: accountId, language: 'es', category: 'MARKETING', status: 'APPROVED',
         parameterFormat: 'POSITIONAL', buttons: [],
     };
     const template = await Template.create({
@@ -135,17 +152,17 @@ export const seedAccount = async (label, { rol = 'admin', seq = 1 } = {}) => {
     });
 
     const campaign = await Campaign.create({
-        userId: user._id, name: `${marker} campaña`, totalRecipients: 1, dryRun: true,
+        userId: accountId, name: `${marker} campaña`, totalRecipients: 1, dryRun: true,
         template: { templateId: template.templateId, name: template.name, language: 'es', category: 'MARKETING', bodyText: template.bodyText },
     });
-    await CampaignRecipient.create({ campaignId: campaign._id, userId: user._id, contactId: contact._id });
+    await CampaignRecipient.create({ campaignId: campaign._id, userId: accountId, contactId: contact._id });
 
     const apiKey = await ApiKey.create({
-        userId: user._id, keyHash: `hash-${label}`, keyPreview: `wm_${marker}`, name: `${marker} key`,
+        userId: accountId, keyHash: `hash-${label}`, keyPreview: `wm_${marker}`, name: `${marker} key`,
     });
 
     return {
-        label, marker, seq, userId: String(user._id),
+        label, marker, seq, userId: String(user._id), accountId: String(accountId),
         token: await createAccessToken({ id: String(user._id) }),
         tagId: String(tag._id),
         contactId: String(contact._id),
@@ -187,13 +204,70 @@ export const request = async (account, method, url, body, headers = {}) => {
     const text = await response.text();
     let json = null;
     try { json = JSON.parse(text); } catch { /* binario o vacío */ }
-    return { status: response.status, body: json, text };
+    return { status: response.status, body: json, text, setCookie: response.headers.get('set-cookie') };
+};
+
+/** La sesión que deja una respuesta con `Set-Cookie: token=…` (registro o login), lista para `request`. */
+export const sessionFrom = (response) => ({ token: /token=([^;]+)/.exec(response.setCookie ?? '')?.[1] ?? '' });
+
+/** Sin sesión: registro, login y la API pública. */
+export const ANONYMOUS = { token: '' };
+
+/**
+ * Un webhook de Meta, firmado con HMAC-SHA256 sobre los bytes que se mandan
+ * (como `verifyWebhookSignature` espera). `value` es el de un solo cambio, sin
+ * `metadata`: la pone `phoneNumberId`.
+ */
+export const postWebhook = async (phoneNumberId, value) => {
+    const body = JSON.stringify({ entry: [{ changes: [{ value: { metadata: { phone_number_id: phoneNumberId }, ...value } }] }] });
+    const signature = 'sha256=' + crypto.createHmac('sha256', process.env.META_APP_SECRET).update(body).digest('hex');
+    const response = await fetch(`${baseUrl}/webhook`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-hub-signature-256': signature },
+        body,
+    });
+    return { status: response.status };
+};
+
+/**
+ * Una conexión SSE abierta con la sesión de `account`. `waitFor(text, ms)` se
+ * resuelve con `true` en cuanto lo recibido contiene `text`, o con `false` al
+ * pasar `ms`. `close()` la cierra.
+ */
+export const openStream = async (account) => {
+    const controller = new AbortController();
+    const response = await fetch(`${baseUrl}/stream`, { headers: { Cookie: `token=${account.token}` }, signal: controller.signal });
+    assert.equal(response.status, 200);
+    let received = '';
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    const pump = (async () => {
+        try {
+            for (;;) {
+                const { done, value } = await reader.read();
+                if (done) return;
+                received += decoder.decode(value, { stream: true });
+            }
+        } catch { /* cerrada */ }
+    })();
+    const waitFor = async (text, ms) => {
+        const deadline = Date.now() + ms;
+        while (Date.now() < deadline) {
+            if (received.includes(text)) return true;
+            await new Promise(resolve => setTimeout(resolve, 20));
+        }
+        return received.includes(text);
+    };
+    const close = async () => { controller.abort(); await pump; };
+    // El servidor la registra al recibirla: se espera a su primer comentario.
+    await waitFor(': connected', 2000);
+    return { waitFor, close };
 };
 
 /** Ni la marca ni ningún id de `owner` aparecen en la respuesta. */
 export const assertNoLeak = (response, owner) => {
     const ids = [
-        owner.userId, owner.tagId, owner.contactId, owner.loneContactId, owner.conversationId,
+        owner.userId, owner.accountId, owner.tagId, owner.contactId, owner.loneContactId, owner.conversationId,
         owner.messageId, owner.headerMediaId, owner.templateId, owner.imageTemplateId, owner.campaignId, owner.apiKeyId,
     ];
     for (const secret of [owner.marker, owner.phone, ...ids]) {

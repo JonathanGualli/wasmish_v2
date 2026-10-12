@@ -39,7 +39,7 @@ export const listClients = async (req, res) => {
 
         const [users, totalCount] = await Promise.all([
             User.find({})
-                .select('name email rol status tokenWhatsapp waBusinessId createdAt')
+                .select('name email rol status accountId tokenWhatsapp waBusinessId createdAt')
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit)
@@ -47,15 +47,17 @@ export const listClients = async (req, res) => {
             User.countDocuments({}),
         ]);
 
-        const userIds = users.map(u => u._id);
+        // Los datos cuelgan de la cuenta (`userId` = cuenta), no del usuario: en
+        // una cuenta migrada coinciden, pero no tienen por qué.
+        const accountIds = users.map(u => u.accountId);
 
-        // Conversaciones solo de los usuarios de ESTA página (usa el índice userId)
-        const conversations = await Conversation.find({ userId: { $in: userIds } })
+        // Conversaciones solo de las cuentas de ESTA página (usa el índice userId)
+        const conversations = await Conversation.find({ userId: { $in: accountIds } })
             .select('_id userId lastMessageAt')
             .lean();
 
         const convIds = conversations.map(c => c._id);
-        // conversationId -> userId, para plegar los mensajes por cliente
+        // conversationId -> cuenta, para plegar los mensajes por cliente
         const convOwner = new Map(conversations.map(c => [String(c._id), String(c.userId)]));
 
         // Mensajes agrupados por conversación (usa el índice conversationId)
@@ -70,9 +72,9 @@ export const listClients = async (req, res) => {
             },
         ]);
 
-        // Acumuladores por usuario
+        // Acumuladores por cuenta
         const perUser = new Map(
-            userIds.map(id => [String(id), { conversations: 0, messages: 0, failed: 0, lastActivityAt: null }])
+            accountIds.map(id => [String(id), { conversations: 0, messages: 0, failed: 0, lastActivityAt: null }])
         );
 
         for (const conv of conversations) {
@@ -93,7 +95,7 @@ export const listClients = async (req, res) => {
         }
 
         const clients = users.map(u => {
-            const entry = perUser.get(String(u._id));
+            const entry = perUser.get(String(u.accountId));
             return {
                 id: String(u._id),
                 name: u.name,

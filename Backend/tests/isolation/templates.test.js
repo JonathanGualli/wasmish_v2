@@ -17,11 +17,11 @@ test('GET /templates: B no ve las plantillas de A', async () => {
 });
 
 test('PUT /templates/:templateId/header-media: B no cambia el archivo de una de A', async () => {
-    const mediaBefore = await TemplateMedia.countDocuments({ userId: b.userId });
+    const mediaBefore = await TemplateMedia.countDocuments({ userId: b.accountId });
     const asB = await request(b, 'PUT', `/templates/${a.imageTemplateId}/header-media`, PNG, upload);
     assert.equal(asB.status, 404);
     assert.equal(await headerMediaOf(a), a.headerMediaId);
-    assert.equal(await TemplateMedia.countDocuments({ userId: b.userId }), mediaBefore);
+    assert.equal(await TemplateMedia.countDocuments({ userId: b.accountId }), mediaBefore);
 
     const asA = await request(a, 'PUT', `/templates/${a.imageTemplateId}/header-media`, PNG, upload);
     assert.equal(asA.status, 200, asA.text);

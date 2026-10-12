@@ -340,7 +340,7 @@ export const selectionQueryStages = (userId, { search, filter, tagIds, excludeId
 export const listContacts = async (req, res) => {
     try {
         // aggregate no convierte tipos como find: el userId tiene que ir ya como ObjectId.
-        const userId = new mongoose.Types.ObjectId(req.user.id);
+        const userId = new mongoose.Types.ObjectId(req.auth.accountId);
         const page = Math.max(parseInt(req.query.page) || 1, 1);
         const limit = Math.min(Math.max(parseInt(req.query.limit) || PAGE_SIZE, 1), MAX_PAGE_SIZE);
         const filter = CONTACT_FILTERS.includes(req.query.filter) ? req.query.filter : 'all';
@@ -371,7 +371,7 @@ export const listContacts = async (req, res) => {
 // GET /contacts/:id — la ficha: el contacto y la actividad de su conversación.
 export const getContact = async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = req.auth.accountId;
         const contact = await findOwnedContact(userId, req.params.id);
         if (!contact) return sendContactError(res, 404, 'Contacto no encontrado');
 
@@ -406,7 +406,7 @@ export const getContact = async (req, res) => {
 
 // POST /contacts — alta manual. Crear un contacto no envía nada.
 export const createContact = async (req, res) => {
-    const userId = req.user.id;
+    const userId = req.auth.accountId;
     const fields = pickContactFields(req.body);
     try {
         const tags = await resolveOwnedTagIds(userId, req.body.tagIds ?? []);
@@ -426,7 +426,7 @@ export const createContact = async (req, res) => {
  * persona, y el historial y la ventana de 24 h son de ese número.
  */
 export const updateContact = async (req, res) => {
-    const userId = req.user.id;
+    const userId = req.auth.accountId;
     const fields = pickContactFields(req.body);
     try {
         const contact = await findOwnedContact(userId, req.params.id);
@@ -457,7 +457,7 @@ export const updateContact = async (req, res) => {
 // dejaría el historial sin dueño.
 export const deleteContact = async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = req.auth.accountId;
         const contact = await findOwnedContact(userId, req.params.id);
         if (!contact) return sendContactError(res, 404, 'Contacto no encontrado');
 
@@ -494,7 +494,7 @@ const selectedContactIds = async (userId, selection) => {
 export const summarizeSelectionTags = async (req, res) => {
     try {
         const [result] = await Contact.aggregate([
-            ...selectionStages(req.user.id, req.body.selection),
+            ...selectionStages(req.auth.accountId, req.body.selection),
             {
                 $facet: {
                     total: [{ $count: 'count' }],
@@ -518,7 +518,7 @@ export const summarizeSelectionTags = async (req, res) => {
  * de MAX_TAGS_PER_CONTACT no se le toca y se cuenta en `overLimit`.
  */
 export const bulkTagContacts = async (req, res) => {
-    const userId = req.user.id;
+    const userId = req.auth.accountId;
     try {
         const add = await resolveOwnedTagIds(userId, req.body.add ?? []);
         if (!add) return sendUnknownTags(res);

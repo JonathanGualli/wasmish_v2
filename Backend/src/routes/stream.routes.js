@@ -15,8 +15,11 @@ router.get('/stream', authRequired, (req, res) => {
 
     res.flushHeaders?.();
 
-    const userId = req.user.id;
-    addClient(userId, res);
+    // Las conexiones se agrupan por cuenta: todo lo que pasa en la cuenta llega
+    // a cada pestaña abierta de ella (el filtro por línea y asignación llega con
+    // los permisos, en la Fase 3).
+    const accountId = req.auth.accountId;
+    addClient(accountId, res);
 
     res.write(': connected\n\n');
 
@@ -26,7 +29,7 @@ router.get('/stream', authRequired, (req, res) => {
 
     req.on('close', () => {
         clearInterval(interval);
-        removeClient(userId, res);
+        removeClient(accountId, res);
         try {res.end();} catch (_) {}
     });
 });

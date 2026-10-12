@@ -17,10 +17,12 @@ Cómo se autentica cada ruta, el rate limiting y la tabla completa de endpoints 
 ### Autenticación — dos vías
 
 **Autenticación — dos vías:**
-- **Cookie JWT** (`authRequired`, `validate.token.middleware.js`) para las rutas de la web/app. En dev la cookie usa `secure:false`/`sameSite:'lax'`; en prod (`NODE_ENV=production`) `secure:true`/`sameSite:'none'`.
-- **API key** (`validateApiKey`, `validate.api.key.middleware.js`) para la API pública (`/v1/...`): lee `Authorization: Bearer wm_xxx`, la **hashea** (SHA-256) y busca por `keyHash` para cargar el user dueño; deja `req.user = { id }` igual que `authRequired`.
+- **Cookie JWT** (`authRequired`, `validate.token.middleware.js`) para las rutas de la web/app. En dev la cookie usa `secure:false`/`sameSite:'lax'`; en prod (`NODE_ENV=production`) `secure:true`/`sameSite:'none'`. Desde la Fase 1 de multi-línea (2026-10-11), `authRequired` **lee el usuario de la BD en cada petición** y deja `req.auth = { userId, accountId, role, lineIds, isSuperadmin }` (`sessionAuthFor`, en `utils/account.js`). Un usuario que ya no existe, **desactivado** (`status: 'inactive'`) o sin cuenta (sin migrar) recibe **401** aunque su cookie siga siendo válida. El dueño de los datos es `req.auth.accountId`, la cuenta; nunca la persona de la sesión. Sin cookie, 401; con un JWT inválido, 403.
+- **API key** (`validateApiKey`, `validate.api.key.middleware.js`) para la API pública (`/v1/...`): lee `Authorization: Bearer wm_xxx`, la **hashea** (SHA-256) y busca por `keyHash`. La key es **de la cuenta** (`ApiKey.userId` guarda la cuenta): carga la `Account` y deja `req.auth = { userId: null, accountId, role: 'api', lineIds: null }`, donde `lineIds: null` significa todas las líneas. Así la key sigue valiendo aunque la cuenta cambie de owner. Una key cuya cuenta no existe, 401.
 - **El login no revela qué correos existen.** Un correo inexistente y una contraseña incorrecta devuelven **lo mismo**: 400 con «Correo o contraseña incorrectos» (antes eran 404 y 400, con mensajes distintos). Y `bcrypt.compare` corre **siempre**, contra `HASH_DE_DESCARTE` si el usuario no existe: sin eso las respuestas serían idénticas pero los tiempos no (~1 ms sin usuario frente a ~120 ms con él), y esa diferencia sola basta para enumerar. Medido: 121 ms en ambos casos. `register` sí sigue diciendo si un correo está en uso — taparlo requiere verificación por correo, que no existe todavía.
-- **Rol** (`requireSuperadmin`, `require.superadmin.middleware.js`) para `/api/admin/...`: se monta **después** de `authRequired` y lee el `rol` **de la BD en cada request**, no del JWT, para que revocar el rol tenga efecto inmediato sin esperar a que caduque la cookie.
+- **El login de un usuario desactivado** responde **403** con «Tu usuario está desactivado. Habla con el administrador de tu cuenta.», pero solo con la contraseña correcta: con una incorrecta recibe el mismo 400 que un correo inexistente.
+- **Registro** (`/register`): crea **una cuenta nueva y su owner** con el mismo `_id` (`createAccountWithOwner`, en `services/account.service.js`). Solo usa `name`, `email` y `password`: el rol, el estado, `isSuperadmin` o una cuenta que vengan en el cuerpo se ignoran.
+- **Superadmin** (`requireSuperadmin`, `require.superadmin.middleware.js`) para `/api/admin/...`: se monta **después** de `authRequired` y mira `req.auth.isSuperadmin`, que `authRequired` acaba de leer **de la BD en esta misma petición**, no del JWT: quitarlo tiene efecto inmediato. El campo viejo `rol` ya no da acceso (se conserva para volver a una imagen anterior). Login, `/verify`, `/profile` y `/register` devuelven `isSuperadmin`, y el frontend enseña el menú de administración con él.
 
 ### Lo que `login` y `verify` NO devuelven
 
@@ -31,7 +33,7 @@ Cómo se autentica cada ruta, el rate limiting y la tabla completa de endpoints 
 **Rate limiting** (`rate.limit.middleware.js`, `express-rate-limit`):
 - `authLimiter` — `/login` y `/register`: 10 por IP cada 15 min, con `skipSuccessfulRequests` (solo cuenta los fallos).
 - `publicApiIpLimiter` — 120/min por IP, **antes** de `validateApiKey`: frena a quien prueba keys al azar, cuando todavía no hay usuario que limitar.
-- `publicApiUserLimiter` — 60/min por `req.user.id`, **después** de `validateApiKey`: el abuso de una key filtrada no le come el cupo a los demás clientes.
+- `publicApiUserLimiter` — 60/min **por cuenta** (`req.auth.accountId`), **después** de `validateApiKey`: el abuso de una key filtrada no le come el cupo a los demás clientes.
 
 No se aplica a `/api/webhook` (Meta manda ráfagas) ni a `/api/stream` (conexión persistente). Requiere `app.set('trust proxy', 1)` — ya está en `app.js`; sin eso, detrás de Traefik todas las peticiones comparten IP aparente y se bloquean entre sí.
 
@@ -41,7 +43,7 @@ No se aplica a `/api/webhook` (Meta manda ráfagas) ni a `/api/stream` (conexió
 
 | Método | Ruta | Auth | Descripción |
 |--------|------|------|-------------|
-| POST | `/api/register` | No | Registrar usuario |
+| POST | `/api/register` | No | Registrar usuario: crea su cuenta y lo deja de owner |
 | POST | `/api/login` | No | Login, setea cookie JWT |
 | POST | `/api/logout` | No | Borra cookie |
 | GET | `/api/verify` | No | Verifica cookie JWT activa |
