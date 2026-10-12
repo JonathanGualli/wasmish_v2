@@ -52,6 +52,21 @@
   --color-brand-info:    #2563a8;   /* Informativo del sistema */
   --color-brand-info-soft: #edf3fa;   /* Fondo de lo que está en curso (enviando, entregado) */
 
+  /* ── Líneas de WhatsApp — el cuadrito de cada línea (Fase 2c) ───────────
+     Se asigna por orden de conexión, no se elige (utils/lineDisplay.ts). Los
+     tres primeros son los del diseño de Claude Design; el resto amplía la
+     paleta con la misma luminosidad para que ninguno destaque sobre otro. */
+  --color-line-1:  #2fae7a;
+  --color-line-2:  #3b82c4;
+  --color-line-3:  #d08a2b;
+  --color-line-4:  #8b5cc7;
+  --color-line-5:  #d0567a;
+  --color-line-6:  #2a9db0;
+  --color-line-7:  #7d8c2e;
+  --color-line-8:  #c4623a;
+  --color-line-9:  #5a6fd6;
+  --color-line-10: #8a6a4f;
+
   /* ── Rampa verde ───────────────────────────────────────────────────────── */
   --color-brand-green-50:  #effcf5;
   --color-brand-green-100: #d6f8e7;

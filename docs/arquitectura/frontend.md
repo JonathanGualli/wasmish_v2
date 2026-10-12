@@ -33,8 +33,10 @@ Lógica no obvia del `AuthProvider`, los errores de WhatsApp en palabras y la li
 - `useConversationMessages(conversationId)` — mensajes paginados + suscripción SSE
 - `useConversationSendMessages` — envío de mensajes (UI optimista; marca `failed` en error)
 - `useSendMediaMessage` — envío de archivos (`send`, `retry`, `discard`), con progreso y UI optimista; `useOutgoingAttachment` (el archivo que se prepara) y `useWindowFileDrag` (se arrastra un archivo sobre la página)
-- `useUpdateWhatsappToken` — carga manual de credenciales de WhatsApp
-- `useConnectWhatsapp` — Embedded Signup (SDK de Facebook → `/api/whatsapp/connect`)
+- `useUpdateWhatsappToken` — carga manual de credenciales de WhatsApp (conecta, renueva o reemplaza una línea; vuelve a pedir las líneas)
+- `useConnectWhatsapp` — Embedded Signup (SDK de Facebook → `/api/whatsapp/connect`); `isConnecting` cubre también el rato con la ventana de Facebook abierta
+- `useLines` — las líneas de WhatsApp de la cuenta (Fase 2c): `lines`, `activeLines`, `previousLines`, `defaultLine`, `nextDefaultLine`, `maxLines`, `isMultiLine` (plan de varias o más de una conectada), `colorOf(lineId)` (el color de cada línea por orden de conexión, `utils/lineDisplay.ts`) y `rename` / `makeDefault` / `disconnect`. Cada mutación vuelve a pedir la lista al terminar
+- `useCopyToClipboard(resetMs)` — copiar con `copied` un momento en true (las API keys, los IDs de línea, `CodeBlock`)
 - `useConversationWindow(windowExpiresAt)` — cuenta atrás de la ventana de 24 h (tick de 60 s); con `msSinceClosed` para «hace 2 días»
 - `useAutosave(value, { savedValue, save, delay, onLost })` — guardar solo mientras se escribe (las notas de la ficha del chat)
 - `useAutosizeTextarea(ref, value, maxHeight)` — un `<textarea>` que crece con lo escrito (el campo de escribir y las notas)
@@ -45,6 +47,7 @@ Lógica no obvia del `AuthProvider`, los errores de WhatsApp en palabras y la li
 - `useImportPreview`, `useImportRun`, `importError` — importar contactos (en `useContactImport.ts`); `useRefreshContacts` (en `useContacts.ts`) invalida contactos, bandeja y etiquetas
 - `useTemplates` — sync + listado de plantillas, y `uploadHeaderMedia` / `removeHeaderMedia` (el archivo de la cabecera; `utils/templateHeader.ts` replica `templateHeaderIssue` para los selectores y `TemplateBubble` pinta la cabecera con `template`)
 - `useApiKey` — gestión de API keys (listar / generar / revocar)
+- `useAdminStats`, `useAdminClients`, `useUpdateAccountLimits` — el panel de superadmin (en `useAdmin.ts`)
 - `useContacts(pageIndex, pageSize, search, filter, tagIds)`, `useContact(id)`, `useLiveContact(id, conversationId)`, `useContactByPhone(phone)`, `useContactMutations` (create/update/remove, y `saveNotes`/`setTags` para la ficha del chat) — en `useContacts.ts`
 - `useTags`, `useTagSelectionSummary(selection, enabled)`, `useTagMutations` (create/rename/remove/bulk y `createMissing`), `tagError` — etiquetas (en `useTags.ts`)
 - `useDebouncedValue` — retrasa un valor (la búsqueda de contactos)

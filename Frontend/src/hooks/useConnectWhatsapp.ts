@@ -1,18 +1,32 @@
-import { useMutation } from "@tanstack/react-query";
+import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { loadFacebookSdk } from "../libs/facebookSdk";
 import { connectWhatsappService } from "../services/api.service";
+import { LINES_QUERY_KEY } from "./useLines";
 
 const CONFIG_ID = import.meta.env.VITE_META_CONFIG_ID;
 
 export const useConnectWhatsapp = () => {
+    const queryClient = useQueryClient();
+    // Mientras la ventana de Facebook está abierta: conectar ya empezó, aunque
+    // todavía no se haya llamado al backend.
+    const [isSigningIn, setIsSigningIn] = useState(false);
     const mutation = useMutation({
         mutationFn: ({ code, phoneNumberId, waBusinessId }: { code: string; phoneNumberId: string; waBusinessId: string }) =>
             connectWhatsappService(code, phoneNumberId, waBusinessId),
+        onSettled: () => queryClient.invalidateQueries({ queryKey: LINES_QUERY_KEY }),
     });
 
     const connect = async () => {
+        mutation.reset();
+        setIsSigningIn(true);
         // 1. Nos aseguramos de que el SDK esté cargado e inicializado.
-        await loadFacebookSdk();
+        try {
+            await loadFacebookSdk();
+        } catch (error) {
+            setIsSigningIn(false);
+            throw error;
+        }
 
         // Aquí guardaremos los IDs que llegan por postMessage.
         const sessionInfo: { phoneNumberId?: string; waBusinessId?: string } = {};
@@ -36,6 +50,7 @@ export const useConnectWhatsapp = () => {
         window.FB.login(
             (response) => {
                 window.removeEventListener("message", messageListener);
+                setIsSigningIn(false);
                 const code = response?.authResponse?.code;
 
                 // 4. Si tenemos el code Y los IDs → mandamos todo al backend.
@@ -56,5 +71,5 @@ export const useConnectWhatsapp = () => {
         );
     };
 
-    return { connect, ...mutation };
+    return { ...mutation, connect, isConnecting: isSigningIn || mutation.isPending };
 };

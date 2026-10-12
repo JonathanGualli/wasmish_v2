@@ -9,12 +9,18 @@ export interface AdminStats {
 
 export interface AdminClient {
     id: string;
+    /** La cuenta del cliente; `null` en un usuario sin migrar. */
+    accountId: string | null;
     name: string;
     email: string;
     rol: UserRole;
     status: 'active' | 'inactive';
     whatsappConnected: boolean;
     waBusinessId: string | null;
+    /** Cuántos WABA más tiene con líneas conectadas, además del de `waBusinessId`. */
+    extraWabas: number;
+    /** Líneas conectadas y máximo del plan. */
+    lines: { active: number; max: number };
     conversations: number;
     messages: number;
     failed: number;

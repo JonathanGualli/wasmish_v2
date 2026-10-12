@@ -1,5 +1,6 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import type { AdminClient } from "../../../models/admin.model";
+import { LinesLimitCell } from "./LinesLimitCell";
 
 const formatDate = (value: string | null) => {
     if (!value) return '—';
@@ -38,7 +39,7 @@ export const adminClientColumns: ColumnDef<AdminClient>[] = [
                         Conectado
                     </span>
                     <span className="font-mono text-[12px] text-brand-subtle tabular-nums">
-                        WABA {row.original.waBusinessId}
+                        WABA {row.original.waBusinessId}{row.original.extraWabas > 0 && ` +${row.original.extraWabas}`}
                     </span>
                 </div>
             ) : (
@@ -48,6 +49,11 @@ export const adminClientColumns: ColumnDef<AdminClient>[] = [
                 </span>
             )
         ),
+    },
+    {
+        header: 'Líneas',
+        id: 'lines',
+        cell: ({ row }) => <LinesLimitCell client={row.original} />,
     },
     {
         header: 'Convs',
