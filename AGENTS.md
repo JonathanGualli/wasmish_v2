@@ -71,6 +71,18 @@ Todo PR que toque código lo revisa **el agente que no lo escribió**, en **una 
 3. **Responder** el autor punto por punto en otro comentario: *aceptado*, con el commit que lo arregla, o *rechazado*, con el motivo comprobado en el código.
 4. **Sin segunda ronda**: Jonathan lee los dos comentarios y decide si se une.
 
+## Planes
+
+Para una funcionalidad de varios pasos: primero el diseño (skill `brainstorming`, que deja el spec en `docs/superpowers/specs/`) y después el plan (skill `writing-plans`, en `docs/superpowers/plans/`), **antes de escribir código**. En Wasmish:
+
+- El plan es el **primer commit de la rama** de la funcionalidad, y **lo revisa el otro agente** antes de empezar a programar (una ronda, igual que el código).
+- Se ejecuta siempre **nativo**: rama, PR y revisión cruzada. `writing-plans` remite a otras skills de superpowers que este proyecto no usa (`subagent-driven-development`, `executing-plans`, `using-git-worktrees`): esas referencias se ignoran.
+- Un cambio pequeño y claro no necesita plan.
+
+## Desplegar
+
+Solo cuando Jonathan lo pide, con la skill `deploy` (`.agents/skills/deploy/SKILL.md`; en Claude Code, `/deploy`). **Ningún agente despliega por su cuenta**, y cada comando que toca el servidor se confirma uno por uno. Lo desplegado queda registrado con una **etiqueta de git `vX.Y.Z`** sobre el commit: el próximo despliegue parte de la última. La versión se sube en un PR (con `docs/estado.md` al día), nunca en el momento de desplegar.
+
 ## Diseño y marca
 
 **Antes de crear o modificar cualquier componente, página, o estilo, consultar el skill `/brand-guidelines`.**
@@ -106,6 +118,6 @@ Cada archivo de `docs/arquitectura/` empieza con su índice. Las secciones son t
 | Estado del proyecto | [docs/estado.md](docs/estado.md) | versión en producción, trabajo en curso, lo siguiente, cabos sueltos conocidos |
 | Decisiones de producto | [docs/decisiones.md](docs/decisiones.md) | lo que Jonathan decidió y por qué, con fecha |
 | Diseños y briefs | `Design/*.html`, `docs/superpowers/specs/` | diseños exportados de Claude Design; briefs de UI y specs técnicas de cada módulo |
-| Producción | `deploy/README.md` | compose, Traefik, despliegue con `tar`, volver a una versión anterior |
+| Producción | `deploy/README.md` y la skill `deploy` | compose, Traefik, despliegue con `tar` paso a paso, etiquetas `vX.Y.Z`, volver a una versión anterior |
 
 **Para buscar algo concreto:** `grep -rn "<palabra>" AGENTS.md Backend/AGENTS.md Frontend/AGENTS.md docs/`. El nombre de una función o un código de error de Meta (`131047`, `132012`…) suele llevar directo a su sección.

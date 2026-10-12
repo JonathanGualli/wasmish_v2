@@ -6,7 +6,7 @@ Lo de arriba (importado de `AGENTS.md`) vale para cualquier agente. Esto es lo p
 
 ## Skills del proyecto
 
-Viven en `.agents/skills/` (el formato que comparten Claude Code y Codex) y `.claude/skills/` las enlaza. La de marca, `brand-guidelines`, se consulta **antes de crear o modificar cualquier componente, página o estilo**; para diseñar pantallas está también `interface-design`.
+Viven en `.agents/skills/` (el formato que comparten Claude Code y Codex) y `.claude/skills/` las enlaza. La de marca, `brand-guidelines`, se consulta **antes de crear o modificar cualquier componente, página o estilo**; para diseñar pantallas está también `interface-design`. Para una funcionalidad de varios pasos, `brainstorming` y luego `writing-plans` (cómo se usan aquí: «Planes» en `AGENTS.md`). `/deploy` solo lo lanza Jonathan.
 
 ## Grafo de conocimiento (graphify)
 
