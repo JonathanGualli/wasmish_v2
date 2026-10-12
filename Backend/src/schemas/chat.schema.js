@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { templateButtonSchema } from "./template.schema.js";
-import { phoneNumberSchema } from "./contact.schema.js";
+import { objectIdSchema, phoneNumberSchema } from "./contact.schema.js";
 
 // Como la ruta es /chats/:id/template, el destinatario sale de la
 // conversación — el cliente no lo manda y por tanto no puede falsearlo.
@@ -16,6 +16,8 @@ export const sendConversationTemplateSchema = z.object({
 export const startConversationTemplateSchema = sendConversationTemplateSchema.extend({
     destinationNumber: phoneNumberSchema,
     contactName: z.string().trim().max(80).optional(),
+    // La línea por la que empieza la conversación (Fase 2b); sin ella, la por defecto.
+    lineId: objectIdSchema.optional(),
 });
 
 export const sendMessageSchema = z.object({
@@ -23,6 +25,8 @@ export const sendMessageSchema = z.object({
     destinationNumber: z.string().min(8).optional(),
     text: z.string().min(1),
     temporalId: z.string().optional(),
+    // Solo sin conversación (Fase 2b): la línea por la que empieza; sin ella, la por defecto.
+    lineId: objectIdSchema.optional(),
 });
 
 export const sendNewMessageSchema = z.object({

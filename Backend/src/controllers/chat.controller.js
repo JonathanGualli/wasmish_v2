@@ -197,7 +197,7 @@ const markConversationRead = async (userId, conversationId) => {
 export const sendMessageController = async (req, res) => {
     try {
         const { id } = req.params; // Puede ser undefined si es un chat nuevo
-        const { text, temporalId, destinationNumber, contactName } = req.body;
+        const { text, temporalId, destinationNumber, contactName, lineId } = req.body;
 
         const accountId = req.auth.accountId;
 
@@ -215,9 +215,10 @@ export const sendMessageController = async (req, res) => {
             if (!conversation) return res.status(404).json([{ message: "Conversation not found" }]);
         }
 
-        // Sin conversación, la línea va primero (la por defecto): la ventana es
-        // de la conversación del contacto EN ESA LÍNEA.
-        let line = conversation ? null : await findSendingLine(accountId);
+        // Sin conversación, la línea va primero (la del cuerpo o la por defecto;
+        // 404 si es de otra cuenta): la ventana es de la conversación del
+        // contacto EN ESA LÍNEA.
+        let line = conversation ? null : await findSendingLine(accountId, { lineId });
 
         // Fuera de la ventana de 24 h, Meta no entrega texto libre (131047): se
         // rechaza aquí, sin llamarla y sin dejar un mensaje fallido. La interfaz
@@ -454,7 +455,8 @@ export const sendConversationTemplateController = async (req, res) => {
 // la filtra por la cuenta de la sesión: no hay conversación ajena que comprobar.
 export const startConversationTemplateController = async (req, res) => {
     try {
-        const line = await findSendingLine(req.auth.accountId);
+        // La del cuerpo o la por defecto; 404 si es de otra cuenta.
+        const line = await findSendingLine(req.auth.accountId, { lineId: req.body.lineId });
 
         const resultado = await processTemplateSending({
             line,
