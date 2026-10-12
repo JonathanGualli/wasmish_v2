@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AlertCircle, Plus, RefreshCw, Send, Trash2 } from "lucide-react";
 import { PageHeader, PageShell } from "../../../components/Page/PageShell";
@@ -18,6 +18,8 @@ import { CampaignDraftSummary } from "./CampaignDraftSummary";
 import { DraftConflictDialog } from "./DraftConflictDialog";
 import { campaignColumns } from "./CampaignColumns";
 import { CampaignProgressCell, CampaignResults, CampaignStatusPill } from "./CampaignCells";
+import { LineChip } from "../../../components/Line/LineChip";
+import { useLines } from "../../../hooks/useLines";
 
 const FIRST_PAGE = { pageIndex: 0, pageSize: 20 };
 
@@ -48,6 +50,7 @@ const CampaignMobileRow = ({ campaign }: { campaign: Campaign }) => (
             <div className="min-w-0 flex-1">
                 <div className="text-sm font-semibold text-brand-text truncate">{campaign.name}</div>
                 <div className="font-mono text-[11.5px] text-brand-muted truncate mt-0.5">{campaign.template.name}</div>
+                <div className="empty:hidden mt-1"><LineChip lineId={campaign.lineId} /></div>
             </div>
             <CampaignStatusPill campaign={campaign} />
         </div>
@@ -69,6 +72,8 @@ export const CampaignsPage = () => {
     const draftStore = useCampaignDraft();
     const { draft, discard } = draftStore;
     const newCampaign = useNewCampaign(draftStore);
+    const { showLines } = useLines();
+    const columns = useMemo(() => campaignColumns(showLines), [showLines]);
 
     const pickContacts = () => {
         const state: ContactsNavigationState = { campaignPick: 'new' };
@@ -122,7 +127,7 @@ export const CampaignsPage = () => {
                 {(totalCount > 0 || !draft) && (
                     <DataTable
                         data={data?.campaigns ?? []}
-                        columns={campaignColumns}
+                        columns={columns}
                         totalCount={totalCount}
                         pagination={pagination}
                         setPagination={setPagination}

@@ -81,6 +81,8 @@ export const getCampaignFailureReasons = async (campaignId) => {
 export const serializeCampaign = (campaign, stats = buildCampaignStats()) => ({
     id: String(campaign._id),
     name: campaign.name,
+    // La línea por la que sale (la UI la enseña con varias). `null` en una anterior a las líneas.
+    lineId: campaign.lineId ? String(campaign.lineId) : null,
     status: campaign.status,
     pauseReason: campaign.pauseReason?.message ? campaign.pauseReason : null,
     template: {

@@ -1,4 +1,4 @@
-import { AlertTriangle, Info, RefreshCw } from "lucide-react";
+import { AlertTriangle, Info, RefreshCw, Unplug } from "lucide-react";
 import { Callout } from "../../../../components/Callout/Callout";
 import { Checkbox } from "../../../../components/Checkbox/Checkbox";
 import { TemplatePicker } from "../../../../components/Chat/TemplateFields";
@@ -11,6 +11,32 @@ import { bulkDisabledReason, type CampaignWizard } from "./useCampaignWizard";
 import { FillField } from "./FillField";
 import { MessagePreview } from "./MessagePreview";
 import { HeaderMediaField } from "../../../../components/HeaderMediaField/HeaderMediaField";
+import { LineSelect } from "../../../../components/Line/LineSelect";
+import { LineSwatch } from "../../../../components/Line/LineSwatch";
+import { useLines } from "../../../../hooks/useLines";
+import { lineLabel } from "../../../../utils/lineDisplay";
+import { LineChangeDialog } from "./LineChangeDialog";
+import type { LineResumeNotice } from "./useCampaignWizard";
+
+/** El borrador volvió y su línea cambió: qué se cambió y por qué. */
+const LineResumeCallout = ({ notice }: { notice: LineResumeNotice }) => {
+    const dropped = notice.droppedTemplate
+        ? `, y quitamos «${notice.droppedTemplate}», que era de otra cuenta de WhatsApp Business. Elige una plantilla de ${notice.to}.`
+        : '. Revisa el mensaje antes de enviar.';
+    if (notice.reason === 'defaultChanged') {
+        return (
+            <Callout tone="warning" icon={<Unplug size={16} />} title="Cambió la línea por defecto.">
+                Este borrador salía por la línea por defecto, que ahora es {notice.to}{dropped}
+            </Callout>
+        );
+    }
+    const from = notice.from ?? 'la línea del borrador';
+    return (
+        <Callout tone="warning" icon={<Unplug size={16} />} title={`${notice.from ?? 'La línea del borrador'} ya no está conectada.`}>
+            Guardaste el borrador para enviar por {from}, pero esa línea se desconectó. Lo pasamos a {notice.to}, la línea por defecto{dropped}
+        </Callout>
+    );
+};
 
 /** La sincronización más reciente: cualquier plantilla se toca en cada una. */
 const lastSyncedAt = (templates: Template[]) =>
@@ -56,7 +82,8 @@ const OptOutNotice = ({ wizard }: { wizard: CampaignWizard }) => {
 
 /** Paso 2: qué plantilla y de dónde sale cada variable. */
 export const MessageStep = ({ wizard }: { wizard: CampaignWizard }) => {
-    const { draft, template, templates, preview, fieldError } = wizard;
+    const { draft, template, templates, preview, fieldError, line } = wizard;
+    const { hasManyLines, colorOf } = useLines();
     if (!draft) return null;
 
     const syncedAt = lastSyncedAt(templates);
@@ -69,13 +96,20 @@ export const MessageStep = ({ wizard }: { wizard: CampaignWizard }) => {
     return (
         <div className="grid lg:grid-cols-[minmax(0,1fr)_340px] gap-8">
             <div className="grid gap-5 content-start">
+                {wizard.lineNotice && <LineResumeCallout notice={wizard.lineNotice} />}
+                <div className="empty:hidden">
+                    <LineSelect value={line?.id ?? null} onChange={wizard.changeLine} templateChosen={Boolean(template)} />
+                </div>
+                <LineChangeDialog wizard={wizard} />
+
                 <div className="grid gap-2">
                     <TemplatePicker
                         templates={templates}
                         selected={template}
                         onSelect={wizard.selectTemplate}
                         disabledReason={bulkDisabledReason}
-                        hint={fieldError('templateId') ? undefined : 'Solo aparecen las aprobadas'}
+                        hint={fieldError('templateId') ? undefined
+                            : hasManyLines && line ? `Solo las aprobadas de ${lineLabel(line)}` : 'Solo aparecen las aprobadas'}
                     />
                     {fieldError('templateId') && <p className="text-xs text-brand-danger">{fieldError('templateId')}</p>}
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] text-brand-muted">
@@ -164,6 +198,11 @@ export const MessageStep = ({ wizard }: { wizard: CampaignWizard }) => {
                         samples={preview?.samples ?? []}
                         fallbacks={preview?.fallbacks ?? {}}
                         headerNote={wizard.headerUpload.pending ? 'Subiendo…' : headerSourceNote(template, wizard.headerSource)}
+                        from={hasManyLines && line && (
+                            <span className="inline-flex items-center gap-1.5 font-semibold text-brand-text">
+                                <LineSwatch colorClass={colorOf(line.id)} size="sm" />{line.verifiedName ?? lineLabel(line)}
+                            </span>
+                        )}
                     />
                 ) : (
                     <p className="hidden lg:block pt-10 text-center text-[13px] text-brand-subtle">

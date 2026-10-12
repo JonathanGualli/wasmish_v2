@@ -36,6 +36,8 @@ export interface CampaignDraftInput {
     recipients: CampaignRecipientsInput;
     /** El archivo de la cabecera elegido para esta campaña; sin él, el de la plantilla. */
     headerMediaId?: string | null;
+    /** La línea por la que sale; sin ella, la por defecto. */
+    lineId?: string | null;
 }
 
 export interface CreateCampaignInput extends CampaignDraftInput {
@@ -63,6 +65,8 @@ export interface CampaignStats {
 export interface Campaign {
     id: string;
     name: string;
+    /** La línea por la que sale. `null` en una anterior a las líneas. */
+    lineId: string | null;
     status: CampaignStatus;
     /** Por qué se pausó sola. `null` si la pausó el usuario o no está pausada. */
     pauseReason: { code: string | null; message: string } | null;

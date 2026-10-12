@@ -2,8 +2,16 @@ import type { ColumnDef } from "@tanstack/react-table";
 import type { Campaign } from "../../../models/campaign.model";
 import { formatDateTime } from "../../../utils/campaignDisplay";
 import { CampaignProgressCell, CampaignResults, CampaignStatusPill } from "./CampaignCells";
+import { LineChip } from "../../../components/Line/LineChip";
 
-export const campaignColumns: ColumnDef<Campaign>[] = [
+const lineColumn: ColumnDef<Campaign> = {
+    id: 'line',
+    header: 'Línea',
+    cell: ({ row }) => <LineChip lineId={row.original.lineId} />,
+};
+
+/** Las columnas de la lista; la de la línea, solo con más de una (`showLines`). */
+export const campaignColumns = (showLines: boolean): ColumnDef<Campaign>[] => [
     {
         id: 'name',
         header: 'Campaña',
@@ -14,6 +22,7 @@ export const campaignColumns: ColumnDef<Campaign>[] = [
             </div>
         ),
     },
+    ...(showLines ? [lineColumn] : []),
     {
         id: 'date',
         header: 'Fecha',

@@ -165,6 +165,8 @@ test('una campaña nueva nace con la línea por defecto de su cuenta', async () 
     assert.ok(defaultLineId);
     const campaign = await Campaign.findOne({ userId: s.accountId, name: 'con línea' }).lean();
     assert.equal(String(campaign.lineId), String(defaultLineId));
+    // Fase 2c: la respuesta la dice, para la etiqueta de la lista y el detalle.
+    assert.equal(res.body.lineId, String(defaultLineId));
 });
 
 // Regresión que vigila (Codex, PR #15): la campaña aceptaba una plantilla de un

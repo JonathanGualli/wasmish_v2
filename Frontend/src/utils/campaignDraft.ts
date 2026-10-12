@@ -22,6 +22,8 @@ export interface CampaignDraft {
      * repite al reanudar y puede salir otro número: con esto se avisa.
      */
     selectedCount: number;
+    /** La línea elegida en «Enviar desde»; `null` o sin el campo (un borrador anterior) = la por defecto. */
+    lineId?: string | null;
     templateId: string | null;
     /** Para la lista de Campañas, que no carga las plantillas. */
     templateName: string | null;
