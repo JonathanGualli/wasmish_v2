@@ -39,16 +39,20 @@ const connectState = ({ activeCount, maxLines, isMultiLine, isConnecting }: {
             note: 'Sirve para renovar el permiso. Si inicias sesión con otro número, sustituye a este: el actual pasa a «Números anteriores» con sus conversaciones.',
         };
     }
+    // En el límite (o por encima, si el plan bajó) no cabe otro número, pero
+    // renovar el permiso de uno conectado sí: el botón se queda como «Volver a
+    // conectar», y si se elige un número nuevo, el backend responde con el
+    // límite (revisión de Codex del PR #21; el diseño lo apagaba).
     if (activeCount > maxLines) {
         return {
-            label: 'Conectar otro número', variant: 'primary' as const, disabled: true, strong: true,
-            note: `Tu plan ahora permite ${plural(maxLines, 'línea conectada', 'líneas conectadas')}. Las ${activeCount} siguen funcionando con normalidad; solo no puedes conectar otra.`,
+            label: 'Volver a conectar', variant: 'outline' as const, disabled: false, strong: true,
+            note: `Tu plan ahora permite ${plural(maxLines, 'línea conectada', 'líneas conectadas')}. Las ${activeCount} siguen funcionando con normalidad; solo no puedes conectar otra. Volver a conectar un número ya conectado renueva su permiso.`,
         };
     }
     if (activeCount === maxLines) {
         return {
-            label: 'Conectar otro número', variant: 'primary' as const, disabled: true, strong: true,
-            note: `Tu plan permite ${plural(maxLines, 'línea conectada', 'líneas conectadas')}. Desconecta una antes de conectar otra, o pide más líneas. Renovar el permiso de un número conectado sí se puede.`,
+            label: 'Volver a conectar', variant: 'outline' as const, disabled: false, strong: true,
+            note: `Tu plan permite ${plural(maxLines, 'línea conectada', 'líneas conectadas')}. Desconecta una antes de conectar otra, o pide más líneas. Volver a conectar un número ya conectado renueva su permiso.`,
         };
     }
     return {

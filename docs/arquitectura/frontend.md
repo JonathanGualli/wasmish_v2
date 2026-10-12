@@ -20,6 +20,7 @@ Lógica no obvia del `AuthProvider`, los errores de WhatsApp en palabras y la li
 - `authChecked` se setea en `true` cuando `isVerifying` (de `useVerifyLogin`) termina
 - `PrivateGuard` bloquea el render hasta que `isLoading` sea `false`
 - Si `verifyData` llega → setea `user`; si `verifyError` → setea `user = null`
+- **Al salir y al entrar se vacía la caché de React Query** (`clearSessionCache`, menos la de `useVerifyLogin`): las claves no llevan la cuenta (`['lines']`, `['conversations']`…), y sin esto quien entra después en el mismo navegador veía un momento los datos de la sesión anterior (revisión de Codex del PR #21). Al salir se borran también los borradores (`clearAllDrafts`, `clearAllCampaignDrafts`)
 
 ### Errores de WhatsApp en palabras (`utils/whatsappErrors.ts`)
 
