@@ -7,6 +7,9 @@ import { renderLegacyTemplateText } from "../../utils/legacyTemplate";
 import { formatChatTime } from "../../utils/formatChatTime";
 import { initials } from "../../utils/initials";
 import { draftTitle, type ConversationDraft } from "../../utils/conversationDraft";
+import { useLines } from "../../hooks/useLines";
+import { LineChip } from "../Line/LineChip";
+import { ALL_LINES, LineFilter } from "./LineFilter";
 
 interface Props {
     onSelect: (id: string) => void;
@@ -31,29 +34,38 @@ const CenteredState = ({ children, tone = 'muted' }: { children: React.ReactNode
  * Cabecera con el contador de sin leer y la conversación nueva, buscador, y
  * filas de 38px de avatar. La abierta se marca con borde izquierdo verde profundo.
  *
+ * Con más de una línea, cada conversación lleva la etiqueta de la suya junto a
+ * la hora, y bajo la búsqueda se filtra por línea (en el cliente: la lista ya
+ * trae todas). El contador de sin leer es el de lo que se ve.
+ *
  * Los filtros (Todos / Míos / Sin asignar) y las etiquetas de la maqueta no
  * están: dependen de asignación y etiquetado, que el backend todavía no tiene.
  */
 export const ChatconversationList = ({ onSelect, selectedId, onNewConversation, draft, draftActive, onOpenDraft }: Props) => {
     const { data: conversations, isLoading, isError } = useConversations();
     const { templates } = useTemplates();
+    const { lineById, showLines } = useLines();
     const [query, setQuery] = useState('');
+    const [lineFilter, setLineFilter] = useState(ALL_LINES);
+    // Una línea que ya no está (u otra cuenta en la misma pestaña) vuelve a «todas».
+    const filterLineId = showLines && lineById(lineFilter) ? lineFilter : ALL_LINES;
 
-    const unread = useMemo(
-        () => conversations?.reduce((n, c) => n + (c.unreadCount > 0 ? 1 : 0), 0) ?? 0,
-        [conversations]
+    const ofLine = useMemo(
+        () => (filterLineId === ALL_LINES ? conversations ?? [] : (conversations ?? []).filter(c => c.lineId === filterLineId)),
+        [conversations, filterLineId]
     );
 
+    const unread = useMemo(() => ofLine.reduce((n, c) => n + (c.unreadCount > 0 ? 1 : 0), 0), [ofLine]);
+
     const visible = useMemo(() => {
-        if (!conversations) return [];
         const q = query.trim().toLowerCase();
-        if (!q) return conversations;
-        return conversations.filter(c =>
+        if (!q) return ofLine;
+        return ofLine.filter(c =>
             (c.title ?? '').toLowerCase().includes(q)
             || (c.phone ?? '').includes(q)
             || (c.username ?? '').toLowerCase().includes(q.replace(/^@/, ''))
         );
-    }, [conversations, query]);
+    }, [ofLine, query]);
 
     const renderRows = () => {
         if (isLoading) return <CenteredState>Cargando conversaciones…</CenteredState>;
@@ -62,7 +74,9 @@ export const ChatconversationList = ({ onSelect, selectedId, onNewConversation, 
             return <CenteredState>Todavía no hay conversaciones. Empieza una con el botón +.</CenteredState>;
         }
         if (visible.length === 0) {
-            return <CenteredState>Ninguna conversación coincide con «{query}».</CenteredState>;
+            return <CenteredState>
+                {query.trim() ? `Ninguna conversación coincide con «${query}».` : 'Esta línea todavía no tiene conversaciones.'}
+            </CenteredState>;
         }
 
         return visible.map((chat) => {
@@ -87,10 +101,13 @@ export const ChatconversationList = ({ onSelect, selectedId, onNewConversation, 
                     </div>
 
                     <div className="flex-1 min-w-0">
-                        <div className="flex gap-2 items-baseline">
+                        <div className="flex gap-2 items-center">
                             <span className="text-sm font-semibold text-brand-text truncate">{title}</span>
-                            <span className="font-mono text-[11px] text-brand-subtle ml-auto flex-none">
-                                {formatChatTime(chat.updatedAt)}
+                            <span className="ml-auto flex-none flex items-center gap-2">
+                                <LineChip lineId={chat.lineId} />
+                                <span className="font-mono text-[11px] text-brand-subtle">
+                                    {formatChatTime(chat.updatedAt)}
+                                </span>
                             </span>
                         </div>
 
@@ -133,6 +150,9 @@ export const ChatconversationList = ({ onSelect, selectedId, onNewConversation, 
                 </div>
 
                 <SearchInput value={query} onChange={setQuery} placeholder="Buscar conversación o número" className="mt-3" />
+                <div className="empty:hidden mt-2.5">
+                    <LineFilter value={filterLineId} onChange={setLineFilter} conversations={conversations ?? []} />
+                </div>
             </div>
 
             <div className="flex-1 overflow-y-auto min-h-0 flex flex-col">

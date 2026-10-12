@@ -6,7 +6,13 @@ export interface ChatsNavigationState {
   /** Abrir esta conversación. */
   conversationId?: string;
   /** Empezar una conversación nueva con estos datos; reemplaza el borrador que hubiera. */
-  draft?: { phone: string; name: string };
+  draft?: NewConversationRequest;
+}
+
+/** Lo que llega ya puesto a una conversación nueva. */
+export interface NewConversationRequest {
+  phone: string;
+  name: string;
 }
 
 export interface Conversation {
@@ -18,6 +24,8 @@ export interface Conversation {
   phone: string | null;
   /** Nombre de usuario de WhatsApp, sin la @. */
   username?: string | null;
+  /** Su línea de WhatsApp. `null` solo en una conversación anterior a las líneas que aún no se enlazó. */
+  lineId: string | null;
   lastMessage: string;
   updatedAt: string; // ISO date
   unreadCount: number;

@@ -38,7 +38,7 @@ export interface Contact {
      */
     conversationId: string | null;
     lastInteractionAt: string | null;
-    /** ISO de cuándo cierra la ventana de 24 h. `null` = cerrada o nunca escribió. */
+    /** ISO de cuándo cierra (o cerró) la ventana de 24 h. `null` = nunca escribió. */
     windowExpiresAt: string | null;
     /** Una por línea, la más reciente primero. La UI las usa desde la Fase 2c. */
     conversations: ContactConversation[];

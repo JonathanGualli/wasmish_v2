@@ -19,8 +19,12 @@ interface InitialValues {
  * cuerpo y los de los botones. Lo comparten el diálogo de la ventana cerrada
  * (`SendTemplateDialog`) y la conversación nueva (`NewConversationPanel`), que
  * lo arranca con lo que tenía guardado el borrador.
+ *
+ * `waBusinessId`: el de la línea por la que se envía. Solo se ofrecen las
+ * plantillas de esa cuenta de WhatsApp Business, porque por otra no salen.
+ * Sin él (la línea aún no se sabe), todas.
  */
-export const useTemplateForm = (initial?: InitialValues) => {
+export const useTemplateForm = (initial?: InitialValues, waBusinessId?: string | null) => {
     const { templates, isLoading } = useTemplates();
 
     const [selectedName, setSelectedName] = useState(initial?.templateName ?? '');
@@ -28,10 +32,18 @@ export const useTemplateForm = (initial?: InitialValues) => {
     const [buttonValues, setButtonValues] = useState<Record<number, string>>(initial?.buttonValues ?? {});
 
     // Solo las aprobadas se pueden enviar; el resto Meta las rechaza.
-    const approved = useMemo(
+    const allApproved = useMemo(
         () => (templates as Template[]).filter(t => t.status === 'APPROVED'),
         [templates],
     );
+    const approved = useMemo(
+        () => (waBusinessId === undefined ? allApproved : allApproved.filter(t => t.waBusinessId === waBusinessId)),
+        [allApproved, waBusinessId],
+    );
+
+    /** Esa cuenta de WhatsApp Business tiene una aprobada con ese nombre (al cambiar de línea, se queda). */
+    const existsIn = (templateName: string, wabaId: string | null) =>
+        allApproved.some(t => t.name === templateName && t.waBusinessId === wabaId);
 
     const selected = useMemo(
         () => approved.find(t => t.name === selectedName),
@@ -90,7 +102,7 @@ export const useTemplateForm = (initial?: InitialValues) => {
         selectedName,
         approved, isLoading, selected, placeholders, buttonFields,
         values, setValues, buttonValues, setButtonValues,
-        selectTemplate, missing, headerIssue,
+        selectTemplate, existsIn, missing, headerIssue,
         reset: () => selectTemplate(''),
         buildPayload,
     };

@@ -7,7 +7,7 @@ import { useAuthContext } from "../../../context/auth.context";
 import {
     EMPTY_DRAFT, clearDraft, loadDraft, saveDraft, type ConversationDraft,
 } from "../../../utils/conversationDraft";
-import type { ChatsNavigationState } from "../../../models/conversation.mode";
+import type { ChatsNavigationState, NewConversationRequest } from "../../../models/conversation.mode";
 
 /**
  * Bandeja + conversación — «Sidebar y Chats» del manual de marca v1.0.
@@ -89,6 +89,15 @@ export const ChatPage = () => {
         if (userId) saveDraft(userId, next);
     }, [userId]);
 
+    // Una conversación nueva ya rellenada (desde una conversación de una línea
+    // desconectada): reemplaza el borrador que hubiera, como al llegar desde
+    // la ficha de un contacto.
+    const startDraft = (request: NewConversationRequest) => {
+        setSelectedId(null);
+        setDraft({ ...EMPTY_DRAFT, ...request });
+        setDraftOpen(true);
+    };
+
     const discardDraft = () => {
         clearDraft(userId);
         setDraft(null);
@@ -133,6 +142,8 @@ export const ChatPage = () => {
                         onBack={() => setSelectedId(null)}
                         contactSidebarOpen={contactSidebarOpen}
                         onContactSidebarChange={open => setContactSidebarFor(open ? selectedId : null)}
+                        onStartConversation={startDraft}
+                        onOpenConversation={id => { openConversation(id); setContactSidebarFor(id); }}
                     />
                 )}
             </div>

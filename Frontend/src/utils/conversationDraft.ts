@@ -11,6 +11,8 @@
 export interface ConversationDraft {
     phone: string;
     name: string;
+    /** La línea elegida en «Enviar desde»; `null` = la por defecto. */
+    lineId: string | null;
     templateName: string;
     values: Record<string, string>;
     buttonValues: Record<number, string>;
@@ -19,7 +21,7 @@ export interface ConversationDraft {
 const PREFIX = 'wasmish:conversation-draft:';
 
 export const EMPTY_DRAFT: ConversationDraft = {
-    phone: '', name: '', templateName: '', values: {}, buttonValues: {},
+    phone: '', name: '', lineId: null, templateName: '', values: {}, buttonValues: {},
 };
 
 // El storage puede no estar (navegación privada estricta, cuota llena): el

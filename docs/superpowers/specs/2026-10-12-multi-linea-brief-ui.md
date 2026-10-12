@@ -106,6 +106,12 @@ Hoy el panel tiene cuatro indicadores arriba (clientes, conectados, mensajes y f
 
 # Parte 2 · Elegir y ver la línea (se construye después)
 
+**La Parte 1 ya está diseñada y construida** (`Design/Wasmish Líneas - Ajustes y superadmin.html`). Lo que fija y la Parte 2 reutiliza tal cual:
+
+- **Cómo se señala una línea:** su cuadrito de color y su etiqueta (nombre interno → nombre verificado → número). Una desconectada lleva el cuadrito hueco, solo con el borde.
+- **Los colores:** 10, asignados por orden de alta de la línea y siempre los mismos para la misma línea. Con más de 10, se repiten.
+- **La línea por defecto** y el aviso de las desconectadas, con los textos de Ajustes.
+
 Regla general:
 
 - **Los selectores de línea solo aparecen con más de una línea conectada.** Con una, se usa esa y no se pregunta nada.
@@ -123,7 +129,8 @@ Regla general:
 
 - La **cabecera** dice por qué línea es la conversación.
 - **Conversación de una línea desconectada:** hoy, al responder, el envío da el error «Esta conversación es de un número de WhatsApp que ya no está conectado. Para escribirle, inicia una conversación nueva desde tu número actual.». Mejor que el campo de escribir lo diga **antes** de intentarlo, con un estado propio parecido al de la ventana cerrada, y que ofrezca escribir al contacto desde una línea conectada (la conversación nueva de §4.3, con el contacto ya puesto).
-- **Enviar plantilla** dentro de una conversación: solo se ofrecen las plantillas del WABA de la línea de esa conversación. No hay que elegir línea: es la de la conversación.
+- **Enviar plantilla** dentro de una conversación: solo se ofrecen las plantillas del WABA de la línea de esa conversación. No hay que elegir línea: es la de la conversación. En una conversación de una línea desconectada tampoco se puede enviar plantilla: lo cubre el mismo estado del campo de escribir.
+- Si la cuenta no tiene **ninguna** línea conectada, el estado es el mismo, pero el camino es conectar un número en Ajustes, no escribir desde otra línea.
 
 ### 4.3 Conversación nueva
 
@@ -149,9 +156,15 @@ La ficha (en Contactos y en la columna del chat) enseña hoy la **ventana de 24 
 - Con más de una línea, **la ventana va siempre con su línea**: un contacto puede tener la ventana abierta en «Ventas» y cerrada en «Soporte». Propón cómo se ve un contacto con conversaciones en varias líneas (una línea por conversación con su etiqueta y su ventana, la más reciente primero).
 - La actividad (mensajes enviados, recibidos y fallidos) es la suma de todas sus conversaciones.
 
+## 7. En todas las pantallas
+
+- **Móvil:** la bandeja, el chat, la conversación nueva y el asistente ya tienen su versión de móvil. El filtro, la etiqueta y el selector de línea tienen que caber en ella.
+- **Mientras cargan las líneas,** el selector y las etiquetas no pueden aparecer y desaparecer: con una sola línea no se enseñan.
+- **Una línea renombrada o desconectada** cambia su etiqueta en todas partes en el momento; las conversaciones y las campañas que ya tenía la conservan.
+
 ---
 
-## 7. Lo que no entra
+## 8. Lo que no entra
 
 - Usuarios, roles y asignar conversaciones a personas: es la fase siguiente. Hoy cada cuenta la usa una persona.
 - Comprar o cambiar de plan desde Wasmish: el límite lo pone el superadmin a mano.

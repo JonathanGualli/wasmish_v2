@@ -7,6 +7,7 @@ import {
     createContactService, deleteContactService, getContactService, getContactsService, updateContactService,
 } from "../services/api.service";
 import type { ContactDetail, ContactFilter, ContactInput, ContactsPage } from "../models/contact.model";
+import type { Conversation } from "../models/conversation.mode";
 
 export const useContacts = (pageIndex: number, pageSize: number, search: string, filter: ContactFilter, tagIds: string[] = []) => {
     const { subscribe } = useSSE();
@@ -45,15 +46,23 @@ export const useContact = (id: string | null) => {
 
 /**
  * Un contacto que se ve junto a su conversación (la ficha del chat). Sus cifras
- * cambian con cada mensaje de esa conversación, y `contact_updated` trae una
- * baja de publicidad o un cambio de número: se vuelve a pedir solo entonces.
+ * y sus ventanas cambian con cada mensaje de **cualquiera** de sus
+ * conversaciones (una por línea), y `contact_updated` trae una baja de
+ * publicidad o un cambio de número: se vuelve a pedir solo entonces.
+ *
+ * El evento no trae el contacto: se busca en la bandeja de quién es la
+ * conversación. Una que la bandeja aún no tiene puede ser suya, recién creada
+ * en otra línea, y también refresca.
  */
 export const useLiveContact = (id: string, conversationId: string) => {
     const { subscribe } = useSSE();
+    const queryClient = useQueryClient();
     const refresh = useThrottledInvalidate(detailKey(id));
     useEffect(() => {
         const unsubMessage = subscribe("message_created", payload => {
-            if (payload.conversationId === conversationId) refresh();
+            const conversation = payload.conversationId === conversationId ? null
+                : queryClient.getQueryData<Conversation[]>(['conversations'])?.find(c => c.id === payload.conversationId);
+            if (!conversation || conversation.contactId === id) refresh();
         });
         const unsubContact = subscribe("contact_updated", payload => {
             if (payload.id === id) refresh();
@@ -62,7 +71,7 @@ export const useLiveContact = (id: string, conversationId: string) => {
             unsubMessage();
             unsubContact();
         };
-    }, [subscribe, refresh, id, conversationId]);
+    }, [subscribe, refresh, queryClient, id, conversationId]);
 
     return useContact(id);
 };

@@ -38,6 +38,8 @@ export interface StartConversationVars extends Omit<SendTemplateVars, "conversat
     /** Solo dígitos, con código de país. */
     destinationNumber: string;
     contactName?: string;
+    /** La línea por la que sale; sin ella, la por defecto. */
+    lineId?: string;
 }
 
 /**
@@ -51,7 +53,7 @@ export const useStartConversation = () => {
         mutationFn: (vars: StartConversationVars) =>
             startConversationTemplateService(
                 vars.destinationNumber, vars.templateName, vars.parameters,
-                vars.language, vars.buttons, vars.contactName,
+                vars.language, vars.buttons, vars.contactName, vars.lineId,
             ),
         // También en el error: si Meta rechaza, el backend guarda igual la
         // conversación con el mensaje fallido, y tiene que aparecer en la bandeja.
