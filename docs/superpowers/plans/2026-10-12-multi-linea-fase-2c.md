@@ -19,7 +19,7 @@
 - **El cliente de la API no cambia nada:** sin `lineId` ni `from`, la línea por defecto (`Account.defaultLineId`), y la respuesta es idéntica.
 - Una línea de otra cuenta → **404**, nunca 403, con su test en `tests/isolation/`. El token nunca sale en una respuesta.
 - Textos al usuario en español; errores como `[{ message }]`. Commits sin coautor ni atribución. Cuatro PRs, cada uno con su rama; un solo despliegue (1.0.15) cuando estén los cuatro.
-- Antes de tocar la UI (Tareas 3 y 4), la skill de marca (`.agents/skills/brand-guidelines/SKILL.md`).
+- **La UI (Tareas 3 y 4) la diseña Claude Design** (ver «Diseño y marca» en `AGENTS.md`): el brief está en `docs/superpowers/specs/2026-10-12-multi-linea-brief-ui.md`, y se implementa siguiendo el diseño que devuelve, con la skill de marca para los detalles.
 - Comprobar con `cd Backend && npm test && npm run test:isolation`, y en las Tareas 2 a 4 también `cd Frontend && npm run lint && npm run build`. Las Tareas 3 y 4 se prueban además en el navegador.
 
 ## Review Focus
