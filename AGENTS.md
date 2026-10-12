@@ -60,6 +60,17 @@ Los dos agentes trabajan en este repo. Para que no se desfasen, cada cosa vive e
 - **Nada del proyecto se guarda solo en la memoria de un agente**: si el otro lo necesitaría, va a estos documentos.
 - El CI tiene un check de documentación: falla si un enlace se rompe, si un archivo de `docs/arquitectura/` no está en el mapa o si un `CLAUDE.md` deja de importar su `AGENTS.md`.
 
+## Revisión cruzada
+
+Todo PR que toque código lo revisa **el agente que no lo escribió**, en **una sola ronda**. Un PR que solo cambia documentación no la necesita.
+
+1. **Revisar**, desde la rama del PR y con los criterios de [.github/revision-cruzada.md](.github/revision-cruzada.md):
+   - si escribió Claude, revisa Codex: `codex exec -s read-only --ephemeral -o /tmp/revision.md "$(cat .github/revision-cruzada.md)"` (solo lectura: no puede tocar nada). `codex review --base master` no admite instrucciones propias; por eso `exec`;
+   - si escribió Codex, revisa Claude, con `/code-review` o con el mismo prompt.
+2. **Publicar** la revisión tal cual como comentario del PR, titulado «Revisión de Codex» o «Revisión de Claude».
+3. **Responder** el autor punto por punto en otro comentario: *aceptado*, con el commit que lo arregla, o *rechazado*, con el motivo comprobado en el código.
+4. **Sin segunda ronda**: Jonathan lee los dos comentarios y decide si se une.
+
 ## Diseño y marca
 
 **Antes de crear o modificar cualquier componente, página, o estilo, consultar el skill `/brand-guidelines`.**
