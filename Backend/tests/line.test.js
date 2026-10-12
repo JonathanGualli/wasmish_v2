@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
-import { ownerConnection, lineStateIssues } from '../src/utils/line.js';
+import { ownerConnection, lineStateIssues, sharedWabas, historicalLines } from '../src/utils/line.js';
 
 const newId = () => new mongoose.Types.ObjectId();
 
@@ -57,4 +57,30 @@ test('lineStateIssues: sin conexión, cualquier línea activa o línea por defec
     assert.notDeepEqual(lineStateIssues({ owner: disconnectedOwner, account, lines: [line], waba }), []);
     const off = { ...line, status: 'disconnected' };
     assert.deepEqual(lineStateIssues({ owner: disconnectedOwner, account: { ...account, defaultLineId: null }, lines: [off], waba: null }), []);
+});
+
+test('sharedWabas: un WABA en dos cuentas aparece con las dos', () => {
+    const [a, b] = [newId(), newId()];
+    assert.deepEqual(sharedWabas([
+        { waBusinessId: 'w1', accountId: a },
+        { waBusinessId: 'w1', accountId: b },
+        { waBusinessId: 'w2', accountId: a },
+    ]), [{ waBusinessId: 'w1', accountIds: [String(a), String(b)] }]);
+});
+
+// El mismo WABA en `User` y en `Waba` de UNA cuenta es lo normal tras migrar.
+test('sharedWabas: el mismo WABA repetido en una sola cuenta no cuenta', () => {
+    const a = newId();
+    assert.deepEqual(sharedWabas([{ waBusinessId: 'w1', accountId: a }, { waBusinessId: 'w1', accountId: String(a) }]), []);
+});
+
+test('historicalLines: solo los números anteriores que aún no tienen línea', () => {
+    assert.deepEqual(historicalLines(['111', '222', '333'], ['222'], '111'), { create: ['333'] });
+    assert.deepEqual(historicalLines(['111'], [], '111'), { create: [] });
+});
+
+// Regresión que vigila (Codex, plan de la Fase 1): migrar a medias con datos ambiguos.
+test('historicalLines: una conversación sin número para la migración', () => {
+    assert.ok(historicalLines(['111', null], [], '111').stop);
+    assert.ok(historicalLines([''], [], null).stop);
 });

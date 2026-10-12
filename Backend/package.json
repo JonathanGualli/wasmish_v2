@@ -13,6 +13,7 @@
     "backfill:contacts": "node scripts/backfill-contacts.js",
     "check:duplicates": "node scripts/check-duplicate-messages.js",
     "migrate:accounts": "node scripts/migrate-accounts.js",
+    "migrate:lines": "node scripts/migrate-lines.js",
     "version:bump": "node scripts/bump-version.js",
     "webhook:simulate": "node scripts/simulate-webhook.js",
     "seed:contacts": "node scripts/seed-test-contacts.js"

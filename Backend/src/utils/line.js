@@ -41,3 +41,33 @@ export const lineStateIssues = ({ owner, account, lines, waba }) => {
 
     return issues;
 };
+
+// Los WABA que aparecen en más de una cuenta. `entries` = `{ waBusinessId,
+// accountId }` sacados de los owners (`User`) y de los `Waba` que ya existan.
+// `migrate:lines` para si hay alguno: un WABA es de una sola cuenta.
+export const sharedWabas = (entries) => {
+    const byWaba = new Map();
+    for (const { waBusinessId, accountId } of entries) {
+        if (!waBusinessId || !accountId) continue;
+        if (!byWaba.has(waBusinessId)) byWaba.set(waBusinessId, new Set());
+        byWaba.get(waBusinessId).add(String(accountId));
+    }
+    return [...byWaba]
+        .filter(([, accounts]) => accounts.size > 1)
+        .map(([waBusinessId, accounts]) => ({ waBusinessId, accountIds: [...accounts] }));
+};
+
+// Las líneas desconectadas que `migrate:lines` crea en una cuenta: los números
+// de sus conversaciones que no son el actual (de ese se ocupa
+// `syncLinesFromOwner`) y aún no tienen línea. Una conversación sin número es
+// un dato ambiguo: la migración para en vez de adivinar.
+export const historicalLines = (conversationPhoneIds, existingPhoneIds, currentPhoneNumberId = null) => {
+    if (conversationPhoneIds.some(phoneNumberId => !phoneNumberId)) {
+        return { stop: 'hay conversaciones sin phoneNumberId' };
+    }
+    const existing = new Set(existingPhoneIds);
+    return {
+        create: conversationPhoneIds.filter(phoneNumberId =>
+            phoneNumberId !== currentPhoneNumberId && !existing.has(phoneNumberId)),
+    };
+};
