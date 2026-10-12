@@ -15,3 +15,14 @@ export const describeWabaPhoneNumber = (body, phoneNumberId) => {
         verifiedName: entry.verified_name ?? null,
     };
 };
+
+export const WHATSAPP_NOT_CONNECTED_MESSAGE = 'La cuenta no tiene WhatsApp conectado. Conéctala desde Ajustes antes de enviar.';
+
+// Para enviar hace falta el token y el número. Sin esto, `decrypt(null)`
+// revienta y el envío responde un 500 que no explica nada.
+export const assertWhatsappConnected = (user) => {
+    if (user?.tokenWhatsapp && user?.phoneNumberId) return;
+    const error = new Error(WHATSAPP_NOT_CONNECTED_MESSAGE);
+    error.statusCode = 409;
+    throw error;
+};

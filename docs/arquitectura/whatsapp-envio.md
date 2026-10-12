@@ -77,7 +77,8 @@ El índice único parcial `user_phoneNumberId_unique` cubre la carrera de dos co
 
 **Flujo de mensaje saliente (`sendMessageController`):**
 1. Con `id` (params) busca la conversación con `findOne({ _id: id, userId })` — es la comprobación de propiedad; sin `id`, el destinatario es `destinationNumber` (body) y se reutiliza la conversación de su contacto si existe
-2. Decripta `user.tokenWhatsapp` → llama Meta Cloud API con el destinatario del contacto (teléfono o BSUID)
-3. `getSendingConversation` da la conversación (la crea con su contacto si no existía); se actualiza `lastMessage` y **`lastMessageAt`** — nunca `updatedAt`, que Mongoose pisa en el `save()` por `timestamps: true` y que además no es el campo por el que ordena `listConversations`. La conversación y el `Message` comparten un único `const now` para que el orden de la lista y el cursor de paginación estén en la misma escala
-4. Persiste `Message` con `temporalId` (para UI optimista). Si Meta rechaza, guarda igual `status:'failed'` + `errorCode`/`errorDetail` (no se pierde)
-5. Emite `message_created` via SSE; el POST responde el mensaje normalizado con `id` real (para que los `message_status` posteriores casen con el optimista del frontend)
+2. Sin WhatsApp conectado (sin token o sin número), **409** «La cuenta no tiene WhatsApp conectado…» (`assertWhatsappConnected`, en `utils/whatsapp.line.js`; la comparten el texto, los archivos y `processTemplateSending`). Va después del 409 de la ventana y, en los archivos, **antes** de guardarlo en disco (2026-10-11; antes daba 500 por `decrypt(null)`). `GET /api/templates/sync` responde 400 en el mismo caso, también sin descifrar nada.
+3. Decripta `user.tokenWhatsapp` → llama Meta Cloud API con el destinatario del contacto (teléfono o BSUID)
+4. `getSendingConversation` da la conversación (la crea con su contacto si no existía); se actualiza `lastMessage` y **`lastMessageAt`** — nunca `updatedAt`, que Mongoose pisa en el `save()` por `timestamps: true` y que además no es el campo por el que ordena `listConversations`. La conversación y el `Message` comparten un único `const now` para que el orden de la lista y el cursor de paginación estén en la misma escala
+5. Persiste `Message` con `temporalId` (para UI optimista). Si Meta rechaza, guarda igual `status:'failed'` + `errorCode`/`errorDetail` (no se pierde)
+6. Emite `message_created` via SSE; el POST responde el mensaje normalizado con `id` real (para que los `message_status` posteriores casen con el optimista del frontend)

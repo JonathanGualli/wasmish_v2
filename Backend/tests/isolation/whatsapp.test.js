@@ -1,7 +1,8 @@
 // Un número de WhatsApp es de una sola cuenta: el webhook enruta por él.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { seedAccount, request, connectWhatsapp, metaCalls, onMeta, User } from './helpers.js';
+import fs from 'node:fs/promises';
+import { seedAccount, request, connectWhatsapp, metaCalls, onMeta, User, Conversation, PNG } from './helpers.js';
 
 const { isPhoneNumberTaken } = await import('../../src/services/whatsapp.connection.service.js');
 
@@ -91,4 +92,27 @@ test('dos conexiones a la vez: la segunda recibe 409, no 500, y no guarda nada',
 test('isPhoneNumberTaken: el número propio no cuenta como tomado (reconectar)', async () => {
     assert.equal(await isPhoneNumberTaken(a.userId, A_NUMBER), false);
     assert.equal(await isPhoneNumberTaken(b.userId, A_NUMBER), true);
+});
+
+// Regresión que vigila: processMessageSending llamaba a decrypt(null) y respondía 500 «Cannot read properties of null».
+test('POST /chats/:id/messages sin WhatsApp y con la ventana abierta: 409', async () => {
+    await Conversation.updateOne({ _id: b.conversationId }, { lastInboundAt: new Date() });
+    const res = await request(b, 'POST', `/chats/${b.conversationId}/messages`, { text: 'hola', temporalId: 't1' });
+    assert.equal(res.status, 409, res.text);
+});
+
+test('POST /chats/:id/media sin WhatsApp: 409 y no guarda el archivo', async () => {
+    await Conversation.updateOne({ _id: b.conversationId }, { lastInboundAt: new Date() });
+    const before = await fs.readdir(process.env.MEDIA_DIR, { recursive: true });
+    const res = await request(b, 'POST', `/chats/${b.conversationId}/media`, PNG, { 'Content-Type': 'image/png' });
+    assert.equal(res.status, 409, res.text);
+    assert.deepEqual(await fs.readdir(process.env.MEDIA_DIR, { recursive: true }), before);
+});
+
+// Regresión que vigila: syncTemplatesForUser descifraba antes de comprobar el token y respondía 500.
+test('GET /templates/sync sin WhatsApp: 400, sin llamar a Meta', async () => {
+    const before = metaCalls.length;
+    const res = await request(b, 'GET', '/templates/sync');
+    assert.equal(res.status, 400, res.text);
+    assert.equal(metaCalls.length, before);
 });

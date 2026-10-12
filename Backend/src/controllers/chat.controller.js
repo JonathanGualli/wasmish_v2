@@ -15,6 +15,7 @@ import {
 import { mimeBase, saveByContentHash } from "../utils/media.storage.js";
 import { cleanFilename } from "../services/template.media.service.js";
 import { MEDIA_DIR } from "../config.js";
+import { assertWhatsappConnected } from "../utils/whatsapp.line.js";
 
 /**
  * Un mensaje tal como lo ve el frontend: la lista del chat, la respuesta de un
@@ -86,6 +87,9 @@ export const processMessageSending = async ({
     destinationNumber,
     contactName,
     attachment = null }) => {
+
+    // Sin esto, decrypt(null) revienta y el envío responde un 500 sin explicación.
+    assertWhatsappConnected(user);
 
     const token = decrypt(user.tokenWhatsapp);
     const phoneNumberId = conversation?.phoneNumberId || user.phoneNumberId;
@@ -219,6 +223,7 @@ export const sendMessageController = async (req, res) => {
         const target = conversation ?? await findConversationByNumber(user._id, destinationNumber);
         const blocked = freeTextBlockReason(await lastInboundOf(target));
         if (blocked) return res.status(409).json([{ message: WINDOW_BLOCK_MESSAGES[blocked], code: 'window_closed' }]);
+        assertWhatsappConnected(user);
 
         // Llamamos al servicio (que ahora persiste incluso si el envío falla)
         const { msg } = await processMessageSending({
@@ -236,8 +241,8 @@ export const sendMessageController = async (req, res) => {
 
         return res.status(201).json(serializeMessage(msg));
     } catch (error) {
-        console.error("Error enviando mensaje:", error.response?.data || error.message || error);
-        res.status(500).json([{ message: error.message }]);
+        if (!error.statusCode) console.error("Error enviando mensaje:", error.response?.data || error.message || error);
+        res.status(error.statusCode || 500).json([{ message: error.message }]);
     }
 };
 
@@ -273,6 +278,8 @@ export const sendMediaMessageController = async (req, res) => {
 
         const blocked = freeTextBlockReason(await lastInboundOf(conversation));
         if (blocked) return res.status(409).json([{ message: WINDOW_BLOCK_MESSAGES[blocked], code: 'window_closed' }]);
+        // Antes de guardar el archivo: si no puede salir, no se queda en disco.
+        assertWhatsappConnected(user);
 
         const buffer = Buffer.isBuffer(req.body) ? req.body : null;
         const mimeType = mimeBase(req.headers['content-type']);
@@ -303,8 +310,8 @@ export const sendMediaMessageController = async (req, res) => {
 
         return res.status(201).json(serializeMessage(msg));
     } catch (error) {
-        console.error("Error enviando archivo:", error.message);
-        res.status(500).json([{ message: error.message }]);
+        if (!error.statusCode) console.error("Error enviando archivo:", error.message);
+        res.status(error.statusCode || 500).json([{ message: error.message }]);
     }
 };
 

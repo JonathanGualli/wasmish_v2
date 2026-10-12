@@ -15,6 +15,7 @@ import {
 } from "../services/template.media.service.js";
 import { MEDIA_DIR } from "../config.js";
 import { mimeParaServir, rutaDeArchivo } from "../utils/media.storage.js";
+import { assertWhatsappConnected } from "../utils/whatsapp.line.js";
 
 
 // ---------------------------------------------------------------------------
@@ -25,14 +26,15 @@ import { mimeParaServir, rutaDeArchivo } from "../utils/media.storage.js";
 // La usan el sync manual (endpoint) y el sync just-in-time del envío.
 // Devuelve cuántas plantillas se procesaron.
 export const syncTemplatesForUser = async (user) => {
-    const token = decrypt(user.tokenWhatsapp);
-    const waBusinessId = user.waBusinessId;
-
-    if (!token || !waBusinessId) {
+    // Se comprueba ANTES de descifrar: decrypt(null) revienta y daba un 500.
+    if (!user.tokenWhatsapp || !user.waBusinessId) {
         const error = new Error("Token or Business ID is required");
         error.statusCode = 400;
         throw error;
     }
+
+    const token = decrypt(user.tokenWhatsapp);
+    const waBusinessId = user.waBusinessId;
 
     const dataMeta = await getTemplates({ token, waBusinessId });
     const templates = dataMeta?.data?.data;
@@ -399,11 +401,7 @@ export const processTemplateSending = async ({
     dryRun = false,
 }) => {
     // Cuenta sin WhatsApp conectado: antes reventaba dentro de decrypt()
-    if (!user.tokenWhatsapp || !user.phoneNumberId) {
-        const error = new Error("La cuenta no tiene WhatsApp conectado. Conéctala desde Ajustes antes de enviar plantillas.");
-        error.statusCode = 409;
-        throw error;
-    }
+    assertWhatsappConnected(user);
 
     const token = decrypt(user.tokenWhatsapp);
     const phoneNumberId = user.phoneNumberId;
