@@ -14,7 +14,7 @@
 
 - **`maxLines` sigue en 1 en todas las cuentas reales** hasta que se haga la prueba del token en WasmishTest (spec § 2.2) y se ensaye la vuelta atrás en local (spec § 5). Esta fase se puede desplegar antes: con `maxLines: 1`, conectar otro número **reemplaza** al actual, como hoy.
 - **El token, solo del `Waba`.** Conectar un número de un WABA reemplaza el token de ese `Waba`; ninguna línea guarda su propia copia.
-- **Escribe la conexión solo `line.service.js`** (`applyConnection`, `disconnectLine`, `setDefaultLine`). Ningún controlador escribe `User.tokenWhatsapp/phoneNumberId/waBusinessId`: lo hace `writeLegacyUser`, desde la línea por defecto.
+- **Escribe la conexión solo `line.service.js`** (`applyConnection`, `disconnectLine`, `setDefaultLine`), y siempre dentro de `withLineLock`: una operación de líneas a la vez por cuenta. Ningún controlador escribe `User.tokenWhatsapp/phoneNumberId/waBusinessId`: lo hace `writeLegacyUser`, desde la línea por defecto.
 - **Bajar el límite nunca desconecta** una línea: solo impide conectar otra mientras se esté por encima (spec § 3.5).
 - **El cliente de la API no cambia nada:** sin `lineId` ni `from`, la línea por defecto (`Account.defaultLineId`), y la respuesta es idéntica.
 - Una línea de otra cuenta → **404**, nunca 403, con su test en `tests/isolation/`. El token nunca sale en una respuesta.
@@ -39,7 +39,7 @@ Sin cambio visible con `maxLines: 1`. Conectar sigue haciéndose por los dos end
 
 **Files:**
 - Modify: `Backend/src/utils/line.js`, `Backend/tests/line.test.js`
-- Modify: `Backend/src/services/line.service.js`, `Backend/src/services/whatsapp.connection.service.js`
+- Modify: `Backend/src/services/line.service.js`, `Backend/src/services/whatsapp.connection.service.js`, `Backend/src/models/account.model.js` (`lineLock`, `legacyUserStale`)
 - Modify: `Backend/src/controllers/whatsapp.controller.js`, `Backend/src/controllers/user.controller.js`
 - Modify: `Backend/src/utils/whatsapp.line.js` (mensajes)
 - Modify: `Backend/src/services/line.migration.service.js`, `Backend/scripts/migrate-lines.js`
@@ -50,20 +50,25 @@ Sin cambio visible con `maxLines: 1`. Conectar sigue haciéndose por los dos end
 **Interfaces:**
 - Produces (puras, en `utils/line.js`):
   - `legacyUserFields(defaultLine, waba) → { tokenWhatsapp, phoneNumberId, waBusinessId }`: los de la línea si está `active` y su `waba` tiene token; si no, los tres `null`.
-  - `planConnection({ lines, maxLines, phoneNumberId }) → { action: 'renew', lineId } | { action: 'add' } | { action: 'replace', replaceLineIds } | { error: 'limit' }`. `lines` son las de la cuenta (`_id`, `phoneNumberId`, `status`). Ese número ya activo → `renew` (renovar el token nunca choca con el límite). Si no, con menos activas que `maxLines` → `add` (también si el número tiene una línea `disconnected`: se reactiva). Con `maxLines === 1` y una activa de otro número → `replace` (lo de hoy). Si no → `limit`.
+  - `planConnection({ lines, maxLines, phoneNumberId }) → { action: 'renew', lineId } | { action: 'add' } | { action: 'replace', replaceLineIds } | { error: 'limit' }`. `lines` son las de la cuenta (`_id`, `phoneNumberId`, `status`). Ese número ya activo → `renew` (renovar el token nunca choca con el límite, aunque se haya bajado por debajo de las activas). Si no, con menos activas que `maxLines` → `add` (también si el número tiene una línea `disconnected`: se reactiva). Con `maxLines === 1` y **exactamente una** activa de otro número → `replace` (lo de hoy). Si no → `limit`: con más activas que el límite (se bajó) nunca se reemplaza, porque bajar el límite no desconecta nada (revisión de Codex del plan).
   - `sendingLineFor({ line, waba, requested }) → { line: SendingLine } | { issue: 'not_connected' | 'disconnected' }`. Sustituye a la de la 2b: ya no recibe `owner`. Sin `line`: `requested` (se pidió una línea o un número concreto) → `disconnected`; si no → `not_connected`. Línea no `active` o sin token en su `waba` → `disconnected`. `SendingLine` no cambia (`{ accountId, lineId, phoneNumberId, waBusinessId, tokenWhatsapp }`, token cifrado).
   - `legacyUserIssues({ owner, defaultLine, waba }) → string[]`: en qué no coincide `User` con `legacyUserFields(defaultLine, waba)`. Vacío = al día. Sustituye a `lineStateIssues`. `lineMatchesOwner` desaparece.
 - Produces (en `line.service.js`):
-  - `applyConnection({ accountId, plan, waBusinessId, tokenWhatsapp, details }) → Promise<{ lineId }>` (token ya cifrado; `details` de `verifyWabaPhoneNumber`). En este orden: `Waba` con el token nuevo; si `replace`, las líneas de `replaceLineIds` a `disconnected`; la línea del número `active`, con su `wabaId` y los `details`; `Account.defaultLineId` = esta línea si no había por defecto activa o si se reemplazó; `writeLegacyUser(accountId)`. **Después de escribir**, si la cuenta tiene más activas que `maxLines`, deja esta línea `disconnected` y lanza 409 con `lineLimitMessage(maxLines)`: dos conexiones a la vez pasaron las dos la comprobación.
-  - `writeLegacyUser(accountId) → Promise<void>`: escribe en el owner `legacyUserFields` de la línea por defecto. Si falla (p. ej. E11000 en `User.phoneNumberId`), `console.error` y sigue: `User` ya no enruta, solo sirve para volver atrás, y `migrate:lines -- --check` lo detecta.
+  - `withLineLock(accountId, fn) → Promise<T>`: un candado por cuenta **en Mongo**, para que valga entre procesos. Campo nuevo `Account.lineLock = { token, expiresAt }` (por defecto `null`). Se toma con un `findOneAndUpdate` condicional (`lineLock` nulo o `expiresAt` vencido) que pone un `token` aleatorio y `expiresAt = ahora + 30 s`; se suelta en un `finally` solo si el `token` sigue siendo el suyo. Ocupado → 409 `LINE_BUSY_MESSAGE` = `'Hay otro cambio en las líneas de esta cuenta en curso. Inténtalo de nuevo en unos segundos.'`. Envuelve solo las escrituras: las llamadas a Meta van antes, fuera del candado.
+  - `applyConnection({ accountId, waBusinessId, tokenWhatsapp, phoneNumberId, details }) → Promise<{ lineId }>` (token ya cifrado; `details` de `verifyWabaPhoneNumber`). Dentro de `withLineLock`: vuelve a leer las líneas y `maxLines`, `planConnection` (409 `lineLimitMessage` si `limit`) y, en este orden: `Waba` con el token nuevo; si `replace`, las líneas de `replaceLineIds` a `disconnected`; la línea del número `active`, con su `wabaId` y los `details`; `Account.defaultLineId` = esta línea si no había por defecto activa o si se reemplazó; `writeLegacyUser(accountId)`. Con el candado, el plan siempre se calcula sobre el estado real y no hace falta deshacer nada después (revisión de Codex del plan: la compensación dejaba `defaultLineId` y `User` en la línea deshecha).
+  - `writeLegacyUser(accountId) → Promise<void>`: escribe en el owner `legacyUserFields` de la línea por defecto. Si choca con `User.phoneNumberId` (E11000: el `User` de **otra** cuenta conserva ese número porque su copia quedó atrás), primero `writeLegacyUser` de esa cuenta (que lo recalcula desde **sus** líneas), y reintenta una vez. Si aun así falla, `Account.legacyUserStale = true` (campo nuevo, por defecto `false`) y `console.error`; al acertar, `false`. La operación de líneas responde bien igual: `Line` ya está escrita y es la fuente. `legacyUserStale` es lo que permite a `migrate:lines` repararla sin adivinar (revisión de Codex del plan: un fallo solo logueado rompía la vuelta atrás).
   - `findInboundLine(phoneNumberId) → Promise<InboundLine | null>`: la línea `active` de ese número (`line_phoneNumberId_active_unique` garantiza una) y el token de su `Waba`. **Reserva** (spec: «nunca se descarta»), solo si ninguna cuenta tiene una `Line` de ese número: el `User` que lo tiene, con `lineId: null`, su token y `console.error`. Un número que existe como `Line` pero no está activo en ninguna cuenta → `null`: una línea desconectada no recibe.
   - `findSendingLine(accountId, { lineId, phoneNumberId })`, con la misma firma: con `lineId`, esa línea de la cuenta o 404; si no, la del número `phoneNumberId` (una conversación sin línea); si no, `Account.defaultLineId`. Sin reserva de `User`.
 - Produces (en `whatsapp.connection.service.js`):
-  - `isPhoneNumberTaken(accountId, phoneNumberId)`: **cambia el primer parámetro** (la cuenta, no el `_id` del owner). Ocupado = una `Line` `active` de otra cuenta, o el `User` de otra cuenta.
-  - `connectNumber({ accountId, tokenWhatsapp, waBusinessId, phoneNumberId, details }) → Promise<{ lineId }>`: lo que comparten los dos controladores después de hablar con Meta: `planConnection` (409 `lineLimitMessage` si `limit`) y `applyConnection`. Los controladores hacen antes, en el orden de hoy: número ocupado (409) → WABA ocupado (409) → **límite (409, antes de llamar a Meta)** → Meta → `claimWaba` → `connectNumber`. Desaparece `syncLinesAfterConnecting`.
-- `lineLimitMessage(maxLines)` en `utils/whatsapp.line.js`: con 1, `'Tu plan permite 1 línea conectada. Desconéctala antes de conectar otra, o pide más líneas.'`; con más, `` `Tu plan permite ${maxLines} líneas conectadas. Desconecta una antes de conectar otra, o pide más líneas.` `` (con `maxLines: 1` nunca se ve al conectar, porque reemplaza; sale en la carrera y en la Tarea 2).
+  - `isPhoneNumberTaken(accountId, phoneNumberId)`: **cambia el primer parámetro** (la cuenta, no el `_id` del owner). Ocupado = una `Line` `active` de otra cuenta, o el `User` de otra cuenta **que no tiene ninguna `Line` de ese número** (una cuenta anterior a las líneas). Un `User` con una copia atrasada de un número que su cuenta ya desconectó no lo bloquea.
+  - `connectNumber({ accountId, tokenWhatsapp, waBusinessId, phoneNumberId, details }) → Promise<{ lineId }>`: lo que comparten los dos controladores después de hablar con Meta: `applyConnection`. Los controladores hacen antes, en el orden de hoy: número ocupado (409) → WABA ocupado (409) → **límite (`planConnection`, 409 antes de llamar a Meta; se vuelve a comprobar dentro del candado)** → Meta → `claimWaba` → `connectNumber`. Desaparece `syncLinesAfterConnecting`.
+- `lineLimitMessage(maxLines)` en `utils/whatsapp.line.js`: con 1, `'Tu plan permite 1 línea conectada. Desconéctala antes de conectar otra, o pide más líneas.'`; con más, `` `Tu plan permite ${maxLines} líneas conectadas. Desconecta una antes de conectar otra, o pide más líneas.` `` (con `maxLines: 1` solo se ve si se bajó el límite con dos activas).
 - Respuestas de los dos endpoints de conexión: las de hoy, más `lineId`.
-- `migrate:lines` en la 2c: `syncLinesFromOwner` (que deja activa **solo** la línea de `User`) se usa únicamente en las cuentas que **no tienen ninguna `Line` activa** y sí conexión en `User` (cuentas conectadas con la imagen anterior). En las demás no toca `Line`: comprueba `legacyUserIssues`, las cuenta en `pending.accountsOutOfSync` (`--check` sale con 1) y las lista, **sin corregirlas** (no se sabe cuál de los dos tiene razón). El resto de pasos (líneas históricas, `lineId` de conversaciones y campañas, WABA de plantillas, índices) no cambia.
+- `migrate:lines` en la 2c:
+  - `syncLinesFromOwner` (que deja activa **solo** la línea de `User`) se usa únicamente en las cuentas **sin ninguna `Line`**, de ningún estado (anteriores a las líneas). Una cuenta con líneas desconectadas a propósito nunca se reconstruye desde `User` (revisión de Codex del plan: reactivaba una línea desconectada).
+  - Las cuentas con `legacyUserStale: true`: `writeLegacyUser` las repara (ahí la imagen nueva escribió la última, así que manda `Line`). `--check` las cuenta en `pending.legacyUserStale`.
+  - Las demás con `legacyUserIssues` (`User` no es copia de la línea por defecto **sin** la marca: lo escribió la imagen anterior durante una vuelta atrás): se cuentan en `pending.accountsOutOfSync` y se listan, **sin corregirlas**, porque no se sabe cuál de los dos tiene razón.
+  - `--check` sale con 1 si queda cualquiera de los dos. El resto de pasos (líneas históricas, `lineId` de conversaciones y campañas, WABA de plantillas, índices) no cambia.
 
 - [ ] **Step 1: Tests puros que fallan** en `tests/line.test.js` (se borran los de `lineMatchesOwner`, `lineStateIssues` y el `sendingLineFor` de la 2b)
 
@@ -90,8 +95,14 @@ test('conectar con maxLines 2 añade una segunda línea y conserva la primera', 
 test('conectar otro número con maxLines 1 lo reemplaza y /v1 sale por el nuevo', ...);
 test('conectar con la cuenta en el límite → 409 sin llamar a Meta', ...);            // 0 metaCalls
 test('conectar un número del mismo WABA reemplaza el token del Waba para las dos líneas', ...);
-// Regresión que vigila (Review Focus 3): la carrera la simula una línea activa sembrada después del plan
-test('applyConnection deja la línea desconectada si al terminar se pasa del límite', ...);
+// Regresión que vigila (Review Focus 3)
+test('dos conexiones a la vez: la segunda da 409 LINE_BUSY y el estado final es el de la primera', ...);
+// la primera se detiene dentro de withLineLock (un hook de test, como afterRead en la 2a) mientras corre la segunda;
+// al final: una sola activa con maxLines 1, defaultLineId y User en ella, y /v1 sale por ella
+test('withLineLock: un candado vencido se puede tomar', ...);
+test('renovar el token con la cuenta por encima del límite (se bajó) funciona y no desconecta nada', ...);
+test('si la copia de User choca con la copia atrasada de otra cuenta, se repara esa y se reintenta', ...);
+test('si la copia de User falla, legacyUserStale queda en true y migrate:lines la repara', ...);
 test('tras conectar, User es la copia de la línea por defecto', ...);
 // lines.test.js / webhook.test.js
 test('findInboundLine: cada número activo llega a su línea y su cuenta', ...);
@@ -103,6 +114,7 @@ test('sin ninguna Line del número pero con User: la reserva y su console.error'
 test('cada conversación responde por su línea, con dos líneas activas', ...);   // metaCalls con el phoneNumberId de cada una
 // migrate-lines.test.js
 test('migrar no desactiva la segunda línea de una cuenta', ...);
+test('desconectar la última línea, fallar la copia de User y migrar: la línea sigue desconectada y User se limpia', ...);
 test('--check detecta un User que no es copia de la línea por defecto, y migrar no lo toca', ...);
 ```
 
@@ -217,7 +229,7 @@ git commit -m "líneas: listar, renombrar, elegir la por defecto y desconectar; 
 - Consumes: `GET /lines`, `PATCH /lines/:id`, `POST /lines/:id/disconnect`, `PATCH /admin/accounts/:accountId/limits` (Tarea 2).
 - Produces:
   - `Line = { id; name: string | null; phoneNumberId; displayPhoneNumber: string | null; verifiedName: string | null; status: 'active' | 'disconnected'; isDefault: boolean; waBusinessId: string | null }` y `LinesResponse = { lines: Line[]; maxLines: number }`.
-  - `useLines() → { lines, activeLines, defaultLine, maxLines, hasManyLines, isLoading, rename, makeDefault, disconnect }`, con la clave `['lines']`. `hasManyLines` = más de una activa. Conectar (los dos caminos) invalida `['lines']`.
+  - `useLines() → { lines, activeLines, defaultLine, maxLines, hasManyLines, isLoading, rename, makeDefault, disconnect }`, con la clave `['lines']`. `hasManyLines` = más de una activa. `showLines` = más de una línea en la cuenta, **de cualquier estado** (revisión de Codex del plan: con una línea desconectada y otra activa, las ventanas de un contacto tienen que decir de qué número son). Conectar (los dos caminos) invalida `['lines']`.
   - `lineLabel(line) → string`: `name` ?? `verifiedName` ?? `displayPhoneNumber` ?? `phoneNumberId`.
 
 La tarjeta de líneas (con la skill de marca antes):
@@ -248,7 +260,7 @@ git commit -m "ajustes: la lista de líneas y el límite de líneas en el panel"
 
 ### Task 4: Elegir la línea en la UI (PR 4, rama `fase2c-elegir-linea`)
 
-Todo lo de esta tarea **solo se ve con más de una línea activa** (`hasManyLines`). Con una, la UI es la de hoy.
+Los selectores solo se ven con más de una línea activa (`hasManyLines`); los chips, con más de una línea de cualquier estado (`showLines`). Con una sola línea, la UI es la de hoy.
 
 **Files:**
 - Create: `Frontend/src/components/Line/LineSelect.tsx`, `Frontend/src/components/Line/LineChip.tsx`
@@ -263,7 +275,7 @@ Todo lo de esta tarea **solo se ve con más de una línea activa** (`hasManyLine
 - Consumes: `useLines`, `lineLabel` (Tarea 3); `lineId` en `GET /chats`, en las plantillas (`waBusinessId`) y en `POST /campaigns` (Tarea 2); `lineId` en `POST /chats/messages` y `/chats/template` (2b).
 - Produces:
   - `LineSelect({ value, onChange })`: las líneas activas, la por defecto preseleccionada. No se pinta sin `hasManyLines`.
-  - `LineChip({ lineId })`: la etiqueta de la línea; nada sin `hasManyLines` o con `lineId` desconocido.
+  - `LineChip({ lineId })`: la etiqueta de la línea y, si está desconectada, «desconectada»; nada sin `showLines` o con `lineId` desconocido.
 
 Dónde:
 - **Conversación nueva:** `LineSelect` arriba; las plantillas, solo las del `waBusinessId` de la línea elegida; el envío (`useStartConversation`) lleva `lineId`. Cambiar de línea vacía la plantilla elegida si no es de su WABA.
@@ -275,7 +287,7 @@ Dónde:
 
 - [ ] **Step 2: Comprobar.** Run: `cd Frontend && npm run lint && npm run build` · Expected: PASS.
 
-- [ ] **Step 3: Probar en el navegador** con dos líneas de WABA distintos (sembradas): la conversación nueva por la segunda línea ofrece solo sus plantillas y el envío lleva su `lineId`; una campaña por la segunda línea; el filtro de la bandeja; un borrador de campaña con una línea desconectada después. Con una sola línea, ninguna de estas piezas aparece. Capturas en el PR.
+- [ ] **Step 3: Probar en el navegador** con dos líneas de WABA distintos (sembradas): la conversación nueva por la segunda línea ofrece solo sus plantillas y el envío lleva su `lineId`; una campaña por la segunda línea; el filtro de la bandeja; un borrador de campaña con una línea desconectada después; un contacto con la ventana abierta en una línea desconectada y cerrada en la activa (la ficha dice de qué número es cada una). Con una sola línea, ninguna de estas piezas aparece. Capturas en el PR.
 
 - [ ] **Step 4: Documentar** en `chat.md` (selector y chip), `campanas.md` (la línea en el asistente y el borrador) y `contactos.md` (la ventana por línea en la ficha).
 
@@ -299,7 +311,8 @@ git commit -m "líneas: elegir la línea en la conversación nueva y en las camp
 - **Con `maxLines: 1`, conectar otro número reemplaza al actual**, como hoy. La alternativa (exigir desconectar antes) cambiaría lo que el cliente ya conoce. Con `maxLines > 1`, en el límite da 409: se desconecta una primero.
 - **`User` es copia, nunca fuente.** Un fallo al escribirla se loguea y no rompe la conexión; `migrate:lines -- --check` lo detecta. La reserva de `User` sale de los envíos (con `Line` como fuente, una copia desajustada no debe decidir nada) y se queda en el webhook, solo para un número sin ninguna `Line`, para no perder mensajes.
 - **Una línea desconectada no recibe.** Meta sigue mandando sus webhooks (la app sigue suscrita al WABA), y se ignoran. Desconectar no llama a Meta ni borra el token del `Waba`.
-- **El límite se vuelve a comprobar después de escribir**, en vez de con una transacción: el Mongo de los tests y, quizá, el de producción no son réplica. Si dos conexiones a la vez lo superan, la segunda se deshace.
+- **Un candado por cuenta en Mongo** (`Account.lineLock`, con caducidad de 30 s) en vez de transacciones: el Mongo de los tests no es réplica y no consta que el de producción lo sea. Dos cambios de líneas a la vez en una cuenta: el segundo da 409 y se reintenta. (Una versión anterior comprobaba el límite después de escribir y deshacía; Codex vio que dejaba la línea por defecto y `User` en la línea deshecha.)
+- **Un fallo de la copia de `User` queda marcado** (`Account.legacyUserStale`) y `migrate:lines` lo repara desde `Line`. Sin la marca, una copia que no cuadra es de la imagen anterior y no se toca.
 - **`migrate:lines` ya no reconstruye las líneas desde `User`**, salvo en una cuenta sin ninguna línea activa. Si `User` y la línea por defecto no coinciden, lo informa y no elige.
 - **`GET /templates` sin `lineId` lista las de todos los WABA con línea activa**; la UI filtra por el WABA de la línea elegida. En la 2b listaba las del WABA de la línea por defecto.
 - **El filtro de la bandeja va en el cliente:** `GET /chats` ya devuelve todas las conversaciones.
@@ -315,7 +328,7 @@ Con `/deploy`, cuando estén unidos los cuatro PRs y la 1.0.15 subida. Esta fase
 3. `up` de la 1.0.15 y otra vez `--check` → 0.
 4. Comprobar: un entrante en vivo, una respuesta desde el chat, `POST /api/v1/templates/send` con 200 en los logs, y en Ajustes la línea de cada cuenta.
 
-**Volver atrás:** las imágenes `:1.0.14` leen `User`, que es copia de la línea por defecto. Funciona **mientras ninguna cuenta tenga más de una línea activa**; por eso `maxLines > 1` se enciende después y, antes de hacerlo en una cuenta real, se ensaya la vuelta atrás en local (spec § 5).
+**Volver atrás:** las imágenes `:1.0.14` leen `User`, que es copia de la línea por defecto. Antes, `migrate:lines -- --check` con la 1.0.15 tiene que dar 0 (si no, `migrate:lines` repara las marcadas con `legacyUserStale`). Funciona **mientras ninguna cuenta tenga más de una línea activa**; por eso `maxLines > 1` se enciende después y, antes de hacerlo en una cuenta real, se ensaya la vuelta atrás en local (spec § 5).
 
 ## Después de desplegar: encender varias líneas
 
