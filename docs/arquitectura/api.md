@@ -50,13 +50,13 @@ No se aplica a `/api/webhook` (Meta manda ráfagas) ni a `/api/stream` (conexió
 | GET | `/api/profile` | JWT | Perfil del usuario autenticado |
 | PUT | `/api/users/update-user-token-whatsapp` | JWT | Guarda token WA cifrado (carga manual). Pide `tokenWhatsapp`, `phoneNumberId` y `waBusinessId` (400 si falta alguno); 409 si el número está en otra cuenta, 400 si no es del WABA ([Un número, una cuenta](whatsapp-envio.md#embedded-signup-objetivo-central--saas-multi-cliente)) |
 | POST | `/api/whatsapp/connect` | JWT | Embedded Signup: canjea el `code` de Meta → token permanente, comprueba el número en el WABA, suscribe webhook, guarda credenciales. 409 si el número está en otra cuenta, 400 si no es del WABA |
-| POST | `/api/chats/messages` | JWT | Enviar mensaje por número (reutiliza su conversación). **409** si el contacto nunca escribió o la ventana está cerrada: hay que empezar con una plantilla |
+| POST | `/api/chats/messages` | JWT | Enviar mensaje por número (reutiliza su conversación en esa línea). `lineId?` elige la línea (404 si es de otra cuenta; sin él, la por defecto). **409** si el contacto nunca escribió o la ventana está cerrada: hay que empezar con una plantilla |
 | POST | `/api/chats/:id/messages` | JWT | Enviar mensaje a conversación existente. **409** (`code: window_closed`) si la ventana de 24 h está cerrada, sin llamar a Meta |
 | POST | `/api/chats/:id/media` | JWT | Enviar un archivo a una conversación. Cuerpo = el archivo crudo (Content-Type = su tipo); `X-Filename`, `X-Caption` (URI-encoded) y `X-Temporal-Id` en cabeceras, `X-Send-As: document` para una imagen como documento. 400 si no vale, **409** fuera de la ventana. Responde el mensaje (`201`) aunque Meta lo rechace |
 | GET | `/api/chats` | JWT | Listar conversaciones del usuario |
 | GET | `/api/chats/:id/messages` | JWT | Mensajes paginados (cursor-based) |
 | POST | `/api/chats/:id/template` | JWT | Enviar plantilla a una conversación existente (para reabrir la ventana de 24 h). Body: `{ templateName, language?, parameters?, buttons? }` |
-| POST | `/api/chats/template` | JWT | Iniciar conversación con plantilla desde la bandeja. Body: `{ destinationNumber, contactName?, templateName, language?, parameters?, buttons? }` — el número solo dígitos (8–15) |
+| POST | `/api/chats/template` | JWT | Iniciar conversación con plantilla desde la bandeja. Body: `{ destinationNumber, contactName?, templateName, language?, parameters?, buttons?, lineId? }` — el número solo dígitos (8–15); `lineId` elige la línea (404 si es de otra cuenta; sin él, la por defecto) |
 | GET | `/api/media/:id` | JWT | Adjunto de un mensaje (`:id` es el **id del mensaje**, no el del archivo) |
 | GET | `/api/contacts` | JWT | Contactos paginados (`?search`, `?filter=all\|with_conversation\|without_conversation\|opted_out`, `?tags=id,id` —alguna de—, `?page`, `?limit` máx 50), ordenados por actividad |
 | GET | `/api/contacts/:id` | JWT | Ficha: contacto + `activity` (primer mensaje, enviados, recibidos, fallidos) |
@@ -89,7 +89,7 @@ No se aplica a `/api/webhook` (Meta manda ráfagas) ni a `/api/stream` (conexió
 | POST | `/api/api-key/generate` | JWT | Generar API key (guarda hash; devuelve la key en claro **una sola vez**) |
 | GET | `/api/api-key` | JWT | Listar API keys (preview, estado, último uso; nunca el hash) |
 | DELETE | `/api/api-key/:id` | JWT | Revocar (eliminar) una API key |
-| POST | `/api/v1/templates/send` | **API key** | **API pública:** enviar plantilla. Body: `{ destinationNumber, templateName, language?, parameters?, contactName?, buttons? }` |
+| POST | `/api/v1/templates/send` | **API key** | **API pública:** enviar plantilla. Body: `{ destinationNumber, templateName, language?, parameters?, contactName?, buttons?, lineId?, from? }`. `lineId` o `from` (el número de la línea; desde la Fase 2b) eligen la línea; sin ellos, la por defecto y todo igual que antes ([whatsapp-envio.md § API pública](whatsapp-envio.md#api-pública-de-plantillas-sendtemplatecontroller)) |
 | GET | `/api/admin/stats` | JWT + superadmin | Métricas de plataforma: clientes totales/conectados, mensajes y fallos de 7 días |
 | GET | `/api/admin/clients` | JWT + superadmin | Listado paginado de clientes (`?page`, `?limit` máx 50). Nunca devuelve token WA, texto de mensajes ni teléfonos |
 | GET | `/api/webhook` | No | Verificación webhook Meta (hub.challenge) |

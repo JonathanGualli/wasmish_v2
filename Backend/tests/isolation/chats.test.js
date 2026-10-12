@@ -186,3 +186,21 @@ test('con la reserva, la ventana de una conversación sin línea de otro número
     assert.equal(res.body[0].code, 'window_closed');
     assert.equal(metaCalls.length, calls);
 });
+
+// Fase 2b: la conversación nueva puede elegir su línea (la UI lo hará en la 2c).
+test('conversación nueva con el lineId de otra cuenta → 404', async () => {
+    const foreign = await currentLineOf(d);
+    const e = await seedAccount('H', { seq: 8 });
+    await connectWhatsapp(e);
+    const calls = metaCalls.length;
+
+    const template = await request(e, 'POST', '/chats/template', {
+        templateName: e.templateName, destinationNumber: '593990002007', lineId: String(foreign._id),
+    });
+    assert.equal(template.status, 404, template.text);
+    const text = await request(e, 'POST', '/chats/messages', {
+        text: 'hola', destinationNumber: '593990002007', lineId: String(foreign._id),
+    });
+    assert.equal(text.status, 404, text.text);
+    assert.equal(metaCalls.length, calls);
+});

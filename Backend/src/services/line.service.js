@@ -118,6 +118,17 @@ export const findInboundLine = async (phoneNumberId) => {
     return { accountId: owner.accountId, lineId: line?._id ?? null, phoneNumberId, tokenWhatsapp: owner.tokenWhatsapp ?? null };
 };
 
+/**
+ * Guarda el número visible de una línea que no lo tiene: las que creó
+ * `migrate:lines` no lo saben (solo se guarda al conectar), y Meta lo manda en
+ * cada webhook (`metadata.display_phone_number`). Lo necesita `from` en la API
+ * pública. Nunca pisa uno que ya esté.
+ */
+export const rememberDisplayPhoneNumber = async (lineId, displayPhoneNumber) => {
+    if (!lineId || !displayPhoneNumber) return;
+    await Line.updateOne({ _id: lineId, displayPhoneNumber: null }, { $set: { displayPhoneNumber: String(displayPhoneNumber) } });
+};
+
 const statusError = (statusCode, message) => Object.assign(new Error(message), { statusCode });
 
 /**

@@ -7,7 +7,7 @@ import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import {
     seedAccount, request, sessionFrom, ANONYMOUS, assertNoLeak, assertHasOwn, connectWhatsapp, onMeta, metaCalls,
-    Account, ApiKey, Conversation, User,
+    Account, ApiKey, Conversation, Line, User,
 } from './helpers.js';
 
 const { hashApiKey } = await import('../../src/utils/crypto.js');
@@ -159,6 +159,52 @@ test('POST /v1/templates/send con un cambio de número a medias sigue saliendo',
         onMeta(null);
         await User.updateOne({ _id: a.userId }, { phoneNumberId: `99${a.seq}` });
     }
+});
+
+// Fase 2b: el cliente de la API elige la línea con `lineId` o `from`.
+const sendWithKeyOfA = (body) => request(ANONYMOUS, 'POST', '/v1/templates/send',
+    { destinationNumber: a.phone, templateName: a.templateName, ...body }, { Authorization: 'Bearer wm_prueba_a' });
+
+test('POST /v1/templates/send con un lineId de otra cuenta → 404 sin llamar a Meta', async () => {
+    const foreign = await Line.create({ accountId: b.accountId, phoneNumberId: '7090', status: 'active' });
+    const calls = metaCalls.length;
+    const res = await sendWithKeyOfA({ lineId: String(foreign._id) });
+    assert.equal(res.status, 404, res.text);
+    assert.equal(metaCalls.length, calls);
+});
+
+test('POST /v1/templates/send con from elige esa línea; con otro número, 404', async () => {
+    await Line.updateOne({ accountId: a.accountId, phoneNumberId: `99${a.seq}` }, { displayPhoneNumber: '+1 555-000-0991' });
+    onMeta(async (config) => (config.method === 'post' && config.url === `/99${a.seq}/messages`
+        ? { data: { messages: [{ id: 'wamid.from' }] } }
+        : undefined));
+    try {
+        const res = await sendWithKeyOfA({ from: '+15550000991' });
+        assert.equal(res.status, 200, res.text);
+        assert.deepEqual(Object.keys(res.body).sort(), ['conversationId', 'success', 'waMessageId']);
+        assert.deepEqual(metaCalls.at(-1), { method: 'post', url: `/99${a.seq}/messages` });
+    } finally {
+        onMeta(null);
+    }
+    assert.equal((await sendWithKeyOfA({ from: '+15550000000' })).status, 404);
+});
+
+// Regresión que vigila (Codex, PR #16): un lineId en mayúsculas daba 404.
+test('POST /v1/templates/send con el lineId propio en mayúsculas sale por esa línea', async () => {
+    const own = await Line.findOne({ accountId: a.accountId, phoneNumberId: `99${a.seq}` }).lean();
+    onMeta(async (config) => (config.method === 'post' && config.url === `/99${a.seq}/messages`
+        ? { data: { messages: [{ id: 'wamid.mayusculas' }] } }
+        : undefined));
+    try {
+        const res = await sendWithKeyOfA({ lineId: String(own._id).toUpperCase() });
+        assert.equal(res.status, 200, res.text);
+    } finally {
+        onMeta(null);
+    }
+});
+
+test('POST /v1/templates/send con un lineId mal formado → 400', async () => {
+    assert.equal((await sendWithKeyOfA({ lineId: 'no-es-un-id' })).status, 400);
 });
 
 // Regresión que vigila: el panel buscaba la actividad por el `_id` del usuario.

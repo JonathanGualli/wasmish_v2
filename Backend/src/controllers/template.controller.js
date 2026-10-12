@@ -15,6 +15,8 @@ import {
 import { MEDIA_DIR } from "../config.js";
 import { mimeParaServir, rutaDeArchivo } from "../utils/media.storage.js";
 import { findSendingLine } from "../services/line.service.js";
+import Line from "../models/line.model.js";
+import { resolveApiLine } from "../utils/line.js";
 
 
 // ---------------------------------------------------------------------------
@@ -577,8 +579,16 @@ export const sendTemplateController = async (req, res) => {
     try {
         const { destinationNumber, templateName, contactName } = req.body;
 
-        // La línea por defecto de la cuenta de la API key (validateApiKey).
-        const line = await findSendingLine(req.auth.accountId);
+        // La línea de la cuenta de la API key (validateApiKey): la que pide con
+        // `lineId` o `from`, o la por defecto. Sin ellos, todo como siempre.
+        let lineId = null;
+        if (req.body.lineId || req.body.from) {
+            const lines = await Line.find({ accountId: req.auth.accountId }).select('_id displayPhoneNumber').lean();
+            const chosen = resolveApiLine(lines, { lineId: req.body.lineId, from: req.body.from });
+            if (chosen.statusCode) return res.status(chosen.statusCode).json([{ message: chosen.message }]);
+            lineId = chosen.lineId;
+        }
+        const line = await findSendingLine(req.auth.accountId, { lineId });
 
         const { waMessageId, conversation, status, errorCode, errorDetail } =
             await processTemplateSending({

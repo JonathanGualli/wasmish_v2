@@ -28,6 +28,7 @@ cd Backend && npm run webhook:simulate -- --all
 cd Backend && npm run webhook:simulate -- --clean       # borra la conversación de prueba
 cd Backend && npm run webhook:simulate -- baja-marketing  # aviso de baja de publicidad (alta-marketing para volver)
 cd Backend && npm run webhook:simulate -- cambio-numero --new-from 593000000001   # cambia de número y de BSUID
+cd Backend && npm run webhook:simulate -- texto --display-number 15551635863        # el número visible de la línea (por defecto 15550000000)
 ```
 `scripts/simulate-webhook.js` firma el payload con `META_APP_SECRET` igual que Meta y se lo manda al backend local (que tiene que estar levantado). Como el SSE dispara igual, los mensajes **aparecen en vivo** en el chat del navegador. Las muestras de cada tipo están escritas a mano desde la documentación de Meta: si alguna no cuadra con la realidad, se corrige ahí **y** en `utils/inbound.message.js`.
 

@@ -15,6 +15,7 @@
 //
 // Opciones: --from <numero>  --url <http://...>  --phone-number-id <id>
 //           --name <nombre de perfil>  --username <usuario>  --new-from <numero>
+//           --display-number <numero visible de la línea, como lo manda Meta>
 //
 // Después de cambio-numero, el contacto de prueba es el de --from <número nuevo>.
 //
@@ -79,6 +80,9 @@ const phoneNumberIdArg = opcion('phone-number-id', null);
 const PROFILE_NAME = opcion('name', 'Cliente de prueba');
 const USERNAME = opcion('username', null);
 const NEW_FROM = opcion('new-from', null);
+// Meta manda en cada webhook el número visible de la línea; el backend lo
+// guarda si la línea no lo tiene (lo usa `from` en la API pública).
+const DISPLAY_NUMBER = opcion('display-number', '15550000000');
 
 // El BSUID que Meta generaría: país + id. Se deriva del número o del usuario
 // para que el mismo contacto de prueba tenga siempre el mismo.
@@ -88,7 +92,7 @@ const PHONE = USERNAME ? null : FROM;
 // Tras el cambio de número, el BSUID es el que tendría --from <número nuevo>.
 const NEW_USER_ID = NEW_FROM && simulatedUserId(NEW_FROM);
 
-const valoresDeOpciones = [FROM, URL_BASE, phoneNumberIdArg, PROFILE_NAME, USERNAME, NEW_FROM];
+const valoresDeOpciones = [FROM, URL_BASE, phoneNumberIdArg, PROFILE_NAME, USERNAME, NEW_FROM, DISPLAY_NUMBER];
 const nombres = argv.filter(a => !a.startsWith('--') && !valoresDeOpciones.includes(a));
 const todos = argv.includes('--all');
 const listar = argv.includes('--list');
@@ -206,7 +210,7 @@ const valorDe = (nombre) => {
 for (const nombre of elegidos) {
     const body = JSON.stringify({
         entry: [{ changes: [{ value: {
-            metadata: { phone_number_id: phoneNumberId },
+            metadata: { display_phone_number: DISPLAY_NUMBER, phone_number_id: phoneNumberId },
             // Desde abril de 2026 llega siempre el BSUID; el teléfono, no siempre.
             contacts: [{
                 profile: { name: PROFILE_NAME, ...(USERNAME && { username: USERNAME }) },
