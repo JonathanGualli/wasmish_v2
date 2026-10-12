@@ -18,7 +18,8 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En curso
 
-Nada a medias en este momento (2026-10-11). La Fase 0 de multi-línea está en `master` (PR #6) y sale con la 1.0.11.
+- **Multi-línea · Fase 1: la cuenta, separada del usuario** — rama `fase1-cuenta`, empezado el 2026-10-11 por Claude.
+  Hecho: el plan (`docs/superpowers/plans/2026-10-11-multi-linea-fase-1.md`). · Falta: la revisión de Codex del plan y las tareas 1 a 4. · Sin probar: nada todavía.
 
 <!-- Formato de una entrada:
 - **<qué>** — rama `<rama>`, PR #<n>, empezado el <fecha> por <Claude|Codex|Jonathan>.
@@ -27,7 +28,7 @@ Nada a medias en este momento (2026-10-11). La Fase 0 de multi-línea está en `
 
 ## Lo siguiente
 
-- **Multi-línea y multi-agente, fases 1 a 4** (diseño aprobado, sin preguntas abiertas: `docs/superpowers/specs/2026-10-11-multi-linea-multi-agente-design.md`). La siguiente es la **Fase 1**, la cuenta separada del usuario, sin cambio visible; su plan por tareas está por escribir.
+- **Multi-línea y multi-agente, fases 1 a 4** (diseño aprobado, sin preguntas abiertas: `docs/superpowers/specs/2026-10-11-multi-linea-multi-agente-design.md`). La **Fase 1** (la cuenta separada del usuario, sin cambio visible) está en curso; después, la Fase 2 (líneas).
 - **Próximo módulo: un chatbot.** Jonathan aún no decidió de qué tipo. La propuesta sobre la mesa: empezar por respuestas automáticas (bienvenida, fuera de horario, palabras clave) como un motor de «respuestas» en el webhook, con traspaso a una persona (el bot se calla si alguien responde a mano) y la marca «Bot» en el chat; después, flujos con botones (requiere enviar mensajes interactivos) o IA. Antes de empezar: preguntar el tipo y qué problema concreto del cliente resuelve.
 - El campo de archivo de cabecera al enviar una plantilla a **un solo contacto** (`SendTemplateDialog` y `NewConversationPanel`); hoy solo existe en las campañas.
 - En la API pública: el campo `header`, la cabecera de texto con variable y las plantillas de carrusel. Toca al cliente de la API: con cuidado.
