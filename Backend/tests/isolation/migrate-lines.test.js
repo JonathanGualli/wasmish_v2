@@ -40,8 +40,32 @@ test('migrar: cada conversación recibe la línea de su propio número', async (
 test('una segunda pasada no tiene nada pendiente', async () => {
     const result = await runLineMigration({ check: true });
     assert.deepEqual(result.stop, []);
-    assert.deepEqual(result.pending, { oldLines: 0, conversations: 0, campaigns: 0, accountsOutOfSync: 0 });
+    assert.deepEqual(result.pending, {
+        oldLines: 0, conversations: 0, campaigns: 0, accountsOutOfSync: 0, oldConversationIndex: false,
+    });
     assert.deepEqual(result.issues, []);
+});
+
+// Fase 2b: con el índice viejo { userId, contactId }, un contacto no puede
+// tener una conversación en cada línea. Se cambia ANTES de arrancar el código
+// que enruta por línea (ver el plan de la 2b, «Antes de desplegar»).
+test('migrar crea el índice nuevo de conversaciones y borra el viejo; --check lo detecta antes', async () => {
+    await Conversation.collection.dropIndex('conversation_line_contact_unique').catch(() => {});
+    await Conversation.collection.createIndex(
+        { userId: 1, contactId: 1 },
+        { name: 'conversation_contact_unique', unique: true, partialFilterExpression: { contactId: { $type: 'objectId' } } },
+    );
+    const indexNames = async () => (await Conversation.collection.indexes()).map(index => index.name);
+
+    const before = await runLineMigration({ check: true });
+    assert.equal(before.pending.oldConversationIndex, true);
+    assert.ok((await indexNames()).includes('conversation_contact_unique'), '--check no puede escribir');
+
+    await runLineMigration({});
+    const names = await indexNames();
+    assert.ok(!names.includes('conversation_contact_unique'));
+    assert.ok(names.includes('conversation_line_contact_unique'));
+    assert.equal((await runLineMigration({ check: true })).pending.oldConversationIndex, false);
 });
 
 test('--check no escribe y dice lo pendiente', async () => {

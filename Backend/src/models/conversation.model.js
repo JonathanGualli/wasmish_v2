@@ -62,14 +62,20 @@ const conversationSchema = new mongoose.Schema({
     timestamps: true,
 });
 
-// Una conversación por contacto y cuenta. Antes la clave era el teléfono, pero
-// un contacto puede no tenerlo (ver utils/contact.identity.js). Es PARCIAL para
-// que las conversaciones anteriores a los contactos, aún sin contactId, no
-// choquen entre sí; `npm run backfill:contacts` las enlaza todas y borra el
-// índice viejo `userId_1_contactPhone_1`.
+// Una conversación por contacto y LÍNEA (Fase 2b de multi-línea): el mismo
+// contacto tiene una en cada número de la cuenta, cada una con su historial y
+// su ventana. Antes la clave era el teléfono, pero un contacto puede no tenerlo
+// (ver utils/contact.identity.js). Es PARCIAL para que las conversaciones sin
+// contactId (anteriores a los contactos) o sin lineId (anteriores a las
+// líneas) no choquen entre sí. Mongoose no borra el índice anterior,
+// `conversation_contact_unique` ({ userId, contactId }): lo borra `migrate:lines`.
 conversationSchema.index(
-    { userId: 1, contactId: 1 },
-    { name: 'conversation_contact_unique', unique: true, partialFilterExpression: { contactId: { $type: 'objectId' } } },
+    { userId: 1, lineId: 1, contactId: 1 },
+    {
+        name: 'conversation_line_contact_unique',
+        unique: true,
+        partialFilterExpression: { contactId: { $type: 'objectId' }, lineId: { $type: 'objectId' } },
+    },
 );
 
 export default mongoose.model('Conversation', conversationSchema);
