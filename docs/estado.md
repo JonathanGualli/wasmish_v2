@@ -17,7 +17,8 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En curso
 
-Nada a medias en este momento (2026-10-11). La reorganización de la documentación y el flujo con CI, ramas y PRs ya está en `master`.
+- **Multi-línea y multi-agente · Fase 0 (un número, una cuenta)** — rama `fase0-un-numero-una-cuenta`, empezado el 2026-10-11 por Claude. Diseño: `docs/superpowers/specs/2026-10-11-multi-linea-multi-agente-design.md`; plan: `docs/superpowers/plans/2026-10-11-multi-linea-fase-0.md` (revisado por Codex).
+  Hecho: diseño y plan. · Falta: las 4 tareas del plan. · Sin probar: todo.
 
 <!-- Formato de una entrada:
 - **<qué>** — rama `<rama>`, PR #<n>, empezado el <fecha> por <Claude|Codex|Jonathan>.
