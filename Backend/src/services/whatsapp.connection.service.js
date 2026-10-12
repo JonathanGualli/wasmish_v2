@@ -21,6 +21,21 @@ export const isWabaTaken = async (accountId, waBusinessId) => Boolean(
     || await Waba.exists({ waBusinessId, accountId: { $ne: accountId } })
 );
 
+// Reclama el WABA para esta cuenta ANTES de guardar la conexión. `isWabaTaken`
+// lo mira antes de llamar a Meta, pero dos cuentas a la vez lo pasarían las
+// dos: el índice único de `Waba` decide quién se lo queda. Si es de otra
+// cuenta, 409 y la conexión no se guarda. Reclamar el propio es un no-op.
+export const claimWaba = async (accountId, waBusinessId) => {
+    try {
+        await Waba.updateOne({ waBusinessId, accountId }, { $setOnInsert: { tokenWhatsapp: null } }, { upsert: true });
+    } catch (error) {
+        if (error.code !== 11000) throw error;
+        const taken = new Error(WABA_TAKEN_MESSAGE);
+        taken.statusCode = 409;
+        throw taken;
+    }
+};
+
 // Tras guardar la conexión en `User`, refleja `Waba` y `Line`. Si falla, la
 // conexión NO se deshace: el enrutado lee `User`, que ya está bien, y la
 // siguiente sincronización (o `migrate:lines`) completa la proyección.

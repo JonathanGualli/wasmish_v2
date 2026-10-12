@@ -35,12 +35,23 @@ const writeProjection = async (accountId, owner, details) => {
         { accountId, status: 'active', phoneNumberId: { $ne: connection.phoneNumberId } },
         { $set: { status: 'disconnected' } },
     );
+    // `User.phoneNumberId` es único: si OTRA cuenta tiene activo este número,
+    // esa línea es vieja (el número pasó de una cuenta a otra, p. ej. con la
+    // imagen anterior, que solo escribe `User`). Sin esto, activarlo aquí
+    // chocaría con el índice y la sincronización se quedaría bloqueada.
+    await Line.updateMany(
+        { phoneNumberId: connection.phoneNumberId, status: 'active', accountId: { $ne: accountId } },
+        { $set: { status: 'disconnected' } },
+    );
+    // Los datos de Meta solo si son de ESTE número: al repetir tras un cambio
+    // de número, los que llegaron eran del anterior.
+    const freshDetails = details && details.phoneNumberId === connection.phoneNumberId ? details : null;
     const line = await Line.findOneAndUpdate(
         { accountId, phoneNumberId: connection.phoneNumberId },
         { $set: {
             wabaId: waba._id,
             status: 'active',
-            ...(details && { displayPhoneNumber: details.displayPhoneNumber ?? null, verifiedName: details.verifiedName ?? null }),
+            ...(freshDetails && { displayPhoneNumber: freshDetails.displayPhoneNumber ?? null, verifiedName: freshDetails.verifiedName ?? null }),
         } },
         { upsert: true, new: true },
     );
@@ -53,8 +64,8 @@ const writeProjection = async (accountId, owner, details) => {
  * conexión cambió entre medias (otra conexión a la vez), repite, así que la
  * última sincronización en terminar siempre refleja el `User` final.
  *
- * `details` = `{ displayPhoneNumber, verifiedName }` de Meta, si se acaban de
- * leer al conectar. `afterRead(attempt)` es SOLO para los tests: provoca un
+ * `details` = `{ phoneNumberId, displayPhoneNumber, verifiedName }` de Meta, si
+ * se acaban de leer al conectar; solo se guardan si son del número actual. `afterRead(attempt)` es SOLO para los tests: provoca un
  * cambio entre la lectura y la escritura.
  */
 export const syncLinesFromOwner = async (accountId, { details = null, afterRead = null } = {}) => {

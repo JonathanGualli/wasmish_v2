@@ -1,7 +1,7 @@
 import { findAccountOwner } from "../services/account.service.js";
 import { encrypt } from "../utils/crypto.js";
 import {
-    isPhoneNumberTaken, isWabaTaken, verifyWabaPhoneNumber, syncLinesAfterConnecting, PHONE_NUMBER_TAKEN_MESSAGE, WABA_TAKEN_MESSAGE,
+    isPhoneNumberTaken, isWabaTaken, claimWaba, verifyWabaPhoneNumber, syncLinesAfterConnecting, PHONE_NUMBER_TAKEN_MESSAGE, WABA_TAKEN_MESSAGE,
 } from "../services/whatsapp.connection.service.js";
 import { connectionErrorResponse } from "./whatsapp.controller.js";
 
@@ -27,6 +27,8 @@ export const updateUserTokenWhatsapp = async (req, res) => {
         }
 
         const line = await verifyWabaPhoneNumber({ token: tokenWhatsapp, waBusinessId, phoneNumberId });
+        // El WABA para esta cuenta, antes de guardar nada.
+        await claimWaba(req.auth.accountId, waBusinessId);
 
         // Encript the token before saving
         userFound.tokenWhatsapp = encrypt(tokenWhatsapp);

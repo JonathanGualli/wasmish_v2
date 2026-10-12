@@ -223,3 +223,27 @@ test('si Meta rechaza el número, ni WABA ni línea', async () => {
     assert.equal(await Waba.countDocuments({ accountId: v.accountId }), 0);
     assert.equal(await Line.countDocuments({ accountId: v.accountId }), 0);
 });
+
+// Regresión que vigila (Codex, código de la 2a): dos cuentas conectando a la vez
+// números distintos del mismo WABA pasaban las dos `isWabaTaken`, y las dos
+// quedaban conectadas al mismo WABA.
+for (const [via, connect] of [
+    ['PUT /users/update-user-token-whatsapp', (account, number, waba) => connectManual(account, number, waba)],
+    ['POST /whatsapp/connect', (account, number, waba) => request(account, 'POST', '/whatsapp/connect', { code: 'x', phoneNumberId: number, waBusinessId: waba })],
+]) {
+    test(`${via}: si otra cuenta se queda el WABA mientras Meta responde, 409 y no se guarda nada`, async () => {
+        const loser = await seedAccount(`P${via.length}`, { seq: 30 + via.length });
+        const winner = await seedAccount(`Q${via.length}`, { seq: 40 + via.length });
+        const waba = `waba-carrera-${via.length}`;
+        const number = `99${50 + via.length}`;
+        // Mientras Meta lista los números para `loser`, `winner` reclama ese WABA.
+        fakeMeta([number], { onPhoneNumbers: () => Waba.create({ accountId: winner.accountId, waBusinessId: waba }) });
+        const res = await connect(loser, number, waba);
+        onMeta(null);
+        assert.equal(res.status, 409, res.text);
+        assert.equal(res.body[0].message, WABA_TAKEN_MESSAGE);
+        const saved = await User.findById(loser.userId).lean();
+        assert.equal(saved.phoneNumberId, null);
+        assert.equal(saved.waBusinessId ?? null, null);
+    });
+}

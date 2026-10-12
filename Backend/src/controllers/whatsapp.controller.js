@@ -2,7 +2,7 @@ import { findAccountOwner } from "../services/account.service.js";
 import { encrypt } from "../utils/crypto.js";
 import { exchangeCodeForToken, subscribeAppToWaba } from "../libs/whatsapp.js";
 import {
-    isPhoneNumberTaken, isWabaTaken, verifyWabaPhoneNumber, syncLinesAfterConnecting, PHONE_NUMBER_TAKEN_MESSAGE, WABA_TAKEN_MESSAGE,
+    isPhoneNumberTaken, isWabaTaken, claimWaba, verifyWabaPhoneNumber, syncLinesAfterConnecting, PHONE_NUMBER_TAKEN_MESSAGE, WABA_TAKEN_MESSAGE,
 } from "../services/whatsapp.connection.service.js";
 
 // La respuesta de error de las dos formas de conectar (esta y el formulario
@@ -42,6 +42,8 @@ export const connectWhatsappEmbedded = async (req, res) => {
         // 3. El número tiene que ser del WABA de ese token. Antes de suscribir
         //    la app: si no lo es, no se toca nada en Meta.
         const line = await verifyWabaPhoneNumber({ token: accessToken, waBusinessId, phoneNumberId });
+        // El WABA para esta cuenta, antes de suscribir la app y de guardar nada.
+        await claimWaba(req.auth.accountId, waBusinessId);
 
         // 4. Subir la app a los whebhooks del whatsapp del cliente
         await subscribeAppToWaba( { token: accessToken, waBusinessId } );

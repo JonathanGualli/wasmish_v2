@@ -32,7 +32,7 @@ const activeLines = (account) => Line.find({ accountId: account.accountId, statu
 test('sincronizar crea el WABA y la línea activa por defecto, con el token de User', async () => {
     const a = await newAccount('A');
     await setConnection(a, { tokenWhatsapp: 'cifrado-a', phoneNumberId: '7001', waBusinessId: 'waba-a' });
-    await syncLinesFromOwner(a.accountId, { details: { displayPhoneNumber: '+1 555 7001', verifiedName: 'Negocio A' } });
+    await syncLinesFromOwner(a.accountId, { details: { phoneNumberId: '7001', displayPhoneNumber: '+1 555 7001', verifiedName: 'Negocio A' } });
 
     assert.deepEqual(await issuesOf(a), []);
     const [line] = await activeLines(a);
@@ -107,18 +107,24 @@ test('dos renovaciones a la vez: el token final del Waba es el de User', async (
     assert.deepEqual(await issuesOf(f), []);
 });
 
-test('dos cambios de número a la vez: una sola línea activa, la de User', async () => {
+// Regresión que vigila (Codex, código de la 2a): al repetir, la primera sincronización
+// escribía en la línea nueva el número visible y el nombre del número anterior.
+test('dos cambios de número a la vez: una sola línea activa, la de User, con sus datos', async () => {
     const g = await newAccount('G');
     await setConnection(g, { tokenWhatsapp: 'cifrado-g', phoneNumberId: '7007', waBusinessId: 'waba-g' });
     await syncLinesFromOwner(g.accountId, {
+        details: { phoneNumberId: '7007', displayPhoneNumber: '+1 555 7007', verifiedName: 'Viejo' },
         afterRead: async (attempt) => {
             if (attempt !== 1) return;
             await setConnection(g, { phoneNumberId: '7017' });
-            await syncLinesFromOwner(g.accountId);
+            await syncLinesFromOwner(g.accountId, { details: { phoneNumberId: '7017', displayPhoneNumber: '+1 555 7017', verifiedName: 'Nuevo' } });
         },
     });
 
-    assert.deepEqual((await activeLines(g)).map(line => line.phoneNumberId), ['7017']);
+    const active = await activeLines(g);
+    assert.deepEqual(active.map(line => line.phoneNumberId), ['7017']);
+    assert.equal(active[0].displayPhoneNumber, '+1 555 7017');
+    assert.equal(active[0].verifiedName, 'Nuevo');
     assert.deepEqual(await issuesOf(g), []);
 });
 
@@ -149,4 +155,25 @@ test('findLineId: la línea del número en esa cuenta, activa o no; si no, null'
     const line = await Line.create({ accountId: m.accountId, phoneNumberId: '7010', status: 'disconnected' });
     assert.equal(String(await findLineId(m.accountId, '7010')), String(line._id));
     assert.equal(await findLineId(m.accountId, '0000'), null);
+});
+
+// Regresión que vigila (Codex, código de la 2a): tras una vuelta atrás, A pasó de
+// X a Y y B conectó X (solo en `User`). La línea X de A seguía activa, y activar
+// X en B chocaba con el índice: la migración se quedaba bloqueada.
+test('el número actual activo en otra cuenta (obsoleto) se desconecta allí', async () => {
+    const n = await newAccount('N');
+    const o = await newAccount('O');
+    await setConnection(n, { tokenWhatsapp: 'cifrado-n', phoneNumberId: '7020', waBusinessId: 'waba-n' });
+    await syncLinesFromOwner(n.accountId);
+    // La imagen anterior: N cambia de número y O se queda el de N, solo en User.
+    await setConnection(n, { phoneNumberId: '7021' });
+    await setConnection(o, { tokenWhatsapp: 'cifrado-o', phoneNumberId: '7020', waBusinessId: 'waba-o' });
+
+    // O se sincroniza ANTES que N.
+    await syncLinesFromOwner(o.accountId);
+    await syncLinesFromOwner(n.accountId);
+
+    assert.deepEqual(await issuesOf(o), []);
+    assert.deepEqual(await issuesOf(n), []);
+    assert.equal((await Line.findOne({ accountId: n.accountId, phoneNumberId: '7020' }).lean()).status, 'disconnected');
 });
