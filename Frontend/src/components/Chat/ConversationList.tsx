@@ -103,11 +103,8 @@ export const ChatconversationList = ({ onSelect, selectedId, onNewConversation, 
                     <div className="flex-1 min-w-0">
                         <div className="flex gap-2 items-center">
                             <span className="text-sm font-semibold text-brand-text truncate">{title}</span>
-                            <span className="ml-auto flex-none flex items-center gap-2">
-                                <LineChip lineId={chat.lineId} />
-                                <span className="font-mono text-[11px] text-brand-subtle">
-                                    {formatChatTime(chat.updatedAt)}
-                                </span>
+                            <span className="ml-auto flex-none font-mono text-[11px] text-brand-subtle">
+                                {formatChatTime(chat.updatedAt)}
                             </span>
                         </div>
 
@@ -123,6 +120,10 @@ export const ChatconversationList = ({ onSelect, selectedId, onNewConversation, 
                                 </span>
                             )}
                         </div>
+
+                        {/* La línea, en su propia fila: junto a la hora le quitaba sitio al
+                            nombre. Con una sola línea, LineChip no pinta nada y la fila no existe. */}
+                        <div className="empty:hidden mt-1 flex min-w-0"><LineChip lineId={chat.lineId} wide /></div>
                     </div>
                 </button>
             );

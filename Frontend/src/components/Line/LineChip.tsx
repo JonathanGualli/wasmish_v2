@@ -5,10 +5,11 @@ import { LineSwatch } from "./LineSwatch";
 interface Props {
     lineId: string | null | undefined;
     /**
-     * `compact`: junto a la hora en la bandeja y en las listas, con la etiqueta
-     * corta. `header`: la pastilla de la cabecera del chat, con el número.
+     * `compact`: en la bandeja y en las listas, con la etiqueta corta. `header`: la pastilla de la cabecera del chat, con el número.
      */
     variant?: 'compact' | 'header';
+    /** En una fila propia (la bandeja): la etiqueta usa todo el ancho que haya. */
+    wide?: boolean;
 }
 
 /**
@@ -17,7 +18,7 @@ interface Props {
  * (`showLines`): con una, la app se ve como siempre. Mientras cargan las
  * líneas, un hueco gris del mismo tamaño si la última vez había varias.
  */
-export const LineChip = ({ lineId, variant = 'compact' }: Props) => {
+export const LineChip = ({ lineId, variant = 'compact', wide = false }: Props) => {
     const { showLines, linesPending, lineById, colorOf } = useLines();
 
     if (linesPending) {
@@ -52,11 +53,11 @@ export const LineChip = ({ lineId, variant = 'compact' }: Props) => {
 
     return (
         <span title={lineLabel(line)}
-            className={`flex-none inline-flex items-center gap-[5px] text-[11.5px] font-semibold whitespace-nowrap
+            className={`${wide ? 'min-w-0 max-w-full' : 'flex-none'} inline-flex items-center gap-[5px] text-[11.5px] font-semibold whitespace-nowrap
                 ${disconnected ? 'text-brand-muted' : 'text-brand-gray-600'}`}>
             <LineSwatch colorClass={colorOf(line.id)} disconnected={disconnected} size="sm" />
-            <span className="max-w-[72px] md:max-w-[96px] truncate">{shortLineLabel(line)}</span>
-            {disconnected && <span className="font-medium">desconectada</span>}
+            <span className={`${wide ? 'min-w-0' : 'max-w-[72px] md:max-w-[96px]'} truncate`}>{shortLineLabel(line)}</span>
+            {disconnected && <span className="flex-none font-medium">desconectada</span>}
         </span>
     );
 };
