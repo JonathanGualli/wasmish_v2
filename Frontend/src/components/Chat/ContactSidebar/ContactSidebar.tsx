@@ -31,7 +31,8 @@ interface Props {
  * cifras. Se edita en el sitio. La columna y su posición las pone `ChatThread`.
  *
  * Con más de una línea, la ventana va por línea: una fila por conversación
- * del contacto, con la abierta resaltada, y tocar otra la abre.
+ * del contacto, con la abierta resaltada, y tocar otra la abre. Va en la
+ * primera tarjeta blanca, no en la cabecera: sobre el verde no se leía.
  */
 export const ContactSidebar = ({ contactId, conversationId, windowExpiresAt, onOpenConversation, onClose }: Props) => {
     const { data: contact, isError } = useLiveContact(contactId, conversationId);
@@ -43,16 +44,17 @@ export const ContactSidebar = ({ contactId, conversationId, windowExpiresAt, onO
             <div className="flex-none bg-brand-deep text-white px-4 pt-3.5 pb-4 grid gap-3.5">
                 <SidebarTopBar onClose={onClose} />
                 {contact && (
-                    <ContactIdentity contact={contact} windowSlot={byLine
-                        ? <LineWindowList tone="onDeep" conversations={contact.conversations}
-                            currentConversationId={conversationId} onOpen={onOpenConversation} />
-                        : <WindowLine expiresAt={windowExpiresAt} />} />
+                    <ContactIdentity contact={contact} windowSlot={byLine ? null : <WindowLine expiresAt={windowExpiresAt} />} />
                 )}
             </div>
 
             {contact ? (
                 <>
                     <div className="flex-1 min-h-0 overflow-y-auto p-3.5 grid gap-2.5 content-start">
+                        {byLine && (
+                            <LineWindowList conversations={contact.conversations}
+                                currentConversationId={conversationId} onOpen={onOpenConversation} />
+                        )}
                         {contact.marketingOptOut && (
                             <Callout tone="warning" icon={<AlertTriangle size={16} />} title="Pidió no recibir publicidad.">
                                 Solo plantillas de servicio o utilidad.

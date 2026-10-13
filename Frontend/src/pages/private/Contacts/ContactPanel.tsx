@@ -280,7 +280,7 @@ const ContactDetails = ({ contact, onClose, onEdit }: {
                 <div className="grid gap-2.5">
                     <SectionLabel>Actividad</SectionLabel>
                     {byLine ? (
-                        <LineWindowList tone="light" conversations={contact.conversations}
+                        <LineWindowList framed conversations={contact.conversations}
                             onOpen={conversationId => navigate(`${AppRoutes.private.root}/${AppRoutes.private.chats}`,
                                 { state: { conversationId } satisfies ChatsNavigationState })} />
                     ) : (

@@ -7,7 +7,7 @@ import { LineChip } from "../../../components/Line/LineChip";
 const lineColumn: ColumnDef<Campaign> = {
     id: 'line',
     header: 'Línea',
-    cell: ({ row }) => <LineChip lineId={row.original.lineId} />,
+    cell: ({ row }) => <LineChip lineId={row.original.lineId} wide />,
 };
 
 /** Las columnas de la lista; la de la línea, solo con más de una (`showLines`). */

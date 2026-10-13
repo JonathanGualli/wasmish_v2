@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { AlertTriangle, ImageUp, LayoutTemplate, RefreshCw } from "lucide-react";
 import { useTemplates } from "../../../hooks/useTemplates";
 import { DataTable } from "../../../components/DataTable/DataTable";
 import { CustomButton } from "../../../components/Button/Button";
 import { PageShell, PageHeader } from "../../../components/Page/PageShell";
-import { templateColumns } from "./TemplateColumns";
+import { templateColumns, templateLinesColumn } from "./TemplateColumns";
+import { useLines } from "../../../hooks/useLines";
 import { Callout } from "../../../components/Callout/Callout"
 import { headerMediaRule } from "../../../utils/templateHeader";
 
@@ -12,6 +13,12 @@ export const TemplatesPage = () => {
     const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 });
     const { templates, isLoading, isSyncing, sync, syncError } = useTemplates();
     const missingMedia = templates.filter(t => headerMediaRule(t) && !t.headerMedia).length;
+    // Con varias líneas, de qué líneas es cada plantilla, junto a su nombre.
+    const { hasManyLines } = useLines();
+    const columns = useMemo(
+        () => (hasManyLines ? [templateColumns[0], templateLinesColumn, ...templateColumns.slice(1)] : templateColumns),
+        [hasManyLines],
+    );
 
     return (
         <PageShell width="wide">
@@ -48,7 +55,7 @@ export const TemplatesPage = () => {
             )}
             <DataTable
                 data={templates}
-                columns={templateColumns}
+                columns={columns}
                 totalCount={templates.length}
                 pagination={pagination}
                 setPagination={setPagination}

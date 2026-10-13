@@ -21,6 +21,8 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En curso
 
+- **Ajustes de la UI multi-línea antes del despliegue**: rama `ajustes-ui-lineas`, empezado el 2026-10-13 por Claude, a pedido de Jonathan tras revisar la 1.0.15 con un cliente de prueba de varias líneas. Entra en la 1.0.15 (no se ha desplegado), sin subir la versión.
+  Hecho: la etiqueta de la línea en su propia fila en la bandeja; el diálogo de cambio de línea ya no se sale (`ConfirmDialog`); la ventana por línea de la ficha en una tarjeta blanca; la conversación nueva con la forma del diseño; la columna «Se envía desde» en Plantillas. · Falta: la revisión de Codex y que Jonathan lo una. · Sin probar: nada pendiente en local (probado en el navegador con el cliente de prueba).
 - **Desplegar la 1.0.15** (Fase 2c de multi-línea completa, PRs #19 a #23), por Jonathan con `/deploy`, cuando él decida. La versión ya está subida; **aún no se despliega**. Lleva:
   - `Line` y `Waba` como fuente de la conexión; `User` queda como copia de la línea por defecto (#19).
   - La API de líneas (`GET /lines`, renombrar, hacer por defecto, desconectar) y el límite `maxLines` del superadmin (#20).
