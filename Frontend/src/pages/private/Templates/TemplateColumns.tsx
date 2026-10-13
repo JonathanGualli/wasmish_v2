@@ -1,6 +1,7 @@
 import { type ColumnDef } from "@tanstack/react-table";
 import type { Template } from "../../../models/template.model";
 import { TemplateHeaderCell } from "./TemplateHeaderCell";
+import { TemplateLinesCell } from "./TemplateLinesCell";
 
 /** Píldora de estado. Tintes sólidos del manual, no opacidades. */
 const STATUS: Record<string, { label: string; className: string }> = {
@@ -79,3 +80,10 @@ export const templateColumns: ColumnDef<Template>[] = [
         },
     },
 ];
+
+/** La columna de las líneas: solo con más de una conectada (`hasManyLines`). */
+export const templateLinesColumn: ColumnDef<Template> = {
+    id: "lines",
+    header: "Se envía desde",
+    cell: ({ row }) => <TemplateLinesCell template={row.original} />,
+};
