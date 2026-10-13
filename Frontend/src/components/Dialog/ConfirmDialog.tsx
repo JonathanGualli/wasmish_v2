@@ -48,8 +48,11 @@ export const ConfirmDialog = ({
         <Dialog open={open} onClose={handleClose} className="relative z-[60]">
             <DialogBackdrop className="fixed inset-0 bg-brand-ink/50" />
             <div className="fixed inset-0 flex items-center justify-center p-4">
+                {/* La columna del panel nunca crece más que el panel: unos botones con
+                    textos largos (los nombres de las líneas) bajan de fila en vez de
+                    ensanchar el contenido y sacarlo por la derecha. */}
                 <DialogPanel className="w-full max-w-[460px] bg-brand-surface border border-brand-border rounded-2xl
-                    shadow-[0_18px_40px_rgba(14,17,22,0.12)] p-6 grid gap-3.5">
+                    shadow-[0_18px_40px_rgba(14,17,22,0.12)] p-6 grid grid-cols-[minmax(0,1fr)] gap-3.5">
                     {icon && (
                         <div className={`w-10 h-10 rounded-[10px] flex items-center justify-center
                             ${tone === 'danger' ? 'bg-brand-danger-soft text-brand-danger' : 'bg-brand-accent-soft text-brand-accent-strong'}`}>
@@ -61,7 +64,7 @@ export const ConfirmDialog = ({
                         <div className="mt-1.5 text-sm leading-[1.55] text-brand-strong">{description}</div>
                     </div>
                     {children}
-                    <div className="mt-1.5 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+                    <div className="mt-1.5 flex flex-col-reverse sm:flex-row sm:flex-wrap sm:justify-end gap-2">
                         <div className="h-10"><CustomButton variant="outline" onClick={onSecondary ?? handleClose} disabled={isLoading}>{cancelLabel}</CustomButton></div>
                         <div className="h-10">
                             <CustomButton variant={tone === 'danger' ? 'danger' : 'secondary'} onClick={onConfirm} isLoading={isLoading} disabled={confirmDisabled}>
