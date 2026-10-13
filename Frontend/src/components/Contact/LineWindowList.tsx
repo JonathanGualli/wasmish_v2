@@ -32,14 +32,17 @@ export const LineWindowList = ({ conversations, currentConversationId, onOpen, f
         </div>
         {conversations.map(conversation => (
             <LineWindowRow key={conversation.conversationId} conversation={conversation}
-                current={conversation.conversationId === currentConversationId} onOpen={onOpen} />
+                current={conversation.conversationId === currentConversationId}
+                highlight={conversations.length > 1} onOpen={onOpen} />
         ))}
     </div>
 );
 
-const LineWindowRow = ({ conversation, current, onOpen }: {
+const LineWindowRow = ({ conversation, current, highlight, onOpen }: {
     conversation: ContactConversation;
     current: boolean;
+    /** Resaltar la abierta: solo con más de una fila, si no no hay de cuál distinguirla. */
+    highlight: boolean;
     onOpen?: (conversationId: string) => void;
 }) => {
     const { lineById, colorOf } = useLines();
@@ -55,7 +58,7 @@ const LineWindowRow = ({ conversation, current, onOpen }: {
         <button type="button" disabled={!clickable} onClick={() => onOpen?.(conversation.conversationId)}
             title={clickable ? 'Abrir esta conversación' : undefined}
             className={`flex items-center gap-[9px] px-3.5 py-2 text-[12.5px] text-left transition-colors
-                ${current ? 'bg-brand-bg' : ''} ${clickable ? 'cursor-pointer hover:bg-brand-bg' : 'cursor-default'}`}>
+                ${current && highlight ? 'bg-brand-bg' : ''} ${clickable ? 'cursor-pointer hover:bg-brand-bg' : 'cursor-default'}`}>
             {line && <LineSwatch colorClass={colorOf(line.id)} disconnected={disconnected} size="sm" />}
             <span className="min-w-0 grid">
                 <span className="truncate font-semibold text-brand-text">{line ? lineLabel(line) : 'Número anterior'}</span>
