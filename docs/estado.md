@@ -6,9 +6,10 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En producción
 
-**Versión 1.0.14**, desplegada el 2026-10-12 (etiqueta `v1.0.14`; comprobar con `curl https://wasmish.solventyc.com/api/version`). Lleva:
+**Versión 1.0.15**, desplegada el 2026-10-13 (etiqueta `v1.0.15`; comprobar con `curl https://wasmish.solventyc.com/api/version`). Lleva:
 
-- **Multi-línea · Fase 2b** (PRs #13 a #16): lo que entra y sale de WhatsApp va por su **línea**. El webhook encuentra la cuenta y la línea por el número, una conversación es de un contacto en una línea, los envíos salen con el número de la línea y el token de su `Waba`, las plantillas se buscan en el WABA de la línea, el worker reparte por línea y la API pública admite `lineId` o `from` (sin ellos, igual que antes). `User` sigue siendo la fuente de la conexión: si la proyección no cuadra, la reserva usa `User`. Responder en una conversación de un número que ya no está conectado da 409. Sin cambio visible con `maxLines: 1`. Se desplegó con `migrate:lines` corrido con la imagen nueva **antes de arrancarla** (cambió el índice de conversaciones y puso el WABA a las plantillas que no lo tenían), `--check` en 0 antes y después, y Jonathan comprobó en el navegador enviar, recibir, Contactos y Plantillas. Ensayado antes con una copia de producción: las cuentas envían y reciben por su línea sin usar la reserva.
+- **Multi-línea · Fase 2c** (PRs #19 a #23, más los ajustes de la UI del #25): `Line` y `Waba` son la fuente de la conexión y `User` queda como copia de la línea por defecto; la API de líneas (`GET /lines`, renombrar, hacer por defecto, desconectar) y el límite `maxLines` del superadmin; Ajustes → Líneas; elegir y ver la línea en Chats, en las fichas, en Campañas y en Plantillas («Se envía desde»). Con `maxLines: 1` (todas las cuentas reales) se ve y funciona como la 1.0.14. Sin migración de datos: `migrate:lines -- --check` en 0 con la 1.0.14 en marcha y otra vez con la 1.0.15, con `mongodump` antes. Jonathan comprobó en vivo entrantes, respuestas, Ajustes y el cliente de la API (PractyCo). Antes se revisó en local con un cliente de prueba de cuatro líneas.
+- **Multi-línea · Fase 2b** (PRs #13 a #16, en producción desde la 1.0.14): lo que entra y sale de WhatsApp va por su **línea**. El webhook encuentra la cuenta y la línea por el número, una conversación es de un contacto en una línea, los envíos salen con el número de la línea y el token de su `Waba`, las plantillas se buscan en el WABA de la línea, el worker reparte por línea y la API pública admite `lineId` o `from` (sin ellos, igual que antes). `User` sigue siendo la fuente de la conexión: si la proyección no cuadra, la reserva usa `User`. Responder en una conversación de un número que ya no está conectado da 409. Sin cambio visible con `maxLines: 1`. Se desplegó con `migrate:lines` corrido con la imagen nueva **antes de arrancarla** (cambió el índice de conversaciones y puso el WABA a las plantillas que no lo tenían), `--check` en 0 antes y después, y Jonathan comprobó en el navegador enviar, recibir, Contactos y Plantillas. Ensayado antes con una copia de producción: las cuentas envían y reciben por su línea sin usar la reserva.
 - **Multi-línea · Fase 2a** (PR #9, en producción desde la 1.0.13): las colecciones `wabas` y `lines`, una proyección de la conexión que guarda el owner en `User` (que sigue siendo la fuente de verdad); conectar WhatsApp las sincroniza, y un WABA solo puede estar en una cuenta (409 si ya es de otra). Las conversaciones, campañas y plantillas nuevas guardan su línea y su WABA, pero todavía nada enruta por ellos. Sin cambio visible. Se migró con `migrate:lines` sin parar la API (plan de la Fase 2a, «Antes de desplegar»), y en producción `--check` salió con 0.
 - **Multi-línea · Fase 1** (PR #8, en producción desde la 1.0.12): la cuenta (`Account`) separada del usuario, con el mismo `_id` que su owner; el backend toma al dueño de los datos de `req.auth.accountId`; el registro crea cuenta y owner e ignora `rol` y `status` del cuerpo; un usuario desactivado o sin cuenta recibe 401; el superadmin sale de `isSuperadmin`; la API key es de la cuenta. Sin cambio visible. **Despliegue con migración** (`migrate:accounts`), con la API vieja parada durante la última pasada: plan de la Fase 1, «Antes de desplegar».
 - **Multi-línea · Fase 0** (PR #6, en producción desde la 1.0.11): un `phoneNumberId` solo puede estar en una cuenta (índice único `user_phoneNumberId_unique`) y, al conectarlo por el Embedded Signup o por el formulario manual, Meta tiene que listarlo en el WABA del token. Sin WhatsApp conectado, enviar texto o archivo da 409 y sincronizar plantillas 400, en vez de 500. Previo al despliegue: la consulta de `phoneNumberId` repetidos del plan, hecha por Jonathan el 2026-10-11 (`[]`).
@@ -21,24 +22,7 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En curso
 
-- **Ajustes de la UI multi-línea antes del despliegue**: rama `ajustes-ui-lineas`, empezado el 2026-10-13 por Claude, a pedido de Jonathan tras revisar la 1.0.15 con un cliente de prueba de varias líneas. Entra en la 1.0.15 (no se ha desplegado), sin subir la versión.
-  Hecho: la etiqueta de la línea en su propia fila en la bandeja; el diálogo de cambio de línea ya no se sale (`ConfirmDialog`); la ventana por línea de la ficha en una tarjeta blanca; la conversación nueva con la forma del diseño; la columna «Se envía desde» en Plantillas. · Falta: la revisión de Codex y que Jonathan lo una. · Sin probar: nada pendiente en local (probado en el navegador con el cliente de prueba).
-- **Desplegar la 1.0.15** (Fase 2c de multi-línea completa, PRs #19 a #23), por Jonathan con `/deploy`, cuando él decida. La versión ya está subida; **aún no se despliega**. Lleva:
-  - `Line` y `Waba` como fuente de la conexión; `User` queda como copia de la línea por defecto (#19).
-  - La API de líneas (`GET /lines`, renombrar, hacer por defecto, desconectar) y el límite `maxLines` del superadmin (#20).
-  - Ajustes → Líneas y el límite en el panel de superadmin (#21).
-  - Elegir y ver la línea en Chats, en las fichas y en Campañas (#22 y #23).
-  - Con `maxLines: 1` (todas las cuentas hoy), se ve y funciona como la 1.0.14.
-
-  **Antes de desplegar** (plan de la 2c, «Antes de desplegar»): no hay migración de datos.
-  1. `mongodump`.
-  2. Compilar la imagen **sin arrancarla** y, con la 1.0.14 en marcha, `docker compose run --rm --no-deps wasmish-api npm run migrate:lines -- --check` → 0.
-  3. `up` de la 1.0.15 y otra vez `--check` → 0.
-  4. Comprobar un entrante en vivo, una respuesta desde el chat, `POST /api/v1/templates/send` con 200 en los logs y, en Ajustes, la línea de cada cuenta.
-
-  **Volver atrás:** las imágenes `:1.0.14` leen `User`, que es copia de la línea por defecto. Vale mientras ninguna cuenta tenga más de una línea activa.
-
-  **Sin probar:** conectar un segundo número contra Meta de verdad, que espera a la prueba del token en WasmishTest. Envíos reales por una segunda línea: en local se probaron con datos sembrados y token falso.
+Nada.
 
 <!-- Formato de una entrada:
 - **<qué>** — rama `<rama>`, PR #<n>, empezado el <fecha> por <Claude|Codex|Jonathan>.
@@ -47,8 +31,8 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## Lo siguiente
 
-- **Multi-línea y multi-agente, fases 1 a 4** (diseño aprobado, sin preguntas abiertas: `docs/superpowers/specs/2026-10-11-multi-linea-multi-agente-design.md`). Fases 1, 2a y 2b en producción (la 2b, enrutar por línea, desde la 1.0.14). La **Fase 2c** está terminada y sale en la 1.0.15 (ver «En curso»).
-  - **Después de desplegarla, para encender varias líneas** (plan de la 2c, «Después de desplegar»):
+- **Multi-línea y multi-agente, fases 1 a 4** (diseño aprobado, sin preguntas abiertas: `docs/superpowers/specs/2026-10-11-multi-linea-multi-agente-design.md`). Fases 1, 2a y 2b en producción (la 2b, enrutar por línea, desde la 1.0.14). La **Fase 2c** está en producción desde la 1.0.15.
+  - **Para encender varias líneas** (plan de la 2c, «Después de desplegar»):
     1. La prueba del token en WasmishTest: ¿repetir el Embedded Signup en el mismo WABA invalida el token anterior? (spec § 2.2). Hace falta un número de pruebas, que Jonathan aún no tiene: una línea fija sin WhatsApp (se verifica por llamada) o un chip prepago.
     2. El ensayo de la vuelta atrás con dos líneas en local.
     3. `maxLines: 2` en una cuenta de prueba desde el panel.
