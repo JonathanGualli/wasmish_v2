@@ -158,7 +158,9 @@ export const NewConversationPanel = ({ initialDraft, onClose, onBack, onCreated,
     try {
       const message = await startConversation.mutateAsync({
         destinationNumber: digits,
-        contactName: name.trim() || undefined,
+        // Con un contacto reconocido, el campo de nombre no se ve: lo que quedara
+        // escrito para otro número no debe acabar en este contacto (Codex, PR #25).
+        contactName: known ? undefined : name.trim() || undefined,
         lineId: line?.id,
         ...form.buildPayload(),
       });
@@ -237,7 +239,7 @@ export const NewConversationPanel = ({ initialDraft, onClose, onBack, onCreated,
           <LineSelect value={line?.id ?? null} onChange={changeLine} templateChosen={Boolean(selectedName)} />
 
           {known ? (
-            <KnownRecipient title={known.title} phone={digits} onChange={() => setPhone('')} />
+            <KnownRecipient title={known.title} phone={digits} onChange={() => { setPhone(''); setName(''); }} />
           ) : (
             <div className="grid gap-3.5">
               <AuthField
