@@ -36,6 +36,9 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
   **Volver atrás:** las imágenes `:1.0.16`.
 
+- **Multi-línea · Fase 3: equipo, roles y acceso por línea** — rama `fase3-permisos`, empezado el 2026-10-14 por Claude. Plan: `docs/superpowers/plans/2026-10-14-multi-linea-fase-3.md`; brief de la UI: `docs/superpowers/specs/2026-10-14-equipo-brief-ui.md` (Jonathan se lo pasa a Claude Design).
+  Hecho: el plan y el brief · Falta: la revisión del plan por Codex y las 8 tareas, en 4 PRs (permisos, tiempo real, equipo e invitaciones, UI) · Sin probar: nada todavía.
+
 <!-- Formato de una entrada:
 - **<qué>** — rama `<rama>`, PR #<n>, empezado el <fecha> por <Claude|Codex|Jonathan>.
   Hecho: … · Falta: … · Sin probar: …
