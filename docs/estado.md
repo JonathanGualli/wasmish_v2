@@ -23,22 +23,24 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En curso
 
-- **Desplegar la 1.0.17**, por Jonathan con `/deploy`, cuando él decida. La versión ya está subida; **aún no se despliega**. Lleva:
+- **Desplegar la 1.0.18**, por Jonathan con `/deploy`, cuando él decida. La versión ya está subida; **aún no se despliega**. Lleva lo de la 1.0.17, que nunca llegó a producción, y la Fase 3:
   - **Esperar a `/register` hasta 60 s** al conectar un número nuevo (#30), con el candado de líneas de 90 s mientras tanto. En la 1.0.16, la primera conexión de un número nuevo daba 502 porque Meta tarda más de 10 s.
   - **La UI del PIN de dos pasos** en «Detalles» de cada línea (#31): oculto, «Mostrar», copiar, «Ocultar», «Sin PIN guardado» y errores con «Reintentar». `GET /lines` dice `hasTwoStepPin`. Y «Reintentar» en el aviso rojo de `phone_number_registration_failed` al conectar.
+  - **Multi-línea · Fase 3: equipo, roles y acceso por línea** (PRs #33 a #37, cada uno con su revisión de Codex): permisos por rol (`requirePermission`, 403) y acceso por línea (`conversationScope`, 404), el tiempo real filtrado por línea y permiso (`canReceive`), el equipo y las invitaciones (`/api/team`, `/api/invitations/:token`, `maxUsers`), quién envió cada mensaje (`Message.sentBy` y `origin`), Ajustes → Equipo, la página de aceptar la invitación y la columna de usuarios del superadmin. Plan: `docs/superpowers/plans/2026-10-14-multi-linea-fase-3.md`. Probado en el navegador en local con dos sesiones (owner y agente, y una supervisora). Con un solo usuario por cuenta (todas las reales) se ve y funciona como antes.
 
-  **Antes de desplegar:** no hay migración de datos.
+  **Antes de desplegar:** no hay migración de datos. La Fase 3 solo añade campos opcionales (`Account.teamLock`, `Message.sentBy`, `sentByName` y `origin`) y la colección `invitations`, cuyos índices crea Mongoose al arrancar.
   1. `mongodump`.
-  2. Compilar y `up` de la 1.0.17 (api y web).
+  2. Compilar y `up` de la 1.0.18 (api y web).
   3. Comprobar `GET /api/version`, los logs (sin «MODO DE PRUEBA» ni E11000) y un `POST /api/v1/templates/send` con 200 del cliente real.
 
-  **Después de desplegar:** en la cuenta de prueba de Jonathan, abrir «Detalles» de la línea de Rey Peluche y ver su PIN con «Mostrar».
+  **Después de desplegar:**
+  - En la cuenta de prueba de Jonathan, abrir «Detalles» de la línea de Rey Peluche y ver su PIN con «Mostrar».
+  - Entrar como el owner de una cuenta real (o la de prueba) y ver que el menú, Contactos, Plantillas, Campañas y Ajustes están como antes, con la tarjeta de Equipo, y que responder en el chat sigue funcionando.
+  - En el panel del superadmin, la columna «Usuarios» con `1 / <su máximo>` en todas las cuentas (una persona: el owner).
 
-  **Volver atrás:** las imágenes `:1.0.16`.
+  **No subir `maxUsers` en una cuenta real** hasta el ensayo de la vuelta atrás con dos usuarios (plan de la Fase 3, «Al terminar»): con una imagen anterior a la Fase 3, el agente vería y haría todo.
 
-- **Multi-línea · Fase 3: equipo, roles y acceso por línea — terminada, en `master` y sin desplegar.** PRs #33 (plan y brief), #34 (permisos y acceso por línea), #35 (el tiempo real respeta las líneas), #36 (equipo, invitaciones y quién envió cada mensaje) y #37 (la interfaz), unidos el 2026-10-14. Plan: `docs/superpowers/plans/2026-10-14-multi-linea-fase-3.md`; diseño: `Design/Wasmish Equipo - Usuarios, roles y acceso.html`. Los cinco con su revisión de Codex y la respuesta en el PR. Probado en el navegador en local con dos sesiones (owner y agente, y una supervisora): invitar, aceptar, lo que no ve cada rol, quién respondió, cambiar el rol o las líneas (el chat abierto de una línea quitada se cierra con aviso) y desactivar (el agente sale sin recargar). Con un solo usuario por cuenta (todas las reales) se ve y funciona como antes.
-  - **Desplegar:** la próxima versión (1.0.18) lleva la Fase 3 y lo de la 1.0.17, que nunca llegó a producción. Se sube en un PR cuando Jonathan quiera desplegar; no lleva migración de datos.
-  - **Para encender equipos en una cuenta real:** el ensayo de la vuelta atrás con dos usuarios (plan de la Fase 3, «Al terminar»): con una imagen anterior a la Fase 3, el agente vería y haría todo.
+  **Volver atrás:** las imágenes `:1.0.16` (mientras ninguna cuenta tenga más de un usuario).
 
 <!-- Formato de una entrada:
 - **<qué>** — rama `<rama>`, PR #<n>, empezado el <fecha> por <Claude|Codex|Jonathan>.
