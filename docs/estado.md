@@ -36,9 +36,9 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
   **Volver atrás:** las imágenes `:1.0.16`.
 
-- **Multi-línea · Fase 3: equipo, roles y acceso por línea** — empezado el 2026-10-14 por Claude. Plan: `docs/superpowers/plans/2026-10-14-multi-linea-fase-3.md`; diseño: `Design/Wasmish Equipo - Usuarios, roles y acceso.html` (entra con el PR 4).
-  Hecho: PR 1 (permisos, #34), PR 2 (tiempo real, #35) y PR 3 (equipo e invitaciones, #36), unidos; PR 4 (UI, rama `fase3-ui`): `can()` y `access_changed` en el `AuthProvider`, lo que cada rol ve (menú, rutas, Contactos, Plantillas, Ajustes), Ajustes → Equipo, la página de aceptar la invitación, quién respondió en el chat y la columna de usuarios del superadmin · Falta: la revisión de Codex del PR 4 · Probado en el navegador en local con dos sesiones (owner y agente): invitar, aceptar, lo que no ve el agente, quién respondió y desactivar (el agente sale sin recargar).
-- **Para encender equipos en una cuenta real:** el ensayo de la vuelta atrás con dos usuarios (plan de la Fase 3, «Al terminar»): con una imagen anterior a la Fase 3, el agente vería y haría todo.
+- **Multi-línea · Fase 3: equipo, roles y acceso por línea — terminada, en `master` y sin desplegar.** PRs #33 (plan y brief), #34 (permisos y acceso por línea), #35 (el tiempo real respeta las líneas), #36 (equipo, invitaciones y quién envió cada mensaje) y #37 (la interfaz), unidos el 2026-10-14. Plan: `docs/superpowers/plans/2026-10-14-multi-linea-fase-3.md`; diseño: `Design/Wasmish Equipo - Usuarios, roles y acceso.html`. Los cinco con su revisión de Codex y la respuesta en el PR. Probado en el navegador en local con dos sesiones (owner y agente, y una supervisora): invitar, aceptar, lo que no ve cada rol, quién respondió, cambiar el rol o las líneas (el chat abierto de una línea quitada se cierra con aviso) y desactivar (el agente sale sin recargar). Con un solo usuario por cuenta (todas las reales) se ve y funciona como antes.
+  - **Desplegar:** la próxima versión (1.0.18) lleva la Fase 3 y lo de la 1.0.17, que nunca llegó a producción. Se sube en un PR cuando Jonathan quiera desplegar; no lleva migración de datos.
+  - **Para encender equipos en una cuenta real:** el ensayo de la vuelta atrás con dos usuarios (plan de la Fase 3, «Al terminar»): con una imagen anterior a la Fase 3, el agente vería y haría todo.
 
 <!-- Formato de una entrada:
 - **<qué>** — rama `<rama>`, PR #<n>, empezado el <fecha> por <Claude|Codex|Jonathan>.
@@ -52,7 +52,7 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
     1. La prueba del token: ¿un token nuevo del Embedded Signup cubre todos los números del WABA? (spec § 2.2). Se puede hacer en producción con la cuenta de prueba de Jonathan (`maxLines: 2`), pero necesita **dos números en el mismo WABA**: hoy tiene uno conectado. Una cuenta con dos líneas de WABA distintos ya se probó el 2026-10-14.
     2. El ensayo de la vuelta atrás con dos líneas en local.
     3. `maxLines: 2` en una cuenta de prueba desde el panel.
-  - Sigue la **Fase 3**: equipo, roles y acceso por línea.
+  - La **Fase 3** (equipo, roles y acceso por línea) está terminada y sin desplegar (ver «En curso»). Sigue la **Fase 4**: asignar conversaciones («Mías / Sin asignar / Todas») y transferirlas.
 - **Próximo módulo: un chatbot.** Jonathan aún no decidió de qué tipo. La propuesta sobre la mesa: empezar por respuestas automáticas (bienvenida, fuera de horario, palabras clave) como un motor de «respuestas» en el webhook, con traspaso a una persona (el bot se calla si alguien responde a mano) y la marca «Bot» en el chat; después, flujos con botones (requiere enviar mensajes interactivos) o IA. Antes de empezar: preguntar el tipo y qué problema concreto del cliente resuelve.
 - El campo de archivo de cabecera al enviar una plantilla a **un solo contacto** (`SendTemplateDialog` y `NewConversationPanel`); hoy solo existe en las campañas.
 - En la API pública: el campo `header`, la cabecera de texto con variable y las plantillas de carrusel. Toca al cliente de la API: con cuidado.
