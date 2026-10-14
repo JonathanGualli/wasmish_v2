@@ -6,6 +6,11 @@ import { AuthProvider } from './context/auth.context.provider.tsx';
 import { NoticeProvider } from './components/Notice/context/NoticeContext.tsx';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { SSEProvider } from './context/sse.provider.tsx';
+import { registerServiceWorker } from './libs/serviceWorker.ts';
+
+// App instalable y avisos push (app móvil). Tras el `load`, para no competir
+// con la carga de la página.
+window.addEventListener('load', () => { void registerServiceWorker(); });
 
 const queryClient = new QueryClient();
 

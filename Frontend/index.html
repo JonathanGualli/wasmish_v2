@@ -4,10 +4,16 @@
 <head>
   <meta charset="UTF-8" />
   <link rel="icon" type="image/svg+xml" href="/brand/favicon.svg" />
-  <link rel="apple-touch-icon" href="/brand/logo.png" />
+  <link rel="apple-touch-icon" href="/brand/apple-touch-icon-180.png" />
+  <!-- App instalable (PWA): nombre, íconos y cómo se abre. En iPhone, las dos
+       meta de Apple hacen que se abra a pantalla completa desde el ícono. -->
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Wasmish" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <!-- Verde profundo de marca — la barra del navegador en móvil hace juego con el sidebar -->
-  <meta name="theme-color" content="#0b3b2e" />
+  <!-- Blanco, como las cabeceras de Chats: la barra de estado de la app instalada
+       (y la del navegador en móvil) se funde con ellas (diseño «App instalable y avisos», § 5). -->
+  <meta name="theme-color" content="#ffffff" />
   <title>Wasmish — CRM de WhatsApp Business</title>
 
   <!-- Tipografía de marca: Inter para el sistema, JetBrains Mono solo para datos -->
