@@ -70,6 +70,35 @@ export const register = async (req, res) => {
     }
 }
 
+/**
+ * Abre la sesión de `user`: la cookie y la respuesta del login. La usan el
+ * login y aceptar una invitación (Fase 3), que entra directamente.
+ */
+export const startSession = async (res, user) => {
+    const token = await createAccessToken({ id: user._id });
+
+    res.cookie('token', token, {
+        httpOnly: true,
+        secure: isProd,                     // OBLIGATORIO EN PROD: Porque la web es HTTPS
+        sameSite: isProd ? 'none' : 'lax',  // OBLIGATORIO EN PROD: Porque localhost != solventyc.com , lax funciona en http 
+    });
+
+    return res.json({
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        rol: user.rol,
+        isSuperadmin: user.isSuperadmin,
+        whatsappConnected: Boolean(user.tokenWhatsapp),
+        phoneNumberId: user.phoneNumberId ?? "",
+        waBusinessId: user.waBusinessId ?? "",
+        status: user.status,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+        ...await sessionAccessFor(user),
+    });
+};
+
 export const login = async (req, res) => {
     
     const { email, password } = req.body;
@@ -89,29 +118,7 @@ export const login = async (req, res) => {
             return res.status(403).json([{ message: 'Tu usuario está desactivado. Habla con el administrador de tu cuenta.' }]);
         }
 
-        const token = await createAccessToken({ id: userFound._id });
-
-        res.cookie('token', token, {
-            httpOnly: true,
-            secure: isProd,                     // OBLIGATORIO EN PROD: Porque la web es HTTPS
-            sameSite: isProd ? 'none' : 'lax',  // OBLIGATORIO EN PROD: Porque localhost != solventyc.com , lax funciona en http 
-        });
-
-        res.json({
-            id: userFound._id,
-            name: userFound.name,
-            email: userFound.email,
-            rol: userFound.rol,
-            isSuperadmin: userFound.isSuperadmin,
-            // Hasta la Fase 2 todo usuario es owner y guarda la conexión él mismo.
-            whatsappConnected: Boolean(userFound.tokenWhatsapp),
-            phoneNumberId: userFound.phoneNumberId ?? "",
-            waBusinessId: userFound.waBusinessId ?? "",
-            status: userFound.status,
-            createdAt: userFound.createdAt,
-            updatedAt: userFound.updatedAt,
-            ...await sessionAccessFor(userFound),
-        });
+        return startSession(res, userFound);
 
     } catch (error) {
         return res.status(500).json([error.message]);

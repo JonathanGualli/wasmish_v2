@@ -206,3 +206,7 @@ export const pickSendingLineId = ({ requestedLineId = null, defaultLineId = null
     if (accessible.length === 1) return { lineId: accessible[0] };
     return { error: accessible.length === 0 ? 'no_line' : 'choose_line' };
 };
+
+/** Cómo se llama una línea para las personas: su nombre interno, el verificado o su número (como `lineLabel` del frontend). */
+export const lineDisplayName = (line) =>
+    line?.name || line?.verifiedName || line?.displayPhoneNumber || line?.phoneNumberId || null;

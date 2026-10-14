@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
-import { pickSendingLineId,
+import { lineDisplayName, pickSendingLineId,
     ownerConnection, lineStateIssues, sharedWabas, historicalLines, legacyUserFields, legacyUserIssues, planConnection, sendingLineFor, resolveApiLine, nextDefaultLine, cleanLineName,
 } from '../src/utils/line.js';
 
@@ -261,4 +261,11 @@ test('pickSendingLineId: la por defecto si es suya; si no, su única línea', ()
 test('pickSendingLineId: con varias suyas que no son la por defecto, que elija; sin ninguna, no hay', () => {
     assert.deepEqual(pickSendingLineId({ requestedLineId: null, defaultLineId: 'l1', accessibleLineIds: ['l2', 'l3'] }), { error: 'choose_line' });
     assert.deepEqual(pickSendingLineId({ requestedLineId: null, defaultLineId: 'l1', accessibleLineIds: [] }), { error: 'no_line' });
+});
+
+test('lineDisplayName: el nombre interno, el verificado, el número o el id', () => {
+    assert.equal(lineDisplayName({ name: 'Ventas', verifiedName: 'Negocio', displayPhoneNumber: '+593' }), 'Ventas');
+    assert.equal(lineDisplayName({ name: null, verifiedName: 'Negocio', displayPhoneNumber: '+593' }), 'Negocio');
+    assert.equal(lineDisplayName({ displayPhoneNumber: '+593 99', phoneNumberId: '1' }), '+593 99');
+    assert.equal(lineDisplayName({ phoneNumberId: '1' }), '1');
 });

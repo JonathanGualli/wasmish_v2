@@ -387,7 +387,7 @@ test('bajar maxLines por debajo de las activas no desconecta nada y bloquea cone
     const admin = await seedAccount('LADMIN', { seq: seq++, isSuperadmin: true });
     const res = await request(admin, 'PATCH', `/admin/accounts/${a.accountId}/limits`, { maxLines: 1 });
     assert.equal(res.status, 200, res.text);
-    assert.deepEqual(res.body, { accountId: a.accountId, maxLines: 1 });
+    assert.deepEqual(res.body, { accountId: a.accountId, maxLines: 1, maxUsers: 1 });
 
     for (const lineId of [a.first, a.second]) {
         assert.equal((await lineFor(lineId)).status, 'active');
