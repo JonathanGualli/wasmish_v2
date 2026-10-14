@@ -27,6 +27,13 @@ process.env.CAMPAIGN_DRY_RUN = 'true';
 // Con él, `postWebhook` firma el cuerpo igual que Meta.
 process.env.META_APP_SECRET = 'secreto-meta-pruebas';
 process.env.MEDIA_DIR = await fs.mkdtemp(path.join(os.tmpdir(), 'wasmish-isolation-'));
+// Los avisos push encendidos, con claves de usar y tirar: sin ellas las rutas de
+// suscripción dan 503 y `notifyInbound` no hace nada.
+const { default: webpush } = await import('web-push');
+const vapid = webpush.generateVAPIDKeys();
+process.env.VAPID_PUBLIC_KEY = vapid.publicKey;
+process.env.VAPID_PRIVATE_KEY = vapid.privateKey;
+process.env.VAPID_SUBJECT = 'mailto:pruebas@pruebas.local';
 
 const mongod = await MongoMemoryServer.create();
 // Para los scripts que se prueban en su propio proceso (migrate:lines).
@@ -62,6 +69,22 @@ whatsappApi.defaults.adapter = async (config) => {
     }
     return { data: reply.data, status: reply.status ?? 200, statusText: 'OK', headers: {}, config, request: {} };
 };
+// Servicio de push falso, como Meta: ningún aviso sale a la red. Apunta cada
+// envío (`pushCalls`: endpoint, aviso y opciones) y responde lo que diga
+// `onPush(responder)`; sin respondedor, como un servicio de push que lo aceptó.
+const { pushTransport } = await import('../../src/services/push.service.js');
+export const pushCalls = [];
+let pushResponder = null;
+
+/** `responder(call) → Promise` (lanza para simular un error del servicio de push). `null` lo quita. */
+export const onPush = (responder) => { pushResponder = responder; };
+
+pushTransport.send = async (subscription, payload, options) => {
+    const call = { endpoint: subscription.endpoint, payload: JSON.parse(payload), options };
+    pushCalls.push(call);
+    return pushResponder ? pushResponder(call) : { statusCode: 201 };
+};
+
 const load = async (file) => (await import(`../../src/models/${file}`)).default;
 
 export const Account = await load('account.model.js');
@@ -78,6 +101,7 @@ export const ApiKey = await load('api.keys.model.js');
 export const Waba = await load('waba.model.js');
 export const Line = await load('line.model.js');
 export const Invitation = await load('invitation.model.js');
+export const PushSubscription = await load('push.subscription.model.js');
 
 const server = app.listen(0);
 const baseUrl = `http://127.0.0.1:${server.address().port}/api`;

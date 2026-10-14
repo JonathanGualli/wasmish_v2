@@ -78,7 +78,7 @@ scp deploy/config/api.env.example megaserver:/opt/docker-projects/prod-wasmish-m
 ### 4.2 Rellenar los secretos en el server
 ```bash
 ssh megaserver
-nano /opt/docker-projects/prod-wasmish-main/config/api.env   # MONGO_URI, TOKEN_SECRET, META_APP_SECRET, WHATSAPP_VERIFY_TOKEN...
+nano /opt/docker-projects/prod-wasmish-main/config/api.env   # MONGO_URI, TOKEN_SECRET, META_APP_SECRET, WHATSAPP_VERIFY_TOKEN, VAPID_*...
 nano /opt/docker-projects/prod-wasmish-main/.env             # normalmente ya trae los VITE_* correctos
 ```
 > ⚠️ Los secretos reales se escriben **directo en el server**, nunca por chat ni en git.
