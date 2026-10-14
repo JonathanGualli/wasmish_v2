@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { authRequired } from "../middlewares/validate.token.middleware.js";
 import { validateSchema } from "../middlewares/validator.middleware.js";
-import { listLines, updateLine, disconnectLineController } from "../controllers/line.controller.js";
+import { listLines, updateLine, disconnectLineController, getLinePin } from "../controllers/line.controller.js";
 import { updateLineSchema } from "../schemas/line.schema.js";
 
 const router = Router();
@@ -9,5 +9,6 @@ const router = Router();
 router.get('/lines', authRequired, listLines);
 router.patch('/lines/:id', authRequired, validateSchema(updateLineSchema), updateLine);
 router.post('/lines/:id/disconnect', authRequired, disconnectLineController);
+router.get('/lines/:id/pin', authRequired, getLinePin);
 
 export default router;
