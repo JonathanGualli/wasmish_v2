@@ -283,7 +283,7 @@ export const finishPendingReplace = async (accountId) => {
  * `afterLock` es SOLO para los tests: se llama con el candado tomado.
  */
 export const applyConnection = async (
-    { accountId, waBusinessId, tokenWhatsapp, phoneNumberId, details = null },
+    { accountId, waBusinessId, tokenWhatsapp, phoneNumberId, details = null, twoStepPin = null },
     { afterLock = null } = {},
 ) => withLineLock(accountId, async () => {
     await afterLock?.();
@@ -314,10 +314,16 @@ export const applyConnection = async (
             // Renovar el token no es conectar: la fecha se queda.
             ...(plan.action !== 'renew' && { connectedAt: new Date(), disconnectedAt: null }),
             ...(freshDetails && { displayPhoneNumber: freshDetails.displayPhoneNumber ?? null, verifiedName: freshDetails.verifiedName ?? null }),
+            // El PIN del registro (`registerIfNeeded`); sin él, se queda el que hubiera.
+            ...(twoStepPin && { twoStepPin }),
         } },
         { upsert: true, new: true },
     );
-    await Waba.updateOne({ _id: waba._id }, { $set: { tokenWhatsapp } });
+    await Waba.updateOne({ _id: waba._id }, {
+        $set: { tokenWhatsapp },
+        // Ya está en la línea: deja de estar pendiente.
+        ...(twoStepPin && { $unset: { [`pendingTwoStepPins.${phoneNumberId}`]: '' } }),
+    });
 
     if (plan.action === 'replace') {
         await finishPendingReplace(accountId);
