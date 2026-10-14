@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
 import {
-    PERMISSIONS, can, conversationScope, inLineScope, lineScope, permissionsFor,
+    PERMISSIONS, can, canReceive, conversationScope, inLineScope, lineScope, permissionsFor,
 } from '../src/utils/permissions.js';
 
 const ALL = Object.keys(PERMISSIONS);
@@ -71,4 +71,17 @@ test('permissionsFor: la lista de cada rol, en el orden de la tabla', () => {
     assert.deepEqual(permissionsFor(auth('supervisor')),
         ['contacts.import', 'contacts.delete', 'tags.manage', 'templates.manage', 'campaigns.manage']);
     assert.deepEqual(permissionsFor(auth('agent')), []);
+});
+
+test('canReceive: los eventos de una línea, a quien la ve; los de campañas, además con el permiso', () => {
+    const agent = auth('agent', ['l1']);
+    assert.equal(canReceive(agent, { lineId: 'l1' }), true);
+    assert.equal(canReceive(agent, { lineId: 'l2' }), false);
+    assert.equal(canReceive(agent, { lineId: null }), false, 'una conversación sin línea');
+    assert.equal(canReceive(agent, { lineId: 'l1', permission: 'campaigns.manage' }), false);
+    assert.equal(canReceive(auth('supervisor', ['l1']), { lineId: 'l1', permission: 'campaigns.manage' }), true);
+    assert.equal(canReceive(auth('supervisor', ['l1']), { lineId: 'l2', permission: 'campaigns.manage' }), false);
+    assert.equal(canReceive(auth('owner'), { lineId: 'l2', permission: 'campaigns.manage' }), true);
+    assert.equal(canReceive(agent, {}), true, 'lo de toda la cuenta (un contacto)');
+    assert.equal(canReceive(agent), true);
 });

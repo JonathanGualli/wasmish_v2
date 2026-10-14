@@ -41,6 +41,13 @@ SSE y sus eventos, no leídos, y la UI del chat: hilo, bandeja, conversación nu
 - `contact_updated`: `{ id, marketingOptOut, marketingOptOutAt }` en una baja o alta de publicidad; `{ id }` en un cambio de número. `useContacts` refresca la lista y la ficha, y `useConversations` la bandeja (el título y el teléfono salen del contacto)
 - `campaign_progress`: la campaña serializada con `stats` — como mucho uno por segundo y campaña, y siempre en los cambios de estado
 - `message_created` y `message_status` llevan `campaignId` si el mensaje salió de una campaña. Una campaña grande dispara cientos seguidos: la bandeja y Contactos los agrupan con `useThrottledInvalidate`
+- `access_changed`: `{}` — a la persona a la que le cambiaron el rol, las líneas o el estado, justo antes de cerrarle la conexión (`disconnectUser`, Fase 3). El navegador reconecta solo; qué hace la UI con él llega con la UI de la Fase 3
+
+**A quién llega cada evento** (Fase 3, 2026-10-14). Cada conexión guarda la sesión con la que se abrió, y `sendToAccount(accountId, event, data, meta)` solo escribe en las que cumplen `canReceive(auth, meta)` (`utils/permissions.js`):
+- `message_created`, `message_status` y `conversation_updated` llevan `{ lineId }` de su conversación: llegan a quien ve esa línea. Una conversación sin línea, solo a quien ve todas.
+- `campaign_progress` lleva `{ lineId, permission: 'campaigns.manage' }`: el agente no lo recibe.
+- `contact_updated` no lleva `meta`: los contactos son de toda la cuenta.
+- La conexión abierta conserva la sesión con la que se abrió: por eso, **cualquier** cambio de acceso la cierra (`disconnectUser(userId)`), no solo quitar una línea.
 
 ### `unreadCount`
 

@@ -177,7 +177,9 @@ const procesarEntrante = async (inbound, messageData, contacts) => {
             status: 'delivered',
             unreadCount: conversation.unreadCount,
             windowExpiresAt: getWindowExpiry(conversation.lastInboundAt)?.toISOString() ?? null,
-        }
+        },
+        // Solo a quien ve esa línea (Fase 3).
+        { lineId: conversation.lineId ?? null },
     );
 
     // Log the created message.
@@ -300,6 +302,10 @@ const procesarEstado = async (inbound, statusData) => {
 
     await message.save();
 
+    // El acuse va a quien ve la línea de su conversación (Fase 3; revisión de
+    // Codex del plan): con estados, errores y campaña, no es de toda la cuenta.
+    const statusConversation = await Conversation.findById(message.conversationId).select('lineId').lean();
+
     sendToAccount(
         String(inbound.accountId),
         'message_status', {
@@ -315,7 +321,8 @@ const procesarEstado = async (inbound, statusData) => {
             // Si salió de una campaña: su detalle se refresca con esto,
             // porque las entregas y lecturas llegan horas después de enviar.
             ...(message.campaignId && { campaignId: String(message.campaignId) }),
-        }
+        },
+        { lineId: statusConversation?.lineId ?? null },
     );
 
     // Solo se registran los fallos. Cada mensaje enviado genera dos o tres acuses

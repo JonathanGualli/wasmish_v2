@@ -17,7 +17,7 @@ Express 5 app. Entry: `index.js` → `app.js`. Patrón: `routes/` → `controlle
 - **Lo que no sabe de HTTP** va en `utils/` (puro, con test en `tests/`) o en `services/` (con BD). Los controladores no repiten esa lógica.
 - **Un solo camino por envío:** `processMessageSending` (texto y archivos) y `processTemplateSending` (plantillas, también las campañas y la API pública). No se escribe otro → [whatsapp-envio.md](../docs/arquitectura/whatsapp-envio.md).
 - **A Meta solo se llama desde `libs/whatsapp.js`**, que deja el error de Meta en `err.waErrorCode` / `err.waErrorDetail`. Los tests nunca llaman a Meta.
-- **Tiempo real:** `sendToAccount(accountId, evento, datos)`, a todas las pestañas abiertas de la cuenta; los eventos y sus payloads están en [chat.md § Eventos SSE](../docs/arquitectura/chat.md#eventos-sse-y-sus-payloads).
+- **Tiempo real:** `sendToAccount(accountId, evento, datos, meta)`, a las pestañas abiertas de la cuenta que pueden verlo (`meta = { lineId, permission }`, `canReceive`; un evento de una conversación lleva siempre su `lineId`), y `disconnectUser(userId)` al cambiarle el acceso a alguien; los eventos y sus payloads están en [chat.md § Eventos SSE](../docs/arquitectura/chat.md#eventos-sse-y-sus-payloads).
 - **Índices únicos** sobre un campo que puede ser `null`: parciales con `$type`, no `sparse` (ver abajo).
 
 ## Comandos y tests

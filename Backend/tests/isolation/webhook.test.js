@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    seedAccount, connectWhatsapp, postWebhook, openStream, Contact, Conversation, Line, Message, User,
+    seedAccount, seedMember, connectWhatsapp, postWebhook, openStream, Contact, Conversation, Line, Message, User,
 } from './helpers.js';
 
 const a = await seedAccount('A', { seq: 1 });
@@ -12,6 +12,12 @@ const b = await seedAccount('B', { seq: 2 });
 await connectWhatsapp(a);
 await connectWhatsapp(b);
 const A_NUMBER = `99${a.seq}`;
+
+// Fase 3: la cuenta EQ con dos líneas (701 y 702) y un agente solo de la 701.
+const team = await seedAccount('EQ', { seq: 40, maxLines: 2 });
+const { lineId: team1 } = await connectWhatsapp(team, { phoneNumberId: '701' });
+const { lineId: team2 } = await connectWhatsapp(team, { phoneNumberId: '702' });
+const agentEq = await seedMember(team, { role: 'agent', lineIds: [team1], label: 'AGEQ' });
 
 const textMessage = (from, body) => ({
     contacts: [{ profile: { name: 'Cliente de prueba' }, wa_id: from }],
@@ -206,4 +212,35 @@ test('el webhook guarda el número visible de la línea si no lo tenía', async 
     const res = await postWebhook(A_NUMBER, { ...value, metadata: { phone_number_id: A_NUMBER, display_phone_number: '15550000991' } });
     assert.equal(res.status, 200);
     assert.equal((await Line.findOne({ accountId: a.accountId, phoneNumberId: A_NUMBER }).lean()).displayPhoneNumber, '15550000991');
+});
+
+// Fase 3 (revisión de Codex del plan): lo que entra por una línea, y los acuses
+// de sus mensajes, solo llegan a quien ve esa línea.
+test('un entrante y un acuse de la línea 702 llegan al owner y no al agente de la 701', async () => {
+    const contact = await Contact.create({ userId: team.accountId, phone: '593990007070', name: 'cliente de la 702' });
+    const conversation = await Conversation.create({
+        userId: team.accountId, contactId: contact._id, contactPhone: contact.phone, phoneNumberId: '702', lineId: team2,
+    });
+    await Message.create({
+        conversationId: conversation._id, direction: 'outbound', sender: 'me', text: 'hola',
+        waMessageId: 'wamid.linea.702', status: 'sent', timestamp: new Date(),
+    });
+    const ownerStream = await openStream(team);
+    const agentStream = await openStream(agentEq);
+    try {
+        assert.equal((await postWebhook('702', {
+            statuses: [{ id: 'wamid.linea.702', status: 'delivered', timestamp: String(Math.floor(Date.now() / 1000)), recipient_id: contact.phone }],
+        })).status, 200);
+        assert.equal((await postWebhook('702', textMessage(contact.phone, 'entrante de la 702'))).status, 200);
+        assert.ok(await ownerStream.waitFor('event: message_status', 2000), 'el owner no recibió el acuse');
+        assert.ok(await ownerStream.waitFor('entrante de la 702', 2000), 'el owner no recibió el entrante');
+        assert.equal(await agentStream.waitFor('event: message_status', 300), false, 'el agente recibió el acuse de otra línea');
+        assert.equal(await agentStream.waitFor('entrante de la 702', 300), false, 'el agente recibió el entrante de otra línea');
+
+        assert.equal((await postWebhook('701', textMessage('593990007071', 'entrante de la 701'))).status, 200);
+        assert.ok(await agentStream.waitFor('entrante de la 701', 2000), 'el agente no recibió lo de su línea');
+    } finally {
+        await ownerStream.close();
+        await agentStream.close();
+    }
 });

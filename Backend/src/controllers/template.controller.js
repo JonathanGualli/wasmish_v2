@@ -597,7 +597,7 @@ export const processTemplateSending = async ({
         type: msg.type, hasMedia: Boolean(msg.mediaFile),
         mediaFilename: msg.mediaFilename, mediaSize: msg.mediaSize,
         ...(campaignId && { campaignId: String(campaignId) }),
-    });
+    }, { lineId: targetConversation.lineId ?? null });
 
     return { msg, conversation: targetConversation, waMessageId, status, errorCode, errorDetail };
 

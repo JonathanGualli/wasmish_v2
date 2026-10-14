@@ -140,7 +140,7 @@ export const processMessageSending = async ({
         failedAt: status === 'failed' ? now : null,
     });
 
-    sendToAccount(String(line.accountId), 'message_created', serializeMessage(msg));
+    sendToAccount(String(line.accountId), 'message_created', serializeMessage(msg), { lineId: line.lineId ?? null });
 
     return { msg, waMessageId, status, errorCode, errorDetail };
 };
@@ -179,7 +179,7 @@ const lastInboundOf = async (conversation) => {
 // con el chat a la vista no basta. El filtro `unreadCount > 0` evita escribir y
 // emitir si ya estaba leída. Nunca lanza: quien la llama ya hizo lo suyo (cargó
 // los mensajes, envió la respuesta) y un fallo aquí solo deja el contador igual.
-const markConversationRead = async (userId, conversationId) => {
+const markConversationRead = async (userId, conversationId, lineId) => {
     try {
         const result = await Conversation.updateOne(
             { _id: conversationId, userId, unreadCount: { $gt: 0 } },
@@ -189,7 +189,7 @@ const markConversationRead = async (userId, conversationId) => {
             sendToAccount(String(userId), 'conversation_updated', {
                 id: String(conversationId),
                 unreadCount: 0,
-            });
+            }, { lineId: lineId ?? null });
         }
     } catch (error) {
         console.error('No se pudo marcar la conversación como leída:', error.message);
@@ -252,7 +252,7 @@ export const sendMessageController = async (req, res) => {
 
         // Responder desde el chat es haberlo leído, aunque Meta lo rechace: se
         // leyó y se intentó contestar.
-        await markConversationRead(accountId, msg.conversationId);
+        await markConversationRead(accountId, msg.conversationId, line.lineId);
 
         return res.status(201).json(serializeMessage(msg));
     } catch (error) {
@@ -317,7 +317,7 @@ export const sendMediaMessageController = async (req, res) => {
         });
 
         // Responder con un archivo también es haberlo leído.
-        await markConversationRead(userId, conversation._id);
+        await markConversationRead(userId, conversation._id, conversation.lineId);
 
         return res.status(201).json(serializeMessage(msg));
     } catch (error) {
@@ -391,7 +391,7 @@ export const listMessages = async (req, res) => {
         const items = msgs.map(serializeMessage);
 
         // Solo marcamos como leído al ABRIR la conversación (primera página, sin cursor)
-        if (!hasCursor) await markConversationRead(userId, conversation._id);
+        if (!hasCursor) await markConversationRead(userId, conversation._id, conversation.lineId);
 
         return res.json({ items, nextCursor });
 
@@ -452,7 +452,7 @@ export const sendConversationTemplateController = async (req, res) => {
         });
 
         // Responder con una plantilla también es haberlo leído.
-        await markConversationRead(userId, conversation._id);
+        await markConversationRead(userId, conversation._id, conversation.lineId);
         return responderEnvioPlantilla(res, resultado);
     } catch (error) {
         return responderErrorPlantilla(res, error);
