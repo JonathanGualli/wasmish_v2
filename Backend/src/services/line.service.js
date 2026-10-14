@@ -1,9 +1,9 @@
-import crypto from 'node:crypto';
 import Account from '../models/account.model.js';
 import Line from '../models/line.model.js';
 import User from '../models/user.model.js';
 import Waba from '../models/waba.model.js';
 import { findAccountOwner } from './account.service.js';
+import { withAccountLock } from './account.lock.service.js';
 import { legacyUserFields, nextDefaultLine, ownerConnection, pickSendingLineId, planConnection, sendingLineFor } from '../utils/line.js';
 import { inLineScope, lineScope } from '../utils/permissions.js';
 import {
@@ -195,30 +195,14 @@ export const findConversationLine = (conversation) =>
 
 // --- Escribir la conexión (Fase 2c) ------------------------------------------
 
-const LOCK_MS = 30 * 1000;
-
 /**
- * Ejecuta `fn` con el candado de líneas de la cuenta: un cambio de líneas a la
- * vez por cuenta, también entre procesos (lo guarda `Account.lineLock` en
- * Mongo, sin transacciones). Ocupado → 409 `LINE_BUSY_MESSAGE`. Caduca a los
- * 30 s (o `ttlMs`, si `fn` espera más a Meta), por si un proceso muere con él;
- * se suelta solo si sigue siendo suyo.
+ * Ejecuta `fn` con el candado de líneas de la cuenta (`withAccountLock` con
+ * `lineLock`): un cambio de líneas a la vez por cuenta. Ocupado → 409
+ * `LINE_BUSY_MESSAGE`. Caduca a los 30 s (o `ttlMs`, si `fn` espera más a Meta).
  */
-export const withLineLock = async (accountId, fn, { ttlMs = LOCK_MS } = {}) => {
-    const token = crypto.randomUUID();
-    const now = new Date();
-    const taken = await Account.findOneAndUpdate(
-        { _id: accountId, $or: [{ lineLock: null }, { 'lineLock.expiresAt': { $lte: now } }] },
-        { $set: { lineLock: { token, expiresAt: new Date(now.getTime() + ttlMs) } } },
-        { projection: { _id: 1 } },
-    );
-    if (!taken) throw statusError(409, LINE_BUSY_MESSAGE, LINE_ERROR_CODES.busy);
-    try {
-        return await fn();
-    } finally {
-        await Account.updateOne({ _id: accountId, 'lineLock.token': token }, { $set: { lineLock: null } });
-    }
-};
+export const withLineLock = (accountId, fn, { ttlMs } = {}) => withAccountLock(accountId, 'lineLock', fn, {
+    ttlMs, onBusy: () => statusError(409, LINE_BUSY_MESSAGE, LINE_ERROR_CODES.busy),
+});
 
 // La copia que le toca al owner de la cuenta: la de su línea por defecto.
 const legacyFieldsOf = async (accountId) => {

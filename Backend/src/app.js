@@ -17,6 +17,7 @@ import contactRoutes from './routes/contact.routes.js';
 import tagRoutes from './routes/tag.routes.js';
 import campaignRoutes from './routes/campaign.routes.js';
 import lineRoutes from './routes/line.routes.js';
+import teamRoutes from './routes/team.routes.js';
 
 import { APP_VERSION } from './config.js';
 
@@ -72,6 +73,7 @@ app.use("/api", mediaRoutes);
 app.use("/api", contactRoutes);
 app.use("/api", tagRoutes);
 app.use("/api", lineRoutes);
+app.use("/api", teamRoutes);
 app.use("/api", campaignRoutes);
 
 export default app; 

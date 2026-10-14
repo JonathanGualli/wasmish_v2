@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    seedAccount, request, assertNoLeak, assertHasOwn, connectWhatsapp, onMeta, metaCalls,
+    seedAccount, seedMember, ANONYMOUS, ApiKey, request, assertNoLeak, assertHasOwn, connectWhatsapp, onMeta, metaCalls,
     Contact, Conversation, Line, Message, User, Waba, PNG,
 } from './helpers.js';
 
@@ -237,4 +237,43 @@ test('GET /chats devuelve el lineId de cada conversación', async () => {
     const entry = res.body.find(item => item.id === String(conversation._id));
     assert.equal(entry.lineId, String(conversation.lineId));
     assert.ok(res.body.some(item => item.lineId === null));   // la sembrada, anterior a las líneas
+});
+
+// Fase 3: con varias personas en la cuenta, cada mensaje dice quién lo envió
+// desde el chat y de dónde salió (chat, campaña o API).
+test('quién envió y de dónde salió: el chat lo firma; la API no', async () => {
+    const e = await seedAccount('QE', { seq: 30 });
+    const { lineId } = await connectWhatsapp(e);
+    await Conversation.updateOne({ _id: e.conversationId }, { lineId, lastInboundAt: new Date() });
+    const agent = await seedMember(e, { role: 'agent', lineIds: [lineId], label: 'QEA' });
+    onMeta(async (config) => (config.method === 'post' && config.url.endsWith('/messages')
+        ? { data: { messages: [{ id: `wamid.qe.${Math.random()}` }] } }
+        : undefined));
+    try {
+        const reply = await request(agent, 'POST', `/chats/${e.conversationId}/messages`, { text: 'hola, soy el agente', temporalId: 'q1' });
+        assert.equal(reply.status, 201, reply.text);
+        assert.deepEqual(reply.body.sentBy, { id: agent.userId, name: 'QEA miembro' });
+        assert.deepEqual(reply.body.origin, { kind: 'chat' });
+
+        const template = await request(agent, 'POST', `/chats/${e.conversationId}/template`, { templateName: e.templateName, language: 'es' });
+        assert.equal(template.status, 200, template.text);
+        const stored = await Message.findById(template.body.id).lean();
+        assert.equal(String(stored.sentBy), agent.userId);
+        assert.equal(stored.origin, 'chat');
+
+        const list = await request(e, 'GET', `/chats/${e.conversationId}/messages`);
+        const mine = list.body.items.find(item => item.id === reply.body.id);
+        assert.deepEqual(mine.sentBy, { id: agent.userId, name: 'QEA miembro' });
+
+        const key = 'wm_qe_origen';
+        await ApiKey.create({ userId: e.accountId, keyHash: (await import('../../src/utils/crypto.js')).hashApiKey(key), keyPreview: 'wm_', name: 'v1' });
+        const viaApi = await request(ANONYMOUS, 'POST', '/v1/templates/send',
+            { destinationNumber: e.phone, templateName: e.templateName }, { Authorization: `Bearer ${key}` });
+        assert.equal(viaApi.status, 200, viaApi.text);
+        const apiMessage = await Message.findOne({ waMessageId: viaApi.body.waMessageId }).lean();
+        assert.equal(apiMessage.origin, 'api');
+        assert.equal(apiMessage.sentBy ?? null, null);
+    } finally {
+        onMeta(null);
+    }
 });

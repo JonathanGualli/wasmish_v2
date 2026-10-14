@@ -17,13 +17,16 @@ import { cleanFilename } from "../services/template.media.service.js";
 import { MEDIA_DIR } from "../config.js";
 import { findConversationLine, findStartLine } from "../services/line.service.js";
 import { conversationScope } from "../utils/permissions.js";
+import { messageOrigin, messageSender } from "../utils/message.origin.js";
+import Campaign from "../models/campaign.model.js";
 
 /**
  * Un mensaje tal como lo ve el frontend: la lista del chat, la respuesta de un
  * envío y su `message_created`. Del archivo solo se dice si lo hay: se pide por
  * /api/media/<id del mensaje>, que comprueba de quién es.
  */
-export const serializeMessage = (msg) => ({
+// `campaignNames` (id → nombre): para decir de qué campaña salió (ver `messageOrigin`).
+export const serializeMessage = (msg, { campaignNames } = {}) => ({
     id: String(msg._id),
     conversationId: String(msg.conversationId),
     sender: msg.sender,
@@ -46,6 +49,9 @@ export const serializeMessage = (msg) => ({
     templateName: msg.templateName ?? null,
     // Con él la UI optimista reconoce su mensaje cuando vuelve por el SSE.
     temporalId: msg.temporalId ?? undefined,
+    // Quién lo envió y de dónde salió (Fase 3): con varias personas, el chat lo dice.
+    sentBy: messageSender(msg),
+    origin: messageOrigin(msg, campaignNames),
 });
 
 // A Meta: un texto o, si hay archivo, el archivo. El archivo se sube primero
@@ -91,7 +97,9 @@ export const processMessageSending = async ({
     temporalId,
     destinationNumber,
     contactName,
-    attachment = null }) => {
+    attachment = null,
+    // `{ userId, name }` de quien lo envía desde el chat (Fase 3).
+    sender = null }) => {
 
     const token = decrypt(line.tokenWhatsapp);
     const { phoneNumberId } = line;
@@ -129,6 +137,9 @@ export const processMessageSending = async ({
         conversationId: targetConversation._id,
         direction: 'outbound',
         sender: 'me',
+        sentBy: sender?.userId ?? null,
+        sentByName: sender?.name ?? null,
+        origin: 'chat',
         waMessageId,
         text: messageText,
         ...(attachment && attachmentFields(attachment)),
@@ -199,6 +210,9 @@ const markConversationRead = async (userId, conversationId, lineId) => {
 // Una conversación de la cuenta de la sesión A SU ALCANCE (Fase 3: las de sus
 // líneas). Filtrar por la cuenta es la comprobación de propiedad; por las
 // líneas, la de acceso: lo que no ve responde 404, igual que lo ajeno.
+// Quien envía desde el chat, para firmar el mensaje (Fase 3).
+const senderOf = (auth) => ({ userId: auth.userId, name: auth.name ?? null });
+
 const findOwnConversation = (auth, id) =>
     mongoose.isValidObjectId(id)
         ? Conversation.findOne({ _id: id, userId: auth.accountId, ...conversationScope(auth) })
@@ -248,6 +262,7 @@ export const sendMessageController = async (req, res) => {
             temporalId,
             destinationNumber,
             contactName,
+            sender: senderOf(req.auth),
         });
 
         // Responder desde el chat es haberlo leído, aunque Meta lo rechace: se
@@ -308,6 +323,7 @@ export const sendMediaMessageController = async (req, res) => {
         const { msg } = await processMessageSending({
             line,
             conversation,
+            sender: senderOf(req.auth),
             temporalId: String(req.headers['x-temporal-id'] ?? '').slice(0, 64) || undefined,
             attachment: {
                 kind, buffer, mimeType, file, caption,
@@ -388,7 +404,13 @@ export const listMessages = async (req, res) => {
             ? msgs[msgs.length -1].timestamp.toISOString()
             : null;
         
-        const items = msgs.map(serializeMessage);
+        // El nombre de las campañas de esta página, de una vez (para «Campaña «…»»).
+        const campaignIds = [...new Set(msgs.filter(msg => msg.campaignId).map(msg => String(msg.campaignId)))];
+        const campaigns = campaignIds.length > 0
+            ? await Campaign.find({ _id: { $in: campaignIds }, userId }).select('name').lean()
+            : [];
+        const campaignNames = new Map(campaigns.map(campaign => [String(campaign._id), campaign.name]));
+        const items = msgs.map(msg => serializeMessage(msg, { campaignNames }));
 
         // Solo marcamos como leído al ABRIR la conversación (primera página, sin cursor)
         if (!hasCursor) await markConversationRead(userId, conversation._id, conversation.lineId);
@@ -445,6 +467,8 @@ export const sendConversationTemplateController = async (req, res) => {
         const resultado = await processTemplateSending({
             line,
             conversation,
+            sender: senderOf(req.auth),
+            origin: 'chat',
             templateName: req.body.templateName,
             language: req.body.language,
             parameters: req.body.parameters ?? [],
@@ -471,6 +495,8 @@ export const startConversationTemplateController = async (req, res) => {
 
         const resultado = await processTemplateSending({
             line,
+            sender: senderOf(req.auth),
+            origin: 'chat',
             destinationNumber: req.body.destinationNumber,
             contactName: req.body.contactName || undefined,
             source: 'manual',

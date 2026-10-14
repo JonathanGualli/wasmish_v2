@@ -112,6 +112,25 @@ const messageSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Campaign',
     },
+    // Quién lo envió desde el chat (Fase 3), con su nombre COPIADO: el historial
+    // lo dice aunque esa persona ya no esté o cambie de nombre. null en los de
+    // campañas, la API y los anteriores al campo.
+    sentBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        default: null,
+    },
+    sentByName: {
+        type: String,
+        default: null,
+    },
+    // De dónde salió un saliente: el chat, una campaña o la API. null en los
+    // entrantes y los anteriores al campo (ver `messageOrigin`).
+    origin: {
+        type: String,
+        enum: ['chat', 'campaign', 'api', null],
+        default: null,
+    },
 }, { 
     timestamps: true,
 });

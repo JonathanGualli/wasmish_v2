@@ -14,5 +14,8 @@ export const updateLineSchema = z.object({
 // PATCH /admin/accounts/:accountId/limits — solo el superadmin.
 export const accountLimitsSchema = z.object({
     maxLines: z.number({ error: 'maxLines tiene que ser un número' }).int('maxLines tiene que ser entero')
-        .min(1, 'Mínimo 1 línea').max(50, 'Máximo 50 líneas'),
-});
+        .min(1, 'Mínimo 1 línea').max(50, 'Máximo 50 líneas').optional(),
+    // Las personas de la cuenta (Fase 3): activas más invitaciones pendientes.
+    maxUsers: z.number({ error: 'maxUsers tiene que ser un número' }).int('maxUsers tiene que ser entero')
+        .min(1, 'Mínimo 1 usuario').max(200, 'Máximo 200 usuarios').optional(),
+}).refine(body => body.maxLines !== undefined || body.maxUsers !== undefined, { message: 'Nada que cambiar: manda maxLines o maxUsers' });

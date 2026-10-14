@@ -38,6 +38,12 @@ const accountSchema = new mongoose.Schema({
         type: new mongoose.Schema({ token: String, expiresAt: Date }, { _id: false }),
         default: null,
     },
+    // El candado de los cambios del equipo que ocupan una plaza (invitar,
+    // reactivar): sin él, dos a la vez podían pasarse de `maxUsers` (Fase 3).
+    teamLock: {
+        type: new mongoose.Schema({ token: String, expiresAt: Date }, { _id: false }),
+        default: null,
+    },
     // Un reemplazo de número a medias (con `maxLines: 1`, conectar otro número
     // desconecta el anterior): se guarda ANTES de activar el nuevo, y la
     // siguiente operación de líneas lo termina si se cortó (`finishPendingReplace`).

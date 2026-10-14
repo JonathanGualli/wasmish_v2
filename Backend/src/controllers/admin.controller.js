@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import Account from "../models/account.model.js";
+import Invitation from "../models/invitation.model.js";
 import Line from "../models/line.model.js";
 import User from "../models/user.model.js";
 import Conversation from "../models/conversation.model.js";
@@ -20,7 +21,8 @@ export const getPlatformStats = async (req, res) => {
         const desde = new Date(Date.now() - SIETE_DIAS_MS);
 
         const [totalClients, connectedClients, messages7d, failed7d] = await Promise.all([
-            User.countDocuments({}),
+            // Clientes = cuentas, no personas (Fase 3: una cuenta tiene varias).
+            Account.countDocuments({}),
             // Las cuentas con alguna línea activa (Fase 2c: `Line` es la fuente).
             Line.distinct('accountId', { status: 'active' }).then(ids => ids.length),
             Message.countDocuments({ timestamp: { $gte: desde } }),
@@ -41,14 +43,16 @@ export const listClients = async (req, res) => {
         const limit = Math.min(Math.max(parseInt(req.query.limit) || 10, 1), 50);
         const skip  = (page - 1) * limit;
 
+        // Una fila por cuenta: la de su owner (Fase 3: las demás personas de la
+        // cuenta no son clientes aparte).
         const [users, totalCount] = await Promise.all([
-            User.find({})
+            User.find({ role: 'owner' })
                 .select('name email rol status accountId waBusinessId createdAt')
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit)
                 .lean(),
-            User.countDocuments({}),
+            User.countDocuments({ role: 'owner' }),
         ]);
 
         // Los datos cuelgan de la cuenta (`userId` = cuenta), no del usuario: en
@@ -56,13 +60,26 @@ export const listClients = async (req, res) => {
         const accountIds = users.map(u => u.accountId);
 
         // Las líneas activas y el máximo de cada cuenta (Fase 2c).
-        const [accounts, activeLines] = await Promise.all([
+        const now = new Date();
+        const [accounts, activeLines, activeUsers, pendingInvitations] = await Promise.all([
             Account.find({ _id: { $in: accountIds } }).select('limits').lean(),
             Line.aggregate([
                 { $match: { accountId: { $in: accountIds.filter(Boolean) }, status: 'active' } },
                 { $group: { _id: '$accountId', active: { $sum: 1 }, wabas: { $addToSet: '$wabaId' } } },
             ]),
+            // Las personas activas y las invitaciones pendientes de cada cuenta (Fase 3).
+            User.aggregate([
+                { $match: { accountId: { $in: accountIds.filter(Boolean) }, status: { $ne: 'inactive' } } },
+                { $group: { _id: '$accountId', count: { $sum: 1 } } },
+            ]),
+            Invitation.aggregate([
+                { $match: { accountId: { $in: accountIds.filter(Boolean) }, acceptedAt: null, expiresAt: { $gt: now } } },
+                { $group: { _id: '$accountId', count: { $sum: 1 } } },
+            ]),
         ]);
+        const maxUsersOf = new Map(accounts.map(a => [String(a._id), a.limits?.maxUsers ?? 1]));
+        const activeUsersOf = new Map(activeUsers.map(u => [String(u._id), u.count]));
+        const pendingOf = new Map(pendingInvitations.map(i => [String(i._id), i.count]));
         const maxLinesOf = new Map(accounts.map(a => [String(a._id), a.limits?.maxLines ?? 1]));
         const activeLinesOf = new Map(activeLines.map(l => [String(l._id), l]));
 
@@ -125,6 +142,11 @@ export const listClients = async (req, res) => {
                 waBusinessId: maskId(u.waBusinessId),
                 extraWabas: Math.max((lines?.wabas.filter(Boolean).length ?? 0) - 1, 0),
                 lines: { active: lines?.active ?? 0, max: maxLinesOf.get(String(u.accountId)) ?? 1 },
+                users: {
+                    active: activeUsersOf.get(String(u.accountId)) ?? 0,
+                    pending: pendingOf.get(String(u.accountId)) ?? 0,
+                    max: maxUsersOf.get(String(u.accountId)) ?? 1,
+                },
                 conversations: entry.conversations,
                 messages: entry.messages,
                 failed: entry.failed,
@@ -148,13 +170,20 @@ export const updateAccountLimits = async (req, res) => {
         const account = mongoose.isValidObjectId(accountId)
             ? await Account.findOneAndUpdate(
                 { _id: accountId },
-                { $set: { 'limits.maxLines': req.body.maxLines } },
+                { $set: {
+                    ...(req.body.maxLines !== undefined && { 'limits.maxLines': req.body.maxLines }),
+                    ...(req.body.maxUsers !== undefined && { 'limits.maxUsers': req.body.maxUsers }),
+                } },
                 { new: true, projection: { limits: 1 } },
             ).lean()
             : null;
         if (!account) return res.status(404).json([{ message: 'La cuenta no existe.' }]);
 
-        return res.json({ accountId: String(account._id), maxLines: account.limits.maxLines });
+        return res.json({
+            accountId: String(account._id),
+            maxLines: account.limits?.maxLines ?? 1,
+            maxUsers: account.limits?.maxUsers ?? 1,
+        });
     } catch (error) {
         return res.status(500).json([{ message: error.message }]);
     }

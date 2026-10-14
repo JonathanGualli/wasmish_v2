@@ -77,6 +77,7 @@ export const CampaignRecipient = await load('campaign.recipient.model.js');
 export const ApiKey = await load('api.keys.model.js');
 export const Waba = await load('waba.model.js');
 export const Line = await load('line.model.js');
+export const Invitation = await load('invitation.model.js');
 
 const server = app.listen(0);
 const baseUrl = `http://127.0.0.1:${server.address().port}/api`;
