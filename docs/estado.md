@@ -26,7 +26,8 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En curso
 
-Nada en curso.
+- **Wasmish en el celular: app instalable (PWA) y avisos push** — rama `app-movil-plan` (spec, brief de la UI y plan), empezado el 2026-10-14 por Claude. Plan: `docs/superpowers/plans/2026-10-14-app-movil.md`; spec: `docs/superpowers/specs/2026-10-14-app-movil-design.md`; brief para Claude Design: `docs/superpowers/specs/2026-10-14-app-movil-brief-ui.md`.
+  Hecho: spec, brief y plan · Falta: la revisión de Codex del plan, y después los cuatro PRs (backend, app instalable, activar los avisos con su UI, Chats en el teléfono). Los dos últimos esperan el diseño · Sin probar: nada todavía.
 
 <!-- Formato de una entrada:
 - **<qué>** — rama `<rama>`, PR #<n>, empezado el <fecha> por <Claude|Codex|Jonathan>.
@@ -35,6 +36,7 @@ Nada en curso.
 
 ## Lo siguiente
 
+- **Prioridad desde el 2026-10-14: Wasmish en el celular** (ver «En curso»). Lo de abajo espera hasta terminarlo, salvo errores.
 - **Multi-línea y multi-agente, fases 1 a 4** (diseño aprobado, sin preguntas abiertas: `docs/superpowers/specs/2026-10-11-multi-linea-multi-agente-design.md`). Fases 1, 2a y 2b en producción (la 2b, enrutar por línea, desde la 1.0.14). La **Fase 2c** está en producción desde la 1.0.15.
   - **Para encender varias líneas** (plan de la 2c, «Después de desplegar»):
     1. La prueba del token: ¿un token nuevo del Embedded Signup cubre todos los números del WABA? (spec § 2.2). Se puede hacer en producción con la cuenta de prueba de Jonathan (`maxLines: 2`), pero necesita **dos números en el mismo WABA**: hoy tiene uno conectado. Una cuenta con dos líneas de WABA distintos ya se probó el 2026-10-14.
