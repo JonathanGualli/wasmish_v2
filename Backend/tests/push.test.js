@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    buildInboundPush, isAllowedPushEndpoint, isGonePushError, pushRecipientIds,
+    buildInboundPush, isAllowedPushEndpoint, isGonePushError, pushLineName, pushRecipientIds,
 } from '../src/utils/push.js';
 
 test('isAllowedPushEndpoint acepta los servicios de push conocidos', () => {
@@ -53,6 +53,37 @@ test('buildInboundPush sin nombre usa lo mismo que la bandeja', () => {
     assert.equal(push.title, '593991234567');
     assert.equal(push.conversationId, 'c9');
     assert.equal(push.url, '/private/chats?c=c9');
+});
+
+test('buildInboundPush: un adjunto lleva su emoji; sin texto, el tipo (diseño D1)', () => {
+    const body = (type, text, caption = null) => buildInboundPush({ conversationId: 'c1', contact: {}, text, type, caption }).body;
+    assert.equal(body('image', 'Imagen'), '📷 Foto');
+    assert.equal(body('video', 'Video'), '🎥 Video');
+    assert.equal(body('audio', 'Audio'), '🎤 Audio');
+    assert.equal(body('document', 'Documento'), '📄 Documento');
+    assert.equal(body('image', 'Mira el pedido', 'Mira el pedido'), '📷 Mira el pedido');
+    // Lo que no es un archivo, como en la bandeja.
+    assert.equal(body('location', 'Ubicación: Oficina'), 'Ubicación: Oficina');
+    assert.equal(body('text', 'hola'), 'hola');
+});
+
+test('buildInboundPush: con varias líneas, la línea va en el título y no se corta', () => {
+    const push = buildInboundPush({ conversationId: 'c1', contact: { name: 'María López' }, text: 'hola', lineName: 'Ventas' });
+    assert.equal(push.title, 'María López · Ventas');
+    const long = buildInboundPush({ conversationId: 'c1', contact: { name: 'N'.repeat(100) }, text: 'hola', lineName: 'Ventas' });
+    assert.equal(long.title.length, 60);
+    assert.ok(long.title.endsWith('… · Ventas'));
+});
+
+test('pushLineName: el nombre de la línea solo si la cuenta tiene más de una', () => {
+    const ventas = { _id: 'l1', name: 'Ventas', phoneNumberId: '111' };
+    const soporte = { _id: 'l2', name: null, verifiedName: 'Soporte SA', phoneNumberId: '222' };
+    assert.equal(pushLineName([ventas], 'l1'), null);
+    assert.equal(pushLineName([ventas, soporte], 'l1'), 'Ventas');
+    assert.equal(pushLineName([ventas, soporte], 'l2'), 'Soporte SA');
+    // Una conversación sin línea, o de una línea que ya no está activa.
+    assert.equal(pushLineName([ventas, soporte], null), null);
+    assert.equal(pushLineName([ventas, soporte], 'l9'), null);
 });
 
 test('pushRecipientIds aplica la regla del SSE', () => {

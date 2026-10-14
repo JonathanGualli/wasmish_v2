@@ -136,8 +136,9 @@ test('un entrante en la línea 1 avisa al owner y al agente de esa línea, y a n
 
     const conversation = await Conversation.findOne({ userId: pc.accountId, lineId: line1, contactPhone: '593990006301' }).lean();
     const [call] = sentTo(endpoints.owner);
+    // PC tiene dos líneas: la del mensaje va en el título (sin nombre, su número).
     assert.deepEqual(call.payload, {
-        title: 'Cliente de prueba', body: text, conversationId: String(conversation._id), url: `/private/chats?c=${conversation._id}`,
+        title: 'Cliente de prueba · 631', body: text, conversationId: String(conversation._id), url: `/private/chats?c=${conversation._id}`,
     });
     assert.deepEqual(call.options, { TTL: 43200, urgency: 'high' });
 });

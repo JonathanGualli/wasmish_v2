@@ -1,8 +1,9 @@
 import webpush from 'web-push';
 import PushSubscription from '../models/push.subscription.model.js';
 import User from '../models/user.model.js';
+import Line from '../models/line.model.js';
 import { PUSH_ENABLED, VAPID_PRIVATE_KEY, VAPID_PUBLIC_KEY, VAPID_SUBJECT } from '../config.js';
-import { buildInboundPush, isGonePushError, pushRecipientIds } from '../utils/push.js';
+import { buildInboundPush, isGonePushError, pushLineName, pushRecipientIds } from '../utils/push.js';
 
 // ---------------------------------------------------------------------------
 // Avisos push (app móvil): al llegar un mensaje, un aviso a cada dispositivo de
@@ -52,7 +53,7 @@ const sendOne = async (subscription, payload) => {
  * El webhook la llama sin esperar: nunca rechaza, y ni el texto ni el endpoint
  * van al log (son conversaciones privadas de los clientes de nuestros clientes).
  */
-export const notifyInbound = async ({ accountId, lineId, conversationId, contact, text }) => {
+export const notifyInbound = async ({ accountId, lineId, conversationId, contact, text, type, caption }) => {
     if (!PUSH_ENABLED) return;
     try {
         const subscriptions = await PushSubscription.find({ accountId }).lean();
@@ -65,7 +66,11 @@ export const notifyInbound = async ({ accountId, lineId, conversationId, contact
         const targets = subscriptions.filter(subscription => recipients.has(String(subscription.memberId)));
         if (targets.length === 0) return;
 
-        const payload = JSON.stringify(buildInboundPush({ conversationId, contact, text }));
+        // Con varias líneas, la del mensaje va en el título.
+        const activeLines = await Line.find({ accountId, status: 'active' })
+            .select('name verifiedName displayPhoneNumber phoneNumberId').lean();
+        const lineName = pushLineName(activeLines, lineId);
+        const payload = JSON.stringify(buildInboundPush({ conversationId, contact, text, type, caption, lineName }));
         await Promise.allSettled(targets.map(subscription => sendOne(subscription, payload)));
     } catch (error) {
         console.error('No se pudieron enviar los avisos push de un entrante:', { error: error.message });

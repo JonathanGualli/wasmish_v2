@@ -191,6 +191,8 @@ const procesarEntrante = async (inbound, messageData, contacts) => {
         conversationId: conversation._id,
         contact,
         text: entrante.text,
+        type: entrante.type,
+        caption: entrante.caption,
     });
 
     // Log the created message.
