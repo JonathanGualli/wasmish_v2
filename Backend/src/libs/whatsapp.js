@@ -112,7 +112,7 @@ export const getWabaPhoneNumbers = async ({ token, waBusinessId, after = null })
     return whatsappApi.get(
         `/${waBusinessId}/phone_numbers`,
         {
-            params: { fields: 'id,display_phone_number,verified_name', limit: 100, ...(after && { after }) },
+            params: { fields: 'id,display_phone_number,verified_name,platform_type', limit: 100, ...(after && { after }) },
             headers: { Authorization: `Bearer ${token}` },
         }
     );
@@ -135,6 +135,18 @@ export const subscribeAppToWaba = async ({ token, waBusinessId }) => {
     return whatsappApi.post(
         `/${waBusinessId}/subscribed_apps`,
         {},
+        { headers: { Authorization: `Bearer ${token}` } }
+    );
+};
+
+// Registra el número en la Cloud API: sin esto, uno recién conectado por el
+// Embedded Signup no puede enviar (133010). `pin` (6 dígitos) pasa a ser el PIN
+// de la verificación en dos pasos del número. Meta admite 10 intentos por
+// número cada 72 h.
+export const registerPhoneNumber = async ({ token, phoneNumberId, pin }) => {
+    return whatsappApi.post(
+        `/${phoneNumberId}/register`,
+        { messaging_product: 'whatsapp', pin },
         { headers: { Authorization: `Bearer ${token}` } }
     );
 };
