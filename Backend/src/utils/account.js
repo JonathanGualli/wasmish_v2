@@ -30,6 +30,8 @@ export const sessionAuthFor = (user) => {
     return {
         userId: String(user._id),
         accountId: String(user.accountId),
+        // Para firmar lo que envía desde el chat (`Message.sentByName`).
+        name: user.name,
         role: user.role,
         lineIds: (user.lineIds ?? []).map(String),
         isSuperadmin: Boolean(user.isSuperadmin),
