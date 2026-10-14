@@ -19,7 +19,10 @@ const A_NUMBER = '991';
 // (`undefined`: sin el campo); el resto de llamadas, OK. `onRegister(config)`
 // puede lanzar: con `waErrorCode` es un rechazo de Meta (como lo deja el
 // interceptor de `whatsappApi`), sin él, una respuesta que no llegó.
-const fakeMeta = (numbers, { onPhoneNumbers, platformType = 'CLOUD_API', onRegister } = {}) => onMeta(async (config) => {
+const fakeMeta = (numbers, options = {}) => onMeta(async (config) => {
+    const { onPhoneNumbers, onRegister } = options;
+    // `platformType: undefined` explícito es «sin el campo»; sin la opción, `CLOUD_API`.
+    const platformType = 'platformType' in options ? options.platformType : 'CLOUD_API';
     if (config.url === '/oauth/access_token') return { data: { access_token: 'token-nuevo' } };
     if (config.url.endsWith('/phone_numbers')) {
         await onPhoneNumbers?.();
@@ -495,7 +498,9 @@ test('PUT /users/update-user-token-whatsapp: el formulario manual también regis
     assert.match(await linePin(r, '982'), /^\d{6}$/);
 });
 
-test('un número ya registrado, sin platform_type o con uno desconocido no se registra', async () => {
+test('un número ya registrado, sin platform_type o con uno desconocido no se registra', async (t) => {
+    // El aviso del log dice el valor que llegó: así se ve que «sin el campo» de verdad llega sin él.
+    const warn = t.mock.method(console, 'warn', () => {});
     for (const [i, platformType] of ['CLOUD_API', undefined, 'ALGO_NUEVO'].entries()) {
         const r = await seedAccount(`RC${i}`, { seq: 82 + i });
         fakeMeta([`983${i}`], { platformType });
@@ -506,6 +511,7 @@ test('un número ya registrado, sin platform_type o con uno desconocido no se re
         assert.deepEqual(registerCalls(before), [], String(platformType));
         assert.equal(await linePin(r, `983${i}`), null);
     }
+    assert.deepEqual(warn.mock.calls.map(call => call.arguments.slice(1)), [['9831', null], ['9832', 'ALGO_NUEVO']]);
 });
 
 // Regresión que vigila: renovar el token de un número ya registrado (el cliente de la API pública) no puede tocar su PIN.
@@ -613,4 +619,35 @@ test('si Meta rechaza el registro: 502 con el código, el errorCode de Meta, nin
     }]);
     assert.equal(await Line.countDocuments({ accountId: r.accountId, status: 'active' }), 0);
     assert.deepEqual(await pendingPins(r), {});
+});
+
+// Regresión que vigila (revisión de Codex): dos conexiones del mismo número a la
+// vez registraban con PINs distintos, y el rechazo de una borraba el PIN de la otra.
+test('dos conexiones del mismo número a la vez: la segunda no registra (409 line_busy) y el PIN de la primera se conserva', async () => {
+    const r = await seedAccount('RJ', { seq: 91 });
+    let firstPin = null;
+    let registering;
+    const inRegister = new Promise(resolve => { registering = resolve; });
+    let loseResponse;
+    const lost = new Promise((_, reject) => { loseResponse = () => reject(new Error('timeout')); });
+    fakeMeta(['989'], { platformType: 'NOT_APPLICABLE', onRegister: async (config) => {
+        firstPin = JSON.parse(config.data).pin;
+        registering();
+        await lost;
+    } });
+    const first = connectEmbedded(r, '989');
+    await inRegister;
+    const before = metaCalls.length;
+    const second = await connectEmbedded(r, '989');
+    assert.equal(second.status, 409, second.text);
+    assert.equal(second.body[0].code, 'line_busy');
+    assert.deepEqual(registerCalls(before), []);
+    loseResponse();
+    assert.equal((await first).status, 502);
+
+    fakeMeta(['989']);
+    const res = await connectEmbedded(r, '989');
+    onMeta(null);
+    assert.equal(res.status, 200, res.text);
+    assert.equal(await linePin(r, '989'), firstPin);
 });
