@@ -14,7 +14,8 @@ export const TagFilter = ({ tags, value, onChange, onManage }: {
     tags: Tag[];
     value: string[];
     onChange: (tagIds: string[]) => void;
-    onManage: () => void;
+    /** Sin ella (el rol no gestiona etiquetas, Fase 3), no hay «Gestionar etiquetas». */
+    onManage?: () => void;
 }) => {
     const [query, setQuery] = useState('');
     const chosen = tags.filter(tag => value.includes(tag.id));
@@ -84,13 +85,15 @@ export const TagFilter = ({ tags, value, onChange, onManage }: {
                         </div>
                         <div className="flex items-center gap-2.5 px-3.5 py-2.5 bg-brand-bg border-t border-brand-raised">
                             {tags.length > 1 && <span className="text-xs text-brand-muted">Muestra a quien tenga alguna.</span>}
-                            <button
-                                type="button"
-                                onClick={() => { close(); onManage(); }}
-                                className="ml-auto min-h-9 text-[12.5px] font-semibold text-brand-accent-strong cursor-pointer hover:underline"
-                            >
-                                Gestionar etiquetas
-                            </button>
+                            {onManage && (
+                                <button
+                                    type="button"
+                                    onClick={() => { close(); onManage(); }}
+                                    className="ml-auto min-h-9 text-[12.5px] font-semibold text-brand-accent-strong cursor-pointer hover:underline"
+                                >
+                                    Gestionar etiquetas
+                                </button>
+                            )}
                         </div>
                     </>
                 )}

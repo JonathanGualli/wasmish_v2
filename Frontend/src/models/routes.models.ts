@@ -1,6 +1,8 @@
 export const AppRoutes = {
     login: '/login',
     register: '/register',
+    // Aceptar una invitación al equipo (Fase 3): pública, con el token en la ruta.
+    invite: '/invite',
     private: {
         root: '/private',
         dashboard: 'dashboard',

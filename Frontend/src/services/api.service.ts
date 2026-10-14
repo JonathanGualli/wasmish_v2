@@ -7,6 +7,8 @@ import type { BulkTagResult, Tag, TagSelectionSummary } from '../models/tag.mode
 import type { CampaignAudienceInput, CampaignDraftInput, CampaignRecipientsInput, CreateCampaignInput, RecipientState } from '../models/campaign.model';
 import type { Message } from '../models/message.mode';
 import type { Line, LineUpdate, LinesResponse } from '../models/line.model';
+import type { InvitationInfo, InvitationInput, MemberChange, TeamInvitation, TeamMember, TeamResponse } from '../models/team.model';
+import type { User } from '../models/user.mode';
 
 const API_URL = '/api'; // configuracion puesta en vite.config.ts
 // const API_URL = 'https://wasmish-api.solventyc.com/api';
@@ -17,6 +19,8 @@ interface SSEHandlers {
     onConversationUpdated?: (event: MessageEvent) => void;
     onContactUpdated?: (event: MessageEvent) => void;
     onCampaignProgress?: (event: MessageEvent) => void;
+    /** Le cambiaron el acceso (rol, líneas, estado): el servidor cierra justo después (Fase 3). */
+    onAccessChanged?: () => void;
     onError?: (err: ErrorEvent) => void;
     /** La conexión se abrió (también al reconectar). */
     onOpen?: () => void;
@@ -153,6 +157,10 @@ export const createSSEConnection = (
     if (handlers.onCampaignProgress) {
         source.addEventListener("campaign_progress", handlers.onCampaignProgress);
     }
+    if (handlers.onAccessChanged) {
+        const onAccessChanged = handlers.onAccessChanged;
+        source.addEventListener("access_changed", () => onAccessChanged());
+    }
 
     source.onmessage = (event) => {
         console.debug("📨 Default message:", event.data);
@@ -266,10 +274,10 @@ export const disconnectLineService = async (id: string): Promise<Line> => {
     return data;
 };
 
-// Cuántas líneas puede tener una cuenta (superadmin).
-export const updateAccountLimitsService = async (accountId: string, maxLines: number) => {
-    const { data } = await axios.patch(`${API_URL}/admin/accounts/${accountId}/limits`, { maxLines }, { withCredentials: true });
-    return data as { accountId: string; maxLines: number };
+// Cuántas líneas y personas puede tener una cuenta (superadmin). Lo que no se manda no cambia.
+export const updateAccountLimitsService = async (accountId: string, limits: { maxLines?: number; maxUsers?: number }) => {
+    const { data } = await axios.patch(`${API_URL}/admin/accounts/${accountId}/limits`, limits, { withCredentials: true });
+    return data as { accountId: string; maxLines: number; maxUsers: number };
 };
 
 // Servicio para obtener metricas globales de la plataforma (superadmin)
@@ -445,3 +453,37 @@ export const campaignActionService = async (id: string, action: 'pause' | 'resum
     const { data } = await axios.post(`${API_URL}/campaigns/${id}/${action}`, undefined, { withCredentials: true });
     return data;
 }
+
+// --- Equipo (Fase 3) -----------------------------------------------------------
+
+export const getTeamService = async (): Promise<TeamResponse> => {
+    const { data } = await axios.get(`${API_URL}/team`, { withCredentials: true });
+    return data;
+};
+
+/** El `token` sale una sola vez: el enlace se arma con él y no se puede volver a pedir. */
+export const inviteMemberService = async (input: InvitationInput): Promise<{ invitation: TeamInvitation; token: string }> => {
+    const { data } = await axios.post(`${API_URL}/team/invitations`, input, { withCredentials: true });
+    return data;
+};
+
+export const revokeInvitationService = async (id: string): Promise<void> => {
+    await axios.delete(`${API_URL}/team/invitations/${id}`, { withCredentials: true });
+};
+
+export const updateMemberService = async (id: string, change: MemberChange): Promise<TeamMember> => {
+    const { data } = await axios.patch(`${API_URL}/team/members/${id}`, change, { withCredentials: true });
+    return data;
+};
+
+/** Público: lo que dice la página de aceptar la invitación. */
+export const getInvitationService = async (token: string): Promise<InvitationInfo> => {
+    const { data } = await axios.get(`${API_URL}/invitations/${encodeURIComponent(token)}`, { withCredentials: true });
+    return data;
+};
+
+/** Público: crea la persona y deja la sesión abierta (como el login). */
+export const acceptInvitationService = async (token: string, input: { name: string; password: string }): Promise<User> => {
+    const { data } = await axios.post(`${API_URL}/invitations/${encodeURIComponent(token)}/accept`, input, { withCredentials: true });
+    return data;
+};

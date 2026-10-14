@@ -9,6 +9,7 @@ import { Logo, LogoLockup } from '../Logo/Logo';
 import { useConversations } from '../../hooks/useConversations';
 import { initials } from '../../utils/initials';
 import { APP_VERSION } from '../../config/version';
+import { ROLE_LABEL, hasTeam } from "../../utils/roleDisplay";
 
 interface Props {
   collapsed: boolean;
@@ -26,7 +27,8 @@ export const Sidebar = ({ collapsed, toggle, isMobile }: Props) => {
   const location = useLocation();
   const [valueSelected, setValueSelected] = useState('');
 
-  const { user, logOut } = useAuthContext();
+  const { user, logOut, can } = useAuthContext();
+  const canCampaigns = can('campaigns.manage');
   const { data: conversations } = useConversations();
 
   // El contador de la barra es el total de conversaciones con mensajes sin leer.
@@ -40,7 +42,8 @@ export const Sidebar = ({ collapsed, toggle, isMobile }: Props) => {
       { icon: <Rocket size={18} />,         text: 'Inicio rápido',  value: 'quickStart', path: `${AppRoutes.private.root}/${AppRoutes.private.quickStart}`, badge: undefined as number | undefined },
       { icon: <MessageSquare size={18} />,  text: 'Chats',          value: 'chats',      path: `${AppRoutes.private.root}/${AppRoutes.private.chats}`,      badge: unread },
       { icon: <Users size={18} />,          text: 'Contactos',      value: 'contacts',   path: `${AppRoutes.private.root}/${AppRoutes.private.contacts}`,   badge: undefined },
-      { icon: <Send size={18} />,           text: 'Campañas',       value: 'campaigns',  path: `${AppRoutes.private.root}/${AppRoutes.private.campaigns}`,  badge: undefined },
+      // El agente no tiene campañas (Fase 3): no se le enseñan, ni apagadas.
+      ...(canCampaigns ? [{ icon: <Send size={18} />, text: 'Campañas', value: 'campaigns', path: `${AppRoutes.private.root}/${AppRoutes.private.campaigns}`, badge: undefined }] : []),
       { icon: <LayoutTemplate size={18} />, text: 'Plantillas',     value: 'templates',  path: `${AppRoutes.private.root}/${AppRoutes.private.templates}`,  badge: undefined },
       { icon: <BookOpen size={18} />,       text: 'Documentación',  value: 'docs',       path: `${AppRoutes.private.root}/${AppRoutes.private.docs}`,       badge: undefined },
     ];
@@ -52,7 +55,7 @@ export const Sidebar = ({ collapsed, toggle, isMobile }: Props) => {
     }
 
     return items;
-  }, [user?.isSuperadmin, unread]);
+  }, [user?.isSuperadmin, unread, canCampaigns]);
 
   const allItems = useMemo(
     () => [...navItems, { value: 'settings', path: `${AppRoutes.private.root}/${AppRoutes.private.settings}` }],
@@ -129,8 +132,9 @@ export const Sidebar = ({ collapsed, toggle, isMobile }: Props) => {
         ))}
       </nav>
 
-      {/* Bloque inferior — ajustes, salida y la identidad de quien responde */}
-      <div className="mt-auto grid gap-[3px] shrink-0">
+      {/* Bloque inferior — ajustes, salida y la identidad de quien responde. La
+          columna no crece con el texto: «Owner · Nombre largo del negocio» se corta. */}
+      <div className="mt-auto grid grid-cols-[minmax(0,1fr)] gap-[3px] shrink-0">
         <div className="h-px bg-brand-deep-active mx-2 mb-3" />
 
         <SidebarItem
@@ -164,7 +168,12 @@ export const Sidebar = ({ collapsed, toggle, isMobile }: Props) => {
               <div className="text-[13px] font-semibold text-white truncate">
                 {user?.name ?? 'Mi cuenta'}
               </div>
-              {user?.email && (
+              {/* Con equipo, el rol junto al negocio: así cada uno sabe por qué ve lo que ve. */}
+              {hasTeam(user) && user?.role ? (
+                <div className="text-[11px] text-brand-on-deep-muted truncate">
+                  {ROLE_LABEL[user.role]}{user.account?.name ? ` · ${user.account.name}` : ''}
+                </div>
+              ) : user?.email && (
                 <div className="text-[11px] text-brand-on-deep-muted truncate">
                   {user.email}
                 </div>

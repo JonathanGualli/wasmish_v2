@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { SearchInput } from "../../../components/SearchInput/SearchInput";
 import { useLocation, useNavigate } from "react-router-dom";
 import { AlertCircle, ArrowRight, Download, Plus, RefreshCw, Search, Send, Tag as TagIcon, Users } from "lucide-react";
@@ -15,7 +15,7 @@ import { joinTagNames, tagsFromIds } from "../../../utils/tags";
 import { useCampaignDraft } from "../../../hooks/useCampaignDraft";
 import { useNewCampaign } from "../../../hooks/useNewCampaign";
 import { ConfirmDialog } from "../../../components/Dialog/ConfirmDialog";
-import { CampaignPaths, ContactImportPath } from "../../../models/routes.models";
+import { CampaignPaths, ContactImportPath, ContactsPath } from "../../../models/routes.models";
 import type { Contact, ContactFilter, ContactsNavigationState } from "../../../models/contact.model";
 import { hasSeenPickIntro, markPickIntroSeen, newCampaignDraft } from "../../../utils/campaignDraft";
 import { pluralize } from "../../../utils/campaignDisplay";
@@ -28,6 +28,7 @@ import { SelectionBar } from "./SelectionBar";
 import { TagFilter } from "./TagFilter";
 import { TagManager } from "./TagManager";
 import { BulkTagDialog } from "./BulkTagDialog";
+import { useAuthContext } from "../../../context/auth.context";
 
 const FILTERS: { value: ContactFilter; label: string }[] = [
     { value: 'all', label: 'Todos' },
@@ -61,6 +62,12 @@ type PendingQueryChange = { query?: string; filter?: ContactFilter; tagIds?: str
  */
 export const ContactsPage = () => {
     const navigate = useNavigate();
+    // Fase 3: el agente ve y edita contactos, pero no importa ni actúa en bloque
+    // (crear una campaña, etiquetar). Lo que no puede hacer no se enseña.
+    const { can } = useAuthContext();
+    const canImport = can('contacts.import');
+    const canManageTags = can('tags.manage');
+    const canBulk = can('campaigns.manage') || canManageTags;
     const navigationState = useLocation().state as ContactsNavigationState | null;
     const pickMode = navigationState?.campaignPick ?? null;
     const draftStore = useCampaignDraft();
@@ -88,6 +95,22 @@ export const ContactsPage = () => {
     // La primera vez que se eligen destinatarios, una explicación corta.
     const [showPickIntro, setShowPickIntro] = useState(() => pickMode === 'new' && !hasSeenPickIntro());
     const selection = useContactSelection(editing);
+
+    // Si le quitan el permiso con la página abierta (Fase 3, `access_changed`;
+    // revisión de Codex del PR #37), se cierra lo que ya no puede usar: la
+    // selección, los diálogos de etiquetas y el modo de elegir destinatarios.
+    const canCampaigns = can('campaigns.manage');
+    const { clear: clearSelection } = selection;
+    useEffect(() => {
+        if (!canBulk) clearSelection();
+        if (!canManageTags) {
+            setTagging(false);
+            setManagingTags(false);
+        }
+    }, [canBulk, canManageTags, clearSelection]);
+    useEffect(() => {
+        if (pickMode && !canCampaigns) navigate(ContactsPath, { replace: true });
+    }, [pickMode, canCampaigns, navigate]);
 
     const search = useDebouncedValue(query.trim(), 300);
     const { data, isLoading, isError, isPlaceholderData, refetch } =
@@ -221,13 +244,15 @@ export const ContactsPage = () => {
                     title="Aún no tienes contactos"
                     action={
                         <div className="flex flex-wrap items-center justify-center gap-2">
+                            {canImport && (
+                                <div className="h-10">
+                                    <CustomButton onClick={() => navigate(ContactImportPath)}>
+                                        <span className="flex items-center gap-2"><Download size={15} />Importar desde Excel</span>
+                                    </CustomButton>
+                                </div>
+                            )}
                             <div className="h-10">
-                                <CustomButton onClick={() => navigate(ContactImportPath)}>
-                                    <span className="flex items-center gap-2"><Download size={15} />Importar desde Excel</span>
-                                </CustomButton>
-                            </div>
-                            <div className="h-10">
-                                <CustomButton variant="outline" onClick={() => setPanel({ mode: 'create' })}>Crear uno a mano</CustomButton>
+                                <CustomButton variant={canImport ? 'outline' : 'primary'} onClick={() => setPanel({ mode: 'create' })}>Crear uno a mano</CustomButton>
                             </div>
                         </div>
                     }
@@ -291,7 +316,7 @@ export const ContactsPage = () => {
                 renderMobileRow={contact => (
                     <ContactMobileRow contact={contact} tags={tagsFromIds(tags, contact.tagIds)} highlightIds={tagIds} />
                 )}
-                selection={{
+                selection={!canBulk && !pickMode ? undefined : {
                     isSelected: contact => selection.isSelected(contact.id),
                     onToggle: contact => selection.toggle(contact.id),
                     pageState,
@@ -337,11 +362,13 @@ export const ContactsPage = () => {
                     // Sin contactos, las mismas acciones están en el centro: arriba sobrarían (y serían dos mentas).
                     actions={!isEmpty && (
                         <div className="w-full sm:w-auto flex gap-2">
-                            <div className="flex-1 sm:flex-none h-10">
-                                <CustomButton variant="outline" onClick={() => navigate(ContactImportPath)}>
-                                    <span className="flex items-center justify-center gap-2"><Download size={15} />Importar</span>
-                                </CustomButton>
-                            </div>
+                            {canImport && (
+                                <div className="flex-1 sm:flex-none h-10">
+                                    <CustomButton variant="outline" onClick={() => navigate(ContactImportPath)}>
+                                        <span className="flex items-center justify-center gap-2"><Download size={15} />Importar</span>
+                                    </CustomButton>
+                                </div>
+                            )}
                             <div className="flex-1 sm:flex-none h-10">
                                 <CustomButton onClick={() => setPanel({ mode: 'create' })}>
                                     <span className="flex items-center justify-center gap-2"><Plus size={16} />Nuevo contacto</span>
@@ -371,7 +398,7 @@ export const ContactsPage = () => {
                                 {f.label}
                             </button>
                         ))}
-                        <TagFilter tags={tags} value={tagIds} onChange={changeTags} onManage={() => setManagingTags(true)} />
+                        <TagFilter tags={tags} value={tagIds} onChange={changeTags} onManage={canManageTags ? () => setManagingTags(true) : undefined} />
                     </div>
                     {data && (
                         <span className="md:ml-auto font-mono text-xs text-brand-muted tabular-nums">
@@ -403,9 +430,9 @@ export const ContactsPage = () => {
             {renderBody()}
 
             {/* Hueco para que la barra de selección no tape la paginación. */}
-            {showSelectionBar && <div className="h-24" />}
+            {showSelectionBar && canBulk && <div className="h-24" />}
 
-            {showSelectionBar && (
+            {showSelectionBar && canBulk && (
                 <SelectionBar
                     count={selectedCount}
                     note={selection.excludedCount > 0 ? pluralize(selection.excludedCount, 'excluido', 'excluidos') : undefined}
@@ -413,7 +440,7 @@ export const ContactsPage = () => {
                     actionLabel={selectionActionLabel()}
                     onAction={handleSelectionAction}
                     onClear={selection.clear}
-                    extraAction={!pickMode && (
+                    extraAction={!pickMode && canManageTags && (
                         // Eligiendo destinatarios no: ahí la barra es solo «Continuar».
                         <button
                             type="button"
@@ -429,7 +456,7 @@ export const ContactsPage = () => {
                 />
             )}
 
-            {tagging && (
+            {tagging && canManageTags && (
                 <BulkTagDialog
                     selection={selection.recipientsInput}
                     count={selectedCount}
@@ -443,7 +470,7 @@ export const ContactsPage = () => {
                 />
             )}
 
-            <TagManager open={managingTags} onClose={() => setManagingTags(false)} onShowContacts={tag => showTagContacts(tag.id)} />
+            <TagManager open={managingTags && canManageTags} onClose={() => setManagingTags(false)} onShowContacts={tag => showTagContacts(tag.id)} />
 
             <ContactPanel state={panel} onChange={setPanel} />
 

@@ -23,6 +23,7 @@ import { ContactForm } from './ContactForm';
 import { ReferralCard } from '../../../components/Contact/ReferralCard';
 import { LineWindowList } from '../../../components/Contact/LineWindowList';
 import { useLines } from '../../../hooks/useLines';
+import { useAuthContext } from "../../../context/auth.context";
 
 export type ContactPanelState =
     | { mode: 'view'; id: string }
@@ -192,6 +193,7 @@ const ContactDetails = ({ contact, onClose, onEdit }: {
     const { data: allTags = [] } = useTags();
     const tags = tagsFromIds(allTags, contact.tagIds);
     const [confirmingDelete, setConfirmingDelete] = useState(false);
+    const { can } = useAuthContext();
 
     const hasConversation = Boolean(contact.conversationId);
     const title = contactTitle(contact);
@@ -360,7 +362,7 @@ const ContactDetails = ({ contact, onClose, onEdit }: {
                             Tiene conversación: su historial se conserva. Puedes editar sus datos.
                         </span>
                     </div>
-                ) : (
+                ) : can('contacts.delete') && (
                     <button
                         type="button"
                         onClick={() => setConfirmingDelete(true)}

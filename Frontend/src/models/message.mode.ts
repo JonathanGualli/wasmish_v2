@@ -50,4 +50,8 @@ export interface Message {
   templateName?: string | null;
   /** Un archivo que se está enviando desde este navegador. */
   pending?: PendingUpload;
+  /** Quién lo envió desde el chat (Fase 3); el nombre es el de ese momento. */
+  sentBy?: { id: string; name: string | null } | null;
+  /** De dónde salió un saliente: el chat, una campaña o la API. `null` en los antiguos. */
+  origin?: { kind: 'chat' | 'api' } | { kind: 'campaign'; campaignName: string | null } | null;
 }

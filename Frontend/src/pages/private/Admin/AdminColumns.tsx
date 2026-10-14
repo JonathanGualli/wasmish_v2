@@ -1,6 +1,6 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import type { AdminClient } from "../../../models/admin.model";
-import { LinesLimitCell } from "./LinesLimitCell";
+import { LimitCell } from "./LimitCell";
 
 const formatDate = (value: string | null) => {
     if (!value) return '—';
@@ -53,7 +53,13 @@ export const adminClientColumns: ColumnDef<AdminClient>[] = [
     {
         header: 'Líneas',
         id: 'lines',
-        cell: ({ row }) => <LinesLimitCell client={row.original} />,
+        cell: ({ row }) => <LimitCell client={row.original} kind="lines" />,
+    },
+    {
+        // Personas activas e invitaciones pendientes / máximo (Fase 3).
+        header: 'Usuarios',
+        id: 'users',
+        cell: ({ row }) => <LimitCell client={row.original} kind="users" />,
     },
     {
         header: 'Convs',

@@ -5,6 +5,7 @@ import { LoginPage } from "./pages/public/LoginPage/LoginPage";
 import { PrivateGuard } from "./guard/PrivateGuard";
 import { PrivateRouter } from "./pages/private/PrivateRouter";
 import { SignUpPage } from "./pages/public/SignUpPage/SignUpPage";
+import { AcceptInvitationPage } from "./pages/public/AcceptInvitationPage/AcceptInvitationPage";
 
 export const AppRouter = () => {
     return (
@@ -13,6 +14,7 @@ export const AppRouter = () => {
                 <Route path="/" element={<Navigate to={AppRoutes.private.root} />} />
                 <Route path={AppRoutes.login} element={<LoginPage />} />
                 <Route path={AppRoutes.register} element={<SignUpPage/>}></Route>
+                <Route path={`${AppRoutes.invite}/:token`} element={<AcceptInvitationPage />} />
                 <Route element={< PrivateGuard />}>
                     <Route path={`${AppRoutes.private.root}/*`} element={<PrivateRouter/>}/>
             </ Route>

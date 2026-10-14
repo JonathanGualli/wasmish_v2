@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, type ReactNode } from "react";
 import { Navigate, Route } from "react-router-dom";
 import { RoutesWithNotFound } from "../../components/RoutersWithNotFound/RoutesWithNotFound";
 import { AppRoutes } from "../../models/routes.models";
@@ -20,6 +20,13 @@ import { useAuthContext } from "../../context/auth.context";
 const ImportContactsPage = lazy(() =>
     import("./Contacts/Import/ImportContactsPage").then(m => ({ default: m.ImportContactsPage })));
 
+// Lo que el rol no puede usar no existe para él (Fase 3): si entra a la ruta a
+// mano, o le quitan el permiso con la página abierta, vuelve a Inicio rápido.
+const RequirePermission = ({ action, children }: { action: string; children: ReactNode }) => {
+    const { can } = useAuthContext();
+    return can(action) ? children : <Navigate to={`${AppRoutes.private.root}/${AppRoutes.private.quickStart}`} replace />;
+};
+
 export const PrivateRouter = () => {
     const { user } = useAuthContext();
 
@@ -36,11 +43,11 @@ export const PrivateRouter = () => {
                 <Route path={AppRoutes.private.contacts} element={<ContactsPage />} />
                 <Route
                     path={`${AppRoutes.private.contacts}/import`}
-                    element={<Suspense fallback={null}><ImportContactsPage /></Suspense>}
+                    element={<RequirePermission action="contacts.import"><Suspense fallback={null}><ImportContactsPage /></Suspense></RequirePermission>}
                 />
-                <Route path={AppRoutes.private.campaigns} element={<CampaignsPage />} />
-                <Route path={`${AppRoutes.private.campaigns}/new`} element={<NewCampaignPage />} />
-                <Route path={`${AppRoutes.private.campaigns}/:id`} element={<CampaignDetailPage />} />
+                <Route path={AppRoutes.private.campaigns} element={<RequirePermission action="campaigns.manage"><CampaignsPage /></RequirePermission>} />
+                <Route path={`${AppRoutes.private.campaigns}/new`} element={<RequirePermission action="campaigns.manage"><NewCampaignPage /></RequirePermission>} />
+                <Route path={`${AppRoutes.private.campaigns}/:id`} element={<RequirePermission action="campaigns.manage"><CampaignDetailPage /></RequirePermission>} />
                 <Route path={AppRoutes.private.templates} element={<TemplatesPage />} />
                 <Route path={AppRoutes.private.docs} element={<DocsPage />} />
             </RoutesWithNotFound>
