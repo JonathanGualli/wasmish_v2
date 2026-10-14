@@ -14,7 +14,7 @@ import {
 } from "../services/template.media.service.js";
 import { MEDIA_DIR } from "../config.js";
 import { mimeParaServir, rutaDeArchivo } from "../utils/media.storage.js";
-import { findAccountWabas, findSendingLine } from "../services/line.service.js";
+import { findAccountWabas, findSendingLine, templateScopeFor } from "../services/line.service.js";
 import Line from "../models/line.model.js";
 import Waba from "../models/waba.model.js";
 import { LINE_NOT_FOUND_MESSAGE } from "../utils/whatsapp.line.js";
@@ -219,8 +219,8 @@ export const fakeTemplateSend = ({ contact, template }) => {
 
 export const syncTemplatesController = async (req, res) => {
     try {
-        // Las de cada WABA con alguna línea activa (Fase 2c).
-        const wabas = await findAccountWabas(req.auth.accountId);
+        // Las de cada WABA con alguna línea activa (Fase 2c) a su alcance (Fase 3).
+        const wabas = await findAccountWabas(req.auth.accountId, { lineIds: lineScope(req.auth) });
         if (wabas.length === 0) return res.status(400).json([{ message: "Token or Business ID is required" }]);
 
         let total = 0;
@@ -263,8 +263,12 @@ const findUserTemplates = (userId, wabas) =>
 const templateWabasFor = async (auth, lineId) => {
     const { accountId } = auth;
     if (lineId === undefined) {
-        const wabas = await findAccountWabas(accountId, { lineIds: lineScope(auth) });
-        return wabas.length > 0 ? wabas : null;
+        const scope = lineScope(auth);
+        const wabas = await findAccountWabas(accountId, { lineIds: scope });
+        if (wabas.length > 0) return wabas;
+        // Sin ninguno: quien ve todas, todas las de la cuenta (como antes);
+        // quien tiene líneas, ninguna (revisión de Codex del PR #34).
+        return scope === null ? null : [];
     }
     const line = mongoose.isValidObjectId(lineId) && inLineScope(auth, lineId)
         ? await Line.findOne({ _id: lineId, accountId }).lean() : null;
@@ -332,7 +336,7 @@ const saveUploadedHeaderMedia = async (req, template) => {
 /** PUT /templates/:templateId/header-media — el archivo de la cabecera de la plantilla. */
 export const uploadHeaderMediaController = async (req, res) => {
     try {
-        const template = await Template.findOne({ userId: req.auth.accountId, templateId: req.params.templateId });
+        const template = await Template.findOne({ userId: req.auth.accountId, templateId: req.params.templateId, ...await templateScopeFor(req.auth) });
         if (!template) return res.status(404).json([{ message: 'La plantilla no existe en tu cuenta.' }]);
 
         const { issue, media } = await saveUploadedHeaderMedia(req, template);
@@ -356,7 +360,7 @@ export const uploadHeaderMediaController = async (req, res) => {
  */
 export const uploadHeaderMediaFileController = async (req, res) => {
     try {
-        const template = await Template.findOne({ userId: req.auth.accountId, templateId: req.params.templateId }).lean();
+        const template = await Template.findOne({ userId: req.auth.accountId, templateId: req.params.templateId, ...await templateScopeFor(req.auth) }).lean();
         if (!template) return res.status(404).json([{ message: 'La plantilla no existe en tu cuenta.' }]);
 
         const { issue, media } = await saveUploadedHeaderMedia(req, template);
@@ -376,7 +380,7 @@ export const uploadHeaderMediaFileController = async (req, res) => {
 export const removeHeaderMediaController = async (req, res) => {
     try {
         const template = await Template.findOneAndUpdate(
-            { userId: req.auth.accountId, templateId: req.params.templateId },
+            { userId: req.auth.accountId, templateId: req.params.templateId, ...await templateScopeFor(req.auth) },
             { $set: { headerMedia: null } },
             { new: true },
         ).lean();

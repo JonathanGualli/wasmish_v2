@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
     seedAccount, seedMember, connectWhatsapp, request, onMeta, metaCalls, ANONYMOUS, PNG,
-    Account, ApiKey, Campaign, Conversation, Message,
+    Account, ApiKey, Campaign, Conversation, Message, Template,
 } from './helpers.js';
 
 const { hashApiKey } = await import('../../src/utils/crypto.js');
@@ -36,6 +36,20 @@ const campaign2 = await Campaign.create({
 
 const agent = await seedMember(a, { role: 'agent', lineIds: [l1], label: 'AG' });
 const supervisor = await seedMember(a, { role: 'supervisor', lineIds: [l1], label: 'SU' });
+
+// Revisión de Codex del PR #34: las plantillas son del WABA, y un WABA solo es
+// «suyo» si tiene alguna de sus líneas. La cuenta B tiene dos WABA: 901 en
+// waba-PB y 902 en waba-PB2 (con su plantilla); el supervisor solo tiene 901.
+const b = await seedAccount('PB', { seq: 2, maxLines: 2 });
+const { lineId: m1 } = await connectWhatsapp(b, { phoneNumberId: '901' });
+await connectWhatsapp(b, { phoneNumberId: '902', waBusinessId: 'waba-PB2' });
+const foreignTemplate = await Template.create({
+    userId: b.accountId, waBusinessId: 'waba-PB2', templateId: 'tpl-ajena-PB', name: 'plantilla_ajena_pb',
+    language: 'es', category: 'MARKETING', status: 'APPROVED', parameterFormat: 'POSITIONAL', buttons: [],
+    bodyText: 'ajena', header: { format: 'IMAGE', text: null }, headerMedia: b.headerMediaId,
+});
+const supervisorB = await seedMember(b, { role: 'supervisor', lineIds: [m1], label: 'SB' });
+const noLinesB = await seedMember(b, { role: 'agent', lineIds: [], label: 'NB' });
 
 const noMetaCalls = async (fn) => {
     const before = metaCalls.length;
@@ -213,4 +227,48 @@ test('la API key sigue llegando a todas las líneas: /v1 sin lineId sale por la 
     } finally {
         onMeta(null);
     }
+});
+
+test('GET /templates: sin ninguna línea, ninguna plantilla (no todas)', async () => {
+    const res = await request(noLinesB, 'GET', '/templates');
+    assert.equal(res.status, 200, res.text);
+    assert.equal(res.body.length, 0);
+    const asSupervisor = await request(supervisorB, 'GET', '/templates');
+    assert.ok(!asSupervisor.body.some(template => template.templateId === foreignTemplate.templateId));
+});
+
+test('el supervisor no toca la cabecera de una plantilla de otro WABA: 404, y la cabecera sigue', async () => {
+    for (const [method, url, body, headers] of [
+        ['DELETE', `/templates/${foreignTemplate.templateId}/header-media`],
+        ['PUT', `/templates/${foreignTemplate.templateId}/header-media`, PNG, { 'Content-Type': 'image/png' }],
+        ['POST', `/templates/${foreignTemplate.templateId}/header-media/files`, PNG, { 'Content-Type': 'image/png' }],
+    ]) {
+        const res = await request(supervisorB, method, url, body, headers);
+        assert.equal(res.status, 404, `${method} ${url}: ${res.text}`);
+    }
+    assert.equal(String((await Template.findById(foreignTemplate._id).lean()).headerMedia), b.headerMediaId);
+});
+
+test('sincronizar: solo los WABA de sus líneas', async () => {
+    const synced = [];
+    onMeta(async (config) => {
+        if (!config.url.endsWith('/message_templates')) return undefined;
+        synced.push(config.url);
+        return { data: { data: [] } };
+    });
+    try {
+        const res = await request(supervisorB, 'GET', '/templates/sync');
+        assert.equal(res.status, 200, res.text);
+        assert.deepEqual(synced, ['/waba-PB/message_templates']);
+    } finally {
+        onMeta(null);
+    }
+});
+
+test('campañas: una plantilla de otro WABA no se previsualiza ni se usa', async () => {
+    const preview = await request(supervisorB, 'POST', '/campaigns/preview', {
+        templateId: foreignTemplate.templateId, recipients: { mode: 'ids', contactIds: [b.contactId] },
+    });
+    assert.equal(preview.status, 200, preview.text);
+    assert.ok(!preview.text.includes('ajena'), 'enseña la plantilla de otro WABA');
 });

@@ -410,6 +410,19 @@ export const disconnectLine = (accountId, lineId) => withLineLock(accountId, asy
  * waBusinessId, tokenWhatsapp }` (token cifrado): lo que necesita
  * `syncTemplatesForWaba`. Las plantillas se listan y se sincronizan de todos.
  */
+/**
+ * Las plantillas a su alcance (Fase 3): son del WABA, y un WABA es «suyo» si
+ * tiene alguna de sus líneas (conectada o no). `{}` para quien ve todas; si no,
+ * `{ waBusinessId: { $in } }`, que con ninguna línea no encuentra nada.
+ */
+export const templateScopeFor = async (auth) => {
+    const scope = lineScope(auth);
+    if (scope === null) return {};
+    const wabaIds = await Line.distinct('wabaId', { _id: { $in: scope }, accountId: auth.accountId, wabaId: { $ne: null } });
+    const waBusinessIds = await Waba.distinct('waBusinessId', { _id: { $in: wabaIds }, accountId: auth.accountId });
+    return { waBusinessId: { $in: waBusinessIds } };
+};
+
 export const findAccountWabas = async (accountId, { lineIds = null } = {}) => {
     const wabaIds = await Line.distinct('wabaId', {
         accountId, status: 'active', wabaId: { $ne: null },
