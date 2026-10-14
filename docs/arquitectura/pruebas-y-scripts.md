@@ -48,8 +48,8 @@ cd Backend && npm run seed:contacts -- --clean      # borra contactos, conversac
 
 **Avisos push en local** (app móvil, 2026-10-14): sin claves VAPID en `Backend/.env` los avisos están apagados y todo lo demás funciona igual. Para probarlos:
 1. Generar un par de claves **una vez**: `cd Backend && npx web-push generate-vapid-keys`, y ponerlas en `Backend/.env` como `VAPID_PUBLIC_KEY` y `VAPID_PRIVATE_KEY`, con `VAPID_SUBJECT=mailto:<un correo>`. Las de local no son las de producción.
-2. Activar los avisos desde la app en `http://localhost:5173` (`localhost` cuenta como seguro: no hace falta HTTPS). En el celular sí hace falta: el frontend por ngrok, **sin tocar el webhook de Meta**.
-3. `npm run webhook:simulate` con la pestaña en segundo plano: llega el aviso.
+2. Lo que se puede comprobar solo con el backend: `npm test` y `npm run test:isolation` (`push.test.js`), y que `npm run webhook:simulate` guarda el mensaje como siempre, con y sin claves.
+3. **El aviso de verdad necesita el service worker y la UI de activar** (Tareas 4 a 6 del plan `docs/superpowers/plans/2026-10-14-app-movil.md`). Con ellas: activar los avisos desde la app en `http://localhost:5173` (`localhost` cuenta como seguro, no hace falta HTTPS; en el celular sí: el frontend por ngrok, **sin tocar el webhook de Meta**) y `npm run webhook:simulate` con la pestaña en segundo plano.
 
 **Las claves no se cambian:** cambiarlas invalida todas las suscripciones, y cada persona tendría que volver a activar los avisos. En los tests de aislamiento, `helpers.js` genera unas de usar y tirar y reemplaza el envío (`pushCalls`, `onPush`).
 

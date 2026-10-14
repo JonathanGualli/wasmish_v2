@@ -22,7 +22,9 @@ export const getPushConfig = (req, res) => res.json({ publicKey: PUSH_ENABLED ? 
 
 /**
  * POST /push/subscriptions — la persona ACTIVA los avisos en este navegador (un
- * toque suyo). Si el navegador era de otra persona, pasa a ser suyo.
+ * toque suyo). Si el endpoint era de otra persona, pasa a ser suyo. La app no
+ * lo provoca: al activar estrena endpoint, porque reasignar el mismo podía
+ * mandar a B un aviso de A que ya estaba saliendo (revisión de Codex del PR #42).
  */
 export const savePushSubscription = async (req, res) => {
     if (!PUSH_ENABLED) return res.status(503).json(PUSH_DISABLED);
