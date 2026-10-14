@@ -22,8 +22,8 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En curso
 
-- **Registrar el número en la Cloud API al conectarlo y guardar su PIN** — rama `registrar-numero`, empezado el 2026-10-13 por Claude.
-  Hecho: el plan (`docs/superpowers/plans/2026-10-13-registrar-numero.md`) · Falta: la revisión del plan por Codex y las tres tareas · Sin probar: nada todavía. Sin esto, un número nuevo conectado por el Embedded Signup no puede enviar (133010).
+- **Registrar el número en la Cloud API al conectarlo y guardar su PIN** — rama `registrar-numero`, PR #27, empezado el 2026-10-13 por Claude.
+  Hecho: el plan (`docs/superpowers/plans/2026-10-13-registrar-numero.md`, revisado por Codex), el registro con el PIN guardado, `GET /api/lines/:id/pin` y el brief de la UI (`docs/superpowers/specs/2026-10-13-pin-linea-brief-ui.md`) · Falta: la revisión del código por Codex; la UI del PIN, cuando Claude Design devuelva el diseño (otro PR) · Sin probar: contra Meta de verdad. Se prueba después de desplegar, con el número nuevo y una cuenta de prueba en producción (plan, «Al terminar»): sobre todo, que un número nuevo llega con `platform_type: 'NOT_APPLICABLE'`.
 
 <!-- Formato de una entrada:
 - **<qué>** — rama `<rama>`, PR #<n>, empezado el <fecha> por <Claude|Codex|Jonathan>.
