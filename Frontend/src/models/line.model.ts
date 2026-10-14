@@ -17,6 +17,8 @@ export interface Line {
     createdAt: string;
     connectedAt: string | null;
     disconnectedAt: string | null;
+    /** Si Wasmish guardó el PIN de dos pasos del número (el PIN se pide aparte, `GET /lines/:id/pin`). */
+    hasTwoStepPin: boolean;
 }
 
 export interface LinesResponse {

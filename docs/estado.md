@@ -6,8 +6,9 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En producción
 
-**Versión 1.0.15**, desplegada el 2026-10-13 (etiqueta `v1.0.15`; comprobar con `curl https://wasmish.solventyc.com/api/version`). Lleva:
+**Versión 1.0.16**, desplegada el 2026-10-14 (etiqueta `v1.0.16`; comprobar con `curl https://wasmish.solventyc.com/api/version`). Lleva:
 
+- **Registrar el número en la Cloud API al conectarlo** (PRs #27 y #28): un número nuevo conectado por el Embedded Signup o el formulario manual se registra con un PIN de dos pasos, que se guarda cifrado (`Line.twoStepPin`, y `Waba.pendingTwoStepPins` mientras se registra), y `GET /api/lines/:id/pin` lo devuelve. Un número ya registrado (el del cliente real) no se toca. **Probado en producción** el 2026-10-14 con un número real de Jonathan en una cuenta de prueba: un número nuevo llega con `platform_type: 'NOT_APPLICABLE'` (lo que suponía el plan), recibe y responde, renovar el token funciona, y el PIN se guardó. `/register` tardó más de 10 s las dos veces: la primera conexión dio 502 y la segunda recuperó el PIN apuntado (arreglado en el #30, sin desplegar).
 - **Multi-línea · Fase 2c** (PRs #19 a #23, más los ajustes de la UI del #25): `Line` y `Waba` son la fuente de la conexión y `User` queda como copia de la línea por defecto; la API de líneas (`GET /lines`, renombrar, hacer por defecto, desconectar) y el límite `maxLines` del superadmin; Ajustes → Líneas; elegir y ver la línea en Chats, en las fichas, en Campañas y en Plantillas («Se envía desde»). Con `maxLines: 1` (todas las cuentas reales) se ve y funciona como la 1.0.14. Sin migración de datos: `migrate:lines -- --check` en 0 con la 1.0.14 en marcha y otra vez con la 1.0.15, con `mongodump` antes. Jonathan comprobó en vivo entrantes, respuestas, Ajustes y el cliente de la API (PractyCo). Antes se revisó en local con un cliente de prueba de cuatro líneas.
 - **Multi-línea · Fase 2b** (PRs #13 a #16, en producción desde la 1.0.14): lo que entra y sale de WhatsApp va por su **línea**. El webhook encuentra la cuenta y la línea por el número, una conversación es de un contacto en una línea, los envíos salen con el número de la línea y el token de su `Waba`, las plantillas se buscan en el WABA de la línea, el worker reparte por línea y la API pública admite `lineId` o `from` (sin ellos, igual que antes). `User` sigue siendo la fuente de la conexión: si la proyección no cuadra, la reserva usa `User`. Responder en una conversación de un número que ya no está conectado da 409. Sin cambio visible con `maxLines: 1`. Se desplegó con `migrate:lines` corrido con la imagen nueva **antes de arrancarla** (cambió el índice de conversaciones y puso el WABA a las plantillas que no lo tenían), `--check` en 0 antes y después, y Jonathan comprobó en el navegador enviar, recibir, Contactos y Plantillas. Ensayado antes con una copia de producción: las cuentas envían y reciben por su línea sin usar la reserva.
 - **Multi-línea · Fase 2a** (PR #9, en producción desde la 1.0.13): las colecciones `wabas` y `lines`, una proyección de la conexión que guarda el owner en `User` (que sigue siendo la fuente de verdad); conectar WhatsApp las sincroniza, y un WABA solo puede estar en una cuenta (409 si ya es de otra). Las conversaciones, campañas y plantillas nuevas guardan su línea y su WABA, pero todavía nada enruta por ellos. Sin cambio visible. Se migró con `migrate:lines` sin parar la API (plan de la Fase 2a, «Antes de desplegar»), y en producción `--check` salió con 0.
@@ -22,18 +23,9 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En curso
 
-- **Desplegar la 1.0.16**, por Jonathan con `/deploy`, cuando él decida. La versión ya está subida; **aún no se despliega**. Lleva:
-  - **Registrar el número en la Cloud API al conectarlo** (PRs #27 y #28): un número nuevo conectado por el Embedded Signup o el formulario manual se registra con un PIN de dos pasos, que se guarda cifrado (`Line.twoStepPin`, y `Waba.pendingTwoStepPins` mientras se registra). Sin esto, un número recién estrenado conecta pero no puede enviar (`133010`). Un número ya registrado (el del cliente de la API pública) no se toca.
-  - `GET /api/lines/:id/pin`: el PIN de una línea. La UI para verlo espera el diseño (brief: `docs/superpowers/specs/2026-10-13-pin-linea-brief-ui.md`).
-
-  **Antes de desplegar:** no hay migración de datos (los campos nuevos empiezan vacíos).
-  1. `mongodump`.
-  2. Compilar y `up` de la 1.0.16.
-  3. Comprobar `GET /api/version`, los logs (sin «MODO DE PRUEBA» ni E11000) y un `POST /api/v1/templates/send` con 200.
-
-  **Después de desplegar,** la prueba con el número nuevo de Jonathan en una cuenta de prueba de producción (plan del registro, «Al terminar»): conectarlo por el Embedded Signup, ver `/register` en los logs (si sale el aviso `platform_type inesperado`, Meta no manda `NOT_APPLICABLE` para un número nuevo y hay que ajustar `needsRegistration`), recibir y responder desde Wasmish, leer el PIN con `GET /lines/:id/pin`, y renovar el token (repetir el Embedded Signup con el mismo número) sin que se vuelva a registrar. Cierra el cabo suelto «Conectar WhatsApp sin probar contra Meta de verdad».
-
-  **Volver atrás:** las imágenes `:1.0.15` ignoran los campos nuevos. Un número registrado mientras tanto sigue registrado en Meta.
+- **La UI del PIN de dos pasos** — rama `pin-linea-ui`, PR #31, empezado el 2026-10-14 por Claude (diseño: `Design/Wasmish Líneas - PIN de dos pasos.html`).
+  Hecho: la fila del PIN en «Detalles» (oculto, «Mostrar», copiar, «Ocultar», sin PIN, errores con «Reintentar»), `hasTwoStepPin` en `GET /lines` y «Reintentar» en el aviso de `phone_number_registration_failed` al conectar · Falta: la revisión de Codex · Probado en el navegador en local, con el cliente de prueba de cuatro líneas; el «Reintentar» del aviso al conectar no, porque necesita el popup de Facebook.
+- **Para la 1.0.17**, cuando Jonathan quiera desplegar: el #30 (esperar a `/register` hasta 60 s, ya unido) y la UI del PIN. Sin migración de datos.
 
 <!-- Formato de una entrada:
 - **<qué>** — rama `<rama>`, PR #<n>, empezado el <fecha> por <Claude|Codex|Jonathan>.
@@ -44,12 +36,11 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 - **Multi-línea y multi-agente, fases 1 a 4** (diseño aprobado, sin preguntas abiertas: `docs/superpowers/specs/2026-10-11-multi-linea-multi-agente-design.md`). Fases 1, 2a y 2b en producción (la 2b, enrutar por línea, desde la 1.0.14). La **Fase 2c** está en producción desde la 1.0.15.
   - **Para encender varias líneas** (plan de la 2c, «Después de desplegar»):
-    1. La prueba del token: ¿un token nuevo del Embedded Signup cubre todos los números del WABA? (spec § 2.2). Se puede hacer en producción con una cuenta de prueba. Jonathan ya tiene **un** número (2026-10-13, sin comprobar si sirve), que sirve para probar el registro y renovar el token; la prueba completa necesita **dos números en el mismo WABA**.
+    1. La prueba del token: ¿un token nuevo del Embedded Signup cubre todos los números del WABA? (spec § 2.2). Se puede hacer en producción con la cuenta de prueba de Jonathan (`maxLines: 2`), pero necesita **dos números en el mismo WABA**: hoy tiene uno conectado. Una cuenta con dos líneas de WABA distintos ya se probó el 2026-10-14.
     2. El ensayo de la vuelta atrás con dos líneas en local.
     3. `maxLines: 2` en una cuenta de prueba desde el panel.
   - Sigue la **Fase 3**: equipo, roles y acceso por línea.
 - **Próximo módulo: un chatbot.** Jonathan aún no decidió de qué tipo. La propuesta sobre la mesa: empezar por respuestas automáticas (bienvenida, fuera de horario, palabras clave) como un motor de «respuestas» en el webhook, con traspaso a una persona (el bot se calla si alguien responde a mano) y la marca «Bot» en el chat; después, flujos con botones (requiere enviar mensajes interactivos) o IA. Antes de empezar: preguntar el tipo y qué problema concreto del cliente resuelve.
-- **La UI del PIN de dos pasos** en Ajustes → Líneas, cuando Claude Design devuelva el diseño del brief `docs/superpowers/specs/2026-10-13-pin-linea-brief-ui.md`.
 - El campo de archivo de cabecera al enviar una plantilla a **un solo contacto** (`SendTemplateDialog` y `NewConversationPanel`); hoy solo existe en las campañas.
 - En la API pública: el campo `header`, la cabecera de texto con variable y las plantillas de carrusel. Toca al cliente de la API: con cuidado.
 - Más adelante: programar campañas para una hora.
@@ -57,7 +48,7 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## Cabos sueltos conocidos
 
-- **Conectar WhatsApp sin probar contra Meta de verdad** (Fase 0, 1.0.11): los tests usan un Meta falso. Falta conectar el número de pruebas de WasmishTest por el Embedded Signup y por el formulario manual, y ver que un número de otro WABA da 400. Desde la 1.0.13 (Fase 2a), comprobar también que, al conectar, se crean su `Waba` y su `Line` (`migrate:lines -- --check` con 0). Se hará con el número de pruebas, junto con la comprobación del token de antes de la 2c. **El `.env` local está mezclado** (el backend con la app WasmishTest y el frontend con la de producción): para el Embedded Signup en local, los dos tienen que apuntar a WasmishTest, con un Config ID propio de esa app.
+- **Conectar WhatsApp contra Meta de verdad:** el Embedded Signup se probó en producción el 2026-10-14 (conectar, registrar, renovar el token, crear su `Waba` y su `Line`). Falta el formulario manual contra Meta y ver que un número de otro WABA da 400. **El `.env` local está mezclado** (el backend con la app WasmishTest y el frontend con la de producción): para el Embedded Signup en local, los dos tienen que apuntar a WasmishTest, con un Config ID propio de esa app.
 - **Adjuntos:** nadie limpia el volumen de archivos (`MEDIA_DIR`, también `outbound/` y `templates/`): se acumulan sin política de retención. Los mensajes anteriores al 2026-09-08 no tienen archivo, y el script para recuperar los que Meta aún guarda no existe. Jonathan decidió que las dos cosas pueden esperar.
 - **Plantillas con cabecera de archivo:** ningún cliente tiene todavía. El primero que la cree tiene que subir el archivo en Plantillas (sin él, el envío da 400 antes de llegar a Meta).
 - **Plantillas sincronizadas hace mucho:** si les falta `Template.buttons`, el diálogo de enviar plantilla no pide los valores de los botones. Se arregla pulsando *Sincronizar* en Plantillas.

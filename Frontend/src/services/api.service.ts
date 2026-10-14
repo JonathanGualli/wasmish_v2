@@ -255,6 +255,12 @@ export const updateLineService = async (id: string, update: LineUpdate): Promise
     return data;
 };
 
+/** El PIN de dos pasos de una línea; `null` si Wasmish no lo guardó. Se pide solo cuando se va a enseñar. */
+export const getLinePinService = async (id: string): Promise<string | null> => {
+    const { data } = await axios.get(`${API_URL}/lines/${id}/pin`, { withCredentials: true });
+    return (data as { pin: string | null }).pin;
+};
+
 export const disconnectLineService = async (id: string): Promise<Line> => {
     const { data } = await axios.post(`${API_URL}/lines/${id}/disconnect`, {}, { withCredentials: true });
     return data;
