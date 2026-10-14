@@ -22,7 +22,7 @@ const sendError = (res, error) => {
 
 const sendNotFound = (res) => res.status(404).json([{ message: LINE_NOT_FOUND_MESSAGE, code: LINE_ERROR_CODES.notFound }]);
 
-/** La línea para el frontend. Nunca el token. */
+/** La línea para el frontend. Nunca el token ni el PIN: solo si hay PIN guardado. */
 export const serializeLine = (line, { defaultLineId, waba }) => ({
     id: String(line._id),
     name: line.name ?? null,
@@ -36,6 +36,9 @@ export const serializeLine = (line, { defaultLineId, waba }) => ({
     createdAt: line.createdAt,
     connectedAt: line.connectedAt ?? null,
     disconnectedAt: line.disconnectedAt ?? null,
+    // Si Wasmish guardó el PIN de dos pasos al registrar el número: la UI dice
+    // «Sin PIN guardado» sin pedirlo. El PIN, solo en GET /lines/:id/pin.
+    hasTwoStepPin: Boolean(line.twoStepPin),
 });
 
 const serializeAccountLine = async (accountId, line) => {

@@ -465,3 +465,14 @@ test('GET /lines no incluye el PIN', async () => {
     const { twoStepPin } = await lineFor(a.first);
     assert.ok(!res.text.includes(twoStepPin));
 });
+
+// La UI dice «Sin PIN guardado» sin pedir el PIN: GET /lines dice si lo hay, nunca cuál es.
+test('GET /lines dice si cada línea tiene PIN (hasTwoStepPin), sin el PIN', async () => {
+    const a = await linesWithPin('PE', '764');
+    const res = await request(a, 'GET', '/lines');
+    assert.equal(res.status, 200, res.text);
+    const byId = new Map(res.body.lines.map(line => [line.id, line]));
+    assert.equal(byId.get(a.first).hasTwoStepPin, true);
+    assert.equal(byId.get(a.second).hasTwoStepPin, false);
+    assert.ok(!res.text.includes('123456'));
+});
