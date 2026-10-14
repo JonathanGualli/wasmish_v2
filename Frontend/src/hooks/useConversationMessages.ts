@@ -7,7 +7,7 @@ export const useConversationMessages = (conversationId: string) => {
 
   const queryClient = useQueryClient();
 
-  const { isLoading, isError, data, fetchNextPage, hasNextPage } = useInfiniteQuery<{ items: Message[], nextCursor: string | undefined }>({
+  const { isLoading, isError, error, data, fetchNextPage, hasNextPage } = useInfiniteQuery<{ items: Message[], nextCursor: string | undefined }>({
     queryKey: ["conversation", conversationId],
     queryFn: (context) => getConversationsMessagesService(conversationId, context),
     getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,
@@ -95,6 +95,8 @@ export const useConversationMessages = (conversationId: string) => {
   return {
     isLoading,
     isError,
+    // Con él, un 404 (la conversación ya no es suya) se distingue de un fallo de red.
+    error,
     data: data?.pages.flatMap(page => page.items) ?? [],
     fetchNextPage,
     hasNextPage,
@@ -115,7 +117,7 @@ export const useConversationMessages = (conversationId: string) => {
   const queryClient = useQueryClient();
   const { subscribe } = useSSE();
 
-  const { isLoading, isError, data, fetchNextPage, hasNextPage } = useInfiniteQuery<{ items: Message[], nextCursor: string | undefined }>({
+  const { isLoading, isError, error, data, fetchNextPage, hasNextPage } = useInfiniteQuery<{ items: Message[], nextCursor: string | undefined }>({
     queryKey: ["conversation", conversationId],
     queryFn: (context) => getConversationsMessagesService(conversationId, context),
     getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,
@@ -177,6 +179,8 @@ export const useConversationMessages = (conversationId: string) => {
   return {
     isLoading,
     isError,
+    // Con él, un 404 (la conversación ya no es suya) se distingue de un fallo de red.
+    error,
     data: data?.pages.flatMap(page => page.items) ?? [],
     fetchNextPage,
     hasNextPage,

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { SearchInput } from "../../../components/SearchInput/SearchInput";
 import { useLocation, useNavigate } from "react-router-dom";
 import { AlertCircle, ArrowRight, Download, Plus, RefreshCw, Search, Send, Tag as TagIcon, Users } from "lucide-react";
@@ -15,7 +15,7 @@ import { joinTagNames, tagsFromIds } from "../../../utils/tags";
 import { useCampaignDraft } from "../../../hooks/useCampaignDraft";
 import { useNewCampaign } from "../../../hooks/useNewCampaign";
 import { ConfirmDialog } from "../../../components/Dialog/ConfirmDialog";
-import { CampaignPaths, ContactImportPath } from "../../../models/routes.models";
+import { CampaignPaths, ContactImportPath, ContactsPath } from "../../../models/routes.models";
 import type { Contact, ContactFilter, ContactsNavigationState } from "../../../models/contact.model";
 import { hasSeenPickIntro, markPickIntroSeen, newCampaignDraft } from "../../../utils/campaignDraft";
 import { pluralize } from "../../../utils/campaignDisplay";
@@ -95,6 +95,22 @@ export const ContactsPage = () => {
     // La primera vez que se eligen destinatarios, una explicación corta.
     const [showPickIntro, setShowPickIntro] = useState(() => pickMode === 'new' && !hasSeenPickIntro());
     const selection = useContactSelection(editing);
+
+    // Si le quitan el permiso con la página abierta (Fase 3, `access_changed`;
+    // revisión de Codex del PR #37), se cierra lo que ya no puede usar: la
+    // selección, los diálogos de etiquetas y el modo de elegir destinatarios.
+    const canCampaigns = can('campaigns.manage');
+    const { clear: clearSelection } = selection;
+    useEffect(() => {
+        if (!canBulk) clearSelection();
+        if (!canManageTags) {
+            setTagging(false);
+            setManagingTags(false);
+        }
+    }, [canBulk, canManageTags, clearSelection]);
+    useEffect(() => {
+        if (pickMode && !canCampaigns) navigate(ContactsPath, { replace: true });
+    }, [pickMode, canCampaigns, navigate]);
 
     const search = useDebouncedValue(query.trim(), 300);
     const { data, isLoading, isError, isPlaceholderData, refetch } =
@@ -414,9 +430,9 @@ export const ContactsPage = () => {
             {renderBody()}
 
             {/* Hueco para que la barra de selección no tape la paginación. */}
-            {showSelectionBar && <div className="h-24" />}
+            {showSelectionBar && canBulk && <div className="h-24" />}
 
-            {showSelectionBar && (
+            {showSelectionBar && canBulk && (
                 <SelectionBar
                     count={selectedCount}
                     note={selection.excludedCount > 0 ? pluralize(selection.excludedCount, 'excluido', 'excluidos') : undefined}
@@ -440,7 +456,7 @@ export const ContactsPage = () => {
                 />
             )}
 
-            {tagging && (
+            {tagging && canManageTags && (
                 <BulkTagDialog
                     selection={selection.recipientsInput}
                     count={selectedCount}
@@ -454,7 +470,7 @@ export const ContactsPage = () => {
                 />
             )}
 
-            <TagManager open={managingTags} onClose={() => setManagingTags(false)} onShowContacts={tag => showTagContacts(tag.id)} />
+            <TagManager open={managingTags && canManageTags} onClose={() => setManagingTags(false)} onShowContacts={tag => showTagContacts(tag.id)} />
 
             <ContactPanel state={panel} onChange={setPanel} />
 

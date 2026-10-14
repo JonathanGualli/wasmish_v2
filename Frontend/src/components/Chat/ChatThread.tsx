@@ -19,6 +19,8 @@ import { ContactSidebar } from "./ContactSidebar/ContactSidebar.tsx";
 import { ChatComposer } from "./Composer/ChatComposer.tsx";
 import { MessageUploadStatus } from "./MessageUploadStatus.tsx";
 import { useAuthContext } from "../../context/auth.context";
+import { useNoticeContext } from "../Notice/context/UseNoticeContext";
+import type { AxiosError } from "axios";
 import { hasTeam } from "../../utils/roleDisplay";
 import { showsUploadStatus, uploadPercent } from "../../utils/outboundMedia.ts";
 import { ProgressBar } from "../ProgressBar/ProgressBar.tsx";
@@ -117,8 +119,20 @@ const MessageAuthor = ({ msg }: { msg: Message }) => {
 export const ChatThread = ({
     conversationId, onBack, contactSidebarOpen, onContactSidebarChange, onStartConversation, onOpenConversation,
 }: Props) => {
-    const { data: messages, isLoading, isError, fetchNextPage, hasNextPage } =
+    const { data: messages, isLoading, isError, error, fetchNextPage, hasNextPage } =
         useConversationMessages(conversationId || "");
+    const { setState: showNotice, setContent: setNoticeContent } = useNoticeContext();
+
+    // La conversación dejó de existir para esta sesión: le quitaron su línea con
+    // el chat abierto (Fase 3, `access_changed`; revisión de Codex del PR #37).
+    // Un 404 cierra el chat con un aviso, en vez de quedarse en el error.
+    const lostAccess = isError && (error as AxiosError | null)?.response?.status === 404;
+    useEffect(() => {
+        if (!lostAccess) return;
+        setNoticeContent(<p className="text-sm text-brand-strong">Ya no tienes acceso a esta conversación.</p>);
+        showNotice(true);
+        onBack?.();
+    }, [lostAccess, onBack, setNoticeContent, showNotice]);
     const { data: conversations } = useConversations();
     const { templates } = useTemplates();
     const { ref, inView } = useInView();

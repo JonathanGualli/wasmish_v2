@@ -6,6 +6,7 @@ import {
 import { AppRoutes } from '../../../models/routes.models';
 import { CustomButton } from '../../../components/Button/Button';
 import { Logo } from '../../../components/Logo/Logo';
+import { useAuthContext } from '../../../context/auth.context';
 
 const to = (page: string) => `${AppRoutes.private.root}/${page}`;
 
@@ -17,6 +18,8 @@ interface Step {
     desc: string;
     cta: string;
     path: string;
+    /** El permiso que hace falta (Fase 3): sin él, el paso no se ofrece. */
+    permission?: string;
 }
 
 const STEPS: Step[] = [
@@ -27,6 +30,7 @@ const STEPS: Step[] = [
         desc: 'Vincula tu cuenta de WhatsApp Business en segundos con «Iniciar sesión con Facebook».',
         cta: 'Ir a Ajustes',
         path: to(AppRoutes.private.settings),
+        permission: 'lines.manage',
     },
     {
         n: 2,
@@ -35,6 +39,7 @@ const STEPS: Step[] = [
         desc: 'Trae tus plantillas aprobadas por Meta y tenlas listas para enviar cuando quieras.',
         cta: 'Ver Plantillas',
         path: to(AppRoutes.private.templates),
+        permission: 'templates.manage',
     },
     {
         n: 3,
@@ -43,6 +48,7 @@ const STEPS: Step[] = [
         desc: 'Crea una clave para enviar mensajes desde tus propios sistemas de forma segura.',
         cta: 'Ir a Ajustes',
         path: to(AppRoutes.private.settings),
+        permission: 'apiKeys.manage',
     },
     {
         n: 4,
@@ -115,6 +121,11 @@ const StepCard = ({ step }: { step: Step }) => {
 
 export const QuickStart = () => {
     const navigate = useNavigate();
+    // Cada rol ve los pasos que puede dar (Fase 3; revisión de Codex del PR #37),
+    // numerados de nuevo.
+    const { can } = useAuthContext();
+    const canConnect = can('lines.manage');
+    const steps = STEPS.filter(step => !step.permission || can(step.permission)).map((step, i) => ({ ...step, n: i + 1 }));
 
     return (
         <div className="max-w-5xl mx-auto px-5 sm:px-8 py-8 sm:py-10">
@@ -139,13 +150,16 @@ export const QuickStart = () => {
                 </p>
 
                 <div className="flex flex-col sm:flex-row gap-2.5 mt-7">
-                    <div className="w-full sm:w-[220px] h-10">
-                        <CustomButton onClick={() => navigate(to(AppRoutes.private.settings))}>
-                            <Plug size={16} /> Conectar WhatsApp
-                        </CustomButton>
-                    </div>
+                    {canConnect && (
+                        <div className="w-full sm:w-[220px] h-10">
+                            <CustomButton onClick={() => navigate(to(AppRoutes.private.settings))}>
+                                <Plug size={16} /> Conectar WhatsApp
+                            </CustomButton>
+                        </div>
+                    )}
                     <div className="w-full sm:w-[180px] h-10">
-                        <CustomButton variant="outline" onClick={() => navigate(to(AppRoutes.private.chats))}>
+                        {/* Sin «Conectar», ir a los chats es la acción principal: la menta pasa aquí. */}
+                        <CustomButton variant={canConnect ? 'outline' : 'primary'} onClick={() => navigate(to(AppRoutes.private.chats))}>
                             <MessageSquare size={16} /> Ir a mis chats
                         </CustomButton>
                     </div>
@@ -161,7 +175,7 @@ export const QuickStart = () => {
                     <span className="text-[13px] text-brand-muted">Configura tu cuenta en 4 pasos</span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {STEPS.map((step) => (
+                    {steps.map((step) => (
                         <StepCard key={step.n} step={step} />
                     ))}
                 </div>
