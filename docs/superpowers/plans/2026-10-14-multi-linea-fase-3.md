@@ -34,7 +34,7 @@ El SSE guarda la sesión de cada conexión y filtra cada evento con `canReceive`
 - **Un agente pide por id una conversación, sus mensajes, un adjunto o una campaña de una línea que no es suya:** 404, igual que si fuera de otra cuenta, y sin enviar nada a Meta → tests en las Tareas 2 y 3.
 - **Un agente empieza una conversación sin elegir línea, y la línea por defecto de la cuenta no es suya:** sale por su única línea; si tiene varias, 400 «Elige la línea»; si no tiene ninguna, 404. Nunca por una línea ajena → test en la Tarea 2.
 - **Al supervisor le quitan una línea, o pasa a agente, con Chats abierto:** su conexión SSE se cierra y la nueva ya no recibe los eventos de esa línea → test en la Tarea 4.
-- **Dos admins invitan a la vez con una sola plaza libre, o una invitación se acepta dos veces:** como mucho una ocupa la plaza, y el enlace solo crea un usuario → tests en las Tareas 5 y 6.
+- **Dos admins invitan a la vez con una sola plaza libre, alguien invita mientras otro acepta o reactiva, o una invitación se acepta dos veces:** nunca hay más plazas ocupadas que `maxUsers`, y el enlace solo crea un usuario → tests en las Tareas 5 y 6 (revisión de Codex).
 - **Un admin intenta cambiar o desactivar al owner, o cualquiera se cambia a sí mismo el rol o el estado:** 403 y nada cambia → test en la Tarea 5.
 
 ---
@@ -86,7 +86,7 @@ El SSE guarda la sesión de cada conexión y filtra cada evento con `canReceive`
 **Files:**
 - Create: `Backend/src/middlewares/require.permission.middleware.js`
 - Modify: las rutas `contact.routes.js`, `tag.routes.js`, `template.routes.js`, `campaign.routes.js`, `api.key.routes.js`, `line.routes.js`, `user.routes.js`, `whatsapp.routes.js`
-- Modify: las búsquedas en `chat.controller.js` (las de las líneas 157, 182, 214, 278, 323, 361 y 430 de hoy), `media.controller.js:19`, `contact.controller.js` (`findContactConversations` y el `$lookup` de conversaciones del listado), `campaign.controller.js` (listar, ver, fallos, destinatarios, pausar, reanudar, cancelar y crear) y `line.controller.js` (`listLines`, `findOwnedLine`)
+- Modify: las búsquedas en `chat.controller.js` (las de las líneas 157, 182, 214, 278, 323, 361 y 430 de hoy), `media.controller.js:19`, `contact.controller.js` (`findContactConversations` y las conversaciones que **enseña** el listado), `template.controller.js` (`templateWabasFor`, la de `GET /templates?lineId=`), `campaign.controller.js` (listar, ver, fallos, destinatarios, pausar, reanudar, cancelar y crear) y `line.controller.js` (`listLines`, `findOwnedLine`)
 - Modify: `Backend/src/utils/line.js` (nueva función pura `pickSendingLineId`) y su test en `Backend/tests/line.test.js`
 - Modify: `docs/arquitectura/api.md` (columna de permisos en la tabla de rutas, o una sección «Roles y permisos» con la matriz), `Backend/AGENTS.md` (regla: toda búsqueda de conversación lleva `conversationScope`)
 - Test: `Backend/tests/isolation/permissions.test.js` (nuevo), con un ayudante nuevo en `helpers.js`
@@ -106,6 +106,8 @@ El SSE guarda la sesión de cada conexión y filtra cada evento con `canReceive`
   - Toda búsqueda de conversación de una persona pasa de `{ _id, userId }` a `{ _id, userId, ...conversationScope(req.auth) }`.
   - `listLines` y `findOwnedLine` filtran por `lineScope`, así que un agente solo ve y pide sus líneas. `nextDefaultLineId` sale `null` para supervisor y agente.
   - Campañas: el listado filtra `lineId ∈ lineScope`; una campaña fuera de alcance → 404. Crear con un `lineId` fuera de alcance → 404 (`LINE_NOT_FOUND_MESSAGE`).
+  - Plantillas: `GET /templates?lineId=<línea fuera de alcance>` → 404, como una ajena (`templateWabasFor` recibe el `auth`); sin `lineId`, las de los WABA de las líneas a su alcance. La API pública (`resolveApiLine`) no cambia: la API key llega a todas (revisión de Codex).
+  - Contactos: **los filtros «con conversación» y «sin conversación» miran cualquier conversación del contacto**, sea de la línea que sea; así `contactSelectionStages` no cambia, y las selecciones que lo reutilizan (campañas, etiquetar en bloque) tampoco. Lo que se **enseña** (`conversations`, `conversation` y la ventana) se filtra después a las líneas a su alcance, con un `$addFields` + `$filter` en `listContacts` y el mismo filtro en `findContactConversations` (revisión de Codex).
   - `pickSendingLineId({ requestedLineId, defaultLineId, accessibleLineIds }) → { lineId } | { error: 'choose_line' | 'no_line' }`: es la regla de «empezar una conversación sin elegir línea».
     - Si se pidió línea, esa (el alcance se comprueba después).
     - Con `accessibleLineIds === null`, la por defecto.
@@ -124,7 +126,8 @@ El SSE guarda la sesión de cada conexión y filtra cada evento con `canReceive`
   - `GET /lines` del agente solo trae la primera; `PATCH /lines/<segunda>` → 403 (el permiso se comprueba antes de buscar).
   - El agente → 403 en `GET /campaigns`, `POST /api-key/generate`, `POST /tags`, `POST /contacts/import`, `DELETE /contacts/:id`, `GET /templates/sync` y `POST /whatsapp/connect`.
   - El supervisor: `GET /campaigns` no trae la de la segunda línea; `GET /campaigns/<de la segunda>` → 404; `POST /campaigns` con la segunda línea → 404.
-  - El agente con `GET /contacts`: ve todos los contactos de la cuenta, pero el contacto de la conversación de la segunda línea sale **sin** esa conversación (ni última, ni ventana).
+  - El agente con `GET /contacts`: ve todos los contactos de la cuenta, pero el contacto de la conversación de la segunda línea sale **sin** esa conversación (ni última, ni ventana). Con `filter=with_conversation`, ese contacto **sí** sale (tiene conversación, aunque no la vea); con `without_conversation`, no. `GET /contacts/:id` tampoco enseña esa conversación.
+  - El agente con `GET /templates?lineId=<segunda>` → 404; sin `lineId`, solo las del WABA de la primera.
   - Regresión que vigila (la línea por defecto es la segunda): el agente que empieza una conversación sin `lineId` sale por la primera; si se le da también la segunda, el sin `lineId` da 400 `choose_line`.
   - El owner hace todo lo anterior como hoy (200), y la API key también (`/v1/templates/send` sin `lineId`).
 - [ ] **Step 3:** `cd Backend && npm test && npm run test:isolation` → fallan los nuevos.
@@ -163,9 +166,9 @@ El SSE guarda la sesión de cada conexión y filtra cada evento con `canReceive`
   - `canReceive(auth, meta = {}) → boolean`. Con `meta.permission`, hace falta `can(auth, meta.permission)`. Si `meta` trae la clave `lineId` (aunque valga `null`), hace falta `inLineScope(auth, meta.lineId)`. Sin `meta`, verdadero.
   - `addClient(auth, res)`, `removeClient(auth, res)`: por cuenta, cada conexión como `{ res, auth }`.
   - `sendToAccount(accountId, event, data, meta = {})`: escribe solo en las conexiones con `canReceive(conexión.auth, meta)`.
-  - `disconnectUser(userId)`: hace `res.end()` en todas las conexiones de esa persona. El navegador reconecta solo (`SSEProvider`) y vuelve con el acceso nuevo.
+  - `disconnectUser(userId)`: escribe en cada conexión de esa persona el evento `access_changed` (sin datos) y después `res.end()`. El navegador reconecta solo (`SSEProvider`); qué hace la UI con `access_changed`, en la Tarea 7.
   - El `meta` de cada evento:
-    - `message_created` y `conversation_updated`: `{ lineId }` de su conversación.
+    - `message_created`, `conversation_updated` y `message_status`: `{ lineId }` de su conversación. En `message_status` (`webhook.controller.js:303`) la conversación ya está cargada en ese camino (la búsqueda de la línea 261 de hoy); si no, se busca (revisión de Codex).
     - `campaign_progress`: `{ lineId: campaign.lineId, permission: 'campaigns.manage' }`.
     - `contact_updated`: sin `meta`, porque los contactos son de toda la cuenta.
 
@@ -173,10 +176,11 @@ El SSE guarda la sesión de cada conexión y filtra cada evento con `canReceive`
   - `canReceive`:
     - Un agente con `['l1']` recibe `{ lineId: 'l1' }` y no recibe `{ lineId: 'l2' }` ni `{ lineId: null }`.
     - No recibe `{ lineId: 'l1', permission: 'campaigns.manage' }`; un supervisor con `['l1']`, sí.
+  - Aislamiento (`tests/isolation/webhook.test.js`): un acuse de estado (`statuses`) de un mensaje de la línea 2 llega por SSE al owner y **no** al agente de la línea 1 (con un cliente SSE falso registrado con `addClient`).
     - Un owner recibe todo, y cualquiera recibe `{}`.
   - En `stream.test.js`, con respuestas falsas (`{ write, end }` que apuntan lo que reciben):
     - `sendToAccount` con `meta` de la línea 2 escribe al owner y no al agente de la línea 1.
-    - `disconnectUser(agente)` cierra sus dos pestañas y no la del owner.
+    - `disconnectUser(agente)` escribe `access_changed` y cierra sus dos pestañas, y no toca la del owner.
     - Después, `sendToAccount` ya no le escribe.
 - [ ] **Step 2:** fallan → **Step 3:** implementar y pasar el `meta` en las 8 llamadas → **Step 4:** `npm test && npm run test:isolation` en verde. Documentación: `chat.md`.
 - [ ] **Step 5: Commit** — `git commit -m "El SSE solo manda a cada uno lo de sus líneas"`. **PR 2**, con la revisión de Codex.
@@ -201,6 +205,7 @@ El SSE guarda la sesión de cada conexión y filtra cada evento con `canReceive`
       - El owner no se cambia por aquí: `owner_locked`.
       - Nadie se cambia a sí mismo el rol ni el estado: `self_change`.
       - Solo se asignan `admin`, `supervisor` y `agent`; cualquier otro rol da `invalid_role`.
+  - **Un candado de equipo por cuenta** para todo lo que puede ocupar una plaza (invitar, reinvitar y reactivar): `withAccountLock(accountId, 'teamLock', fn)`. Es el mecanismo de `withLineLock` (`Account.lineLock`, 30 s, se suelta solo si es suyo) sacado a `services/account.lock.service.js` y parametrizado por campo; `withLineLock` pasa a usarlo con `'lineLock'` sin cambiar su comportamiento. Ocupado → 409 «Hay otro cambio en el equipo en curso. Inténtalo de nuevo en unos segundos.», `code: 'team_busy'`. Dentro del candado se cuentan las plazas y se escribe (revisión de Codex: sin una sección común, invitar mientras otro acepta o reactiva podía pasarse del límite).
   - Rutas, todas con `authRequired` y `requirePermission('team.manage')`:
     - `GET /team` → `{ members, invitations, maxUsers, seatsUsed }`.
       - `members: [{ id, name, email, role, lineIds, status, createdAt }]`, sin contraseña ni token.
@@ -225,7 +230,9 @@ El SSE guarda la sesión de cada conexión y filtra cada evento con `canReceive`
   - Un agente → 403 en las cuatro rutas.
   - B no ve ni toca a los miembros ni las invitaciones de A (404).
   - Invitar con `maxUsers: 1` → 409 `user_limit`; con 2 → 201 y el token no sale en `GET /team`.
-  - Dos `POST /team/invitations` a la vez con una sola plaza libre: como mucho uno da 201. Para eso, la plaza se toma con una escritura condicional en `Account`, o se cuenta dentro de `withLineLock`; el implementador elige, y el test lo fija.
+  - Dos `POST /team/invitations` a la vez con una sola plaza libre: uno da 201 y el otro 409 (`user_limit` o `team_busy`), nunca dos 201.
+  - Reactivar e invitar a la vez con una plaza libre, y dos reactivaciones a la vez con una: como mucho una sale bien.
+  - `withLineLock` sigue pasando todos los tests de líneas de hoy (el candado extraído no cambia su comportamiento).
   - Reinvitar el mismo correo no ocupa otra plaza.
   - Un correo ya registrado → 409 `email_taken`.
   - El admin → 403 al cambiar o desactivar al owner; cualquiera → 403 al cambiarse a sí mismo.
@@ -247,10 +254,13 @@ El SSE guarda la sesión de cada conexión y filtra cada evento con `canReceive`
   - Rutas públicas con `authLimiter`:
     - `GET /invitations/:token` → `{ email, accountName, role, invitedByName }`. Un token desconocido, ya usado o caducado → 404 «Esta invitación no existe o ya no es válida.», `code: 'invitation_invalid'`. Uno caducado con su documento todavía guardado → 410, `code: 'invitation_expired'`, con «La invitación caducó. Pide que te envíen otra.».
     - `POST /invitations/:token/accept { name, password }` (con el esquema de `registerSchema`, sin `email`):
-      - Consume la invitación con una sola escritura condicional (`findOneAndUpdate({ tokenHash, acceptedAt: null, expiresAt: { $gt: now } }, { $set: { acceptedAt: now } })`).
+      - **Reclama** la invitación con una sola escritura condicional, `findOneAndUpdate({ tokenHash, acceptedAt: null, expiresAt: { $gt: now }, $or: [{ claimedAt: null }, { claimedAt: { $lt: hace 60 s } }] }, { $set: { claimedAt: now } })`. Mientras está reclamada sigue **pendiente**, así que sigue ocupando su plaza: nunca hay un momento en que la plaza quede libre (revisión de Codex). Un reclamo de más de 60 s (el proceso murió) se puede volver a tomar.
+      - Al crear el usuario, durante un instante cuentan los dos (el usuario y la invitación): sobra una plaza, no falta.
       - Crea el `User` (`accountId`, `role`, `lineIds`, `email` de la invitación, `status: 'active'`, contraseña con bcrypt, como `register`).
       - Deja la cookie de sesión y responde como el login (Tarea 3).
-      - Si el correo se registró entretanto (E11000), devuelve la invitación a pendiente (`acceptedAt: null`) y responde 409 `email_taken`.
+      - Después marca `acceptedAt: now`.
+      - **Si crear el usuario falla por lo que sea**, quita el reclamo (`claimedAt: null`) para que el enlace siga valiendo. Con E11000 (el correo se registró entretanto) responde 409 `email_taken`; con cualquier otro error, 500.
+      - `Invitation` añade `claimedAt: Date | null` (Tarea 5).
       - Aceptar no comprueba `maxUsers`: la invitación ya ocupaba su plaza (spec § 3.5: bajar el plan no anula nada).
   - `Message.sentBy: ObjectId | null` y `Message.sentByName: string | null`. El nombre es una **copia** del de ese momento: así el mensaje lo dice aunque la persona se desactive o cambie de nombre, sin buscar en `User`.
   - `processMessageSending({ …, sender = null })` y `processTemplateSending({ …, sender = null })`, con `sender = { userId, name }` (de `req.auth`). Se pasa solo desde el chat (texto, archivo, plantilla en una conversación y conversación nueva); las campañas y la API lo dejan en `null`.
@@ -260,6 +270,8 @@ El SSE guarda la sesión de cada conexión y filtra cada evento con `canReceive`
   - Aceptar → 200 con cookie, y el usuario nuevo tiene el rol y las líneas de la invitación.
   - El mismo enlace otra vez → 404 `invitation_invalid`.
   - Dos aceptaciones a la vez del mismo enlace → un solo usuario creado.
+  - Con `maxUsers: 2`, el owner y una invitación pendiente: invitar a otro mientras se acepta (el usuario se crea con el reclamo tomado) → 409 `user_limit`.
+  - Si crear el usuario falla (un `User.create` que lanza, simulado), el enlace vuelve a valer.
   - Un enlace caducado → 410.
   - `GET /invitations/:token` no enseña el token ni nada de otra cuenta.
   - Responder desde el chat como agente → el mensaje tiene `sentBy: { id: <agente>, name }`.
@@ -277,6 +289,11 @@ El SSE guarda la sesión de cada conexión y filtra cada evento con `canReceive`
 **Interfaces:**
 - Consumes: Tareas 3 y 6. Lo visual, del diseño de Claude Design para el brief `docs/superpowers/specs/2026-10-14-equipo-brief-ui.md`.
 - Produces: `useAuthContext().can(action)`. Lo que el rol no puede hacer **no se enseña** (no se deja apagado), salvo donde el diseño diga otra cosa.
+- **Al cambiarle el acceso a alguien con Wasmish abierto** (revisión de Codex: reconectar el SSE e invalidar no basta, porque los datos viejos se quedan en pantalla y, con la persona desactivada, la reconexión ni siquiera abre):
+  - El `SSEProvider` se suscribe a `access_changed` y, al recibirlo, vacía la caché de React Query (`queryClient.clear()`) y le pide al `AuthProvider` que vuelva a leer `/verify`.
+  - Con 401, cierra la sesión y va al login.
+  - Con la sesión nueva, si la ruta actual ya no está permitida (`can`), va a Inicio rápido; la conversación abierta que ahora da 404 se cierra con el mismo aviso que una conversación borrada.
+  - Además, cualquier 401 de la API cierra la sesión, si no lo hace ya.
 
 - [ ] **Step 1:** implementar siguiendo el diseño, con la skill de marca.
 - [ ] **Step 2:** `cd Frontend && npm run lint && npm run build`.
@@ -285,6 +302,7 @@ El SSE guarda la sesión de cada conexión y filtra cada evento con `canReceive`
   - En Ajustes solo ve sus líneas, sin conectar, renombrar, desconectar ni PIN, y sin API keys.
   - En Contactos no ve importar ni borrar.
   - En el chat, sus respuestas dicen su nombre.
+  - Con el agente en una conversación de la línea 2 y **dos pestañas** abiertas, el owner le quita esa línea: en las dos, la conversación se cierra y desaparece de la bandeja sin recargar. Al desactivarlo, las dos van al login.
 - [ ] **Step 4: Commit** — `git commit -m "La interfaz enseña a cada rol lo que puede hacer"`
 
 ### Task 8: Ajustes → Equipo, aceptar la invitación y los usuarios en el superadmin (PR 4)
@@ -327,4 +345,6 @@ El SSE guarda la sesión de cada conexión y filtra cada evento con `canReceive`
 - **El enlace de invitación lo arma el frontend** con su propio origen, sin una variable de entorno nueva en el backend.
 - **Volver a invitar un correo reemplaza la invitación pendiente**: sirve para reenviar un enlace perdido sin anular primero.
 - **Aceptar una invitación no mira `maxUsers`**: su plaza ya estaba contada, y bajar el plan no anula lo que existe.
+- **«Con conversación» mira todas las conversaciones del contacto**, también las de líneas que no ve (revisión de Codex): el filtro y las selecciones de campañas y etiquetas no cambian según quién los pide. Solo se oculta el contenido.
+- **Un candado de equipo** (`teamLock`) aparte del de líneas, para que cambiar el equipo no bloquee las líneas ni al revés.
 - **Las conversaciones sin línea** (anteriores a las líneas, o la reserva de la 2b) quedan fuera para supervisor y agente: no son de ninguna línea suya. Las ven owner y admin.
