@@ -1,0 +1,16 @@
+{
+  "name": "Wasmish",
+  "short_name": "Wasmish",
+  "description": "CRM de WhatsApp Business",
+  "lang": "es",
+  "start_url": "/private/chats",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0b3b2e",
+  "icons": [
+    { "src": "/brand/app-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/brand/app-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/brand/app-icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
