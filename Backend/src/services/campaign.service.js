@@ -125,5 +125,6 @@ export const emitCampaignProgress = async (campaignId, { force = false } = {}) =
     if (['completed', 'cancelled'].includes(campaign.status)) lastProgressAt.delete(key);
 
     const stats = await getCampaignStats(campaign._id);
-    sendToAccount(String(campaign.userId), 'campaign_progress', serializeCampaign(campaign, stats));
+    sendToAccount(String(campaign.userId), 'campaign_progress', serializeCampaign(campaign, stats),
+        { lineId: campaign.lineId ?? null, permission: 'campaigns.manage' });
 };

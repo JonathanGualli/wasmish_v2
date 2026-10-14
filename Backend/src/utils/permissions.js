@@ -54,3 +54,16 @@ export const conversationScope = (auth) => {
 
 /** Las acciones que tiene, en el orden de `PERMISSIONS`: van en la sesión del frontend. */
 export const permissionsFor = (auth) => Object.keys(PERMISSIONS).filter(action => can(auth, action));
+
+/**
+ * Si una conexión SSE con esta sesión recibe un evento (Fase 3). `meta` lo pone
+ * quien emite: `permission`, si hace falta una acción (el progreso de una
+ * campaña), y `lineId`, si el evento es de una línea; la clave presente con
+ * `null` (una conversación sin línea) cuenta como «de ninguna». Sin `meta`, el
+ * evento es de toda la cuenta (un contacto).
+ */
+export const canReceive = (auth, meta = {}) => {
+    if (meta.permission && !can(auth, meta.permission)) return false;
+    if ('lineId' in meta && !inLineScope(auth, meta.lineId)) return false;
+    return true;
+};

@@ -177,7 +177,9 @@ const procesarEntrante = async (inbound, messageData, contacts) => {
             status: 'delivered',
             unreadCount: conversation.unreadCount,
             windowExpiresAt: getWindowExpiry(conversation.lastInboundAt)?.toISOString() ?? null,
-        }
+        },
+        // Solo a quien ve esa línea (Fase 3).
+        { lineId: conversation.lineId ?? null },
     );
 
     // Log the created message.
@@ -277,6 +279,13 @@ const procesarEstado = async (inbound, statusData) => {
 
     const message = await Message.findOne({ waMessageId });
     if(!message) return;
+    // El mensaje tiene que ser de la cuenta del número por el que llega el
+    // acuse: si el número pasó de A a B, un acuse tardío de un mensaje de A no
+    // lo toca ni se avisa a B (revisión de Codex del PR #35). De aquí sale
+    // también la línea del aviso.
+    const conversation = await Conversation.findOne({ _id: message.conversationId, userId: inbound.accountId })
+        .select('lineId').lean();
+    if (!conversation) return;
 
     // Estado desconocido, repetido o que retrocede → lo ignoramos
     const changes = resolveStatusTransition({
@@ -315,7 +324,10 @@ const procesarEstado = async (inbound, statusData) => {
             // Si salió de una campaña: su detalle se refresca con esto,
             // porque las entregas y lecturas llegan horas después de enviar.
             ...(message.campaignId && { campaignId: String(message.campaignId) }),
-        }
+        },
+        // A quien ve la línea de su conversación (Fase 3; revisión de Codex
+        // del plan): con estados, errores y campaña, no es de toda la cuenta.
+        { lineId: conversation.lineId ?? null },
     );
 
     // Solo se registran los fallos. Cada mensaje enviado genera dos o tres acuses
