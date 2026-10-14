@@ -22,7 +22,8 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En curso
 
-Nada.
+- **Registrar el número en la Cloud API al conectarlo y guardar su PIN** — rama `registrar-numero`, empezado el 2026-10-13 por Claude.
+  Hecho: el plan (`docs/superpowers/plans/2026-10-13-registrar-numero.md`) · Falta: la revisión del plan por Codex y las tres tareas · Sin probar: nada todavía. Sin esto, un número nuevo conectado por el Embedded Signup no puede enviar (133010).
 
 <!-- Formato de una entrada:
 - **<qué>** — rama `<rama>`, PR #<n>, empezado el <fecha> por <Claude|Codex|Jonathan>.

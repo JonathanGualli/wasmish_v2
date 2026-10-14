@@ -8,6 +8,7 @@ Cuando se tome una decisión nueva, se añade aquí (la más reciente arriba) y 
 
 | Fecha | Decisión | Por qué | Dónde |
 |---|---|---|---|
+| 2026-10-13 | Al conectar un número nuevo, Wasmish lo registra en la Cloud API con un PIN de dos pasos al azar y **guarda ese PIN** (cifrado), para dárselo al cliente. | El cliente lo puede necesitar después, por ejemplo para llevarse el número a otro proveedor. | [plan del registro](superpowers/plans/2026-10-13-registrar-numero.md) |
 | 2026-10-13 | En la bandeja, la etiqueta de la línea va **en su propia fila, bajo la vista previa**, no junto a la hora como en el diseño. | Con nombres de línea largos tapaba el nombre del contacto y no se leía ninguno de los dos. | [chat.md § Varias líneas en Chats](arquitectura/chat.md#varias-líneas-en-chats) |
 | 2026-10-13 | La conversación nueva pasa a **la forma del diseño** (una columna: «Enviar desde», «Para», plantilla, vista previa). Reemplaza la decisión del 2026-10-12 de conservar la forma anterior. Sin buscador de contactos: «Para» enseña el contacto si el número ya está en la bandeja. | Jonathan prefiere la del diseño. El diseño no dibuja un buscador. | [chat.md § Conversación nueva](arquitectura/chat.md#conversación-nueva-newconversationpanel) |
 | 2026-10-12 | En «Enviar desde», la línea elegida dice **cómo la ve el cliente** («La ven como «Ferretería La Estrella»», su nombre verificado), no el nombre de su cuenta de WhatsApp Business. | Wasmish guarda solo el ID del WABA, no su nombre. | [chat.md § Varias líneas en Chats](arquitectura/chat.md#varias-líneas-en-chats) |
