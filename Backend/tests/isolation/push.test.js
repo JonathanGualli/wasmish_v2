@@ -12,6 +12,36 @@ import {
 const a = await seedAccount('PA', { seq: 61 });
 const b = await seedAccount('PB', { seq: 62 });
 
+// TODO lo que se prepara con `await` va aquí, antes del primer `test()`.
+// Regresión que vigila: los datos del aviso se preparaban a mitad del archivo,
+// entre tests. Si eso tardaba más que los tests ya registrados, el runner los
+// daba por terminados, el `after` de helpers.js cerraba Mongo y la preparación
+// caía con MongoClientClosedError (CI de master tras el PR #43).
+
+// La cuenta PC con dos líneas (631 y 632) y un agente de cada una; el tercero se desactiva en el primer test.
+const pc = await seedAccount('PC', { seq: 63, maxLines: 2 });
+const { lineId: line1 } = await connectWhatsapp(pc, { phoneNumberId: '631' });
+const { lineId: line2 } = await connectWhatsapp(pc, { phoneNumberId: '632' });
+const agent1 = await seedMember(pc, { role: 'agent', lineIds: [line1], label: 'PCAG1' });
+const agent2 = await seedMember(pc, { role: 'agent', lineIds: [line2], label: 'PCAG2' });
+const agentOff = await seedMember(pc, { role: 'agent', lineIds: [line1], label: 'PCAGOFF' });
+
+const textMessage = (from, body) => ({
+    contacts: [{ profile: { name: 'Cliente de prueba' }, wa_id: from }],
+    messages: [{ from, id: `wamid.push.${Date.now()}.${Math.random().toString(36).slice(2)}`, timestamp: String(Math.floor(Date.now() / 1000)), type: 'text', text: { body } }],
+});
+
+/** Espera (el webhook no espera el envío) hasta que se cumple `predicate`, o 2 s. */
+const waitFor = async (predicate, ms = 2000) => {
+    const deadline = Date.now() + ms;
+    while (Date.now() < deadline) {
+        if (await predicate()) return true;
+        await new Promise(resolve => setTimeout(resolve, 20));
+    }
+    return Boolean(await predicate());
+};
+const sentTo = (endpoint) => pushCalls.filter(call => call.endpoint === endpoint);
+
 let seq = 0;
 const newEndpoint = () => `https://fcm.googleapis.com/fcm/send/prueba-${Date.now()}-${seq++}`;
 const keys = { p256dh: 'BPcl4Zx-clave-publica-de-pruebas', auth: 'secreto-auth' };
@@ -92,30 +122,6 @@ test('sincronizar un endpoint que no existe lo crea, y el propio actualiza las c
 });
 
 // --- El aviso de un mensaje entrante ---------------------------------------
-
-// La cuenta PC con dos líneas (631 y 632) y un agente de cada una; el tercero se desactiva en el primer test.
-const pc = await seedAccount('PC', { seq: 63, maxLines: 2 });
-const { lineId: line1 } = await connectWhatsapp(pc, { phoneNumberId: '631' });
-const { lineId: line2 } = await connectWhatsapp(pc, { phoneNumberId: '632' });
-const agent1 = await seedMember(pc, { role: 'agent', lineIds: [line1], label: 'PCAG1' });
-const agent2 = await seedMember(pc, { role: 'agent', lineIds: [line2], label: 'PCAG2' });
-const agentOff = await seedMember(pc, { role: 'agent', lineIds: [line1], label: 'PCAGOFF' });
-
-const textMessage = (from, body) => ({
-    contacts: [{ profile: { name: 'Cliente de prueba' }, wa_id: from }],
-    messages: [{ from, id: `wamid.push.${Date.now()}.${Math.random().toString(36).slice(2)}`, timestamp: String(Math.floor(Date.now() / 1000)), type: 'text', text: { body } }],
-});
-
-/** Espera (el webhook no espera el envío) hasta que se cumple `predicate`, o 2 s. */
-const waitFor = async (predicate, ms = 2000) => {
-    const deadline = Date.now() + ms;
-    while (Date.now() < deadline) {
-        if (await predicate()) return true;
-        await new Promise(resolve => setTimeout(resolve, 20));
-    }
-    return Boolean(await predicate());
-};
-const sentTo = (endpoint) => pushCalls.filter(call => call.endpoint === endpoint);
 
 test('un entrante en la línea 1 avisa al owner y al agente de esa línea, y a nadie más', async () => {
     pushCalls.length = 0;
