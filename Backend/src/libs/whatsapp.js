@@ -139,6 +139,10 @@ export const subscribeAppToWaba = async ({ token, waBusinessId }) => {
     );
 };
 
+// Cuánto se espera a `/register`: Meta tarda en registrar un número, y en
+// producción pasó de los 10 s del resto de llamadas (2026-10-14).
+export const REGISTER_TIMEOUT_MS = 60_000;
+
 // Registra el número en la Cloud API: sin esto, uno recién conectado por el
 // Embedded Signup no puede enviar (133010). `pin` (6 dígitos) pasa a ser el PIN
 // de la verificación en dos pasos del número. Meta admite 10 intentos por
@@ -147,7 +151,7 @@ export const registerPhoneNumber = async ({ token, phoneNumberId, pin }) => {
     return whatsappApi.post(
         `/${phoneNumberId}/register`,
         { messaging_product: 'whatsapp', pin },
-        { headers: { Authorization: `Bearer ${token}` } }
+        { headers: { Authorization: `Bearer ${token}` }, timeout: REGISTER_TIMEOUT_MS }
     );
 };
 
