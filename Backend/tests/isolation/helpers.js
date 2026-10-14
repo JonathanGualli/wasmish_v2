@@ -69,6 +69,22 @@ whatsappApi.defaults.adapter = async (config) => {
     }
     return { data: reply.data, status: reply.status ?? 200, statusText: 'OK', headers: {}, config, request: {} };
 };
+// Servicio de push falso, como Meta: ningún aviso sale a la red. Apunta cada
+// envío (`pushCalls`: endpoint, aviso y opciones) y responde lo que diga
+// `onPush(responder)`; sin respondedor, como un servicio de push que lo aceptó.
+const { pushTransport } = await import('../../src/services/push.service.js');
+export const pushCalls = [];
+let pushResponder = null;
+
+/** `responder(call) → Promise` (lanza para simular un error del servicio de push). `null` lo quita. */
+export const onPush = (responder) => { pushResponder = responder; };
+
+pushTransport.send = async (subscription, payload, options) => {
+    const call = { endpoint: subscription.endpoint, payload: JSON.parse(payload), options };
+    pushCalls.push(call);
+    return pushResponder ? pushResponder(call) : { statusCode: 201 };
+};
+
 const load = async (file) => (await import(`../../src/models/${file}`)).default;
 
 export const Account = await load('account.model.js');

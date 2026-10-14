@@ -16,6 +16,7 @@ import { getMediaInfo, downloadMedia } from '../libs/whatsapp.js';
 import { decrypt } from '../utils/crypto.js';
 import { MEDIA_DIR, MEDIA_MAX_BYTES } from '../config.js';
 import { findInboundLine, rememberDisplayPhoneNumber } from '../services/line.service.js';
+import { notifyInbound } from '../services/push.service.js';
 
 // Baja el adjunto y lo deja en disco. Devuelve SIEMPRE un objeto: si algo falla
 // —token caducado, archivo enorme, Meta caída— sale con mediaFile en null y el
@@ -181,6 +182,16 @@ const procesarEntrante = async (inbound, messageData, contacts) => {
         // Solo a quien ve esa línea (Fase 3).
         { lineId: conversation.lineId ?? null },
     );
+
+    // El aviso push a los dispositivos de quien ve esa línea (app móvil). Sin
+    // esperar: un servicio de push lento o caído no puede frenar ni tumbar el webhook.
+    void notifyInbound({
+        accountId: inbound.accountId,
+        lineId: conversation.lineId ?? null,
+        conversationId: conversation._id,
+        contact,
+        text: entrante.text,
+    });
 
     // Log the created message.
     //

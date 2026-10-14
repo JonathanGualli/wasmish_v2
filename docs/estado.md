@@ -26,8 +26,9 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En curso
 
-- **Wasmish en el celular: app instalable (PWA) y avisos push** — rama `app-movil-plan` (spec, brief de la UI y plan), empezado el 2026-10-14 por Claude. Plan: `docs/superpowers/plans/2026-10-14-app-movil.md`; spec: `docs/superpowers/specs/2026-10-14-app-movil-design.md`; brief para Claude Design: `docs/superpowers/specs/2026-10-14-app-movil-brief-ui.md`.
-  Hecho: spec, brief y plan · Falta: la revisión de Codex del plan, y después los cuatro PRs (backend, app instalable, activar los avisos con su UI, Chats en el teléfono). Los dos últimos esperan el diseño · Sin probar: nada todavía.
+- **Wasmish en el celular: app instalable (PWA) y avisos push** — plan: `docs/superpowers/plans/2026-10-14-app-movil.md` (PR #41, unido); spec y brief de la UI en `docs/superpowers/specs/2026-10-14-app-movil-*`. Empezado el 2026-10-14 por Claude.
+  - **PR 1, rama `app-movil-push-backend`** (Tareas 1 a 3): suscripciones por dispositivo y aviso al llegar un mensaje. Hecho y con tests · Sin probar: un aviso real (necesita el service worker de la Tarea 4).
+  - Falta: PR 2 (app instalable), PR 3 (activar los avisos con su UI) y PR 4 (Chats en el teléfono). Los dos últimos esperan el diseño de Claude Design (el brief ya se le pasó).
 
 <!-- Formato de una entrada:
 - **<qué>** — rama `<rama>`, PR #<n>, empezado el <fecha> por <Claude|Codex|Jonathan>.

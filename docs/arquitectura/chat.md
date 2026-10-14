@@ -11,6 +11,7 @@ SSE y sus eventos, no leídos, y la UI del chat: hilo, bandeja, conversación nu
   - [SSE (`stream.controller.js`)](#sse-streamcontrollerjs)
   - [Eventos SSE y sus payloads](#eventos-sse-y-sus-payloads)
   - [`unreadCount`](#unreadcount)
+  - [Avisos push (`push.service.js`)](#avisos-push-pushservicejs)
 - **Frontend**
   - [`useConversationMessages` — patrón crítico](#useconversationmessages--patrón-crítico)
   - [`useConversations` — reglas del handler de `message_created`](#useconversations--reglas-del-handler-de-message_created)
@@ -53,6 +54,17 @@ SSE y sus eventos, no leídos, y la UI del chat: hilo, bandeja, conversación nu
 ### `unreadCount`
 
 **`unreadCount`:** se incrementa en cada mensaje inbound (webhook). Se resetea a 0 (`markConversationRead`, en `chat.controller.js`) en dos momentos: al **abrir** el chat (`GET /api/chats/:id/messages` **sin cursor**, `hasCursor === false`) y al **responder** desde él (texto o plantilla en `POST /api/chats/:id/…`, aunque Meta lo rechace). Lo que llega con el chat abierto **sigue sin leer** hasta entonces (decisión de Jonathan, 2026-10-07). La plantilla de «Conversación nueva» a un número que ya tenía chat no cuenta: ahí no se vieron sus mensajes. Paginar hacia atrás en el historial no es leer, y si reseteara siempre, un mensaje que llegue mientras el usuario hace scroll perdería su badge. El `updateOne` filtra por `unreadCount: { $gt: 0 }` y solo emite `conversation_updated` si `modifiedCount > 0`, para no inundar el SSE al reabrir chats ya leídos.
+
+### Avisos push (`push.service.js`)
+
+**Avisos push** (app móvil, 2026-10-14; plan: `docs/superpowers/plans/2026-10-14-app-movil.md`): el SSE solo sirve con Wasmish en pantalla. Con la app en segundo plano o cerrada, el celular congela la página y la conexión se cae. Por eso, cada entrante también manda un **aviso push** a los dispositivos suscritos.
+- **Quién recibe:** la misma regla que el `message_created` por SSE. `notifyInbound` (`services/push.service.js`) busca las suscripciones de la cuenta, **relee** a esas personas (`User`: estado, rol y líneas **de ahora**, no las de cuando se suscribieron) y se queda con las que cumplen `pushRecipientIds` (`utils/push.js`: `sessionAuthFor` + `canReceive(auth, { lineId })`). La API key no recibe avisos.
+- **Qué dice:** `buildInboundPush` → `{ title, body, conversationId, url }`. `title` es el nombre del contacto de la bandeja (`contactDisplayName`, 60 caracteres como mucho); `body` es el `text` del mensaje (un adjunto sin texto lleva su etiqueta), 180 caracteres; `url` es `/private/chats?c=<id>`. Se envía con `TTL` de 12 h y `urgency: 'high'`.
+- **El webhook no lo espera** (`void notifyInbound(…)`, después del SSE) y `notifyInbound` nunca rechaza: un servicio de push lento o caído no frena ni tumba el webhook (regla 7). Ni el texto ni el `endpoint` van al log: solo el código HTTP y el host del servicio.
+- **Suscripciones caducadas:** si el servicio de push responde 404 o 410 (`isGonePushError`), se borra la suscripción. Otro error solo se loguea.
+- **El envío** sale por `pushTransport.send` (`web-push`, que firma con las claves VAPID y cifra). Los tests de aislamiento lo reemplazan (`pushCalls`, `onPush` en `helpers.js`): ningún test sale a la red.
+- **Las suscripciones** (`PushSubscription`: `accountId`, `memberId` = la persona, `endpoint` único, `keys`) las guardan las rutas `/api/push/…` ([api.md](api.md#endpoints-completos)). **Activar** (`POST /push/subscriptions`, un toque de la persona) pasa el navegador a quien lo activa. **Sincronizar** (`POST /push/subscriptions/sync`, automático) nunca cambia de dueño: con otra persona, 409 `push_owned_by_other`. Si no, una sincronización vieja que llega tarde devolvía el dispositivo a quien ya no lo usa (revisión de Codex del PR #41). Solo se aceptan `endpoint` de servicios de push conocidos (`isAllowedPushEndpoint`), porque el backend les hace un POST.
+- **Sin `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` y `VAPID_SUBJECT`** (`PUSH_ENABLED` en `config.js`), los avisos están apagados: `/push/config` da `publicKey: null`, suscribir da 503 `push_disabled` y `notifyInbound` no hace nada.
 
 ## Frontend
 
