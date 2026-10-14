@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import {
-    seedAccount, request, sessionFrom, ANONYMOUS, assertNoLeak, assertHasOwn, connectWhatsapp, onMeta, metaCalls,
+    seedAccount, seedMember, request, sessionFrom, ANONYMOUS, assertNoLeak, assertHasOwn, connectWhatsapp, onMeta, metaCalls,
     Account, ApiKey, Conversation, Line, User,
 } from './helpers.js';
 
@@ -276,4 +276,32 @@ test('GET /admin/clients cuenta las líneas activas de cada cuenta', async () =>
     const after = (await request(admin, 'GET', '/admin/clients?limit=50')).body.clients.find(client => client.email === 'm@pruebas.local');
     assert.equal(after.extraWabas, 1);
     assert.ok(!JSON.stringify(after).includes('token'));
+});
+
+// Fase 3: la sesión dice qué puede hacer cada uno; el frontend decide con eso
+// qué enseña (la autoridad sigue siendo el backend).
+test('/verify: el rol, los permisos, las líneas y la cuenta (sin correos ajenos)', async () => {
+    const owner = await seedAccount('VO', { seq: 30 });
+    const own = await request(owner, 'GET', '/verify');
+    assert.equal(own.status, 200, own.text);
+    assert.equal(own.body.role, 'owner');
+    assert.deepEqual(own.body.permissions, [
+        'contacts.import', 'contacts.delete', 'tags.manage', 'templates.manage',
+        'campaigns.manage', 'apiKeys.manage', 'lines.manage', 'team.manage',
+    ]);
+    assert.equal(own.body.lineIds, null);
+    assert.equal(own.body.account.memberCount, 1);
+
+    const { lineId } = await connectWhatsapp(owner);
+    const agent = await seedMember(owner, { role: 'agent', lineIds: [lineId], label: 'VA' });
+    await seedMember(owner, { role: 'agent', label: 'VX' }).then(member =>
+        User.updateOne({ _id: member.userId }, { status: 'inactive' }));
+    const asAgent = await request(agent, 'GET', '/verify');
+    assert.equal(asAgent.status, 200, asAgent.text);
+    assert.equal(asAgent.body.role, 'agent');
+    assert.deepEqual(asAgent.body.permissions, []);
+    assert.deepEqual(asAgent.body.lineIds, [String(lineId)]);
+    assert.equal(asAgent.body.account.memberCount, 2, 'el desactivado no cuenta');
+    assert.deepEqual(asAgent.body.account.managers, [{ name: `SECRETO-VO`, role: 'owner' }]);
+    assert.ok(!asAgent.text.includes('vo@pruebas.local'), 'no enseña el correo del owner');
 });

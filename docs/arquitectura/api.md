@@ -27,6 +27,8 @@ Cómo se autentica cada ruta, el rate limiting y la tabla completa de endpoints 
 
 ### Lo que `login` y `verify` NO devuelven
 
+**Lo que sí devuelven sobre el acceso** (Fase 3, `sessionAccessFor` en `services/account.service.js`): `register`, `login` y `/verify` añaden `role`, `permissions` (las acciones de la tabla de «Roles y permisos» que tiene), `lineIds` (las líneas a su alcance; `null` = todas) y `account: { name, memberCount, managers }`. `memberCount` son las personas activas de la cuenta; `managers`, el owner y los admins activos, **solo nombre y rol**. El frontend decide con esto qué enseña; la autoridad sigue siendo el backend.
+
 **Lo que `login` y `verify` NO devuelven:** el token de WhatsApp **nunca** sale del backend. Ambos endpoints devuelven `whatsappConnected: boolean`, no `tokenWhatsapp`. El frontend no lo necesita — todas las llamadas a Meta las hace el backend. Mismo criterio en `admin.controller.js`.
 
 ### Roles y permisos

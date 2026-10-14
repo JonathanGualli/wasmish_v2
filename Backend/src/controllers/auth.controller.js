@@ -1,7 +1,7 @@
 import { TOKEN_SECRET } from '../config.js';
 import { createAccessToken } from '../libs/jwt.js';
 import User from '../models/user.model.js'
-import { createAccountWithOwner } from '../services/account.service.js';
+import { createAccountWithOwner, sessionAccessFor } from '../services/account.service.js';
 import { sessionAuthFor } from '../utils/account.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
@@ -62,6 +62,7 @@ export const register = async (req, res) => {
             status: userSaved.status,
             createdAt: userSaved.createdAt,
             updatedAt: userSaved.updatedAt,
+            ...await sessionAccessFor(userSaved),
         });
 
     } catch (error) {
@@ -109,6 +110,7 @@ export const login = async (req, res) => {
             status: userFound.status,
             createdAt: userFound.createdAt,
             updatedAt: userFound.updatedAt,
+            ...await sessionAccessFor(userFound),
         });
 
     } catch (error) {
@@ -158,7 +160,9 @@ export const verifyToken = async (req, res) => {
             status: userFound.status,
             whatsappConnected: Boolean(userFound.tokenWhatsapp),
             phoneNumberId: userFound.phoneNumberId ?? "",
-            waBusinessId: userFound.waBusinessId ?? ""
+            waBusinessId: userFound.waBusinessId ?? "",
+            // Qué puede hacer y qué ve (Fase 3): el frontend decide con esto qué enseña.
+            ...await sessionAccessFor(userFound),
         })
     });
 }
