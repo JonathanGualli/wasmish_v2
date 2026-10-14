@@ -9,15 +9,16 @@ import {
     uploadHeaderMediaController, uploadHeaderMediaFileController, removeHeaderMediaController, getHeaderMediaFileController,
 } from "../controllers/template.controller.js";
 import { publicApiIpLimiter, publicApiUserLimiter } from "../middlewares/rate.limit.middleware.js";
+import { requirePermission } from "../middlewares/require.permission.middleware.js";
 
 const router = Router();
 
-router.get('/templates/sync', authRequired, syncTemplatesController);
+router.get('/templates/sync', authRequired, requirePermission('templates.manage'), syncTemplatesController);
 router.get('/templates', authRequired, getTemplatesController);
 
-router.put('/templates/:templateId/header-media', authRequired, readRawFile, uploadHeaderMediaController);
-router.post('/templates/:templateId/header-media/files', authRequired, readRawFile, uploadHeaderMediaFileController);
-router.delete('/templates/:templateId/header-media', authRequired, removeHeaderMediaController);
+router.put('/templates/:templateId/header-media', authRequired, requirePermission('templates.manage'), readRawFile, uploadHeaderMediaController);
+router.post('/templates/:templateId/header-media/files', authRequired, requirePermission('templates.manage'), readRawFile, uploadHeaderMediaFileController);
+router.delete('/templates/:templateId/header-media', authRequired, requirePermission('templates.manage'), removeHeaderMediaController);
 router.get('/templates/media/:id', authRequired, getHeaderMediaFileController);
 
 // API pública para terceros — autenticada por API key

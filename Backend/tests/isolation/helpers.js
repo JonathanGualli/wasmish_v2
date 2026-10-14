@@ -187,6 +187,21 @@ export const seedAccount = async (label, { isSuperadmin = false, seq = 1, maxLin
 };
 
 /**
+ * Otra persona de la cuenta de `account` (Fase 3), con su rol y sus líneas.
+ * Devuelve `{ userId, accountId, token, label }`, que sirve para `request`.
+ */
+export const seedMember = async (account, { role, lineIds = [], label }) => {
+    const user = await User.create({
+        name: `${label} miembro`, email: `${label.toLowerCase()}@pruebas.local`, password: 'x',
+        accountId: account.accountId, role, lineIds, status: 'active',
+    });
+    return {
+        label, userId: String(user._id), accountId: account.accountId,
+        token: await createAccessToken({ id: String(user._id) }),
+    };
+};
+
+/**
  * Una cuenta con WhatsApp «conectado», para lo que lo exige antes de nada (crear una campaña).
  * Pasa por `applyConnection`, como una conexión de verdad después de hablar con Meta: la línea
  * del número (`99<seq>` si no se da otro: un número solo puede estar en una cuenta), el token en

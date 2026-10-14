@@ -5,6 +5,7 @@ import Waba from "../models/waba.model.js";
 import { disconnectLine, updateLineSettings } from "../services/line.service.js";
 import { decrypt } from "../utils/crypto.js";
 import { cleanLineName, nextDefaultLine } from "../utils/line.js";
+import { inLineScope, lineScope } from "../utils/permissions.js";
 import { LINE_ERROR_CODES, LINE_NOT_FOUND_MESSAGE } from "../utils/whatsapp.line.js";
 
 // ---------------------------------------------------------------------------
@@ -47,9 +48,16 @@ const serializeAccountLine = async (accountId, line) => {
     return serializeLine(line, { defaultLineId: account?.defaultLineId, waba });
 };
 
+// Las líneas a su alcance (Fase 3): supervisor y agente, las suyas. Lo demás
+// responde 404, igual que una línea de otra cuenta.
+const lineFilterFor = (auth) => {
+    const scope = lineScope(auth);
+    return scope === null ? { accountId: auth.accountId } : { accountId: auth.accountId, _id: { $in: scope } };
+};
+
 // Un id mal formado es una línea que no existe: 404, no un CastError (500).
-const findOwnedLine = (accountId, id) =>
-    mongoose.isValidObjectId(id) ? Line.findOne({ _id: id, accountId }).lean() : null;
+const findOwnedLine = (auth, id) =>
+    mongoose.isValidObjectId(id) && inLineScope(auth, id) ? Line.findOne({ _id: id, accountId: auth.accountId }).lean() : null;
 
 // GET /lines — todas, también las desconectadas (con su historial): las
 // activas primero, la por defecto la primera; después, por antigüedad.
@@ -57,7 +65,7 @@ export const listLines = async (req, res) => {
     try {
         const { accountId } = req.auth;
         const account = await Account.findById(accountId).select('limits defaultLineId').lean();
-        const lines = await Line.find({ accountId }).sort({ createdAt: 1 }).lean();
+        const lines = await Line.find(lineFilterFor(req.auth)).sort({ createdAt: 1 }).lean();
         const wabas = await Waba.find({ _id: { $in: lines.map(line => line.wabaId).filter(Boolean) }, accountId }).lean();
         const wabaById = new Map(wabas.map(waba => [String(waba._id), waba]));
 
@@ -68,7 +76,9 @@ export const listLines = async (req, res) => {
 
         // La que pasaría a ser la por defecto si se desconecta la actual: el
         // diálogo de desconectar lo dice («La API pasará a enviar por…»).
-        const nextDefault = account?.defaultLineId ? nextDefaultLine(lines, account.defaultLineId) : null;
+        // Solo quien ve todas las líneas (y las gestiona) necesita saberlo.
+        const nextDefault = account?.defaultLineId && lineScope(req.auth) === null
+            ? nextDefaultLine(lines, account.defaultLineId) : null;
 
         return res.json({
             lines: serialized,
@@ -84,7 +94,7 @@ export const listLines = async (req, res) => {
 export const updateLine = async (req, res) => {
     try {
         const { accountId } = req.auth;
-        const line = await findOwnedLine(accountId, req.params.id);
+        const line = await findOwnedLine(req.auth, req.params.id);
         if (!line) return sendNotFound(res);
 
         await updateLineSettings(accountId, line._id, {
@@ -102,7 +112,7 @@ export const updateLine = async (req, res) => {
 export const disconnectLineController = async (req, res) => {
     try {
         const { accountId } = req.auth;
-        const line = await findOwnedLine(accountId, req.params.id);
+        const line = await findOwnedLine(req.auth, req.params.id);
         if (!line) return sendNotFound(res);
 
         await disconnectLine(accountId, line._id);
@@ -118,7 +128,7 @@ export const disconnectLineController = async (req, res) => {
 // GET /lines para que solo salga cuando se pide.
 export const getLinePin = async (req, res) => {
     try {
-        const line = await findOwnedLine(req.auth.accountId, req.params.id);
+        const line = await findOwnedLine(req.auth, req.params.id);
         if (!line) return sendNotFound(res);
         return res.json({ pin: line.twoStepPin ? decrypt(line.twoStepPin) : null });
     } catch (error) {

@@ -7,18 +7,19 @@ import {
     pauseCampaign, resumeCampaign, cancelCampaign,
 } from "../controllers/campaign.controller.js";
 import { campaignAudienceSchema, campaignDraftSchema, createCampaignSchema } from "../schemas/campaign.schema.js";
+import { requirePermission } from "../middlewares/require.permission.middleware.js";
 
 const router = Router();
 
-router.post('/campaigns/preview', authRequired, validateSchema(campaignDraftSchema), previewCampaign);
-router.post('/campaigns/preview/recipients', authRequired, validateSchema(campaignAudienceSchema), previewCampaignRecipients);
-router.post('/campaigns', authRequired, validateSchema(createCampaignSchema), createCampaign);
-router.get('/campaigns', authRequired, listCampaigns);
-router.get('/campaigns/:id', authRequired, getCampaign);
-router.get('/campaigns/:id/failures', authRequired, getCampaignFailures);
-router.get('/campaigns/:id/recipients', authRequired, listCampaignRecipients);
-router.post('/campaigns/:id/pause', authRequired, pauseCampaign);
-router.post('/campaigns/:id/resume', authRequired, resumeCampaign);
-router.post('/campaigns/:id/cancel', authRequired, cancelCampaign);
+router.post('/campaigns/preview', authRequired, requirePermission('campaigns.manage'), validateSchema(campaignDraftSchema), previewCampaign);
+router.post('/campaigns/preview/recipients', authRequired, requirePermission('campaigns.manage'), validateSchema(campaignAudienceSchema), previewCampaignRecipients);
+router.post('/campaigns', authRequired, requirePermission('campaigns.manage'), validateSchema(createCampaignSchema), createCampaign);
+router.get('/campaigns', authRequired, requirePermission('campaigns.manage'), listCampaigns);
+router.get('/campaigns/:id', authRequired, requirePermission('campaigns.manage'), getCampaign);
+router.get('/campaigns/:id/failures', authRequired, requirePermission('campaigns.manage'), getCampaignFailures);
+router.get('/campaigns/:id/recipients', authRequired, requirePermission('campaigns.manage'), listCampaignRecipients);
+router.post('/campaigns/:id/pause', authRequired, requirePermission('campaigns.manage'), pauseCampaign);
+router.post('/campaigns/:id/resume', authRequired, requirePermission('campaigns.manage'), resumeCampaign);
+router.post('/campaigns/:id/cancel', authRequired, requirePermission('campaigns.manage'), cancelCampaign);
 
 export default router;

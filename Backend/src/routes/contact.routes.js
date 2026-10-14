@@ -5,17 +5,18 @@ import { listContacts, getContact, createContact, updateContact, deleteContact, 
 import { bulkTagContactsSchema, createContactSchema, tagSelectionSummarySchema, updateContactSchema } from "../schemas/contact.schema.js";
 import { previewImport, importContacts } from "../controllers/contact.import.controller.js";
 import { importContactsSchema, importPreviewSchema } from "../schemas/contact.import.schema.js";
+import { requirePermission } from "../middlewares/require.permission.middleware.js";
 
 const router = Router();
 
 router.get('/contacts', authRequired, listContacts);
 router.get('/contacts/:id', authRequired, getContact);
 router.post('/contacts', authRequired, validateSchema(createContactSchema), createContact);
-router.post('/contacts/tags', authRequired, validateSchema(bulkTagContactsSchema), bulkTagContacts);
+router.post('/contacts/tags', authRequired, requirePermission('tags.manage'), validateSchema(bulkTagContactsSchema), bulkTagContacts);
 router.post('/contacts/tags/summary', authRequired, validateSchema(tagSelectionSummarySchema), summarizeSelectionTags);
-router.post('/contacts/import/preview', authRequired, validateSchema(importPreviewSchema), previewImport);
-router.post('/contacts/import', authRequired, validateSchema(importContactsSchema), importContacts);
+router.post('/contacts/import/preview', authRequired, requirePermission('contacts.import'), validateSchema(importPreviewSchema), previewImport);
+router.post('/contacts/import', authRequired, requirePermission('contacts.import'), validateSchema(importContactsSchema), importContacts);
 router.patch('/contacts/:id', authRequired, validateSchema(updateContactSchema), updateContact);
-router.delete('/contacts/:id', authRequired, deleteContact);
+router.delete('/contacts/:id', authRequired, requirePermission('contacts.delete'), deleteContact);
 
 export default router;

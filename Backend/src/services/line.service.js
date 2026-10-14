@@ -4,9 +4,10 @@ import Line from '../models/line.model.js';
 import User from '../models/user.model.js';
 import Waba from '../models/waba.model.js';
 import { findAccountOwner } from './account.service.js';
-import { legacyUserFields, nextDefaultLine, ownerConnection, planConnection, sendingLineFor } from '../utils/line.js';
+import { legacyUserFields, nextDefaultLine, ownerConnection, pickSendingLineId, planConnection, sendingLineFor } from '../utils/line.js';
+import { inLineScope, lineScope } from '../utils/permissions.js';
 import {
-    DEFAULT_LINE_INACTIVE_MESSAGE, LINE_BUSY_MESSAGE, LINE_ERROR_CODES, LINE_DISCONNECTED_MESSAGE, LINE_NOT_FOUND_MESSAGE, WHATSAPP_NOT_CONNECTED_MESSAGE,
+    CHOOSE_LINE_MESSAGE, DEFAULT_LINE_INACTIVE_MESSAGE, LINE_BUSY_MESSAGE, LINE_ERROR_CODES, LINE_DISCONNECTED_MESSAGE, LINE_NOT_FOUND_MESSAGE, WHATSAPP_NOT_CONNECTED_MESSAGE,
     lineLimitMessage,
 } from '../utils/whatsapp.line.js';
 
@@ -164,6 +165,28 @@ export const findSendingLine = async (accountId, { lineId = null, phoneNumberId 
     if (result.issue === 'not_connected') throw statusError(409, WHATSAPP_NOT_CONNECTED_MESSAGE);
     if (result.issue === 'disconnected') throw statusError(409, LINE_DISCONNECTED_MESSAGE);
     return result.line;
+};
+
+/**
+ * La línea por la que sale lo que una PERSONA empieza (una conversación nueva o
+ * una campaña), con las líneas a su alcance (Fase 3): la pedida, si es suya
+ * (si no, 404, como la de otra cuenta); sin pedirla, `pickSendingLineId`. La
+ * API key llega a todas: para ella es `findSendingLine` sin más.
+ */
+export const findStartLine = async (auth, lineId = null) => {
+    const scope = lineScope(auth);
+    if (lineId && !inLineScope(auth, lineId)) throw statusError(404, LINE_NOT_FOUND_MESSAGE, LINE_ERROR_CODES.notFound);
+    if (lineId || scope === null) return findSendingLine(auth.accountId, { lineId });
+
+    const account = await Account.findById(auth.accountId).select('defaultLineId').lean();
+    const accessible = await Line.find({ _id: { $in: scope }, accountId: auth.accountId, status: 'active' }).select('_id').lean();
+    const pick = pickSendingLineId({
+        defaultLineId: account?.defaultLineId ?? null,
+        accessibleLineIds: accessible.map(line => String(line._id)),
+    });
+    if (pick.error === 'choose_line') throw statusError(400, CHOOSE_LINE_MESSAGE, LINE_ERROR_CODES.chooseLine);
+    if (pick.error) throw statusError(404, LINE_NOT_FOUND_MESSAGE, LINE_ERROR_CODES.notFound);
+    return findSendingLine(auth.accountId, { lineId: pick.lineId });
 };
 
 // La línea de una conversación: la suya o, si es anterior a las líneas, la de su número.
@@ -387,8 +410,12 @@ export const disconnectLine = (accountId, lineId) => withLineLock(accountId, asy
  * waBusinessId, tokenWhatsapp }` (token cifrado): lo que necesita
  * `syncTemplatesForWaba`. Las plantillas se listan y se sincronizan de todos.
  */
-export const findAccountWabas = async (accountId) => {
-    const wabaIds = await Line.distinct('wabaId', { accountId, status: 'active', wabaId: { $ne: null } });
+export const findAccountWabas = async (accountId, { lineIds = null } = {}) => {
+    const wabaIds = await Line.distinct('wabaId', {
+        accountId, status: 'active', wabaId: { $ne: null },
+        // Solo los de esas líneas (las que alguien tiene a su alcance, Fase 3).
+        ...(lineIds && { _id: { $in: lineIds } }),
+    });
     const wabas = await Waba.find({ _id: { $in: wabaIds }, accountId }).lean();
     return wabas.map(waba => ({ accountId, waBusinessId: waba.waBusinessId, tokenWhatsapp: waba.tokenWhatsapp }));
 };

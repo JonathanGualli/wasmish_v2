@@ -56,12 +56,16 @@ export const LINE_ERROR_CODES = {
     phoneNumberNotInWaba: 'phone_number_not_in_waba',
     wabaTaken: 'waba_taken',
     registrationFailed: 'phone_number_registration_failed',
+    chooseLine: 'choose_line',
 };
 
 // Conectar otro número con la cuenta en el límite de su plan (Fase 2c).
 export const lineLimitMessage = (maxLines) => (maxLines === 1
     ? 'Tu plan permite 1 línea conectada. Desconéctala antes de conectar otra, o pide más líneas.'
     : `Tu plan permite ${maxLines} líneas conectadas. Desconecta una antes de conectar otra, o pide más líneas.`);
+
+// Empezar sin elegir línea con varias a su alcance y ninguna es la por defecto (Fase 3).
+export const CHOOSE_LINE_MESSAGE = 'Elige por qué línea enviar.';
 
 // Meta no registró el número en la Cloud API al conectarlo (`registerIfNeeded`).
 export const PHONE_NUMBER_REGISTRATION_FAILED_MESSAGE = 'WhatsApp no dejó activar este número para enviar mensajes. Inténtalo de nuevo en unos minutos; si se repite, escríbenos.';

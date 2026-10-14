@@ -3,6 +3,7 @@ import Message from '../models/message.model.js';
 import Conversation from '../models/conversation.model.js';
 import { MEDIA_DIR } from '../config.js';
 import { rutaDeArchivo, mimeParaServir } from '../utils/media.storage.js';
+import { conversationScope } from '../utils/permissions.js';
 
 // Sirve el adjunto de un mensaje. Se pide por el id del MENSAJE, no por el del
 // archivo: así la comprobación de propietario es la misma de siempre
@@ -16,7 +17,8 @@ export const getMedia = async (req, res) => {
         const message = await Message.findById(id).lean();
         if (!message?.mediaFile) return res.status(404).json([{ message: "Media not found" }]);
 
-        const conversation = await Conversation.findOne({ _id: message.conversationId, userId }).lean();
+        // De la cuenta y de una línea a su alcance (Fase 3); si no, 404, como lo ajeno.
+        const conversation = await Conversation.findOne({ _id: message.conversationId, userId, ...conversationScope(req.auth) }).lean();
         if (!conversation) return res.status(404).json([{ message: "Media not found" }]);
 
         const ruta = rutaDeArchivo(MEDIA_DIR, message.mediaFile);
