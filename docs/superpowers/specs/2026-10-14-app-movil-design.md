@@ -21,9 +21,9 @@ Fuera de alcance: app de tienda (Capacitor), modo sin conexión, avisos de otra 
 - **Android y iPhone.** En iPhone (iOS 16.4 o posterior) el push solo existe con la app **añadida a la pantalla de inicio**, y la app instalada tiene sus propias cookies: hay que iniciar sesión otra vez dentro. La interfaz lo explica paso a paso.
 - **El aviso dice el nombre del contacto y el texto** (lo que se ve en la bandeja: un adjunto sin texto sale con su etiqueta, «Imagen», «Documento»…). Se ve en la pantalla bloqueada: es lo que eligió Jonathan.
 - **Cada persona activa o desactiva los avisos en cada dispositivo.** Le llegan los de las conversaciones que ya puede ver: su cuenta, su rol y sus líneas, con la **misma regla que el SSE** (`canReceive`). Con la Fase 4, cuando haya asignación, la regla cambia en el mismo sitio.
-- **Sin aviso si Wasmish está en primer plano** en ese dispositivo: ya se ve en pantalla. Salvo en Safari (iPhone y Mac), que retira el permiso a quien recibe un push sin mostrar aviso: ahí sale siempre.
+- **Cada mensaje muestra su aviso, también con Wasmish en pantalla.** Callarlo no es posible desde el navegador: Chrome pondría un aviso genérico suyo y Safari retiraría el permiso (revisión de Codex del PR #41).
 - **Un aviso por conversación:** varios mensajes seguidos del mismo contacto reemplazan el aviso anterior y vuelven a sonar.
-- **Al cerrar sesión, el dispositivo deja de recibir avisos.** Si otra persona inicia sesión en el mismo navegador y los activa, ese navegador pasa a ser suyo.
+- **Al cerrar sesión, el dispositivo deja de recibir avisos**, aunque falle la red: el navegador cancela la suscripción antes de avisar al backend. Si otra persona inicia sesión en el mismo navegador y **los activa**, ese navegador pasa a ser suyo; la sincronización automática nunca cambia de dueño.
 
 ## 4. Cómo funciona
 
@@ -31,7 +31,9 @@ Fuera de alcance: app de tienda (Capacitor), modo sin conexión, avisos de otra 
 
 **Al llegar un mensaje:** el webhook guarda el mensaje y emite el SSE como siempre; después, sin esperar, `notifyInbound` busca las suscripciones de la cuenta, relee a esas personas (activas, rol y líneas **de ahora**, no de cuando se suscribieron), se queda con las que pueden ver la conversación y les manda el aviso. Si el servicio de push responde 404 o 410, la suscripción ya no existe y se borra.
 
-**Al tocar el aviso:** si Wasmish está abierto, se enfoca y abre la conversación; si no, se abre en `/private/chats?c=<id>`.
+**Al tocar el aviso:** si Wasmish está abierto, se enfoca y abre la conversación; si no, se abre en `/private/chats?c=<id>`. Si la sesión caducó, pasa por el login y después abre esa conversación.
+
+**Mantener la suscripción viva:** el navegador puede renovarla o perderla. El service worker manda la nueva cuando el navegador avisa (`pushsubscriptionchange`, Chrome y Firefox), y al abrir la app se vuelve a guardar, o se crea otra vez si desapareció y la persona no apagó los avisos (Safari no avisa).
 
 **Garantías:**
 - El webhook no se cae ni se retrasa por un aviso (regla 7): el envío no se espera y nunca lanza.
