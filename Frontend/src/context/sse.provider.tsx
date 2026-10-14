@@ -9,7 +9,10 @@ const RETRY_BASE_MS = 1000;
 const RETRY_MAX_MS = 30_000;
 
 export const SSEProvider = ({ children }: { children: ReactNode }) => {
-    const { user } = useAuthContext();
+    const { user, onAccessChanged } = useAuthContext();
+    // En un ref: la conexión no se rehace cada vez que cambia la función.
+    const accessChanged = useRef(onAccessChanged);
+    useEffect(() => { accessChanged.current = onAccessChanged; }, [onAccessChanged]);
     const queryClient = useQueryClient();
 
     // Registro de suscriptores por tipo de evento. useRef para que NO se
@@ -53,6 +56,7 @@ export const SSEProvider = ({ children }: { children: ReactNode }) => {
                 onConversationUpdated: dispatch("conversation_updated"),
                 onContactUpdated: dispatch("contact_updated"),
                 onCampaignProgress: dispatch("campaign_progress"),
+                onAccessChanged: () => accessChanged.current(),
                 onOpen: () => {
                     attempt = 0;
                     if (interrupted) {

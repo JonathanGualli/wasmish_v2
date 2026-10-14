@@ -6,6 +6,7 @@ import { parseError, useTemplates } from "../../../hooks/useTemplates";
 import type { Template } from "../../../models/template.model";
 import { headerFileIssue, headerMediaRule, headerMediaUrl, templateHeaderIssue } from "../../../utils/templateHeader";
 import { formatFileSize } from "../../../utils/fileSize";
+import { useAuthContext } from "../../../context/auth.context";
 
 const linkButton = `text-[12.5px] font-semibold cursor-pointer hover:underline disabled:text-brand-subtle
     disabled:cursor-wait disabled:no-underline`;
@@ -39,6 +40,8 @@ const MediaThumb = ({ template }: { template: Template }) => {
 export const TemplateHeaderCell = ({ template }: { template: Template }) => {
     const inputRef = useRef<HTMLInputElement>(null);
     const { uploadHeaderMedia, removeHeaderMedia } = useTemplates();
+    // Sin `templates.manage` (el agente), la cabecera se ve pero no se cambia (Fase 3).
+    const canManage = useAuthContext().can('templates.manage');
     const { setState: showNotice, setContent: setNoticeContent } = useNoticeContext();
     const rule = headerMediaRule(template);
     // Las mutaciones son de esta celda: cada fila lleva su propio estado.
@@ -85,11 +88,13 @@ export const TemplateHeaderCell = ({ template }: { template: Template }) => {
         return (
             <div className="flex flex-col items-start gap-1.5 min-w-[150px]">
                 <Pill tone="warning">Falta {rule.noun}</Pill>
-                <button type="button" onClick={() => inputRef.current?.click()} disabled={busy}
-                    className={`${linkButton} inline-flex items-center gap-1.5 text-brand-accent-strong`}>
-                    <Upload size={13} />{busy ? 'Subiendo…' : `Subir ${rule.noun}`}
-                </button>
-                {input}
+                {canManage && (
+                    <button type="button" onClick={() => inputRef.current?.click()} disabled={busy}
+                        className={`${linkButton} inline-flex items-center gap-1.5 text-brand-accent-strong`}>
+                        <Upload size={13} />{busy ? 'Subiendo…' : `Subir ${rule.noun}`}
+                    </button>
+                )}
+                {canManage && input}
             </div>
         );
     }
@@ -103,7 +108,7 @@ export const TemplateHeaderCell = ({ template }: { template: Template }) => {
                     {media.filename ?? rule.noun}
                     <span className="font-mono text-[11px] text-brand-subtle"> · {formatFileSize(media.size)}</span>
                 </span>
-                <span className="flex gap-3">
+                {canManage && <span className="flex gap-3">
                     <button type="button" onClick={() => inputRef.current?.click()} disabled={busy}
                         className={`${linkButton} text-brand-accent-strong`}>
                         {uploadHeaderMedia.isPending ? 'Subiendo…' : 'Cambiar'}
@@ -111,9 +116,9 @@ export const TemplateHeaderCell = ({ template }: { template: Template }) => {
                     <button type="button" onClick={remove} disabled={busy} className={`${linkButton} text-brand-gray-600`}>
                         Quitar
                     </button>
-                </span>
+                </span>}
             </div>
-            {input}
+            {canManage && input}
         </div>
     );
 };

@@ -9,6 +9,12 @@ interface AuthContextProps {
     isAuthenticated: boolean;
     errors: string[];
     isLoading: boolean;
+    /** Si la sesión tiene esa acción (`permissions` del backend; la autoridad sigue siendo él). */
+    can: (action: string) => boolean;
+    /** Entra con la sesión que ya abrió el backend (aceptar una invitación). */
+    enterSession: (user: User) => void;
+    /** Le cambiaron el acceso: se olvida lo que había y se vuelve a leer la sesión. */
+    onAccessChanged: () => void;
 }
 
 

@@ -8,6 +8,7 @@ import { templateColumns, templateLinesColumn } from "./TemplateColumns";
 import { useLines } from "../../../hooks/useLines";
 import { Callout } from "../../../components/Callout/Callout"
 import { headerMediaRule } from "../../../utils/templateHeader";
+import { useAuthContext } from "../../../context/auth.context";
 
 export const TemplatesPage = () => {
     const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 });
@@ -15,6 +16,9 @@ export const TemplatesPage = () => {
     const missingMedia = templates.filter(t => headerMediaRule(t) && !t.headerMedia).length;
     // Con varias líneas, de qué líneas es cada plantilla, junto a su nombre.
     const { hasManyLines } = useLines();
+    // Sincronizar y subir la cabecera es gestionarlas: el agente solo las ve (Fase 3).
+    const { can } = useAuthContext();
+    const canManage = can('templates.manage');
     const columns = useMemo(
         () => (hasManyLines ? [templateColumns[0], templateLinesColumn, ...templateColumns.slice(1)] : templateColumns),
         [hasManyLines],
@@ -26,13 +30,13 @@ export const TemplatesPage = () => {
                 icon={<LayoutTemplate size={20} />}
                 title="Plantillas"
                 description="Las plantillas aprobadas por Meta que tienes disponibles para enviar. Sincroniza para traer los cambios más recientes."
-                actions={
+                actions={canManage && (
                     <div className="w-full sm:w-[220px] h-10">
                         <CustomButton isLoading={isSyncing} onClick={() => sync()} type="button">
                             <RefreshCw size={16} /> Sincronizar
                         </CustomButton>
                     </div>
-                }
+                )}
             />
             {syncError && (
                 <div className="mb-6">

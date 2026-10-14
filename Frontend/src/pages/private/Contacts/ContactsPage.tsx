@@ -28,6 +28,7 @@ import { SelectionBar } from "./SelectionBar";
 import { TagFilter } from "./TagFilter";
 import { TagManager } from "./TagManager";
 import { BulkTagDialog } from "./BulkTagDialog";
+import { useAuthContext } from "../../../context/auth.context";
 
 const FILTERS: { value: ContactFilter; label: string }[] = [
     { value: 'all', label: 'Todos' },
@@ -61,6 +62,12 @@ type PendingQueryChange = { query?: string; filter?: ContactFilter; tagIds?: str
  */
 export const ContactsPage = () => {
     const navigate = useNavigate();
+    // Fase 3: el agente ve y edita contactos, pero no importa ni actúa en bloque
+    // (crear una campaña, etiquetar). Lo que no puede hacer no se enseña.
+    const { can } = useAuthContext();
+    const canImport = can('contacts.import');
+    const canManageTags = can('tags.manage');
+    const canBulk = can('campaigns.manage') || canManageTags;
     const navigationState = useLocation().state as ContactsNavigationState | null;
     const pickMode = navigationState?.campaignPick ?? null;
     const draftStore = useCampaignDraft();
@@ -221,13 +228,15 @@ export const ContactsPage = () => {
                     title="Aún no tienes contactos"
                     action={
                         <div className="flex flex-wrap items-center justify-center gap-2">
+                            {canImport && (
+                                <div className="h-10">
+                                    <CustomButton onClick={() => navigate(ContactImportPath)}>
+                                        <span className="flex items-center gap-2"><Download size={15} />Importar desde Excel</span>
+                                    </CustomButton>
+                                </div>
+                            )}
                             <div className="h-10">
-                                <CustomButton onClick={() => navigate(ContactImportPath)}>
-                                    <span className="flex items-center gap-2"><Download size={15} />Importar desde Excel</span>
-                                </CustomButton>
-                            </div>
-                            <div className="h-10">
-                                <CustomButton variant="outline" onClick={() => setPanel({ mode: 'create' })}>Crear uno a mano</CustomButton>
+                                <CustomButton variant={canImport ? 'outline' : 'primary'} onClick={() => setPanel({ mode: 'create' })}>Crear uno a mano</CustomButton>
                             </div>
                         </div>
                     }
@@ -291,7 +300,7 @@ export const ContactsPage = () => {
                 renderMobileRow={contact => (
                     <ContactMobileRow contact={contact} tags={tagsFromIds(tags, contact.tagIds)} highlightIds={tagIds} />
                 )}
-                selection={{
+                selection={!canBulk && !pickMode ? undefined : {
                     isSelected: contact => selection.isSelected(contact.id),
                     onToggle: contact => selection.toggle(contact.id),
                     pageState,
@@ -337,11 +346,13 @@ export const ContactsPage = () => {
                     // Sin contactos, las mismas acciones están en el centro: arriba sobrarían (y serían dos mentas).
                     actions={!isEmpty && (
                         <div className="w-full sm:w-auto flex gap-2">
-                            <div className="flex-1 sm:flex-none h-10">
-                                <CustomButton variant="outline" onClick={() => navigate(ContactImportPath)}>
-                                    <span className="flex items-center justify-center gap-2"><Download size={15} />Importar</span>
-                                </CustomButton>
-                            </div>
+                            {canImport && (
+                                <div className="flex-1 sm:flex-none h-10">
+                                    <CustomButton variant="outline" onClick={() => navigate(ContactImportPath)}>
+                                        <span className="flex items-center justify-center gap-2"><Download size={15} />Importar</span>
+                                    </CustomButton>
+                                </div>
+                            )}
                             <div className="flex-1 sm:flex-none h-10">
                                 <CustomButton onClick={() => setPanel({ mode: 'create' })}>
                                     <span className="flex items-center justify-center gap-2"><Plus size={16} />Nuevo contacto</span>
@@ -371,7 +382,7 @@ export const ContactsPage = () => {
                                 {f.label}
                             </button>
                         ))}
-                        <TagFilter tags={tags} value={tagIds} onChange={changeTags} onManage={() => setManagingTags(true)} />
+                        <TagFilter tags={tags} value={tagIds} onChange={changeTags} onManage={canManageTags ? () => setManagingTags(true) : undefined} />
                     </div>
                     {data && (
                         <span className="md:ml-auto font-mono text-xs text-brand-muted tabular-nums">
@@ -413,7 +424,7 @@ export const ContactsPage = () => {
                     actionLabel={selectionActionLabel()}
                     onAction={handleSelectionAction}
                     onClear={selection.clear}
-                    extraAction={!pickMode && (
+                    extraAction={!pickMode && canManageTags && (
                         // Eligiendo destinatarios no: ahí la barra es solo «Continuar».
                         <button
                             type="button"

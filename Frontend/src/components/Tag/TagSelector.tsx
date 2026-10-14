@@ -5,6 +5,7 @@ import {
     MAX_TAGS_PER_CONTACT, TAG_NAME_MAX, cleanTagName, findTagByName, searchTags, tagKey, tagsFromIds,
 } from '../../utils/tags';
 import { TagChip } from './TagChip';
+import { useAuthContext } from "../../context/auth.context";
 
 /**
  * Lo elegido en un selector: las que ya existen (por id) y las nuevas, que se
@@ -34,6 +35,7 @@ export const TagSelector = ({ label, value, onChange, autoFocus = false, creates
     autoFocus?: boolean;
     createsOnPick?: boolean;
 }) => {
+    const { can } = useAuthContext();
     const { data: tags = [] } = useTags();
     const [query, setQuery] = useState('');
     const [open, setOpen] = useState(false);
@@ -50,7 +52,8 @@ export const TagSelector = ({ label, value, onChange, autoFocus = false, creates
     const isChosen = Boolean(name) && (
         (existing && value.ids.includes(existing.id)) || value.newNames.some(n => tagKey(n) === tagKey(name))
     );
-    const canCreate = Boolean(name) && !existing && !isChosen && name.length <= TAG_NAME_MAX;
+    // Crear etiquetas es gestionarlas: sin ese permiso, solo se ponen las que existen (Fase 3).
+    const canCreate = can('tags.manage') && Boolean(name) && !existing && !isChosen && name.length <= TAG_NAME_MAX;
 
     const matches = searchTags(tags, name)
         .filter(tag => !value.ids.includes(tag.id))
