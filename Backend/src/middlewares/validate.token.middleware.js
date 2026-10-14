@@ -19,7 +19,7 @@ export const authRequired = async (req, res, next) => {
     }
 
     try {
-        const user = await User.findById(payload.id).select('accountId role lineIds isSuperadmin status').lean();
+        const user = await User.findById(payload.id).select('name accountId role lineIds isSuperadmin status').lean();
         const auth = sessionAuthFor(user);
         if (!auth) return res.status(401).json([{ message: 'Unauthorized' }]);
 

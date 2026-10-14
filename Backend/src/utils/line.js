@@ -190,3 +190,19 @@ export const cleanLineName = (name) => {
     const clean = String(name ?? '').replace(/\s+/g, ' ').trim();
     return clean ? clean : null;
 };
+
+/**
+ * Por qué línea sale lo que se empieza sin elegirla (una conversación nueva o
+ * una campaña), según las líneas a su alcance (Fase 3 de multi-línea).
+ * `accessibleLineIds`: las ACTIVAS a las que llega, o `null` si llega a todas.
+ * La pedida se devuelve tal cual: su alcance se comprueba después (404).
+ * → `{ lineId }` (null = no hay línea por defecto) o `{ error: 'choose_line' | 'no_line' }`.
+ */
+export const pickSendingLineId = ({ requestedLineId = null, defaultLineId = null, accessibleLineIds = null }) => {
+    if (requestedLineId) return { lineId: String(requestedLineId) };
+    if (accessibleLineIds === null) return { lineId: defaultLineId ? String(defaultLineId) : null };
+    const accessible = accessibleLineIds.map(String);
+    if (defaultLineId && accessible.includes(String(defaultLineId))) return { lineId: String(defaultLineId) };
+    if (accessible.length === 1) return { lineId: accessible[0] };
+    return { error: accessible.length === 0 ? 'no_line' : 'choose_line' };
+};

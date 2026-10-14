@@ -4,7 +4,8 @@ import CampaignRecipient from "../models/campaign.recipient.model.js";
 import Contact from "../models/contact.model.js";
 import Template from "../models/template.model.js";
 import TemplateMedia from "../models/template.media.model.js";
-import { findSendingLine } from "../services/line.service.js";
+import { findStartLine, templateScopeFor } from "../services/line.service.js";
+import { lineScope } from "../utils/permissions.js";
 import Message from "../models/message.model.js";
 import { selectionQueryStages } from "./contact.controller.js";
 import { renderTemplateBody } from "./template.controller.js";
@@ -33,8 +34,15 @@ const sendError = (res, status, message, extra = {}) => res.status(status).json(
 
 const toIso = (date) => (date ? new Date(date).toISOString() : null);
 
-const findOwnedCampaign = (userId, id) =>
-    mongoose.isValidObjectId(id) ? Campaign.findOne({ _id: id, userId }) : null;
+// Las campañas a su alcance (Fase 3): un supervisor, las de sus líneas. Una
+// fuera de alcance responde 404, igual que la de otra cuenta.
+const campaignScope = (auth) => {
+    const scope = lineScope(auth);
+    return scope === null ? {} : { lineId: { $in: scope.map(id => new mongoose.Types.ObjectId(id)) } };
+};
+
+const findOwnedCampaign = (auth, id) =>
+    mongoose.isValidObjectId(id) ? Campaign.findOne({ _id: id, userId: auth.accountId, ...campaignScope(auth) }) : null;
 
 // ---------------------------------------------------------------------------
 // Borrador: plantilla + destinatarios + cómo se rellena. Lo comparten la vista
@@ -96,10 +104,14 @@ const withCampaignHeader = async (userId, template, headerMediaId) => {
     return { template: { ...template, headerMedia: media._id }, errors: [] };
 };
 
-const buildDraft = async (userId, body) => {
+const buildDraft = async (auth, body) => {
+    const userId = auth.accountId;
     // Sin plantilla (vista previa del paso de destinatarios) solo se cuentan
-    // los contactos: no hay mensaje que validar todavía.
-    const stored = body.templateId ? await Template.findOne({ userId, templateId: body.templateId }).lean() : null;
+    // los contactos: no hay mensaje que validar todavía. Una plantilla de un
+    // WABA fuera de su alcance (Fase 3) es como una que no existe.
+    const stored = body.templateId
+        ? await Template.findOne({ userId, templateId: body.templateId, ...await templateScopeFor(auth) }).lean()
+        : null;
     const { template, errors: headerErrors } = await withCampaignHeader(userId, stored, body.headerMediaId);
     const config = { variables: body.variables ?? [], buttons: body.buttons ?? [] };
     // El que vale, no el que se pidió: es el que se guarda en la campaña.
@@ -199,7 +211,7 @@ const summarizeDraft = (draft) => {
  */
 export const previewCampaign = async (req, res) => {
     try {
-        const draft = await buildDraft(req.auth.accountId, req.body);
+        const draft = await buildDraft(req.auth, req.body);
         return res.json(summarizeDraft(draft));
     } catch (error) {
         return sendError(res, 500, error.message);
@@ -219,7 +231,7 @@ export const previewCampaignRecipients = async (req, res) => {
         // más simple que repetir la selección con otra condición.
         const matching = contacts.filter(contact => matchesContactSearch(contact, req.query.search));
         const template = req.body.templateId
-            ? await Template.findOne({ userId: req.auth.accountId, templateId: req.body.templateId }).select('category').lean()
+            ? await Template.findOne({ userId: req.auth.accountId, templateId: req.body.templateId, ...await templateScopeFor(req.auth) }).select('category').lean()
             : null;
         const plan = planAudience(matching, shouldExcludeOptedOut(template, req.body.excludeOptedOut))
             .map(({ contact, skipReason }) => ({
@@ -250,17 +262,18 @@ export const previewCampaignRecipients = async (req, res) => {
 export const createCampaign = async (req, res) => {
     try {
         const userId = req.auth.accountId;
-        // La línea por la que saldrá: la elegida o la por defecto. 404 si es de
-        // otra cuenta; 409 si está desconectada o no hay WhatsApp conectado.
+        // La línea por la que saldrá: la elegida o la que toca según sus líneas
+        // (`findStartLine`). 404 si no es suya; 409 si está desconectada o no
+        // hay WhatsApp conectado.
         let line;
         try {
-            line = await findSendingLine(userId, { lineId: req.body.lineId ?? null });
+            line = await findStartLine(req.auth, req.body.lineId ?? null);
         } catch (error) {
             if (!error.statusCode) throw error;
             return sendError(res, error.statusCode, error.message);
         }
 
-        const draft = await buildDraft(userId, req.body);
+        const draft = await buildDraft(req.auth, req.body);
         if (draft.errors.length > 0) return res.status(400).json(draft.errors);
 
         const { template } = draft;
@@ -330,8 +343,8 @@ export const listCampaigns = async (req, res) => {
         const { page, limit } = parsePage(req.query);
 
         const [campaigns, totalCount] = await Promise.all([
-            Campaign.find({ userId }).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
-            Campaign.countDocuments({ userId }),
+            Campaign.find({ userId, ...campaignScope(req.auth) }).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+            Campaign.countDocuments({ userId, ...campaignScope(req.auth) }),
         ]);
         const stats = await getCampaignsStats(campaigns.map(c => c._id));
 
@@ -349,7 +362,7 @@ export const listCampaigns = async (req, res) => {
 // GET /campaigns/:id
 export const getCampaign = async (req, res) => {
     try {
-        const campaign = await findOwnedCampaign(req.auth.accountId, req.params.id);
+        const campaign = await findOwnedCampaign(req.auth, req.params.id);
         if (!campaign) return sendError(res, 404, 'Campaña no encontrada');
         return res.json(serializeCampaign(campaign, await getCampaignStats(campaign._id)));
     } catch (error) {
@@ -363,7 +376,7 @@ export const getCampaign = async (req, res) => {
  */
 export const getCampaignFailures = async (req, res) => {
     try {
-        const campaign = await findOwnedCampaign(req.auth.accountId, req.params.id);
+        const campaign = await findOwnedCampaign(req.auth, req.params.id);
         if (!campaign) return sendError(res, 404, 'Campaña no encontrada');
         return res.json({ reasons: await getCampaignFailureReasons(campaign._id) });
     } catch (error) {
@@ -382,7 +395,7 @@ const RECIPIENT_STATES = ['pending', 'sent', 'delivered', 'read', 'failed', 'ski
  */
 export const listCampaignRecipients = async (req, res) => {
     try {
-        const campaign = await findOwnedCampaign(req.auth.accountId, req.params.id);
+        const campaign = await findOwnedCampaign(req.auth, req.params.id);
         if (!campaign) return sendError(res, 404, 'Campaña no encontrada');
 
         const { page, limit } = parsePage(req.query);
@@ -448,12 +461,12 @@ const transition = async (req, res, { from, set, conflict, after }) => {
         if (!mongoose.isValidObjectId(id)) return sendError(res, 404, 'Campaña no encontrada');
 
         const campaign = await Campaign.findOneAndUpdate(
-            { _id: id, userId: req.auth.accountId, status: { $in: from } },
+            { _id: id, userId: req.auth.accountId, ...campaignScope(req.auth), status: { $in: from } },
             { $set: set() },
             { new: true },
         );
         if (!campaign) {
-            const exists = await Campaign.exists({ _id: id, userId: req.auth.accountId });
+            const exists = await Campaign.exists({ _id: id, userId: req.auth.accountId, ...campaignScope(req.auth) });
             return exists ? sendError(res, 409, conflict) : sendError(res, 404, 'Campaña no encontrada');
         }
 

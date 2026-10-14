@@ -7,6 +7,7 @@ import { pickContactFields, buildContactMatch, CONTACT_FILTERS, summarizeConvers
 import { resolveMarketingPreference } from "../utils/marketing.preference.js";
 import { MAX_TAGS_PER_CONTACT } from "../utils/contact.tags.js";
 import { resolveOwnedTagIds } from "../services/tag.service.js";
+import { inLineScope, lineScope } from "../utils/permissions.js";
 
 // ---------------------------------------------------------------------------
 // Contactos y su conversación. Lo usan los sitios por donde entra un número o
@@ -264,8 +265,29 @@ const findOwnedContact = (userId, id) =>
 // por línea, Fase 2b de multi-línea).
 const CONVERSATION_SUMMARY_FIELDS = { lineId: 1, lastMessageAt: 1, lastInboundAt: 1 };
 
+// Todas, de cualquier línea: lo que decide (no cambiar el número de quien ya
+// tiene historial) mira todas. Lo que se ENSEÑA pasa por `visibleConversations`.
 const findContactConversations = (userId, contactId) =>
     Conversation.find({ userId, contactId }).select(CONVERSATION_SUMMARY_FIELDS).lean();
+
+// Las conversaciones que la sesión puede ver: las de sus líneas (Fase 3). El
+// contacto es de toda la cuenta; sus conversaciones, de cada línea.
+const visibleConversations = (auth, conversations) =>
+    conversations.filter(conversation => inLineScope(auth, conversation.lineId));
+
+// Lo mismo dentro de la lista: después de los filtros, que miran TODAS las
+// conversaciones («con conversación» no cambia según quién lo pide; revisión de
+// Codex del plan de la Fase 3), se quitan las de líneas que no ve. Sin límite
+// de líneas, nada.
+const visibleConversationStages = (auth) => {
+    const scope = lineScope(auth);
+    if (scope === null) return [];
+    const lineIds = scope.map(id => new mongoose.Types.ObjectId(id));
+    return [
+        { $addFields: { conversations: { $filter: { input: '$conversations', cond: { $in: ['$$this.lineId', lineIds] } } } } },
+        { $addFields: { conversation: { $ifNull: [{ $arrayElemAt: ['$conversations', 0] }, null] } } },
+    ];
+};
 
 const toIso = (date) => (date ? new Date(date).toISOString() : null);
 
@@ -389,6 +411,7 @@ export const listContacts = async (req, res) => {
 
         const [result] = await Contact.aggregate([
             ...contactSelectionStages({ userId, search: req.query.search, filter, tagIds }),
+            ...visibleConversationStages(req.auth),
             { $addFields: { activityAt: { $ifNull: ['$conversation.lastMessageAt', '$createdAt'] } } },
             { $sort: { activityAt: -1, _id: -1 } },
             { $facet: {
@@ -416,7 +439,7 @@ export const getContact = async (req, res) => {
         const contact = await findOwnedContact(userId, req.params.id);
         if (!contact) return sendContactError(res, 404, 'Contacto no encontrado');
 
-        const conversations = await findContactConversations(userId, contact._id);
+        const conversations = visibleConversations(req.auth, await findContactConversations(userId, contact._id));
 
         const [stats] = conversations.length > 0
             ? await Message.aggregate([
@@ -487,7 +510,7 @@ export const updateContact = async (req, res) => {
 
         Object.assign(contact, fields);
         await contact.save();
-        return res.json(serializeContact(contact, conversations));
+        return res.json(serializeContact(contact, visibleConversations(req.auth, conversations)));
     } catch (error) {
         if (error.code === 11000) return sendDuplicatePhone(res, userId, fields.phone);
         return sendContactError(res, 500, error.message);

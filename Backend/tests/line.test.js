@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
-import {
+import { pickSendingLineId,
     ownerConnection, lineStateIssues, sharedWabas, historicalLines, legacyUserFields, legacyUserIssues, planConnection, sendingLineFor, resolveApiLine, nextDefaultLine, cleanLineName,
 } from '../src/utils/line.js';
 
@@ -240,4 +240,25 @@ test('cleanLineName: sin espacios de sobra; vacío → null', () => {
     assert.equal(cleanLineName('  Ventas   Quito '), 'Ventas Quito');
     assert.equal(cleanLineName('   '), null);
     assert.equal(cleanLineName(null), null);
+});
+
+// Empezar una conversación (o una campaña) sin elegir línea, según las líneas a
+// su alcance (Fase 3): la por defecto si es suya; si no, su única línea.
+test('pickSendingLineId: la pedida, sin comprobar aquí el alcance', () => {
+    assert.deepEqual(pickSendingLineId({ requestedLineId: 'l2', defaultLineId: 'l1', accessibleLineIds: ['l1'] }), { lineId: 'l2' });
+});
+
+test('pickSendingLineId: quien ve todas, la por defecto (null si no hay)', () => {
+    assert.deepEqual(pickSendingLineId({ requestedLineId: null, defaultLineId: 'l1', accessibleLineIds: null }), { lineId: 'l1' });
+    assert.deepEqual(pickSendingLineId({ requestedLineId: null, defaultLineId: null, accessibleLineIds: null }), { lineId: null });
+});
+
+test('pickSendingLineId: la por defecto si es suya; si no, su única línea', () => {
+    assert.deepEqual(pickSendingLineId({ requestedLineId: null, defaultLineId: 'l1', accessibleLineIds: ['l2', 'l1'] }), { lineId: 'l1' });
+    assert.deepEqual(pickSendingLineId({ requestedLineId: null, defaultLineId: 'l1', accessibleLineIds: ['l2'] }), { lineId: 'l2' });
+});
+
+test('pickSendingLineId: con varias suyas que no son la por defecto, que elija; sin ninguna, no hay', () => {
+    assert.deepEqual(pickSendingLineId({ requestedLineId: null, defaultLineId: 'l1', accessibleLineIds: ['l2', 'l3'] }), { error: 'choose_line' });
+    assert.deepEqual(pickSendingLineId({ requestedLineId: null, defaultLineId: 'l1', accessibleLineIds: [] }), { error: 'no_line' });
 });

@@ -38,8 +38,8 @@ test('planAccountMigration: con accountId ya puesto no hace nada', () => {
 test('sessionAuthFor: deja ids como texto y lineIds vacío', () => {
     const _id = newId();
     const accountId = newId();
-    assert.deepEqual(sessionAuthFor({ _id, accountId, role: 'owner', status: 'active', isSuperadmin: false }), {
-        userId: String(_id), accountId: String(accountId), role: 'owner', lineIds: [], isSuperadmin: false,
+    assert.deepEqual(sessionAuthFor({ _id, accountId, name: 'Ana', role: 'owner', status: 'active', isSuperadmin: false }), {
+        userId: String(_id), accountId: String(accountId), name: 'Ana', role: 'owner', lineIds: [], isSuperadmin: false,
     });
 });
 

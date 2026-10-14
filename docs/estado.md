@@ -36,8 +36,8 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
   **Volver atrás:** las imágenes `:1.0.16`.
 
-- **Multi-línea · Fase 3: equipo, roles y acceso por línea** — rama `fase3-permisos`, empezado el 2026-10-14 por Claude. Plan: `docs/superpowers/plans/2026-10-14-multi-linea-fase-3.md`; brief de la UI: `docs/superpowers/specs/2026-10-14-equipo-brief-ui.md` (Jonathan se lo pasa a Claude Design).
-  Hecho: el plan y el brief · Falta: la revisión del plan por Codex y las 8 tareas, en 4 PRs (permisos, tiempo real, equipo e invitaciones, UI) · Sin probar: nada todavía.
+- **Multi-línea · Fase 3: equipo, roles y acceso por línea** — empezado el 2026-10-14 por Claude. Plan: `docs/superpowers/plans/2026-10-14-multi-linea-fase-3.md` (revisado por Codex, PR #33); diseño: `Design/Wasmish Equipo - Usuarios, roles y acceso.html`.
+  Hecho: PR 1 (permisos, rama `fase3-permisos`): `utils/permissions.js`, `requirePermission`, el alcance por línea en conversaciones, campañas, líneas, plantillas y contactos, `findStartLine`, y la sesión con `role`, `permissions`, `lineIds` y `account` · Falta: la revisión de Codex del PR 1; PR 2 (tiempo real), PR 3 (equipo e invitaciones), PR 4 (UI) · Sin probar: en el navegador, nada (el PR 1 no cambia la UI).
 
 <!-- Formato de una entrada:
 - **<qué>** — rama `<rama>`, PR #<n>, empezado el <fecha> por <Claude|Codex|Jonathan>.
@@ -60,6 +60,7 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## Cabos sueltos conocidos
 
+- **Archivos de cabecera y líneas (Fase 3):** `GET /templates/media/:id` solo comprueba la cuenta, no la línea: alguien de la cuenta que conozca el id de una cabecera de una plantilla de otro WABA puede descargarla. Los archivos (`TemplateMedia`) no son de ninguna línea ni WABA (una campaña puede usar cualquiera, y se suben antes de elegir) y su contenido es lo que la cuenta manda a sus clientes. Atarlos a un WABA es un cambio de modelo aparte, si Jonathan lo quiere (revisión de Codex del PR #34).
 - **Conectar WhatsApp contra Meta de verdad:** el Embedded Signup se probó en producción el 2026-10-14 (conectar, registrar, renovar el token, crear su `Waba` y su `Line`). Falta el formulario manual contra Meta y ver que un número de otro WABA da 400. **El `.env` local está mezclado** (el backend con la app WasmishTest y el frontend con la de producción): para el Embedded Signup en local, los dos tienen que apuntar a WasmishTest, con un Config ID propio de esa app.
 - **Adjuntos:** nadie limpia el volumen de archivos (`MEDIA_DIR`, también `outbound/` y `templates/`): se acumulan sin política de retención. Los mensajes anteriores al 2026-09-08 no tienen archivo, y el script para recuperar los que Meta aún guarda no existe. Jonathan decidió que las dos cosas pueden esperar.
 - **Plantillas con cabecera de archivo:** ningún cliente tiene todavía. El primero que la cree tiene que subir el archivo en Plantillas (sin él, el envío da 400 antes de llegar a Meta).

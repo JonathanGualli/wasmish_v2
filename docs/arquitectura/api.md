@@ -9,6 +9,7 @@ Cómo se autentica cada ruta, el rate limiting y la tabla completa de endpoints 
 
 - [Autenticación — dos vías](#autenticación--dos-vías)
 - [Lo que `login` y `verify` NO devuelven](#lo-que-login-y-verify-no-devuelven)
+- [Roles y permisos](#roles-y-permisos)
 - [Rate limiting](#rate-limiting)
 - [Endpoints completos](#endpoints-completos)
 
@@ -17,7 +18,7 @@ Cómo se autentica cada ruta, el rate limiting y la tabla completa de endpoints 
 ### Autenticación — dos vías
 
 **Autenticación — dos vías:**
-- **Cookie JWT** (`authRequired`, `validate.token.middleware.js`) para las rutas de la web/app. En dev la cookie usa `secure:false`/`sameSite:'lax'`; en prod (`NODE_ENV=production`) `secure:true`/`sameSite:'none'`. Desde la Fase 1 de multi-línea (2026-10-11), `authRequired` **lee el usuario de la BD en cada petición** y deja `req.auth = { userId, accountId, role, lineIds, isSuperadmin }` (`sessionAuthFor`, en `utils/account.js`). Un usuario que ya no existe, **desactivado** (`status: 'inactive'`) o sin cuenta (sin migrar) recibe **401** aunque su cookie siga siendo válida. El dueño de los datos es `req.auth.accountId`, la cuenta; nunca la persona de la sesión. Sin cookie, 401; con un JWT inválido, 403.
+- **Cookie JWT** (`authRequired`, `validate.token.middleware.js`) para las rutas de la web/app. En dev la cookie usa `secure:false`/`sameSite:'lax'`; en prod (`NODE_ENV=production`) `secure:true`/`sameSite:'none'`. Desde la Fase 1 de multi-línea (2026-10-11), `authRequired` **lee el usuario de la BD en cada petición** y deja `req.auth = { userId, accountId, name, role, lineIds, isSuperadmin }` (`sessionAuthFor`, en `utils/account.js`). Un usuario que ya no existe, **desactivado** (`status: 'inactive'`) o sin cuenta (sin migrar) recibe **401** aunque su cookie siga siendo válida. El dueño de los datos es `req.auth.accountId`, la cuenta; nunca la persona de la sesión. Sin cookie, 401; con un JWT inválido, 403.
 - **API key** (`validateApiKey`, `validate.api.key.middleware.js`) para la API pública (`/v1/...`): lee `Authorization: Bearer wm_xxx`, la **hashea** (SHA-256) y busca por `keyHash`. La key es **de la cuenta** (`ApiKey.userId` guarda la cuenta): carga la `Account` y deja `req.auth = { userId: null, accountId, role: 'api', lineIds: null }`, donde `lineIds: null` significa todas las líneas. Así la key sigue valiendo aunque la cuenta cambie de owner. Una key cuya cuenta no existe, 401.
 - **El login no revela qué correos existen.** Un correo inexistente y una contraseña incorrecta devuelven **lo mismo**: 400 con «Correo o contraseña incorrectos» (antes eran 404 y 400, con mensajes distintos). Y `bcrypt.compare` corre **siempre**, contra `HASH_DE_DESCARTE` si el usuario no existe: sin eso las respuestas serían idénticas pero los tiempos no (~1 ms sin usuario frente a ~120 ms con él), y esa diferencia sola basta para enumerar. Medido: 121 ms en ambos casos. `register` sí sigue diciendo si un correo está en uso — taparlo requiere verificación por correo, que no existe todavía.
 - **El login de un usuario desactivado** responde **403** con «Tu usuario está desactivado. Habla con el administrador de tu cuenta.», pero solo con la contraseña correcta: con una incorrecta recibe el mismo 400 que un correo inexistente.
@@ -26,7 +27,34 @@ Cómo se autentica cada ruta, el rate limiting y la tabla completa de endpoints 
 
 ### Lo que `login` y `verify` NO devuelven
 
+**Lo que sí devuelven sobre el acceso** (Fase 3, `sessionAccessFor` en `services/account.service.js`): `register`, `login` y `/verify` añaden `role`, `permissions` (las acciones de la tabla de «Roles y permisos» que tiene), `lineIds` (las líneas a su alcance; `null` = todas) y `account: { name, memberCount, managers }`. `memberCount` son las personas activas de la cuenta; `managers`, el owner y los admins activos, **solo nombre y rol**. El frontend decide con esto qué enseña; la autoridad sigue siendo el backend.
+
 **Lo que `login` y `verify` NO devuelven:** el token de WhatsApp **nunca** sale del backend. Ambos endpoints devuelven `whatsappConnected: boolean`, no `tokenWhatsapp`. El frontend no lo necesita — todas las llamadas a Meta las hace el backend. Mismo criterio en `admin.controller.js`.
+
+### Roles y permisos
+
+**Roles y permisos** (Fase 3 de multi-línea, 2026-10-14; spec § 3.3). Un rol por persona (`owner`, `admin`, `supervisor`, `agent`) y, para supervisor y agente, sus líneas (`User.lineIds`). La lógica es pura, en `utils/permissions.js`:
+
+- **`requirePermission(action)`** (`require.permission.middleware.js`, detrás de `authRequired`): una acción que el rol no tiene → **403** `[{ message: 'Tu rol no permite esta acción.', code: 'forbidden' }]`. Es su propia cuenta: no hay nada que ocultar.
+
+  | Acción | Owner | Admin | Supervisor | Agente | Rutas |
+  |---|:-:|:-:|:-:|:-:|---|
+  | `contacts.import` | ✓ | ✓ | ✓ | ✗ | `POST /contacts/import/preview`, `POST /contacts/import` |
+  | `contacts.delete` | ✓ | ✓ | ✓ | ✗ | `DELETE /contacts/:id` |
+  | `tags.manage` | ✓ | ✓ | ✓ | ✗ | `POST/PATCH/DELETE /tags`, `POST /contacts/tags` (etiquetar en bloque) |
+  | `templates.manage` | ✓ | ✓ | ✓ | ✗ | `GET /templates/sync` y las de `header-media` (salvo `GET /templates/media/:id`) |
+  | `campaigns.manage` | ✓ | ✓ | ✓ (sus líneas) | ✗ | todas las de `/campaigns`, también verlas |
+  | `apiKeys.manage` | ✓ | ✓ | ✗ | ✗ | las de `/api-key` |
+  | `lines.manage` | ✓ | ✓ | ✗ | ✗ | `PATCH /lines/:id`, `POST /lines/:id/disconnect`, `GET /lines/:id/pin`, `POST /whatsapp/connect`, `PUT /users/update-user-token-whatsapp` |
+
+  Lo demás lo hace cualquier rol **en sus líneas**: ver y responder conversaciones, ver y editar contactos, ver plantillas, ver sus líneas.
+- **Las líneas a su alcance** (`lineScope`): owner, admin y la API key, todas (`null`); supervisor y agente, las suyas. Lo de una línea fuera de alcance responde **404**, como lo de otra cuenta:
+  - toda búsqueda de conversación de una persona lleva `conversationScope(req.auth)` (chat, mensajes, adjuntos, envíos, plantilla desde el chat); una conversación sin línea solo la ven quienes ven todas;
+  - campañas (listar, ver, fallos, destinatarios, pausar, reanudar, cancelar y crear), `GET /lines` y `GET /templates?lineId=`;
+  - **las plantillas son del WABA**, y un WABA está a su alcance si tiene alguna de sus líneas (`templateScopeFor`): listarlas (sin ninguna línea, ninguna), sincronizar, la cabecera (subirla, añadir un archivo, quitarla) y la plantilla de una campaña (vista previa y crear). Fuera de alcance, 404 o como si no existiera (revisión de Codex del PR #34). `GET /templates/media/:id` mira solo la cuenta: los archivos de cabecera no son de ninguna línea;
+  - en Contactos, el contacto es de toda la cuenta, pero sus conversaciones de otras líneas no se enseñan. Los filtros «con / sin conversación» miran **todas** (no cambian según quién los pide).
+- **Empezar algo sin elegir línea** (una conversación nueva o una campaña; `findStartLine`, con `pickSendingLineId`): la línea por defecto si está a su alcance; si no, su única línea activa; con varias, **400** `choose_line` «Elige por qué línea enviar.»; sin ninguna, 404.
+- La API key (`role: 'api'`) no tiene ninguna de las acciones de la tabla (no las necesita: solo usa `/v1`) y llega a todas las líneas.
 
 ### Rate limiting
 

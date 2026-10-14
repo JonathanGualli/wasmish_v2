@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Conversation from "../models/conversation.model.js";
 import Contact from "../models/contact.model.js";
 import Message from "../models/message.model.js";
@@ -14,7 +15,8 @@ import {
 import { mimeBase, saveByContentHash } from "../utils/media.storage.js";
 import { cleanFilename } from "../services/template.media.service.js";
 import { MEDIA_DIR } from "../config.js";
-import { findConversationLine, findSendingLine } from "../services/line.service.js";
+import { findConversationLine, findStartLine } from "../services/line.service.js";
+import { conversationScope } from "../utils/permissions.js";
 
 /**
  * Un mensaje tal como lo ve el frontend: la lista del chat, la respuesta de un
@@ -194,6 +196,14 @@ const markConversationRead = async (userId, conversationId) => {
     }
 };
 
+// Una conversación de la cuenta de la sesión A SU ALCANCE (Fase 3: las de sus
+// líneas). Filtrar por la cuenta es la comprobación de propiedad; por las
+// líneas, la de acceso: lo que no ve responde 404, igual que lo ajeno.
+const findOwnConversation = (auth, id) =>
+    mongoose.isValidObjectId(id)
+        ? Conversation.findOne({ _id: id, userId: auth.accountId, ...conversationScope(auth) })
+        : null;
+
 export const sendMessageController = async (req, res) => {
     try {
         const { id } = req.params; // Puede ser undefined si es un chat nuevo
@@ -211,14 +221,14 @@ export const sendMessageController = async (req, res) => {
         // Sin ID, processMessageSending reutiliza la del contacto de ese número.
         let conversation = null;
         if (id) {
-            conversation = await Conversation.findOne({ _id: id, userId: accountId });
+            conversation = await findOwnConversation(req.auth, id);
             if (!conversation) return res.status(404).json([{ message: "Conversation not found" }]);
         }
 
-        // Sin conversación, la línea va primero (la del cuerpo o la por defecto;
-        // 404 si es de otra cuenta): la ventana es de la conversación del
-        // contacto EN ESA LÍNEA.
-        let line = conversation ? null : await findSendingLine(accountId, { lineId });
+        // Sin conversación, la línea va primero (la del cuerpo o la que toca
+        // según sus líneas, `findStartLine`; 404 si no es suya): la ventana es
+        // de la conversación del contacto EN ESA LÍNEA.
+        let line = conversation ? null : await findStartLine(req.auth, lineId);
 
         // Fuera de la ventana de 24 h, Meta no entrega texto libre (131047): se
         // rechaza aquí, sin llamarla y sin dejar un mensaje fallido. La interfaz
@@ -274,8 +284,7 @@ const decodeHeader = (raw) => {
 export const sendMediaMessageController = async (req, res) => {
     try {
         const userId = req.auth.accountId;
-        // Filtrar por userId es la comprobación de propiedad.
-        const conversation = await Conversation.findOne({ _id: req.params.id, userId });
+        const conversation = await findOwnConversation(req.auth, req.params.id);
         if (!conversation) return res.status(404).json([{ message: "Conversation not found" }]);
 
         const blocked = freeTextBlockReason(await lastInboundOf(conversation));
@@ -320,7 +329,7 @@ export const sendMediaMessageController = async (req, res) => {
 export const listConversations = async (req, res) => {
     const userId = req.auth.accountId;
     try{
-        const items = await Conversation.find({ userId })
+        const items = await Conversation.find({ userId, ...conversationScope(req.auth) })
             .sort({ lastMessageAt: -1 })
             .populate('contactId', 'name profileName username phone')
             .lean();
@@ -358,7 +367,7 @@ export const listMessages = async (req, res) => {
     const { before, limit } = req.query;
 
     try {
-        const conversation = await Conversation.findOne({ _id: conversationId, userId });
+        const conversation = await findOwnConversation(req.auth, conversationId);
         if (!conversation) return res.status(404).json([{ message: "Conversation not found" }]);
         const pageLimit = Math.min(parseInt(limit, 10) || 20, 100);
 
@@ -425,9 +434,9 @@ export const sendConversationTemplateController = async (req, res) => {
         const userId = req.auth.accountId;
         const { id } = req.params;
 
-        // Filtrar por userId además del _id es la comprobación de propiedad:
-        // sin eso, cualquier sesión podría enviar en la conversación de otro.
-        const conversation = await Conversation.findOne({ _id: id, userId });
+        // Sin `findOwnConversation`, cualquier sesión podría enviar en la
+        // conversación de otro, o en una de una línea que no es suya.
+        const conversation = await findOwnConversation(req.auth, id);
         if (!conversation) return res.status(404).json([{ message: "Conversation not found" }]);
 
         // La línea de la conversación: 409 si es de un número que ya no está conectado.
@@ -457,8 +466,8 @@ export const sendConversationTemplateController = async (req, res) => {
 // la filtra por la cuenta de la sesión: no hay conversación ajena que comprobar.
 export const startConversationTemplateController = async (req, res) => {
     try {
-        // La del cuerpo o la por defecto; 404 si es de otra cuenta.
-        const line = await findSendingLine(req.auth.accountId, { lineId: req.body.lineId });
+        // La del cuerpo o la que toca según sus líneas; 404 si no es suya.
+        const line = await findStartLine(req.auth, req.body.lineId);
 
         const resultado = await processTemplateSending({
             line,
