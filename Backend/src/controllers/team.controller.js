@@ -49,6 +49,13 @@ const withTeamLock = (accountId, fn) => withAccountLock(accountId, 'teamLock', f
 
 const pendingInvitation = (now = new Date()) => ({ acceptedAt: null, expiresAt: { $gt: now } });
 
+// Sin nadie aceptándola ahora mismo: sin reclamo, o con uno viejo (el proceso murió).
+const notBeingAccepted = (now = new Date()) => ({
+    $or: [{ claimedAt: null }, { claimedAt: { $lt: new Date(now.getTime() - STALE_CLAIM_MS) } }],
+});
+
+const INVITATION_BUSY_MESSAGE = 'Esta invitación se está aceptando ahora mismo.';
+
 const countSeats = async (accountId) => {
     const [activeUsers, pendingInvitations] = await Promise.all([
         User.countDocuments({ accountId, status: { $ne: 'inactive' } }),
@@ -143,12 +150,17 @@ export const inviteMember = async (req, res) => {
         };
 
         const invitation = await withTeamLock(accountId, async () => {
+            // Reemplazar la pendiente, salvo que alguien la esté aceptando: su
+            // aceptación usa el rol y las líneas que reclamó (revisión de Codex del PR #36).
             const existing = await Invitation.findOneAndUpdate(
-                { accountId, email, ...pendingInvitation() },
+                { accountId, email, ...pendingInvitation(), ...notBeingAccepted() },
                 { $set: fields },
                 { new: true },
             ).lean();
             if (existing) return existing;
+            if (await Invitation.exists({ accountId, email, ...pendingInvitation() })) {
+                throw statusError(409, INVITATION_BUSY_MESSAGE, 'invitation_busy');
+            }
             await assertFreeSeat(accountId);
             return (await Invitation.create({ accountId, email, ...fields })).toObject();
         });
@@ -163,10 +175,14 @@ export const inviteMember = async (req, res) => {
 export const revokeInvitation = async (req, res) => {
     try {
         const { id } = req.params;
-        const result = mongoose.isValidObjectId(id)
-            ? await Invitation.deleteOne({ _id: id, accountId: req.auth.accountId, acceptedAt: null })
-            : { deletedCount: 0 };
-        if (result.deletedCount === 0) throw statusError(404, 'La invitación no existe.', 'invitation_not_found');
+        if (!mongoose.isValidObjectId(id)) throw statusError(404, 'La invitación no existe.', 'invitation_not_found');
+        const own = { _id: id, accountId: req.auth.accountId, acceptedAt: null };
+        // No mientras alguien la acepta: su plaza la va a ocupar (revisión de Codex del PR #36).
+        const result = await Invitation.deleteOne({ ...own, ...notBeingAccepted() });
+        if (result.deletedCount === 0) {
+            if (await Invitation.exists(own)) throw statusError(409, INVITATION_BUSY_MESSAGE, 'invitation_busy');
+            throw statusError(404, 'La invitación no existe.', 'invitation_not_found');
+        }
         return res.status(204).end();
     } catch (error) {
         return sendError(res, error);
@@ -203,13 +219,17 @@ export const updateMember = async (req, res) => {
         if (accessChanged && role !== 'admin' && lineCount === 0) throw statusError(400, CHOOSE_LINES_MESSAGE, 'choose_lines');
         if (change.status !== undefined) set.status = change.status;
 
-        const reactivating = change.status === 'active' && target.status === 'inactive';
         const apply = async () => {
-            if (reactivating) await assertFreeSeat(accountId);
+            // Activar puede ocupar una plaza: dentro del candado se relee el
+            // estado (el de arriba pudo cambiar entretanto; revisión de Codex del PR #36).
+            if (change.status === 'active') {
+                const current = await User.findOne({ _id: target._id, accountId }).select('status').lean();
+                if (current?.status === 'inactive') await assertFreeSeat(accountId);
+            }
             return User.findOneAndUpdate({ _id: target._id, accountId }, { $set: set }, { new: true })
                 .select('name email role lineIds status createdAt').lean();
         };
-        const updated = reactivating ? await withTeamLock(accountId, apply) : await apply();
+        const updated = change.status === 'active' ? await withTeamLock(accountId, apply) : await apply();
 
         disconnectUser(String(target._id));
         return res.json(serializeMember(updated));
@@ -261,16 +281,13 @@ export const acceptInvitation = async (req, res) => {
         const tokenHash = hashApiKey(String(req.params.token));
         const now = new Date();
         const invitation = await Invitation.findOneAndUpdate(
-            {
-                tokenHash, ...pendingInvitation(now),
-                $or: [{ claimedAt: null }, { claimedAt: { $lt: new Date(now.getTime() - STALE_CLAIM_MS) } }],
-            },
+            { tokenHash, ...pendingInvitation(now), ...notBeingAccepted(now) },
             { $set: { claimedAt: now } },
             { new: true },
         ).lean();
         if (!invitation) {
             await findUsableInvitation(req.params.token); // lanza 404 o 410
-            throw statusError(409, 'Esta invitación se está aceptando ahora mismo.', 'invitation_busy');
+            throw statusError(409, INVITATION_BUSY_MESSAGE, 'invitation_busy');
         }
 
         let user;
@@ -285,7 +302,16 @@ export const acceptInvitation = async (req, res) => {
             if (error.code === 11000) throw statusError(409, EMAIL_TAKEN_MESSAGE, 'email_taken');
             throw error;
         }
-        await Invitation.updateOne({ _id: invitation._id }, { $set: { acceptedAt: new Date() } });
+        // Se cierra la invitación que se reclamó, con su token y su reclamo: si
+        // otro la cambió entretanto (un reclamo que caducó), el usuario no vale.
+        const closed = await Invitation.updateOne(
+            { _id: invitation._id, tokenHash, claimedAt: now, acceptedAt: null },
+            { $set: { acceptedAt: new Date() } },
+        );
+        if (closed.modifiedCount === 0) {
+            await User.deleteOne({ _id: user._id });
+            throw statusError(409, INVITATION_INVALID_MESSAGE, 'invitation_invalid');
+        }
 
         return startSession(res, user);
     } catch (error) {

@@ -243,3 +243,49 @@ test('superadmin: sube maxUsers, y la lista de clientes es una fila por cuenta c
     assert.equal(rows.length, 1, 'el agente salía como otro cliente');
     assert.deepEqual(rows[0].users, { active: 2, pending: 1, max: 5 });
 });
+
+// Revisión de Codex del PR #36: mientras alguien acepta (la invitación está
+// reclamada), ni anularla ni reinvitar pueden tocarla: anular liberaba una
+// plaza que el usuario iba a ocupar, y reinvitar cambiaba el rol de un enlace
+// que ya se estaba usando.
+test('una invitación que se está aceptando no se anula ni se reemplaza: 409, y sigue igual', async () => {
+    const a = await newAccount('TR', 3);
+    const { body } = await invite(a, { email: 'en.curso@pruebas.local', role: 'admin' });
+    await Invitation.updateOne({ _id: body.invitation.id }, { claimedAt: new Date() });
+
+    const revoke = await request(a, 'DELETE', `/team/invitations/${body.invitation.id}`);
+    assert.equal(revoke.status, 409, revoke.text);
+    assert.equal(revoke.body[0].code, 'invitation_busy');
+
+    const reinvite = await invite(a, { email: 'en.curso@pruebas.local', role: 'agent', lineIds: [a.lineId] });
+    assert.equal(reinvite.status, 409, reinvite.text);
+    assert.equal(reinvite.body[0].code, 'invitation_busy');
+
+    const stored = await Invitation.findById(body.invitation.id).lean();
+    assert.equal(stored.role, 'admin');
+    assert.equal(await seats(a), 2);
+});
+
+test('un reclamo viejo (el proceso murió) ya no bloquea anular', async () => {
+    const a = await newAccount('TS', 3);
+    const { body } = await invite(a, { email: 'reclamo.viejo@pruebas.local', role: 'agent', lineIds: [a.lineId] });
+    await Invitation.updateOne({ _id: body.invitation.id }, { claimedAt: new Date(Date.now() - 5 * 60 * 1000) });
+    assert.equal((await request(a, 'DELETE', `/team/invitations/${body.invitation.id}`)).status, 204);
+});
+
+// Revisión de Codex del PR #36: activar leía el estado antes del candado y,
+// si entretanto otro lo desactivaba y se ocupaba la plaza, se pasaba del plan.
+test('activar, desactivar e invitar a la vez nunca pasan de maxUsers', async () => {
+    const a = await newAccount('TT', 2);
+    const member = await seedMember(a, { role: 'agent', lineIds: [a.lineId], label: 'TT1' });
+    for (let round = 0; round < 5; round++) {
+        await Invitation.deleteMany({ accountId: a.accountId });
+        await User.updateOne({ _id: member.userId }, { status: 'active' });
+        await Promise.all([
+            request(a, 'PATCH', `/team/members/${member.userId}`, { status: 'inactive' }),
+            request(a, 'PATCH', `/team/members/${member.userId}`, { status: 'active' }),
+            invite(a, { email: `vuelta${round}@pruebas.local`, role: 'agent', lineIds: [a.lineId] }),
+        ]);
+        assert.ok(await seats(a) <= 2, `vuelta ${round}: ${await seats(a)} plazas con maxUsers 2`);
+    }
+});
