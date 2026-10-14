@@ -274,10 +274,10 @@ export const disconnectLineService = async (id: string): Promise<Line> => {
     return data;
 };
 
-// Cuántas líneas puede tener una cuenta (superadmin).
-export const updateAccountLimitsService = async (accountId: string, maxLines: number) => {
-    const { data } = await axios.patch(`${API_URL}/admin/accounts/${accountId}/limits`, { maxLines }, { withCredentials: true });
-    return data as { accountId: string; maxLines: number };
+// Cuántas líneas y personas puede tener una cuenta (superadmin). Lo que no se manda no cambia.
+export const updateAccountLimitsService = async (accountId: string, limits: { maxLines?: number; maxUsers?: number }) => {
+    const { data } = await axios.patch(`${API_URL}/admin/accounts/${accountId}/limits`, limits, { withCredentials: true });
+    return data as { accountId: string; maxLines: number; maxUsers: number };
 };
 
 // Servicio para obtener metricas globales de la plataforma (superadmin)

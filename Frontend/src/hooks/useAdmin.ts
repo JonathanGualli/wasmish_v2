@@ -21,11 +21,12 @@ export const useAdminClients = (pageIndex: number, pageSize: number) => {
         refetchOnWindowFocus: false,
     });
 }
-/** Cambiar cuántas líneas puede tener una cuenta. Vuelve a pedir la tabla al terminar. */
+/** Cambiar cuántas líneas o personas puede tener una cuenta. Vuelve a pedir la tabla al terminar. */
 export const useUpdateAccountLimits = () => {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: ({ accountId, maxLines }: { accountId: string; maxLines: number }) => updateAccountLimitsService(accountId, maxLines),
+        mutationFn: ({ accountId, ...limits }: { accountId: string; maxLines?: number; maxUsers?: number }) =>
+            updateAccountLimitsService(accountId, limits),
         onSettled: () => queryClient.invalidateQueries({ queryKey: ['admin', 'clients'] }),
     });
 }

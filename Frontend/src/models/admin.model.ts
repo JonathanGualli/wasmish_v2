@@ -21,6 +21,8 @@ export interface AdminClient {
     extraWabas: number;
     /** Líneas conectadas y máximo del plan. */
     lines: { active: number; max: number };
+    /** Personas activas, invitaciones pendientes y máximo del plan (Fase 3). */
+    users: { active: number; pending: number; max: number };
     conversations: number;
     messages: number;
     failed: number;
