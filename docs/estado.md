@@ -22,8 +22,18 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En curso
 
-- **Registrar el número en la Cloud API al conectarlo y guardar su PIN** — rama `registrar-numero-codigo`, PR #28 (el plan entró con el #27), empezado el 2026-10-13 por Claude.
-  Hecho: el plan (`docs/superpowers/plans/2026-10-13-registrar-numero.md`, revisado por Codex), el registro con el PIN guardado, `GET /api/lines/:id/pin` y el brief de la UI (`docs/superpowers/specs/2026-10-13-pin-linea-brief-ui.md`) · Falta: la revisión del código por Codex; la UI del PIN, cuando Claude Design devuelva el diseño (otro PR) · Sin probar: contra Meta de verdad. Se prueba después de desplegar, con el número nuevo y una cuenta de prueba en producción (plan, «Al terminar»): sobre todo, que un número nuevo llega con `platform_type: 'NOT_APPLICABLE'`.
+- **Desplegar la 1.0.16**, por Jonathan con `/deploy`, cuando él decida. La versión ya está subida; **aún no se despliega**. Lleva:
+  - **Registrar el número en la Cloud API al conectarlo** (PRs #27 y #28): un número nuevo conectado por el Embedded Signup o el formulario manual se registra con un PIN de dos pasos, que se guarda cifrado (`Line.twoStepPin`, y `Waba.pendingTwoStepPins` mientras se registra). Sin esto, un número recién estrenado conecta pero no puede enviar (`133010`). Un número ya registrado (el del cliente de la API pública) no se toca.
+  - `GET /api/lines/:id/pin`: el PIN de una línea. La UI para verlo espera el diseño (brief: `docs/superpowers/specs/2026-10-13-pin-linea-brief-ui.md`).
+
+  **Antes de desplegar:** no hay migración de datos (los campos nuevos empiezan vacíos).
+  1. `mongodump`.
+  2. Compilar y `up` de la 1.0.16.
+  3. Comprobar `GET /api/version`, los logs (sin «MODO DE PRUEBA» ni E11000) y un `POST /api/v1/templates/send` con 200.
+
+  **Después de desplegar,** la prueba con el número nuevo de Jonathan en una cuenta de prueba de producción (plan del registro, «Al terminar»): conectarlo por el Embedded Signup, ver `/register` en los logs (si sale el aviso `platform_type inesperado`, Meta no manda `NOT_APPLICABLE` para un número nuevo y hay que ajustar `needsRegistration`), recibir y responder desde Wasmish, leer el PIN con `GET /lines/:id/pin`, y renovar el token (repetir el Embedded Signup con el mismo número) sin que se vuelva a registrar. Cierra el cabo suelto «Conectar WhatsApp sin probar contra Meta de verdad».
+
+  **Volver atrás:** las imágenes `:1.0.15` ignoran los campos nuevos. Un número registrado mientras tanto sigue registrado en Meta.
 
 <!-- Formato de una entrada:
 - **<qué>** — rama `<rama>`, PR #<n>, empezado el <fecha> por <Claude|Codex|Jonathan>.
@@ -34,11 +44,12 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 - **Multi-línea y multi-agente, fases 1 a 4** (diseño aprobado, sin preguntas abiertas: `docs/superpowers/specs/2026-10-11-multi-linea-multi-agente-design.md`). Fases 1, 2a y 2b en producción (la 2b, enrutar por línea, desde la 1.0.14). La **Fase 2c** está en producción desde la 1.0.15.
   - **Para encender varias líneas** (plan de la 2c, «Después de desplegar»):
-    1. La prueba del token en WasmishTest: ¿repetir el Embedded Signup en el mismo WABA invalida el token anterior? (spec § 2.2). Hace falta un número de pruebas, que Jonathan aún no tiene: una línea fija sin WhatsApp (se verifica por llamada) o un chip prepago.
+    1. La prueba del token: ¿un token nuevo del Embedded Signup cubre todos los números del WABA? (spec § 2.2). Se puede hacer en producción con una cuenta de prueba. Jonathan ya tiene **un** número (2026-10-13, sin comprobar si sirve), que sirve para probar el registro y renovar el token; la prueba completa necesita **dos números en el mismo WABA**.
     2. El ensayo de la vuelta atrás con dos líneas en local.
     3. `maxLines: 2` en una cuenta de prueba desde el panel.
   - Sigue la **Fase 3**: equipo, roles y acceso por línea.
 - **Próximo módulo: un chatbot.** Jonathan aún no decidió de qué tipo. La propuesta sobre la mesa: empezar por respuestas automáticas (bienvenida, fuera de horario, palabras clave) como un motor de «respuestas» en el webhook, con traspaso a una persona (el bot se calla si alguien responde a mano) y la marca «Bot» en el chat; después, flujos con botones (requiere enviar mensajes interactivos) o IA. Antes de empezar: preguntar el tipo y qué problema concreto del cliente resuelve.
+- **La UI del PIN de dos pasos** en Ajustes → Líneas, cuando Claude Design devuelva el diseño del brief `docs/superpowers/specs/2026-10-13-pin-linea-brief-ui.md`.
 - El campo de archivo de cabecera al enviar una plantilla a **un solo contacto** (`SendTemplateDialog` y `NewConversationPanel`); hoy solo existe en las campañas.
 - En la API pública: el campo `header`, la cabecera de texto con variable y las plantillas de carrusel. Toca al cliente de la API: con cuidado.
 - Más adelante: programar campañas para una hora.
