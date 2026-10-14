@@ -44,17 +44,32 @@ self.addEventListener('push', (event) => {
     }));
 });
 
+// Una ventana de la app con sesión: solo las de `/private/` escuchan
+// `open-conversation` (PrivateLayout). Una página estática del mismo origen
+// (`/privacidad.html`) o el login no lo harían, y el toque no abriría nada
+// (revisión de Codex del PR #43).
+const isAppWindow = (client) => {
+    const url = new URL(client.url);
+    return url.origin === self.location.origin && url.pathname.startsWith('/private/');
+};
+
 // Con Wasmish abierto, lo enfoca y le pide que abra la conversación (sin
-// recargar); si no, lo abre en ella.
+// recargar); si no, lo abre en ella. Si enfocar falla (la ventana se cerró
+// entretanto, o iOS lo rechaza al arrancar la app), también se abre en ella.
 const openFromNotification = async ({ url, conversationId }) => {
+    const target = url || CHATS_URL;
     const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    const open = windows.find(client => new URL(client.url).origin === self.location.origin);
+    const open = windows.find(isAppWindow);
     if (open) {
-        await open.focus();
-        if (conversationId) open.postMessage({ type: 'open-conversation', conversationId });
-        return;
+        try {
+            const focused = await open.focus();
+            if (conversationId) (focused ?? open).postMessage({ type: 'open-conversation', conversationId });
+            return;
+        } catch {
+            // Cae a abrir la URL.
+        }
     }
-    await self.clients.openWindow(url || CHATS_URL);
+    await self.clients.openWindow(target);
 };
 
 self.addEventListener('notificationclick', (event) => {
