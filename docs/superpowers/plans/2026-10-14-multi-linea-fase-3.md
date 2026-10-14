@@ -13,7 +13,7 @@ El SSE guarda la sesión de cada conexión y filtra cada evento con `canReceive`
 
 **Tech Stack:** Express 5, Mongoose 8, Zod, `node:test`, `mongodb-memory-server`; React 19, TypeScript, React Query, Tailwind v4.
 
-**Spec:** `docs/superpowers/specs/2026-10-11-multi-linea-multi-agente-design.md`: § 3.2 (sesión), § 3.3 (roles, matriz y cómo se aplica), § 3.4 («Tiempo real»), § 3.5 (`maxUsers`), § 4 «Fase 3», § 6 (cómo probarlo), § 7 y § 8 (respuestas de Jonathan). Brief de la UI: `docs/superpowers/specs/2026-10-14-equipo-brief-ui.md`.
+**Spec:** `docs/superpowers/specs/2026-10-11-multi-linea-multi-agente-design.md`: § 3.2 (sesión), § 3.3 (roles, matriz y cómo se aplica), § 3.4 («Tiempo real»), § 3.5 (`maxUsers`), § 4 «Fase 3», § 6 (cómo probarlo), § 7 y § 8 (respuestas de Jonathan). Brief de la UI: `docs/superpowers/specs/2026-10-14-equipo-brief-ui.md`; diseño de Claude Design: `Design/Wasmish Equipo - Usuarios, roles y acceso.html` (entra al repo con el PR de la UI).
 
 ## Global Constraints
 
@@ -145,9 +145,12 @@ El SSE guarda la sesión de cada conexión y filtra cada evento con `canReceive`
 
 **Interfaces:**
 - Consumes: `permissionsFor`, `lineScope`, `sessionAuthFor`.
-- Produces: la respuesta de `register`, `login` y `/verify` añade `role`, `permissions: string[]` y `lineIds: string[] | null` (`lineScope`). El resto no cambia. `User` (TS) añade `role: 'owner' | 'admin' | 'supervisor' | 'agent'`, `permissions: string[]` y `lineIds: string[] | null`.
+- Produces: la respuesta de `register`, `login` y `/verify` añade `role`, `permissions: string[]`, `lineIds: string[] | null` (`lineScope`) y `account: { name, memberCount, managers }`. El resto no cambia.
+  - `memberCount`: los usuarios **activos** de la cuenta. El diseño enseña el rol bajo el nombre en el menú lateral y quién respondió cada mensaje **solo con más de una persona** en la cuenta.
+  - `managers: [{ name, role }]`: el owner y los admins activos, solo nombre y rol. El diseño los nombra en los Ajustes de un agente o supervisor: «Para ver otra línea o cambiar tu rol, pídeselo a Jonathan Gualli (owner) o a Ana Pérez (admin).»
+  - `User` (TS) añade `role: 'owner' | 'admin' | 'supervisor' | 'agent'`, `permissions: string[]`, `lineIds: string[] | null` y `account: { name: string; memberCount: number; managers: { name: string; role: string }[] }`.
 
-- [ ] **Step 1: Test**: `/verify` de un owner da `role: 'owner'`, las 8 acciones y `lineIds: null`; el de un agente con una línea, `permissions: []` y `lineIds: [<esa>]`.
+- [ ] **Step 1: Test**: `/verify` de un owner da `role: 'owner'`, las 8 acciones, `lineIds: null` y `account.memberCount: 1`; el de un agente con una línea, `permissions: []`, `lineIds: [<esa>]`, `memberCount: 2` y `managers: [{ name: <owner>, role: 'owner' }]`, sin correos.
 - [ ] **Step 2:** falla → **Step 3:** implementar → **Step 4:** en verde, y `cd Frontend && npm run lint && npm run build`.
 - [ ] **Step 5: Commit** — `git commit -m "Login y /verify dicen el rol, los permisos y las líneas"`. **PR 1**, con la revisión de Codex.
 
@@ -205,7 +208,7 @@ El SSE guarda la sesión de cada conexión y filtra cada evento con `canReceive`
       - El owner no se cambia por aquí: `owner_locked`.
       - Nadie se cambia a sí mismo el rol ni el estado: `self_change`.
       - Solo se asignan `admin`, `supervisor` y `agent`; cualquier otro rol da `invalid_role`.
-  - **Un candado de equipo por cuenta** para todo lo que puede ocupar una plaza (invitar, reinvitar y reactivar): `withAccountLock(accountId, 'teamLock', fn)`. Es el mecanismo de `withLineLock` (`Account.lineLock`, 30 s, se suelta solo si es suyo) sacado a `services/account.lock.service.js` y parametrizado por campo; `withLineLock` pasa a usarlo con `'lineLock'` sin cambiar su comportamiento. Ocupado → 409 «Hay otro cambio en el equipo en curso. Inténtalo de nuevo en unos segundos.», `code: 'team_busy'`. Dentro del candado se cuentan las plazas y se escribe (revisión de Codex: sin una sección común, invitar mientras otro acepta o reactiva podía pasarse del límite).
+  - **Un candado de equipo por cuenta** para todo lo que puede ocupar una plaza (invitar, reinvitar y reactivar): `withAccountLock(accountId, 'teamLock', fn)`. Es el mecanismo de `withLineLock` (`Account.lineLock`, 30 s, se suelta solo si es suyo) sacado a `services/account.lock.service.js` y parametrizado por campo; `withLineLock` pasa a usarlo con `'lineLock'` sin cambiar su comportamiento. Ocupado → 409 «Hay otro cambio en esta cuenta en curso. Inténtalo de nuevo en unos segundos.» (el texto del diseño), `code: 'team_busy'`. Dentro del candado se cuentan las plazas y se escribe (revisión de Codex: sin una sección común, invitar mientras otro acepta o reactiva podía pasarse del límite).
   - Rutas, todas con `authRequired` y `requirePermission('team.manage')`:
     - `GET /team` → `{ members, invitations, maxUsers, seatsUsed }`.
       - `members: [{ id, name, email, role, lineIds, status, createdAt }]`, sin contraseña ni token.
@@ -223,7 +226,7 @@ El SSE guarda la sesión de cada conexión y filtra cada evento con `canReceive`
       - Reactivar sin plaza → 409 `user_limit`.
       - Los `lineIds` se comprueban como en la invitación.
       - Si cambió algo, `disconnectUser(id)`.
-  - Superadmin: `PATCH /admin/accounts/:accountId/limits` acepta también `maxUsers` (entero de 1 a 200; al menos uno de los dos campos). `GET /admin/clients` añade `users: { active, max }`.
+  - Superadmin: `PATCH /admin/accounts/:accountId/limits` acepta también `maxUsers` (entero de 1 a 200; al menos uno de los dos campos). `GET /admin/clients` añade `users: { active, pending, max }` (el diseño enseña «4 / 5» y, al editar, «3 activos · 1 invitación»).
 
 - [ ] **Step 1: Tests puros** (`team.test.js`): `hasFreeSeat` (2 activos + 1 pendiente con `maxUsers` 3 → falso; con 4 → verdadero) y cada caso de `memberChangeIssue`.
 - [ ] **Step 2: Tests de aislamiento** (`isolation/team.test.js`):
@@ -252,7 +255,7 @@ El SSE guarda la sesión de cada conexión y filtra cada evento con `canReceive`
 **Interfaces:**
 - Produces:
   - Rutas públicas con `authLimiter`:
-    - `GET /invitations/:token` → `{ email, accountName, role, invitedByName }`. Un token desconocido, ya usado o caducado → 404 «Esta invitación no existe o ya no es válida.», `code: 'invitation_invalid'`. Uno caducado con su documento todavía guardado → 410, `code: 'invitation_expired'`, con «La invitación caducó. Pide que te envíen otra.».
+    - `GET /invitations/:token` → `{ email, accountName, role, invitedByName, lineNames, expiresAt }`. `lineNames` son los nombres que ve la app (`lineLabel`: nombre interno, verificado o número), vacío para un admin. El diseño los enseña en el panel de la página de aceptar, junto con la fecha en que caduca. Un token desconocido, ya usado o caducado → 404 «Esta invitación no existe o ya no es válida.», `code: 'invitation_invalid'`. Uno caducado con su documento todavía guardado → 410, `code: 'invitation_expired'`, con «La invitación caducó. Pide que te envíen otra.».
     - `POST /invitations/:token/accept { name, password }` (con el esquema de `registerSchema`, sin `email`):
       - **Reclama** la invitación con una sola escritura condicional, `findOneAndUpdate({ tokenHash, acceptedAt: null, expiresAt: { $gt: now }, $or: [{ claimedAt: null }, { claimedAt: { $lt: hace 60 s } }] }, { $set: { claimedAt: now } })`. Mientras está reclamada sigue **pendiente**, así que sigue ocupando su plaza: nunca hay un momento en que la plaza quede libre (revisión de Codex). Un reclamo de más de 60 s (el proceso murió) se puede volver a tomar.
       - Al crear el usuario, durante un instante cuentan los dos (el usuario y la invitación): sobra una plaza, no falta.
@@ -264,7 +267,10 @@ El SSE guarda la sesión de cada conexión y filtra cada evento con `canReceive`
       - Aceptar no comprueba `maxUsers`: la invitación ya ocupaba su plaza (spec § 3.5: bajar el plan no anula nada).
   - `Message.sentBy: ObjectId | null` y `Message.sentByName: string | null`. El nombre es una **copia** del de ese momento: así el mensaje lo dice aunque la persona se desactive o cambie de nombre, sin buscar en `User`.
   - `processMessageSending({ …, sender = null })` y `processTemplateSending({ …, sender = null })`, con `sender = { userId, name }` (de `req.auth`). Se pasa solo desde el chat (texto, archivo, plantilla en una conversación y conversación nueva); las campañas y la API lo dejan en `null`.
-  - `serializeMessage` añade `sentBy: { id, name } | null`.
+  - `Message.origin: 'chat' | 'campaign' | 'api' | null`. Lo pone quien envía: el chat, el worker de campañas y `/v1`. Es `null` en los mensajes anteriores a esta fase y en los entrantes. El diseño marca en gris, con icono, los que no escribió una persona («Campaña «Promo octubre»», «API»), y sin este campo un envío por la API no se distingue de uno antiguo del chat.
+  - `serializeMessage` añade `sentBy: { id, name } | null` y `origin: { kind: 'chat' | 'campaign' | 'api', campaignName? } | null`.
+    - El nombre de la campaña se busca una vez por página de mensajes, con las campañas distintas de esa página.
+    - Un mensaje antiguo con `campaignId` sale como `campaign` aunque no tenga `origin`.
 
 - [ ] **Step 1: Tests de aislamiento**:
   - Aceptar → 200 con cookie, y el usuario nuevo tiene el rol y las líneas de la invitación.
@@ -274,8 +280,8 @@ El SSE guarda la sesión de cada conexión y filtra cada evento con `canReceive`
   - Si crear el usuario falla (un `User.create` que lanza, simulado), el enlace vuelve a valer.
   - Un enlace caducado → 410.
   - `GET /invitations/:token` no enseña el token ni nada de otra cuenta.
-  - Responder desde el chat como agente → el mensaje tiene `sentBy: { id: <agente>, name }`.
-  - Un envío por `/v1` y uno de campaña → `sentBy: null`.
+  - Responder desde el chat como agente → el mensaje tiene `sentBy: { id: <agente>, name }` y `origin.kind: 'chat'`.
+  - Un envío por `/v1` → `sentBy: null`, `origin.kind: 'api'`; uno de campaña → `origin: { kind: 'campaign', campaignName }`.
 - [ ] **Step 2:** fallan → **Step 3:** implementar → **Step 4:** en verde. Documentación.
 - [ ] **Step 5: Commit** — `git commit -m "Aceptar la invitación y decir quién envió cada mensaje"`. **PR 3**, con la revisión de Codex.
 
@@ -287,7 +293,12 @@ El SSE guarda la sesión de cada conexión y filtra cada evento con `canReceive`
 - Modify: `docs/arquitectura/frontend.md`
 
 **Interfaces:**
-- Consumes: Tareas 3 y 6. Lo visual, del diseño de Claude Design para el brief `docs/superpowers/specs/2026-10-14-equipo-brief-ui.md`.
+- Consumes: Tareas 3 y 6. Lo visual, del diseño `Design/Wasmish Equipo - Usuarios, roles y acceso.html`, con estos ajustes:
+  - **El diseño dice «Envíos» y «Nuevo envío»; en la app es «Campañas»** (decisión del 2026-10-04 en `docs/decisiones.md`).
+  - Con más de una persona en la cuenta (`account.memberCount > 1`), el menú lateral enseña bajo el nombre «Rol · Negocio»; con una, como hoy.
+  - Los Ajustes de un agente o supervisor: «Tus líneas» para consultar y «Tu acceso» (rol, cuenta, correo), con a quién pedirle más (`account.managers`).
+  - En el chat, el nombre de quien respondió y el origen gris de campañas y API van en la línea de la hora, y solo con más de una persona en la cuenta.
+  - **No entran**: el filtro de líneas de la bandeja que dibuja el marco 4e (no existe hoy y no es de esta fase) y el estado «Programado» de las campañas.
 - Produces: `useAuthContext().can(action)`. Lo que el rol no puede hacer **no se enseña** (no se deja apagado), salvo donde el diseño diga otra cosa.
 - **Al cambiarle el acceso a alguien con Wasmish abierto** (revisión de Codex: reconectar el SSE e invalidar no basta, porque los datos viejos se quedan en pantalla y, con la persona desactivada, la reconexión ni siquiera abre):
   - El `SSEProvider` se suscribe a `access_changed` y, al recibirlo, vacía la caché de React Query (`queryClient.clear()`) y le pide al `AuthProvider` que vuelva a leer `/verify`.
@@ -309,13 +320,13 @@ El SSE guarda la sesión de cada conexión y filtra cada evento con `canReceive`
 
 **Files:**
 - Create: `Frontend/src/pages/private/Settings/Team/` (los componentes que pida el diseño), `Frontend/src/hooks/useTeam.ts`, `Frontend/src/pages/public/AcceptInvitationPage/`
-- Modify: `Frontend/src/AppRouter.tsx` (la ruta pública `/invite/:token`, con `AppRoutes.invite`), `models/routes.models.ts`, `services/api.service.ts` y el panel de superadmin (la columna de usuarios, como la de líneas)
+- Modify: `Frontend/src/AppRouter.tsx` (la ruta pública `/invite/:token`, con `AppRoutes.invite`; el diseño pinta `/invitacion/…`, pero las rutas de la app van en inglés, como `/login` y `/register`), `models/routes.models.ts`, `services/api.service.ts` y el panel de superadmin (la columna de usuarios, como la de líneas)
 - Modify: `docs/arquitectura/frontend.md` y, si nace, la sección del equipo en `docs/arquitectura/`
 - Modify: `docs/estado.md`
 
 **Interfaces:**
 - Consumes: las rutas de las Tareas 5 y 6.
-- Produces: `useTeam()` → `{ members, invitations, maxUsers, seatsUsed, invite, revokeInvitation, updateMember }`. La página de aceptar la invitación usa las piezas de `components/Auth/` (spec de la marca: «06 · Acceso»).
+- Produces: `useTeam()` → `{ members, invitations, maxUsers, seatsUsed, invite, revokeInvitation, updateMember }`. La página de aceptar la invitación usa las piezas de `components/Auth/` (spec de la marca: «06 · Acceso»). Al aceptar, entra a Chats, como dice el diseño.
 
 - [ ] **Step 1:** implementar siguiendo el diseño.
 - [ ] **Step 2:** `lint` y `build`.
