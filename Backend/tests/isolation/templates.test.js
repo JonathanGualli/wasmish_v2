@@ -11,6 +11,25 @@ const headerMediaOf = async (account) =>
     String((await Template.findOne({ templateId: account.imageTemplateId }).lean()).headerMedia);
 const upload = { 'Content-Type': 'image/png', 'X-Filename': 'cabecera.png' };
 
+// Lo que se prepara con `await` va antes del primer `test()`: preparado entre
+// tests, si tardaba más que los ya registrados, el runner los daba por
+// terminados y el `after` de helpers.js cerraba Mongo a mitad (el fallo del CI
+// de master tras el PR #43, en push.test.js).
+
+// Fase 2c: una cuenta con dos líneas de WABA distintos.
+const w = await seedAccount('W', { seq: 6, maxLines: 2 });
+const { lineId: wFirst } = await connectWhatsapp(w, { phoneNumberId: '7591' });          // waba-W, el de las sembradas
+const { lineId: wSecond } = await connectWhatsapp(w, { phoneNumberId: '7592', waBusinessId: 'waba-W2' });
+await Template.create({
+    userId: w.accountId, waBusinessId: 'waba-W2', templateId: 'tpl-w2', name: 'del_segundo_waba',
+    language: 'es', category: 'MARKETING', status: 'APPROVED', bodyText: 'w2', header: null, buttons: [],
+});
+await Template.create({
+    userId: w.accountId, waBusinessId: 'waba-sin-linea', templateId: 'tpl-w3', name: 'de_un_waba_sin_linea',
+    language: 'es', category: 'MARKETING', status: 'APPROVED', bodyText: 'w3', header: null, buttons: [],
+});
+const namesOf = (res) => res.body.map(template => template.name).sort();
+
 test('GET /templates: B no ve las plantillas de A', async () => {
     assertNoLeak(await request(b, 'GET', '/templates'), a);
     assertHasOwn(await request(a, 'GET', '/templates'), a);
@@ -117,19 +136,6 @@ test('una plantilla sin WABA se sincroniza y sale', async () => {
     assert.equal((await Template.findOne({ templateId: v.templateId }).lean()).waBusinessId, 'waba-V');
 });
 
-// Fase 2c: una cuenta con dos líneas de WABA distintos.
-const w = await seedAccount('W', { seq: 6, maxLines: 2 });
-const { lineId: wFirst } = await connectWhatsapp(w, { phoneNumberId: '7591' });          // waba-W, el de las sembradas
-const { lineId: wSecond } = await connectWhatsapp(w, { phoneNumberId: '7592', waBusinessId: 'waba-W2' });
-await Template.create({
-    userId: w.accountId, waBusinessId: 'waba-W2', templateId: 'tpl-w2', name: 'del_segundo_waba',
-    language: 'es', category: 'MARKETING', status: 'APPROVED', bodyText: 'w2', header: null, buttons: [],
-});
-await Template.create({
-    userId: w.accountId, waBusinessId: 'waba-sin-linea', templateId: 'tpl-w3', name: 'de_un_waba_sin_linea',
-    language: 'es', category: 'MARKETING', status: 'APPROVED', bodyText: 'w3', header: null, buttons: [],
-});
-const namesOf = (res) => res.body.map(template => template.name).sort();
 
 test('GET /templates?lineId=: solo las del WABA de esa línea; de otra cuenta → 404', async () => {
     const second = await request(w, 'GET', `/templates?lineId=${wSecond}`);
