@@ -84,7 +84,7 @@ export const LinePin = ({ line }: { line: Line }) => {
             </div>
             <dd className="pt-px text-[12.5px] leading-[1.5] text-brand-muted">{hasPin ? WITH_PIN : WITHOUT_PIN}</dd>
 
-            {hasPin && error && (
+            {hasPin && error !== null && (
                 <dd role="alert" className="sm:col-span-2 flex flex-wrap items-center gap-2 text-[13px] text-brand-danger">
                     <AlertCircle size={14} className="flex-none" />
                     <span>{loadErrorMessage(error)}</span>
