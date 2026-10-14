@@ -132,6 +132,9 @@ test('el worker envía la campaña de una cuenta cuyo _id no es el del owner', a
     assert.equal(recipient.status, 'done');
     const sent = await Message.findOne({ campaignId: c.campaignId }).lean();
     assert.ok(sent, 'la campaña no dejó ningún mensaje');
+    // Fase 3: el chat lo enseña como de la campaña, no de una persona.
+    assert.equal(sent.origin, 'campaign');
+    assert.equal(sent.sentBy ?? null, null);
     assert.ok(await Conversation.exists({ _id: sent.conversationId, userId: c.accountId }));
     // Regresión que vigila (plan de la 2b, Review Focus 6): la campaña sembrada no
     // tiene `lineId` (anterior a las líneas) y sale por la línea del número actual.

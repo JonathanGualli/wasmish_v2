@@ -37,7 +37,7 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
   **Volver atrás:** las imágenes `:1.0.16`.
 
 - **Multi-línea · Fase 3: equipo, roles y acceso por línea** — empezado el 2026-10-14 por Claude. Plan: `docs/superpowers/plans/2026-10-14-multi-linea-fase-3.md` (revisado por Codex, PR #33); diseño: `Design/Wasmish Equipo - Usuarios, roles y acceso.html`.
-  Hecho: PR 1 (permisos, #34, unido): `utils/permissions.js`, `requirePermission`, el alcance por línea en conversaciones, campañas, líneas, plantillas y contactos, `findStartLine`, y la sesión con `role`, `permissions`, `lineIds` y `account`; PR 2 (tiempo real, rama `fase3-tiempo-real`): `canReceive`, las conexiones SSE con su sesión, el `meta` de línea en cada evento y `disconnectUser` con `access_changed` · Falta: la revisión de Codex del PR 2; PR 3 (equipo e invitaciones), PR 4 (UI) · Sin probar: en el navegador, nada (no cambian la UI).
+  Hecho: PR 1 (permisos, #34) y PR 2 (tiempo real, #35), unidos; PR 3 (equipo, rama `fase3-equipo`): `/team` (invitar, anular, cambiar rol, líneas y estado), aceptar la invitación (`/invitations/:token`), `maxUsers` con el candado del equipo (`withAccountLock`), el superadmin con una fila por cuenta y `users`, y `Message.sentBy`/`origin` · Falta: la revisión de Codex del PR 3; PR 4 (UI, con el diseño `Design/Wasmish Equipo - Usuarios, roles y acceso.html`) · Sin probar: en el navegador, nada (no cambian la UI).
 
 <!-- Formato de una entrada:
 - **<qué>** — rama `<rama>`, PR #<n>, empezado el <fecha> por <Claude|Codex|Jonathan>.

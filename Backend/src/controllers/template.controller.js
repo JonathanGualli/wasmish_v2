@@ -20,6 +20,7 @@ import Waba from "../models/waba.model.js";
 import { LINE_NOT_FOUND_MESSAGE } from "../utils/whatsapp.line.js";
 import { resolveApiLine } from "../utils/line.js";
 import { inLineScope, lineScope } from "../utils/permissions.js";
+import { messageOrigin, messageSender } from "../utils/message.origin.js";
 
 
 // ---------------------------------------------------------------------------
@@ -443,6 +444,10 @@ export const processTemplateSending = async ({
     buttons = [],
     contactName,
     source = null,
+    // Quién lo envía (`{ userId, name }`, desde el chat) y de dónde sale:
+    // 'chat', 'campaign' o 'api' (Fase 3). Una campaña se reconoce por `campaignId`.
+    sender = null,
+    origin = null,
     template: resolvedTemplate = null,
     campaignId = null,
     dryRun = false,
@@ -572,6 +577,8 @@ export const processTemplateSending = async ({
 
     const msg = await Message.create({
         conversationId: targetConversation._id, direction: 'outbound', sender: 'me',
+        sentBy: sender?.userId ?? null, sentByName: sender?.name ?? null,
+        origin: origin ?? (campaignId ? 'campaign' : null),
         waMessageId, text: storedText, timestamp: now,
         status, errorCode, errorDetail, failedAt: status === 'failed' ? now : null,
         templateName,
@@ -597,6 +604,8 @@ export const processTemplateSending = async ({
         type: msg.type, hasMedia: Boolean(msg.mediaFile),
         mediaFilename: msg.mediaFilename, mediaSize: msg.mediaSize,
         ...(campaignId && { campaignId: String(campaignId) }),
+        sentBy: messageSender(msg),
+        origin: messageOrigin(msg),
     }, { lineId: targetConversation.lineId ?? null });
 
     return { msg, conversation: targetConversation, waMessageId, status, errorCode, errorDetail };
@@ -630,6 +639,7 @@ export const sendTemplateController = async (req, res) => {
                 buttons: req.body.buttons ?? [],
                 contactName,
                 source: 'api',
+                origin: 'api',
             });
 
         if (status === 'failed') {
