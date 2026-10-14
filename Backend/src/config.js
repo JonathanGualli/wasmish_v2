@@ -25,6 +25,15 @@ export const MEDIA_DIR = process.env.MEDIA_DIR || 'media';
 // Si se supera, el mensaje se guarda igual con su etiqueta, solo sin archivo.
 export const MEDIA_MAX_BYTES = Number(process.env.MEDIA_MAX_BYTES || 25 * 1024 * 1024);
 
+// Avisos push (app móvil). Las claves VAPID se generan UNA vez
+// (`npx web-push generate-vapid-keys`) y no se cambian: cambiarlas invalida
+// todas las suscripciones. `VAPID_SUBJECT` es un `mailto:` de contacto para los
+// servicios de push. Sin las tres, los avisos están apagados y lo demás funciona igual.
+export const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY;
+export const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
+export const VAPID_SUBJECT = process.env.VAPID_SUBJECT;
+export const PUSH_ENABLED = Boolean(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY && VAPID_SUBJECT);
+
 // Campañas (workers/campaign.worker.js).
 //
 // CAMPAIGN_DRY_RUN: no llama a Meta, simula la respuesta (ver fakeTemplateSend).
