@@ -36,8 +36,9 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
   **Volver atrás:** las imágenes `:1.0.16`.
 
-- **Multi-línea · Fase 3: equipo, roles y acceso por línea** — empezado el 2026-10-14 por Claude. Plan: `docs/superpowers/plans/2026-10-14-multi-linea-fase-3.md` (revisado por Codex, PR #33); diseño: `Design/Wasmish Equipo - Usuarios, roles y acceso.html`.
-  Hecho: PR 1 (permisos, #34) y PR 2 (tiempo real, #35), unidos; PR 3 (equipo, rama `fase3-equipo`): `/team` (invitar, anular, cambiar rol, líneas y estado), aceptar la invitación (`/invitations/:token`), `maxUsers` con el candado del equipo (`withAccountLock`), el superadmin con una fila por cuenta y `users`, y `Message.sentBy`/`origin` · Falta: la revisión de Codex del PR 3; PR 4 (UI, con el diseño `Design/Wasmish Equipo - Usuarios, roles y acceso.html`) · Sin probar: en el navegador, nada (no cambian la UI).
+- **Multi-línea · Fase 3: equipo, roles y acceso por línea** — empezado el 2026-10-14 por Claude. Plan: `docs/superpowers/plans/2026-10-14-multi-linea-fase-3.md`; diseño: `Design/Wasmish Equipo - Usuarios, roles y acceso.html` (entra con el PR 4).
+  Hecho: PR 1 (permisos, #34), PR 2 (tiempo real, #35) y PR 3 (equipo e invitaciones, #36), unidos; PR 4 (UI, rama `fase3-ui`): `can()` y `access_changed` en el `AuthProvider`, lo que cada rol ve (menú, rutas, Contactos, Plantillas, Ajustes), Ajustes → Equipo, la página de aceptar la invitación, quién respondió en el chat y la columna de usuarios del superadmin · Falta: la revisión de Codex del PR 4 · Probado en el navegador en local con dos sesiones (owner y agente): invitar, aceptar, lo que no ve el agente, quién respondió y desactivar (el agente sale sin recargar).
+- **Para encender equipos en una cuenta real:** el ensayo de la vuelta atrás con dos usuarios (plan de la Fase 3, «Al terminar»): con una imagen anterior a la Fase 3, el agente vería y haría todo.
 
 <!-- Formato de una entrada:
 - **<qué>** — rama `<rama>`, PR #<n>, empezado el <fecha> por <Claude|Codex|Jonathan>.

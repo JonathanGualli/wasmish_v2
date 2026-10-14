@@ -222,7 +222,7 @@ export const TeamCard = () => {
                 )}
 
                 {members.length > 0 && (
-                    <div className="rounded-[10px] border border-brand-border divide-y divide-brand-raised">
+                    <div className="rounded-[10px] border border-brand-border divide-y divide-brand-raised max-sm:[&>*:nth-child(2)]:border-t-0">
                         <div className={`hidden ${ROW_GRID} rounded-t-[10px] bg-brand-bg px-[18px] py-[9px]
                             text-[11px] font-semibold uppercase tracking-[0.1em] text-brand-muted`}>
                             <span>Persona</span><span>Rol</span><span>Líneas</span><span>Estado</span><span />

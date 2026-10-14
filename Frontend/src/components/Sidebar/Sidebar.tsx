@@ -132,8 +132,9 @@ export const Sidebar = ({ collapsed, toggle, isMobile }: Props) => {
         ))}
       </nav>
 
-      {/* Bloque inferior — ajustes, salida y la identidad de quien responde */}
-      <div className="mt-auto grid gap-[3px] shrink-0">
+      {/* Bloque inferior — ajustes, salida y la identidad de quien responde. La
+          columna no crece con el texto: «Owner · Nombre largo del negocio» se corta. */}
+      <div className="mt-auto grid grid-cols-[minmax(0,1fr)] gap-[3px] shrink-0">
         <div className="h-px bg-brand-deep-active mx-2 mb-3" />
 
         <SidebarItem
