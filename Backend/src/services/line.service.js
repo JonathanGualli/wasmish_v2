@@ -178,14 +178,15 @@ const LOCK_MS = 30 * 1000;
  * Ejecuta `fn` con el candado de líneas de la cuenta: un cambio de líneas a la
  * vez por cuenta, también entre procesos (lo guarda `Account.lineLock` en
  * Mongo, sin transacciones). Ocupado → 409 `LINE_BUSY_MESSAGE`. Caduca a los
- * 30 s, por si un proceso muere con él; se suelta solo si sigue siendo suyo.
+ * 30 s (o `ttlMs`, si `fn` espera más a Meta), por si un proceso muere con él;
+ * se suelta solo si sigue siendo suyo.
  */
-export const withLineLock = async (accountId, fn) => {
+export const withLineLock = async (accountId, fn, { ttlMs = LOCK_MS } = {}) => {
     const token = crypto.randomUUID();
     const now = new Date();
     const taken = await Account.findOneAndUpdate(
         { _id: accountId, $or: [{ lineLock: null }, { 'lineLock.expiresAt': { $lte: now } }] },
-        { $set: { lineLock: { token, expiresAt: new Date(now.getTime() + LOCK_MS) } } },
+        { $set: { lineLock: { token, expiresAt: new Date(now.getTime() + ttlMs) } } },
         { projection: { _id: 1 } },
     );
     if (!taken) throw statusError(409, LINE_BUSY_MESSAGE, LINE_ERROR_CODES.busy);

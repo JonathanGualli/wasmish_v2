@@ -651,3 +651,22 @@ test('dos conexiones del mismo número a la vez: la segunda no registra (409 lin
     assert.equal(res.status, 200, res.text);
     assert.equal(await linePin(r, '989'), firstPin);
 });
+
+// Regresión que vigila: en producción (2026-10-14), `/register` tardó más de los
+// 10 s de `whatsappApi` y la primera conexión de un número nuevo falló con 502,
+// aunque Meta sí lo registró. Y el candado de líneas (30 s) caducaba antes.
+test('registrar espera a Meta hasta 60 s, con el candado de líneas tomado todo ese tiempo', async () => {
+    const r = await seedAccount('RK', { seq: 92 });
+    let timeout = null;
+    let lockLeftMs = null;
+    fakeMeta(['990'], { platformType: 'NOT_APPLICABLE', onRegister: async (config) => {
+        timeout = config.timeout;
+        const { lineLock } = await Account.findById(r.accountId).lean();
+        lockLeftMs = new Date(lineLock.expiresAt).getTime() - Date.now();
+    } });
+    const res = await connectEmbedded(r, '990');
+    onMeta(null);
+    assert.equal(res.status, 200, res.text);
+    assert.equal(timeout, 60_000);
+    assert.ok(lockLeftMs > 60_000, `al candado le quedaban ${lockLeftMs} ms`);
+});

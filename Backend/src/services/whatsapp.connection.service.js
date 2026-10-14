@@ -2,7 +2,7 @@ import Account from "../models/account.model.js";
 import Line from "../models/line.model.js";
 import User from "../models/user.model.js";
 import Waba from "../models/waba.model.js";
-import { getWabaPhoneNumbers, registerPhoneNumber } from "../libs/whatsapp.js";
+import { REGISTER_TIMEOUT_MS, getWabaPhoneNumbers, registerPhoneNumber } from "../libs/whatsapp.js";
 import { withLineLock } from "./line.service.js";
 import { decrypt, encrypt } from "../utils/crypto.js";
 import { planConnection } from "../utils/line.js";
@@ -109,7 +109,10 @@ export const verifyWabaPhoneNumber = async ({ token, waBusinessId, phoneNumberId
 //
 // El registro va con el candado de líneas de la cuenta: dos conexiones del
 // mismo número a la vez no pueden registrar con PINs distintos ni borrar el PIN
-// de la otra. La segunda recibe 409 `line_busy` y se reintenta.
+// de la otra. La segunda recibe 409 `line_busy` y se reintenta. El candado
+// dura más que la espera a Meta, para no caducar a mitad del registro.
+const REGISTER_LOCK_MS = REGISTER_TIMEOUT_MS + 30_000;
+
 export const registerIfNeeded = async ({ accountId, waBusinessId, token, phoneNumberId, details }) => {
     const wabaFilter = { waBusinessId, accountId };
     const pinPath = `pendingTwoStepPins.${phoneNumberId}`;
@@ -140,5 +143,5 @@ export const registerIfNeeded = async ({ accountId, waBusinessId, token, phoneNu
             error.waErrorDetail = cause.waErrorDetail ?? cause.message;
             throw error;
         }
-    });
+    }, { ttlMs: REGISTER_LOCK_MS });
 };
