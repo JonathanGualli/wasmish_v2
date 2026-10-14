@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { useInView } from "react-intersection-observer";
 import { Transition } from "@headlessui/react";
-import { CircleAlert } from "lucide-react";
+import { CircleAlert, Code2, Send } from "lucide-react";
 import { useConversationMessages } from "../../hooks/useConversationMessages";
 import { useConversations } from "../../hooks/useConversations.ts";
 import { useTemplates } from "../../hooks/useTemplates.ts";
@@ -18,6 +18,8 @@ import { ChatHeader } from "./ChatHeader.tsx";
 import { ContactSidebar } from "./ContactSidebar/ContactSidebar.tsx";
 import { ChatComposer } from "./Composer/ChatComposer.tsx";
 import { MessageUploadStatus } from "./MessageUploadStatus.tsx";
+import { useAuthContext } from "../../context/auth.context";
+import { hasTeam } from "../../utils/roleDisplay";
 import { showsUploadStatus, uploadPercent } from "../../utils/outboundMedia.ts";
 import { ProgressBar } from "../ProgressBar/ProgressBar.tsx";
 
@@ -86,6 +88,32 @@ const FailedBadge = ({ msg }: { msg: Message }) => (
     </span>
 );
 
+/**
+ * Quién envió un mensaje nuestro (Fase 3; diseño «Wasmish Equipo», marco 5a):
+ * el nombre de la persona, o el origen en gris con icono si no lo escribió nadie
+ * (una campaña, la API). En la línea de la hora, no dentro de la burbuja.
+ */
+const MessageAuthor = ({ msg }: { msg: Message }) => {
+    if (msg.sentBy?.name) {
+        return <><span className="font-semibold text-brand-strong">{msg.sentBy.name}</span><span>·</span></>;
+    }
+    if (msg.origin?.kind === 'campaign' || msg.origin?.kind === 'api') {
+        const isCampaign = msg.origin.kind === 'campaign';
+        const label = msg.origin.kind === 'campaign'
+            ? (msg.origin.campaignName ? `Campaña «${msg.origin.campaignName}»` : 'Campaña')
+            : 'API';
+        return (
+            <>
+                <span className="inline-flex items-center gap-1 text-brand-muted">
+                    {isCampaign ? <Send size={11} /> : <Code2 size={11} />}{label}
+                </span>
+                <span>·</span>
+            </>
+        );
+    }
+    return null;
+};
+
 export const ChatThread = ({
     conversationId, onBack, contactSidebarOpen, onContactSidebarChange, onStartConversation, onOpenConversation,
 }: Props) => {
@@ -94,6 +122,8 @@ export const ChatThread = ({
     const { data: conversations } = useConversations();
     const { templates } = useTemplates();
     const { ref, inView } = useInView();
+    // Con una sola persona en la cuenta, la línea de la hora queda como siempre.
+    const showAuthor = hasTeam(useAuthContext().user);
 
     const conversation = useMemo(
         () => conversations?.find(c => c.id === conversationId),
@@ -177,6 +207,7 @@ export const ChatThread = ({
 
                     <div className={`flex items-center gap-[5px] text-[11px] mt-1 text-brand-subtle
                         ${mine ? "justify-end" : ""}`}>
+                        {mine && showAuthor && <MessageAuthor msg={msg} />}
                         <span className="font-mono">{formatTime(msg.timestamp)}</span>
                         {mine && (
                             showsUploadStatus(msg)
