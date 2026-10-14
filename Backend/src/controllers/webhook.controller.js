@@ -279,6 +279,13 @@ const procesarEstado = async (inbound, statusData) => {
 
     const message = await Message.findOne({ waMessageId });
     if(!message) return;
+    // El mensaje tiene que ser de la cuenta del número por el que llega el
+    // acuse: si el número pasó de A a B, un acuse tardío de un mensaje de A no
+    // lo toca ni se avisa a B (revisión de Codex del PR #35). De aquí sale
+    // también la línea del aviso.
+    const conversation = await Conversation.findOne({ _id: message.conversationId, userId: inbound.accountId })
+        .select('lineId').lean();
+    if (!conversation) return;
 
     // Estado desconocido, repetido o que retrocede → lo ignoramos
     const changes = resolveStatusTransition({
@@ -302,10 +309,6 @@ const procesarEstado = async (inbound, statusData) => {
 
     await message.save();
 
-    // El acuse va a quien ve la línea de su conversación (Fase 3; revisión de
-    // Codex del plan): con estados, errores y campaña, no es de toda la cuenta.
-    const statusConversation = await Conversation.findById(message.conversationId).select('lineId').lean();
-
     sendToAccount(
         String(inbound.accountId),
         'message_status', {
@@ -322,7 +325,9 @@ const procesarEstado = async (inbound, statusData) => {
             // porque las entregas y lecturas llegan horas después de enviar.
             ...(message.campaignId && { campaignId: String(message.campaignId) }),
         },
-        { lineId: statusConversation?.lineId ?? null },
+        // A quien ve la línea de su conversación (Fase 3; revisión de Codex
+        // del plan): con estados, errores y campaña, no es de toda la cuenta.
+        { lineId: conversation.lineId ?? null },
     );
 
     // Solo se registran los fallos. Cada mensaje enviado genera dos o tres acuses

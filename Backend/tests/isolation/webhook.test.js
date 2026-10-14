@@ -244,3 +244,28 @@ test('un entrante y un acuse de la línea 702 llegan al owner y no al agente de 
         await agentStream.close();
     }
 });
+
+// Regresión que vigila (revisión de Codex del PR #35): el acuse buscaba el
+// mensaje solo por su `waMessageId`. Si el número pasaba de A a B, un acuse
+// tardío de un mensaje de A cambiaba ese mensaje y se avisaba a B.
+test('un acuse que llega por el número de B no toca un mensaje de A ni se avisa a B', async () => {
+    const contact = await Contact.create({ userId: a.accountId, phone: '593990004848', name: 'acuse cruzado' });
+    const conversation = await Conversation.create({
+        userId: a.accountId, contactId: contact._id, contactPhone: contact.phone, phoneNumberId: A_NUMBER,
+    });
+    const message = await Message.create({
+        conversationId: conversation._id, direction: 'outbound', sender: 'me', text: 'de A',
+        waMessageId: 'wamid.cruzado.ab', status: 'sent', timestamp: new Date(),
+    });
+    const stream = await openStream(b);
+    try {
+        const res = await postWebhook(`99${b.seq}`, {
+            statuses: [{ id: 'wamid.cruzado.ab', status: 'read', timestamp: String(Math.floor(Date.now() / 1000)), recipient_id: contact.phone }],
+        });
+        assert.equal(res.status, 200);
+        assert.equal((await Message.findById(message._id).lean()).status, 'sent');
+        assert.equal(await stream.waitFor('wamid.cruzado.ab', 300), false, 'B recibió el acuse de un mensaje de A');
+    } finally {
+        await stream.close();
+    }
+});
