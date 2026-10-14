@@ -40,4 +40,5 @@ export const LINE_ERROR = {
     phoneNumberTaken: 'phone_number_taken',
     phoneNumberNotInWaba: 'phone_number_not_in_waba',
     wabaTaken: 'waba_taken',
+    registrationFailed: 'phone_number_registration_failed',
 } as const;

@@ -38,6 +38,11 @@ const lineSchema = new mongoose.Schema({
     // decide la siguiente línea por defecto (`nextDefaultLine`).
     connectedAt: { type: Date, default: null },
     disconnectedAt: { type: Date, default: null },
+    // El PIN de la verificación en dos pasos con el que Wasmish registró el
+    // número en la Cloud API (`registerIfNeeded`), cifrado como el token. El
+    // cliente lo necesita para llevarse el número; solo sale en
+    // `GET /lines/:id/pin`. null si el número ya estaba registrado al conectarlo.
+    twoStepPin: { type: String, default: null },
 }, {
     timestamps: true,
 });

@@ -1,7 +1,8 @@
 import { encrypt } from "../utils/crypto.js";
 import { exchangeCodeForToken, subscribeAppToWaba } from "../libs/whatsapp.js";
 import {
-    isPhoneNumberTaken, isWabaTaken, checkLineLimit, claimWaba, verifyWabaPhoneNumber, PHONE_NUMBER_TAKEN_MESSAGE, WABA_TAKEN_MESSAGE,
+    isPhoneNumberTaken, isWabaTaken, checkLineLimit, claimWaba, verifyWabaPhoneNumber, registerIfNeeded,
+    PHONE_NUMBER_TAKEN_MESSAGE, WABA_TAKEN_MESSAGE,
 } from "../services/whatsapp.connection.service.js";
 import { applyConnection } from "../services/line.service.js";
 import { LINE_ERROR_CODES } from "../utils/whatsapp.line.js";
@@ -53,9 +54,13 @@ export const connectWhatsappEmbedded = async (req, res) => {
         // 4. Subir la app a los whebhooks del whatsapp del cliente
         await subscribeAppToWaba( { token: accessToken, waBusinessId } );
 
-        // 5. La línea, con el token (cifrado) en su WABA
+        // 5. Registrar el número en la Cloud API, si Meta dice que no lo está:
+        //    sin esto, uno recién estrenado no puede enviar (133010).
+        const twoStepPin = await registerIfNeeded({ accountId, waBusinessId, token: accessToken, phoneNumberId, details });
+
+        // 6. La línea, con el token (cifrado) en su WABA
         const { lineId } = await applyConnection({
-            accountId, waBusinessId, tokenWhatsapp: encrypt(accessToken), phoneNumberId, details,
+            accountId, waBusinessId, tokenWhatsapp: encrypt(accessToken), phoneNumberId, details, twoStepPin,
         });
 
         return res.json({

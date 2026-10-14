@@ -3,6 +3,7 @@ import Account from "../models/account.model.js";
 import Line from "../models/line.model.js";
 import Waba from "../models/waba.model.js";
 import { disconnectLine, updateLineSettings } from "../services/line.service.js";
+import { decrypt } from "../utils/crypto.js";
 import { cleanLineName, nextDefaultLine } from "../utils/line.js";
 import { LINE_ERROR_CODES, LINE_NOT_FOUND_MESSAGE } from "../utils/whatsapp.line.js";
 
@@ -103,6 +104,20 @@ export const disconnectLineController = async (req, res) => {
 
         await disconnectLine(accountId, line._id);
         return res.json(await serializeAccountLine(accountId, await Line.findById(line._id).lean()));
+    } catch (error) {
+        return sendError(res, error);
+    }
+};
+
+// GET /lines/:id/pin — el PIN de la verificación en dos pasos con el que Wasmish
+// registró el número (`registerIfNeeded`); el cliente lo necesita para llevarse
+// el número. null si el número ya estaba registrado al conectarlo. Va aparte de
+// GET /lines para que solo salga cuando se pide.
+export const getLinePin = async (req, res) => {
+    try {
+        const line = await findOwnedLine(req.auth.accountId, req.params.id);
+        if (!line) return sendNotFound(res);
+        return res.json({ pin: line.twoStepPin ? decrypt(line.twoStepPin) : null });
     } catch (error) {
         return sendError(res, error);
     }

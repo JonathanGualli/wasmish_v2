@@ -2,9 +2,14 @@ import Account from "../models/account.model.js";
 import Line from "../models/line.model.js";
 import User from "../models/user.model.js";
 import Waba from "../models/waba.model.js";
-import { getWabaPhoneNumbers } from "../libs/whatsapp.js";
+import { getWabaPhoneNumbers, registerPhoneNumber } from "../libs/whatsapp.js";
+import { withLineLock } from "./line.service.js";
+import { decrypt, encrypt } from "../utils/crypto.js";
 import { planConnection } from "../utils/line.js";
-import { LINE_ERROR_CODES, describeWabaPhoneNumber, lineLimitMessage, nextPageCursor } from "../utils/whatsapp.line.js";
+import {
+    LINE_ERROR_CODES, PHONE_NUMBER_REGISTRATION_FAILED_MESSAGE, describeWabaPhoneNumber, generateTwoStepPin,
+    lineLimitMessage, needsRegistration, nextPageCursor,
+} from "../utils/whatsapp.line.js";
 
 // Lo que comparten las dos formas de conectar un número (Embedded Signup y el
 // formulario manual de Ajustes). El webhook enruta cada mensaje por su
@@ -90,4 +95,50 @@ export const verifyWabaPhoneNumber = async ({ token, waBusinessId, phoneNumberId
         throw error;
     }
     return line;
+};
+
+// Registra el número en la Cloud API si Meta dice que no lo está (`details`, de
+// `verifyWabaPhoneNumber`), y devuelve el PIN (cifrado) que tiene que guardar
+// su línea, o null. El `Waba` ya es de esta cuenta (`claimWaba`).
+//
+// El PIN se apunta en el `Waba` ANTES de llamar a Meta y no se borra hasta que
+// llega a la línea (`applyConnection`): si la respuesta se pierde o la conexión
+// falla después, el siguiente intento lo reutiliza, para registrar con el mismo
+// o para dárselo a la línea si Meta ya dice que está registrado. Solo un
+// rechazo de Meta (respuesta con `waErrorCode`: no quedó registrado) lo borra.
+//
+// El registro va con el candado de líneas de la cuenta: dos conexiones del
+// mismo número a la vez no pueden registrar con PINs distintos ni borrar el PIN
+// de la otra. La segunda recibe 409 `line_busy` y se reintenta.
+export const registerIfNeeded = async ({ accountId, waBusinessId, token, phoneNumberId, details }) => {
+    const wabaFilter = { waBusinessId, accountId };
+    const pinPath = `pendingTwoStepPins.${phoneNumberId}`;
+    const findPendingPin = async () =>
+        (await Waba.findOne(wabaFilter).select('pendingTwoStepPins').lean())?.pendingTwoStepPins?.[phoneNumberId] ?? null;
+
+    if (!needsRegistration(details)) {
+        if (details?.platformType !== 'CLOUD_API') {
+            console.warn('Registrar número: platform_type inesperado', phoneNumberId, details?.platformType);
+        }
+        return findPendingPin();
+    }
+
+    return withLineLock(accountId, async () => {
+        const pending = await findPendingPin();
+        const encryptedPin = pending ?? encrypt(generateTwoStepPin());
+        if (!pending) await Waba.updateOne(wabaFilter, { $set: { [pinPath]: encryptedPin } });
+
+        try {
+            await registerPhoneNumber({ token, phoneNumberId, pin: decrypt(encryptedPin) });
+            return encryptedPin;
+        } catch (cause) {
+            if (cause.waErrorCode) await Waba.updateOne(wabaFilter, { $unset: { [pinPath]: '' } });
+            const error = new Error(PHONE_NUMBER_REGISTRATION_FAILED_MESSAGE);
+            error.statusCode = 502;
+            error.code = LINE_ERROR_CODES.registrationFailed;
+            error.waErrorCode = cause.waErrorCode;
+            error.waErrorDetail = cause.waErrorDetail ?? cause.message;
+            throw error;
+        }
+    });
 };

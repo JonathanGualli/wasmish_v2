@@ -11,7 +11,7 @@ import {
 
 const { syncLinesFromOwner, findInboundLine } = await import('../../src/services/line.service.js');
 const { lineStateIssues } = await import('../../src/utils/line.js');
-const { hashApiKey } = await import('../../src/utils/crypto.js');
+const { encrypt, hashApiKey } = await import('../../src/utils/crypto.js');
 const { DEFAULT_LINE_INACTIVE_MESSAGE, LINE_BUSY_MESSAGE, WHATSAPP_NOT_CONNECTED_MESSAGE, lineLimitMessage } = await import('../../src/utils/whatsapp.line.js');
 
 await Waba.init();
@@ -424,4 +424,44 @@ test('renovar el token no cambia la fecha de conexión; reconectar una desconect
     const line = await lineFor(lineId);
     assert.ok(line.connectedAt > connectedAt);
     assert.equal(line.disconnectedAt, null);
+});
+
+// --- El PIN de dos pasos de una línea ---------------------------------------------
+
+/** Una cuenta con una línea con PIN (`<base>1`, '123456') y otra sin él (`<base>2`). */
+const linesWithPin = async (label, base) => {
+    const account = await twoLines(label, base);
+    await Line.updateOne({ _id: account.first }, { twoStepPin: encrypt('123456') });
+    return account;
+};
+
+test('GET /lines/:id/pin: el PIN de una línea propia, descifrado; null si no tiene', async () => {
+    const a = await linesWithPin('PA', '761');
+    const withPin = await request(a, 'GET', `/lines/${a.first}/pin`);
+    assert.equal(withPin.status, 200, withPin.text);
+    assert.deepEqual(withPin.body, { pin: '123456' });
+    const withoutPin = await request(a, 'GET', `/lines/${a.second}/pin`);
+    assert.equal(withoutPin.status, 200, withoutPin.text);
+    assert.deepEqual(withoutPin.body, { pin: null });
+});
+
+test('GET /lines/:id/pin: la línea de otra cuenta o un id mal formado → 404, sin el PIN', async () => {
+    const a = await linesWithPin('PB', '762');
+    const b = await newAccount('PC');
+    const res = await request(b, 'GET', `/lines/${a.first}/pin`);
+    assert.equal(res.status, 404, res.text);
+    assert.ok(!res.text.includes('123456'));
+    const malformed = await request(a, 'GET', '/lines/no-es-un-id/pin');
+    assert.equal(malformed.status, 404, malformed.text);
+});
+
+// Regresión que vigila: GET /lines lee la línea entera; el PIN no puede salir ahí.
+test('GET /lines no incluye el PIN', async () => {
+    const a = await linesWithPin('PD', '763');
+    const res = await request(a, 'GET', '/lines');
+    assert.equal(res.status, 200, res.text);
+    assert.ok(res.body.lines.every(line => !('twoStepPin' in line) && !('pin' in line)));
+    assert.ok(!res.text.includes('123456'));
+    const { twoStepPin } = await lineFor(a.first);
+    assert.ok(!res.text.includes(twoStepPin));
 });

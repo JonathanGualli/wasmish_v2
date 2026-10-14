@@ -20,6 +20,15 @@ const wabaSchema = new mongoose.Schema({
         type: String,
         default: null,
     },
+    // El PIN (cifrado) con el que se está registrando cada número, por
+    // `phoneNumberId`, desde antes de llamar a Meta hasta que llega a su línea
+    // (`Line.twoStepPin`). Si la conexión falla después del registro, el
+    // siguiente intento lo recupera en vez de perderlo (`registerIfNeeded`).
+    pendingTwoStepPins: {
+        type: Map,
+        of: String,
+        default: undefined,
+    },
 }, {
     timestamps: true,
 });

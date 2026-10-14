@@ -2,12 +2,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
-import { seedAccount, request, connectWhatsapp, metaCalls, onMeta, Account, Line, User, Waba, Conversation, PNG } from './helpers.js';
+import { seedAccount, request, connectWhatsapp, metaCalls, onMeta, ANONYMOUS, Account, ApiKey, Line, User, Waba, Conversation, PNG } from './helpers.js';
 
 const { isPhoneNumberTaken, WABA_TAKEN_MESSAGE } = await import('../../src/services/whatsapp.connection.service.js');
 const { applyConnection, writeLegacyUser } = await import('../../src/services/line.service.js');
-const { lineLimitMessage, LINE_BUSY_MESSAGE } = await import('../../src/utils/whatsapp.line.js');
-const { encrypt } = await import('../../src/utils/crypto.js');
+const { lineLimitMessage, LINE_BUSY_MESSAGE, PHONE_NUMBER_REGISTRATION_FAILED_MESSAGE } = await import('../../src/utils/whatsapp.line.js');
+const { encrypt, decrypt, hashApiKey } = await import('../../src/utils/crypto.js');
 const { lineStateIssues } = await import('../../src/utils/line.js');
 
 const a = await seedAccount('A', { seq: 1 });
@@ -15,14 +15,27 @@ const b = await seedAccount('B', { seq: 2 });
 await connectWhatsapp(a);
 const A_NUMBER = '991';
 
-// Meta devuelve `numbers` como los números del WABA; el resto de llamadas, OK.
-const fakeMeta = (numbers, { onPhoneNumbers } = {}) => onMeta(async (config) => {
+// Meta devuelve `numbers` como los números del WABA, con ese `platform_type`
+// (`undefined`: sin el campo); el resto de llamadas, OK. `onRegister(config)`
+// puede lanzar: con `waErrorCode` es un rechazo de Meta (como lo deja el
+// interceptor de `whatsappApi`), sin él, una respuesta que no llegó.
+const fakeMeta = (numbers, options = {}) => onMeta(async (config) => {
+    const { onPhoneNumbers, onRegister } = options;
+    // `platformType: undefined` explícito es «sin el campo»; sin la opción, `CLOUD_API`.
+    const platformType = 'platformType' in options ? options.platformType : 'CLOUD_API';
     if (config.url === '/oauth/access_token') return { data: { access_token: 'token-nuevo' } };
     if (config.url.endsWith('/phone_numbers')) {
         await onPhoneNumbers?.();
-        return { data: { data: numbers.map(id => ({ id, display_phone_number: `+1 555 ${id}`, verified_name: `Negocio ${id}` })) } };
+        return { data: { data: numbers.map(id => ({
+            id, display_phone_number: `+1 555 ${id}`, verified_name: `Negocio ${id}`,
+            ...(platformType !== undefined && { platform_type: platformType }),
+        })) } };
     }
     if (config.url.endsWith('/subscribed_apps')) return { data: { success: true } };
+    if (config.url.endsWith('/register')) {
+        await onRegister?.(config);
+        return { data: { success: true } };
+    }
 });
 
 const updateToken = (account, phoneNumberId) => request(account, 'PUT', '/users/update-user-token-whatsapp',
@@ -436,4 +449,205 @@ test('un reemplazo de número cortado a medias se termina al reintentar', async 
     assert.equal((await defaultLineOf(v)).phoneNumberId, '7773');
     assert.equal((await ownerOf(v)).phoneNumberId, '7773');
     assert.equal((await Account.findById(v.accountId).lean()).pendingReplace, null);
+});
+
+// --- Registrar el número en la Cloud API ----------------------------------------
+
+const connectEmbedded = (account, phoneNumberId) => request(account, 'POST', '/whatsapp/connect',
+    { code: 'x', phoneNumberId, waBusinessId: `waba-${account.label}` });
+
+const registerCalls = (since) => metaCalls.slice(since).filter(call => call.url.endsWith('/register'));
+
+/** La línea de ese número en la cuenta, con su PIN descifrado (o null). */
+const linePin = async (account, phoneNumberId) => {
+    const line = await Line.findOne({ accountId: account.accountId, phoneNumberId }).lean();
+    return line?.twoStepPin ? decrypt(line.twoStepPin) : null;
+};
+
+const pendingPins = async (account) =>
+    (await Waba.findOne({ accountId: account.accountId, waBusinessId: `waba-${account.label}` }).lean())?.pendingTwoStepPins ?? {};
+
+// Regresión que vigila: un número nuevo del Embedded Signup quedaba sin registrar y no podía enviar (133010).
+test('POST /whatsapp/connect: un número sin registrar se registra con un PIN, y se guarda cifrado', async () => {
+    const r = await seedAccount('RA', { seq: 80 });
+    let sent = null;
+    fakeMeta(['981'], { platformType: 'NOT_APPLICABLE', onRegister: (config) => { sent = JSON.parse(config.data); } });
+    const before = metaCalls.length;
+    const res = await connectEmbedded(r, '981');
+    onMeta(null);
+    assert.equal(res.status, 200, res.text);
+    assert.deepEqual(metaCalls.slice(before).map(c => c.url),
+        ['/oauth/access_token', '/waba-RA/phone_numbers', '/waba-RA/subscribed_apps', '/981/register']);
+    assert.equal(sent.messaging_product, 'whatsapp');
+    assert.match(sent.pin, /^\d{6}$/);
+    const line = await Line.findOne({ accountId: r.accountId, phoneNumberId: '981' }).lean();
+    assert.notEqual(line.twoStepPin, sent.pin);
+    assert.equal(decrypt(line.twoStepPin), sent.pin);
+    assert.deepEqual(await pendingPins(r), {});
+});
+
+test('PUT /users/update-user-token-whatsapp: el formulario manual también registra un número sin registrar', async () => {
+    const r = await seedAccount('RB', { seq: 81 });
+    fakeMeta(['982'], { platformType: 'NOT_APPLICABLE' });
+    const before = metaCalls.length;
+    const res = await request(r, 'PUT', '/users/update-user-token-whatsapp',
+        { tokenWhatsapp: 'token-manual', phoneNumberId: '982', waBusinessId: 'waba-RB' });
+    onMeta(null);
+    assert.equal(res.status, 200, res.text);
+    assert.equal(registerCalls(before).length, 1);
+    assert.match(await linePin(r, '982'), /^\d{6}$/);
+});
+
+test('un número ya registrado, sin platform_type o con uno desconocido no se registra', async (t) => {
+    // El aviso del log dice el valor que llegó: así se ve que «sin el campo» de verdad llega sin él.
+    const warn = t.mock.method(console, 'warn', () => {});
+    for (const [i, platformType] of ['CLOUD_API', undefined, 'ALGO_NUEVO'].entries()) {
+        const r = await seedAccount(`RC${i}`, { seq: 82 + i });
+        fakeMeta([`983${i}`], { platformType });
+        const before = metaCalls.length;
+        const res = await connectEmbedded(r, `983${i}`);
+        onMeta(null);
+        assert.equal(res.status, 200, `${platformType}: ${res.text}`);
+        assert.deepEqual(registerCalls(before), [], String(platformType));
+        assert.equal(await linePin(r, `983${i}`), null);
+    }
+    assert.deepEqual(warn.mock.calls.map(call => call.arguments.slice(1)), [['9831', null], ['9832', 'ALGO_NUEVO']]);
+});
+
+// Regresión que vigila: renovar el token de un número ya registrado (el cliente de la API pública) no puede tocar su PIN.
+test('renovar el token no vuelve a registrar ni borra el PIN, y /v1 envía con el token nuevo', async () => {
+    const r = await seedAccount('RD', { seq: 85 });
+    fakeMeta(['984'], { platformType: 'NOT_APPLICABLE' });
+    assert.equal((await connectEmbedded(r, '984')).status, 200);
+    const pin = await linePin(r, '984');
+
+    fakeMeta(['984']);
+    const before = metaCalls.length;
+    const res = await connectEmbedded(r, '984');
+    onMeta(null);
+    assert.equal(res.status, 200, res.text);
+    assert.deepEqual(registerCalls(before), []);
+    assert.equal(await linePin(r, '984'), pin);
+
+    const key = 'wm_rd';
+    await ApiKey.create({ userId: r.accountId, keyHash: hashApiKey(key), keyPreview: 'wm_', name: 'v1' });
+    let authorization = null;
+    onMeta(async (config) => {
+        if (config.method !== 'post' || !config.url.endsWith('/messages')) return undefined;
+        authorization = config.headers.Authorization;
+        return { data: { messages: [{ id: 'wamid.rd' }] } };
+    });
+    const sent = await request(ANONYMOUS, 'POST', '/v1/templates/send',
+        { destinationNumber: r.phone, templateName: r.templateName }, { Authorization: `Bearer ${key}` });
+    onMeta(null);
+    assert.equal(sent.status, 200, sent.text);
+    assert.equal(authorization, 'Bearer token-nuevo');
+});
+
+// Regresión que vigila: un PIN con el que Meta ya registró el número no se puede perder.
+test('si la conexión falla después de registrar, al repetir la línea se guarda con el PIN del primer intento', async () => {
+    const r = await seedAccount('RE', { seq: 86 });
+    const other = await seedAccount('RF', { seq: 87 });
+    let pin = null;
+    // Mientras Meta registra, otra cuenta activa el número: la conexión choca con el índice.
+    fakeMeta(['985'], { platformType: 'NOT_APPLICABLE', onRegister: async (config) => {
+        pin = JSON.parse(config.data).pin;
+        await Line.create({ accountId: other.accountId, phoneNumberId: '985', status: 'active' });
+    } });
+    const failed = await connectEmbedded(r, '985');
+    onMeta(null);
+    assert.equal(failed.status, 409, failed.text);
+
+    await Line.updateOne({ accountId: other.accountId, phoneNumberId: '985' }, { status: 'disconnected' });
+    fakeMeta(['985']);
+    const before = metaCalls.length;
+    const res = await connectEmbedded(r, '985');
+    onMeta(null);
+    assert.equal(res.status, 200, res.text);
+    assert.deepEqual(registerCalls(before), []);
+    assert.equal(await linePin(r, '985'), pin);
+    assert.deepEqual(await pendingPins(r), {});
+});
+
+test('si la respuesta de /register se pierde, al repetir la línea se guarda con ese PIN', async () => {
+    const r = await seedAccount('RG', { seq: 88 });
+    let pin = null;
+    fakeMeta(['986'], { platformType: 'NOT_APPLICABLE', onRegister: (config) => {
+        pin = JSON.parse(config.data).pin;
+        throw new Error('socket hang up');
+    } });
+    const failed = await connectEmbedded(r, '986');
+    onMeta(null);
+    assert.equal(failed.status, 502, failed.text);
+    assert.equal(failed.body[0].code, 'phone_number_registration_failed');
+    assert.equal(failed.body[0].errorCode, null);
+
+    fakeMeta(['986']);
+    const res = await connectEmbedded(r, '986');
+    onMeta(null);
+    assert.equal(res.status, 200, res.text);
+    assert.equal(await linePin(r, '986'), pin);
+});
+
+test('si la respuesta se pierde y Meta sigue sin tenerlo registrado, se reintenta con el mismo PIN', async () => {
+    const r = await seedAccount('RH', { seq: 89 });
+    const pins = [];
+    let lost = true;
+    fakeMeta(['987'], { platformType: 'NOT_APPLICABLE', onRegister: (config) => {
+        pins.push(JSON.parse(config.data).pin);
+        if (lost) { lost = false; throw new Error('timeout'); }
+    } });
+    assert.equal((await connectEmbedded(r, '987')).status, 502);
+    const res = await connectEmbedded(r, '987');
+    onMeta(null);
+    assert.equal(res.status, 200, res.text);
+    assert.equal(pins.length, 2);
+    assert.equal(pins[1], pins[0]);
+    assert.equal(await linePin(r, '987'), pins[0]);
+});
+
+test('si Meta rechaza el registro: 502 con el código, el errorCode de Meta, ninguna línea activa y el PIN apuntado borrado', async () => {
+    const r = await seedAccount('RI', { seq: 90 });
+    fakeMeta(['988'], { platformType: 'NOT_APPLICABLE', onRegister: () => {
+        throw Object.assign(new Error('WhatsApp API Error (400): rate limit'), { waErrorCode: 133016, waErrorDetail: 'rate limit' });
+    } });
+    const res = await connectEmbedded(r, '988');
+    onMeta(null);
+    assert.equal(res.status, 502, res.text);
+    assert.deepEqual(res.body, [{
+        message: PHONE_NUMBER_REGISTRATION_FAILED_MESSAGE, code: 'phone_number_registration_failed', errorCode: 133016,
+    }]);
+    assert.equal(await Line.countDocuments({ accountId: r.accountId, status: 'active' }), 0);
+    assert.deepEqual(await pendingPins(r), {});
+});
+
+// Regresión que vigila (revisión de Codex): dos conexiones del mismo número a la
+// vez registraban con PINs distintos, y el rechazo de una borraba el PIN de la otra.
+test('dos conexiones del mismo número a la vez: la segunda no registra (409 line_busy) y el PIN de la primera se conserva', async () => {
+    const r = await seedAccount('RJ', { seq: 91 });
+    let firstPin = null;
+    let registering;
+    const inRegister = new Promise(resolve => { registering = resolve; });
+    let loseResponse;
+    const lost = new Promise((_, reject) => { loseResponse = () => reject(new Error('timeout')); });
+    fakeMeta(['989'], { platformType: 'NOT_APPLICABLE', onRegister: async (config) => {
+        firstPin = JSON.parse(config.data).pin;
+        registering();
+        await lost;
+    } });
+    const first = connectEmbedded(r, '989');
+    await inRegister;
+    const before = metaCalls.length;
+    const second = await connectEmbedded(r, '989');
+    assert.equal(second.status, 409, second.text);
+    assert.equal(second.body[0].code, 'line_busy');
+    assert.deepEqual(registerCalls(before), []);
+    loseResponse();
+    assert.equal((await first).status, 502);
+
+    fakeMeta(['989']);
+    const res = await connectEmbedded(r, '989');
+    onMeta(null);
+    assert.equal(res.status, 200, res.text);
+    assert.equal(await linePin(r, '989'), firstPin);
 });
