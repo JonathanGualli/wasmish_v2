@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { AlertCircle, Loader2, Plug, X } from "lucide-react";
-import type { Line } from "../../../../models/line.model";
+import { LINE_ERROR, type Line } from "../../../../models/line.model";
 import { CustomButton } from "../../../../components/Button/Button";
 import { Callout } from "../../../../components/Callout/Callout";
 import { Pill } from "../../../../components/Pill/Pill";
@@ -73,6 +73,9 @@ export const LinesCard = () => {
     const [toDisconnect, setToDisconnect] = useState<Line | null>(null);
 
     const connectError = connectWhatsapp.isError ? apiErrorOf(connectWhatsapp.error, 'No se pudo conectar WhatsApp. Intenta de nuevo.') : null;
+    // Se reintenta lo que puede salir bien al repetirlo: otro cambio en curso, o WhatsApp que no activó el número.
+    const canRetryConnect = Boolean(connectError)
+        && (isBusy(connectError) || connectError?.code === LINE_ERROR.registrationFailed);
     const groups = groupByWaba(activeLines);
     const button = connectState({
         activeCount: activeLines.length, maxLines, isMultiLine, isConnecting: connectWhatsapp.isConnecting,
@@ -111,7 +114,7 @@ export const LinesCard = () => {
                         title={isBusy(connectError) ? 'Espera un momento' : 'No se pudo conectar el número'}
                         action={
                             <div className="flex items-center gap-3">
-                                {isBusy(connectError) && (
+                                {canRetryConnect && (
                                     <button type="button" onClick={() => connectWhatsapp.connect()}
                                         className="text-[13px] font-semibold text-brand-accent-strong cursor-pointer">Reintentar</button>
                                 )}
