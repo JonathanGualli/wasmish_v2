@@ -23,7 +23,7 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En curso
 
-- **La UI del PIN de dos pasos** — rama `pin-linea-ui`, empezado el 2026-10-14 por Claude (diseño: `Design/Wasmish Líneas - PIN de dos pasos.html`).
+- **La UI del PIN de dos pasos** — rama `pin-linea-ui`, PR #31, empezado el 2026-10-14 por Claude (diseño: `Design/Wasmish Líneas - PIN de dos pasos.html`).
   Hecho: la fila del PIN en «Detalles» (oculto, «Mostrar», copiar, «Ocultar», sin PIN, errores con «Reintentar»), `hasTwoStepPin` en `GET /lines` y «Reintentar» en el aviso de `phone_number_registration_failed` al conectar · Falta: la revisión de Codex · Probado en el navegador en local, con el cliente de prueba de cuatro líneas; el «Reintentar» del aviso al conectar no, porque necesita el popup de Facebook.
 - **Para la 1.0.17**, cuando Jonathan quiera desplegar: el #30 (esperar a `/register` hasta 60 s, ya unido) y la UI del PIN. Sin migración de datos.
 
