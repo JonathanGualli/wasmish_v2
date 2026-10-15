@@ -21,7 +21,6 @@ import { hasSeenPickIntro, markPickIntroSeen, newCampaignDraft } from "../../../
 import { pluralize } from "../../../utils/campaignDisplay";
 import { AVATAR_LG } from "../../../components/Skeleton/SkeletonListRow";
 import { SkeletonLine } from "../../../components/Skeleton/Skeleton";
-import { useDelayedLoading } from "../../../hooks/useDelayedLoading";
 import { DraftConflictDialog } from "../Campaigns/DraftConflictDialog";
 import { CampaignWizardHeader } from "../Campaigns/NewCampaign/CampaignWizardHeader";
 import { contactColumns } from "./ContactColumns";
@@ -151,7 +150,7 @@ export const ContactsPage = () => {
     };
 
     const totalCount = data?.totalCount ?? 0;
-    const countLoading = useDelayedLoading(isLoading && !data);
+    const countLoading = isLoading && !data;
     const pageIds = data?.contacts.map(c => c.id) ?? [];
     const pageState = selection.pageState(pageIds);
     const selectedCount = selection.count(totalCount);
@@ -411,10 +410,10 @@ export const ContactsPage = () => {
                         <span className="md:ml-auto font-mono text-xs text-brand-muted tabular-nums">
                             {totalCount === 1 ? '1 contacto' : `${totalCount.toLocaleString('es-EC')} contactos`}
                         </span>
-                    ) : countLoading.pending && (
+                    ) : countLoading && (
                         // Su sitio mientras carga: si no, al llegar movía los filtros.
                         <span className="md:ml-auto h-[18px] flex items-center">
-                            <SkeletonLine soft width="92px" visible={countLoading.visible} />
+                            <SkeletonLine soft width="92px" />
                         </span>
                     )}
                 </div>

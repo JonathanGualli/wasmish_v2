@@ -68,8 +68,8 @@ const PageSkeleton = () => (
  * el marco de la app, no una página en blanco. En el teléfono, la cabecera y
  * una lista.
  */
-export const AppBootSkeleton = ({ visible }: { visible: boolean }) => (
-    <SkeletonFrame label="Cargando Wasmish" visible={visible} className="flex h-[var(--app-height,100dvh)] bg-brand-bg">
+export const AppBootSkeleton = () => (
+    <SkeletonFrame label="Cargando Wasmish" className="flex h-[var(--app-height,100dvh)] bg-brand-bg">
         <SidebarSkeleton />
         <div className="flex-1 min-w-0 flex flex-col bg-brand-surface">
             <header className="md:hidden h-[calc(56px+var(--safe-top))] pt-[var(--safe-top)] border-b border-brand-border

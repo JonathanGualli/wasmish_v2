@@ -18,7 +18,6 @@ import { SettingsCard } from "../SettingsCard";
 import { MemberDialog } from "./MemberDialog";
 import { InvitationLinkDialog } from "./InvitationLinkDialog";
 import { expiryText, invitedText, userLimitText, usersText } from "./teamDisplay";
-import { useDelayedLoading } from "../../../../hooks/useDelayedLoading";
 import { SettingsListSkeleton } from "../SettingsListSkeleton";
 import { AVATAR_SM } from "../../../../components/Skeleton/SkeletonListRow";
 
@@ -96,7 +95,6 @@ export const TeamCard = () => {
     const { user } = useAuthContext();
     const { lineById } = useLines();
     const team = useTeam();
-    const loading = useDelayedLoading(team.isLoading);
     const [dialog, setDialog] = useState<DialogState>(null);
     const [done, setDone] = useState<{ title: string; body?: string } | null>(null);
     const [failure, setFailure] = useState<{ error: ApiError; retry: () => void } | null>(null);
@@ -177,13 +175,13 @@ export const TeamCard = () => {
                             Las personas que entran a esta cuenta. Todas ven todos los contactos; las conversaciones, solo las de sus líneas.
                         </p>
                     </div>
-                    {!loading.pending && (
+                    {!team.isLoading && (
                         <div className="flex-none grid justify-items-end gap-1">
                             <span className={`rounded-full px-3 py-1.5 font-mono text-[12.5px] font-semibold tabular-nums
                                 ${full && maxUsers > 1 ? 'bg-brand-warning-soft text-brand-warning' : 'bg-brand-bg text-brand-strong'}`}>
                                 {seatsUsed} de {usersText(maxUsers)}
                             </span>
-                            {!loading.pending && invitations.length > 0 && (
+                            {!team.isLoading && invitations.length > 0 && (
                                 <span className="text-xs text-brand-muted">
                                     {activeCount} {activeCount === 1 ? 'activo' : 'activos'} · {invitations.length} {invitations.length === 1 ? 'invitación' : 'invitaciones'}
                                 </span>
@@ -217,8 +215,8 @@ export const TeamCard = () => {
                     </Callout>
                 )}
 
-                {loading.pending && (
-                    <SettingsListSkeleton label="Cargando el equipo" visible={loading.visible} rows={4}
+                {team.isLoading && (
+                    <SettingsListSkeleton label="Cargando el equipo" rows={4}
                         avatar={AVATAR_SM} rowClassName="px-[18px] py-[13px] max-sm:px-3.5" />
                 )}
                 {team.isError && (
@@ -228,7 +226,7 @@ export const TeamCard = () => {
                     </p>
                 )}
 
-                {!loading.pending && members.length > 0 && (
+                {!team.isLoading && members.length > 0 && (
                     <div className="rounded-[10px] border border-brand-border divide-y divide-brand-raised max-sm:[&>*:nth-child(2)]:border-t-0">
                         <div className={`hidden ${ROW_GRID} rounded-t-[10px] bg-brand-bg px-[18px] py-[9px]
                             text-[11px] font-semibold uppercase tracking-[0.1em] text-brand-muted`}>
@@ -297,7 +295,7 @@ export const TeamCard = () => {
                     </div>
                 )}
 
-                {!loading.pending && invitations.length > 0 && (
+                {!team.isLoading && invitations.length > 0 && (
                     <div className="grid gap-2.5">
                         <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-brand-strong">
                             Invitaciones pendientes
@@ -340,7 +338,7 @@ export const TeamCard = () => {
                     </div>
                 )}
 
-                {!loading.pending && !team.isError && (
+                {!team.isLoading && !team.isError && (
                     <div className="flex flex-wrap items-center gap-4">
                         <div className="h-10 w-full sm:w-auto max-sm:h-12">
                             <CustomButton disabled={full} onClick={() => { team.invite.reset(); setDialog({ kind: 'invite' }); }}>

@@ -6,24 +6,24 @@ const DATA_LABELS = ['Email', 'Empresa', 'Origen', 'Desde'];
 const DATA_WIDTHS = ['72%', '56%', '40%', '32%'];
 
 /** La identidad en la cabecera verde: avatar, nombre, teléfono y etiquetas. */
-export const ContactIdentitySkeleton = ({ visible }: { visible: boolean }) => (
+export const ContactIdentitySkeleton = () => (
     <>
         <div className="flex gap-3 items-center">
-            <SkeletonBox tone="deep" visible={visible} className="w-[52px] h-[52px] rounded-[13px]" />
+            <SkeletonBox tone="deep" className="w-[52px] h-[52px] rounded-[13px]" />
             <div className="flex-1 grid gap-2">
-                <SkeletonBox tone="deep" visible={visible} width="62%" className="h-3.5 rounded-[7px]" />
-                <SkeletonBox tone="deep" visible={visible} width="44%" className="h-2 rounded-[4px]" />
+                <SkeletonBox tone="deep" width="62%" className="h-3.5 rounded-[7px]" />
+                <SkeletonBox tone="deep" width="44%" className="h-2 rounded-[4px]" />
             </div>
         </div>
         <div className="flex gap-1.5">
-            {['72px', '56px', '64px'].map(width => <SkeletonBox key={width} tone="deep" visible={visible} width={width} className="h-[22px] rounded-[6px]" />)}
+            {['72px', '56px', '64px'].map(width => <SkeletonBox key={width} tone="deep" width={width} className="h-[22px] rounded-[6px]" />)}
         </div>
     </>
 );
 
 /** El cuerpo de la ficha mientras carga: sus tarjetas, con sus títulos y etiquetas reales (diseño 3.3). */
-export const ContactSidebarSkeleton = ({ visible }: { visible: boolean }) => (
-    <SkeletonFrame label="Cargando la ficha del contacto" visible={visible} className="flex-1 min-h-0 p-3.5 grid gap-2.5 content-start">
+export const ContactSidebarSkeleton = () => (
+    <SkeletonFrame label="Cargando la ficha del contacto" className="flex-1 min-h-0 p-3.5 grid gap-2.5 content-start">
         <SidebarCard title="Notas">
             <SkeletonBox tone="soft" className="h-[72px] w-full rounded-[10px]" />
         </SidebarCard>

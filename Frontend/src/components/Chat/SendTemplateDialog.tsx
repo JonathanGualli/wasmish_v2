@@ -14,7 +14,6 @@ import { lineLabel } from '../../utils/lineDisplay';
 import { LineSwatch } from '../Line/LineSwatch';
 import { PHONE_QUERY, useMediaQuery } from '../../hooks/useMediaQuery';
 import { useHistoryEntry } from '../../hooks/useHistoryEntry';
-import { useDelayedLoading } from '../../hooks/useDelayedLoading';
 import { TemplateFormSkeleton } from './ChatSkeletons';
 
 interface Props {
@@ -46,7 +45,6 @@ interface Props {
  */
 export const SendTemplateDialog = ({ open, onClose, conversationId, line, contactName, windowOpen, keepsDraft }: Props) => {
   const form = useTemplateForm(undefined, line ? line.waBusinessId : undefined);
-  const loading = useDelayedLoading(form.isLoading);
   const { showLines, colorOf } = useLines();
   const sendTemplate = useSendTemplate();
   const { state: errorVisible, setState, setContent } = useNoticeContext();
@@ -123,11 +121,11 @@ export const SendTemplateDialog = ({ open, onClose, conversationId, line, contac
 
           {/* Mientras cargan las plantillas, el formulario ya está (con su pie): solo el
               selector es skeleton, y el diálogo no crece al llegar. */}
-          {loading.pending || form.approved.length > 0 ? (
+          {form.isLoading || form.approved.length > 0 ? (
             <form onSubmit={handleSubmit} className="flex-1 min-h-0 flex flex-col">
               <div className="flex-1 min-h-0 overflow-y-auto px-6 max-md:px-[18px] pt-6 max-md:pt-5 pb-2 grid grid-cols-[minmax(0,1fr)] gap-[18px] content-start">
-                {loading.pending ? (
-                  <TemplateFormSkeleton visible={loading.visible} />
+                {form.isLoading ? (
+                  <TemplateFormSkeleton />
                 ) : (
                   <>
                     <TemplatePicker templates={form.approved} selected={form.selected} onSelect={t => form.selectTemplate(t.name)}

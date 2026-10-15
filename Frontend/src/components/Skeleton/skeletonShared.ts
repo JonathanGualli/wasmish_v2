@@ -1,22 +1,16 @@
-import { createContext, useEffect, type RefObject } from "react";
-
-/**
- * Si los bloques de esta zona ya se enseñan. Antes de los 300 ms de espera
- * (`useDelayedLoading`) ocupan su sitio sin verse; el texto real que haya
- * alrededor (títulos, etiquetas) se ve desde el principio.
- */
-export const SkeletonVisibleContext = createContext(true);
+import { useEffect, type RefObject } from "react";
 
 /**
  * Todos los bloques laten a la vez, también los de zonas montadas en otro
  * momento (la bandeja y el hilo): su animación arranca en el cero del
- * documento, no al montarse cada uno.
+ * documento, no al montarse cada uno. `active`: cuándo hay bloques dentro de
+ * `ref` (una zona que siempre está montada, como la tabla, los tiene a ratos).
  */
-export const useSyncedPulse = (ref: RefObject<HTMLElement | null>, visible: boolean) => {
+export const useSyncedPulse = (ref: RefObject<HTMLElement | null>, active = true) => {
     useEffect(() => {
-        if (!visible) return;
+        if (!active) return;
         ref.current?.getAnimations({ subtree: true }).forEach(animation => { animation.startTime = 0; });
-    }, [ref, visible]);
+    }, [ref, active]);
 };
 
 /** Los anchos de las líneas, del diseño: varían sin parecer al azar. */

@@ -4,7 +4,6 @@ import { DataTable } from "../../../components/DataTable/DataTable";
 import { PageShell, PageHeader, SectionTitle } from "../../../components/Page/PageShell";
 import { adminClientColumns } from "./AdminColumns";
 import { useAdminClients, useAdminStats } from "../../../hooks/useAdmin";
-import { useDelayedLoading } from "../../../hooks/useDelayedLoading";
 import { SkeletonNumber } from "../../../components/Skeleton/Skeleton";
 import { SkeletonStatus } from "../../../components/Skeleton/SkeletonFrame";
 
@@ -45,10 +44,8 @@ export const AdminPage = () => {
     const { data: stats, isLoading: statsLoading } = useAdminStats();
     const { data: clientsPage, isLoading: clientsLoading, isPlaceholderData: clientsPlaceholder } =
         useAdminClients(pagination.pageIndex, pagination.pageSize);
-
-    const statsWait = useDelayedLoading(statsLoading);
     const tile = (value?: number) =>
-        statsWait.pending ? <SkeletonNumber width="48px" className="h-7" visible={statsWait.visible} />
+        statsLoading ? <SkeletonNumber width="48px" className="h-7" />
         : value === undefined ? '—' : value.toLocaleString('es-EC');
 
     return (
@@ -59,8 +56,8 @@ export const AdminPage = () => {
                 description="Estado de la plataforma y actividad de cada cliente. Solo visible para el operador del SaaS."
             />
 
-            <div aria-busy={statsWait.pending} className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-10">
-                <SkeletonStatus label={statsWait.visible ? 'Cargando el panel de administración' : ''} />
+            <div aria-busy={statsLoading} className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-10">
+                <SkeletonStatus label={statsLoading ? 'Cargando el panel de administración' : ''} />
                 <StatTile label="Clientes"     value={tile(stats?.totalClients)}     icon={<Users size={16} />} />
                 <StatTile label="Con WhatsApp" value={tile(stats?.connectedClients)} icon={<ShieldCheck size={16} />}   tone="accent" />
                 <StatTile label="Mensajes 7d"  value={tile(stats?.messages7d)}       icon={<MessageSquare size={16} />} />

@@ -11,7 +11,6 @@ import { Callout } from "../../Callout/Callout";
 import { CustomButton } from "../../Button/Button";
 import { ContactSidebarTags } from "./ContactSidebarTags";
 import { ContactIdentitySkeleton, ContactSidebarSkeleton } from "./ContactSidebarSkeleton";
-import { useDelayedLoading } from "../../../hooks/useDelayedLoading";
 import { ContactNotes } from "./ContactNotes";
 import { ContactDataCard } from "./ContactDataCard";
 import { LineWindowList } from "../../Contact/LineWindowList";
@@ -38,8 +37,6 @@ interface Props {
  */
 export const ContactSidebar = ({ contactId, conversationId, windowExpiresAt, onOpenConversation, onClose }: Props) => {
     const { data: contact, isError } = useLiveContact(contactId, conversationId);
-    const loading = useDelayedLoading(!contact && !isError);
-    const ready = contact && !loading.pending;
     const { showLines } = useLines();
     const byLine = showLines && contact && contact.conversations.length > 0;
 
@@ -48,13 +45,13 @@ export const ContactSidebar = ({ contactId, conversationId, windowExpiresAt, onO
             {/* En el teléfono, a pantalla completa: el verde baja bajo la muesca y «Ver en Contactos» queda sobre la barra de inicio. */}
             <div className="flex-none bg-brand-deep text-white px-4 pt-3.5 max-md:pt-[calc(10px+var(--safe-top))] pb-4 grid gap-3.5">
                 <SidebarTopBar onClose={onClose} />
-                {ready && (
+                {contact && (
                     <ContactIdentity contact={contact} windowSlot={byLine ? null : <WindowLine expiresAt={windowExpiresAt} />} />
                 )}
-                {loading.pending && <ContactIdentitySkeleton visible={loading.visible} />}
+                {!contact && !isError && <ContactIdentitySkeleton />}
             </div>
 
-            {ready ? (
+            {contact ? (
                 <>
                     <div className="flex-1 min-h-0 overflow-y-auto p-3.5 grid gap-2.5 content-start">
                         {byLine && (
@@ -75,12 +72,12 @@ export const ContactSidebar = ({ contactId, conversationId, windowExpiresAt, onO
                         <SeeInContacts contactId={contact.id} />
                     </div>
                 </>
-            ) : loading.pending ? (
-                <ContactSidebarSkeleton visible={loading.visible} />
-            ) : (
+            ) : isError ? (
                 <div className="flex-1 flex items-center justify-center gap-2 p-8 text-sm text-brand-muted">
                     No se pudo cargar el contacto.
                 </div>
+            ) : (
+                <ContactSidebarSkeleton />
             )}
         </aside>
     );
