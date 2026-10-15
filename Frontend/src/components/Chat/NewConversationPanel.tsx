@@ -211,7 +211,8 @@ export const NewConversationPanel = ({ initialDraft, onClose, onBack, onCreated,
   return (
     <form onSubmit={handleSubmit} className="bg-brand-bg h-full w-full flex flex-col min-h-0">
       {/* Cabecera: qué es esto */}
-      <div className="bg-brand-surface border-b border-brand-border px-4 md:px-6 py-3.5 flex-none flex items-center gap-3">
+      <div className="bg-brand-surface border-b border-brand-border px-4 md:px-6 py-3.5 max-md:pt-[calc(12px+var(--safe-top))] max-md:pb-3
+        flex-none flex items-center gap-3">
         {onBack && (
           <button
             type="button"
@@ -223,12 +224,12 @@ export const NewConversationPanel = ({ initialDraft, onClose, onBack, onCreated,
             <ChevronLeft size={22} strokeWidth={2.2} />
           </button>
         )}
-        <div className="w-9 h-9 rounded-[9px] border border-dashed border-brand-border-strong
+        <div className="max-md:hidden w-9 h-9 rounded-[9px] border border-dashed border-brand-border-strong
           text-brand-muted flex items-center justify-center flex-none">
           <Plus size={16} />
         </div>
         <div className="min-w-0">
-          <div className="text-[15px] font-semibold text-brand-text">Conversación nueva</div>
+          <div className="text-[15px] max-md:text-base font-semibold text-brand-text">Conversación nueva</div>
           <div className="text-[11px] text-brand-muted">Se crea al enviar la primera plantilla</div>
         </div>
       </div>
@@ -298,18 +299,23 @@ export const NewConversationPanel = ({ initialDraft, onClose, onBack, onCreated,
               )}
             </div>
           )}
+        </div>
+      </div>
 
-          <div className="border-t border-brand-border pt-4 flex flex-wrap items-center gap-2.5">
-            <span className="text-[13px] text-brand-muted mr-auto">{status}</span>
-            <div className="h-10">
-              <CustomButton variant="outline" onClick={handleClose}>Descartar</CustomButton>
-            </div>
-            <div className="h-10">
-              <CustomButton type="submit" isLoading={startConversation.isPending} disabled={!ready}>
-                <Send size={16} />
-                {existing ? 'Enviar en su conversación' : 'Enviar plantilla'}
-              </CustomButton>
-            </div>
+      {/* El pie, fijo abajo: en el teléfono, sobre la barra de inicio o el teclado (diseño E6). */}
+      <div className="flex-none px-4 md:px-6 max-md:bg-brand-surface max-md:border-t max-md:border-brand-border
+        max-md:pb-[calc(14px+var(--safe-bottom))] md:pb-5">
+        <div className="mx-auto w-full max-w-[580px] md:border-t md:border-brand-border pt-4 max-md:pt-3
+          flex flex-wrap items-center gap-2.5">
+          <span className="text-[13px] text-brand-muted mr-auto max-md:w-full max-md:text-center">{status}</span>
+          <div className="h-10 max-md:h-12">
+            <CustomButton variant="outline" onClick={handleClose}>Descartar</CustomButton>
+          </div>
+          <div className="h-10 max-md:h-12 max-md:flex-1">
+            <CustomButton type="submit" isLoading={startConversation.isPending} disabled={!ready}>
+              <Send size={16} />
+              {existing ? 'Enviar en su conversación' : 'Enviar plantilla'}
+            </CustomButton>
           </div>
         </div>
       </div>
