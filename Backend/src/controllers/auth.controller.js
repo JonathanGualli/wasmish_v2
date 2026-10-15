@@ -1,20 +1,12 @@
 import { TOKEN_SECRET } from '../config.js';
-import { createAccessToken } from '../libs/jwt.js';
+import { setSessionCookie } from '../libs/jwt.js';
 import User from '../models/user.model.js'
 import { createAccountWithOwner, sessionAccessFor } from '../services/account.service.js';
 import { sessionAuthFor } from '../utils/account.js';
-import { sessionCookieOptions, shouldRenewSession } from '../utils/session.js';
+import { shouldRenewSession } from '../utils/session.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'node:crypto';
-
-const isProd = process.env.NODE_ENV === 'production';
-
-// Abre (o renueva) la sesión en el navegador: un token nuevo de 30 días en la cookie.
-const setSessionCookie = async (res, userId) => {
-    const token = await createAccessToken({ id: userId });
-    res.cookie('token', token, sessionCookieOptions(isProd));
-};
 
 // Respuesta única del login. Que un correo no exista y que la contraseña sea
 // incorrecta tienen que ser indistinguibles: si no, cualquiera puede averiguar
@@ -153,7 +145,7 @@ export const verifyToken = async (req, res) => {
         // Lo mismo que authRequired: inexistente, desactivado o sin cuenta, fuera.
         if(!sessionAuthFor(userFound)) return res.status(401).json([{message: 'Unauthorized'}]);
 
-        // Abrir la app alarga la sesión: solo pide entrar otra vez tras 30 días sin abrirla.
+        // Abrir la app alarga la sesión (y cualquier otra petición, en `authRequired`).
         if (shouldRenewSession(user.exp)) await setSessionCookie(res, userFound._id);
 
         return res.json({

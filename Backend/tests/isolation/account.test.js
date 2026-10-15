@@ -4,6 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
 import {
     seedAccount, seedMember, request, sessionFrom, ANONYMOUS, assertNoLeak, assertHasOwn, connectWhatsapp, onMeta, metaCalls,
@@ -99,6 +100,47 @@ test('un usuario sin cuenta (sin migrar) recibe 401, no 500', async () => {
     await User.collection.updateOne({ _id: new mongoose.Types.ObjectId(d.userId) }, { $unset: { accountId: 1 } });
     assert.equal((await request(d, 'GET', '/contacts')).status, 401);
     assert.equal((await request(d, 'GET', '/verify')).status, 401);
+});
+
+// La sesión dura 30 días desde el último uso (2026-10-15): un token de más de
+// un día se cambia por uno nuevo en la respuesta, como mucho uno al día.
+const DAY_S = 24 * 60 * 60;
+const tokenFromDaysAgo = (account, days) => ({
+    token: jwt.sign({ id: account.userId, iat: Math.floor(Date.now() / 1000) - days * DAY_S }, process.env.TOKEN_SECRET, { expiresIn: '30d' }),
+});
+const daysLeft = (session) => (jwt.decode(session.token).exp - Date.now() / 1000) / DAY_S;
+
+test('sesión: un token recién emitido no se renueva en cada petición', async () => {
+    assert.equal((await request(a, 'GET', '/contacts')).setCookie, null);
+    assert.equal((await request(a, 'GET', '/verify')).setCookie, null);
+});
+
+// Regresión (revisión de Codex del PR #58): solo `/verify` renovaba, y la app
+// suspendida o la pestaña abierta sin recargar no lo vuelven a llamar: la
+// sesión caducaba a los 30 días aunque se usara a diario.
+test('sesión: usarla tras más de un día la renueva, también sin pasar por /verify', async () => {
+    const res = await request(tokenFromDaysAgo(a, 2), 'GET', '/contacts');
+    assert.equal(res.status, 200, res.text);
+    assert.match(res.setCookie ?? '', /Max-Age=2592000/);
+    const renewed = sessionFrom(res);
+    assert.ok(daysLeft(renewed) > 29.9, `al token nuevo le quedan ${daysLeft(renewed)} días`);
+    assert.equal((await request(renewed, 'GET', '/contacts')).setCookie, null);
+});
+
+test('sesión: abrir la app (/verify) tras más de un día también la renueva', async () => {
+    const res = await request(tokenFromDaysAgo(a, 2), 'GET', '/verify');
+    assert.equal(res.status, 200, res.text);
+    assert.ok(daysLeft(sessionFrom(res)) > 29.9);
+});
+
+test('sesión: un usuario desactivado no recibe una sesión nueva', async () => {
+    const f = await seedAccount('F', { seq: 9 });
+    await User.updateOne({ _id: f.userId }, { status: 'inactive' });
+    for (const url of ['/contacts', '/verify']) {
+        const res = await request(tokenFromDaysAgo(f, 2), 'GET', url);
+        assert.equal(res.status, 401);
+        assert.equal(res.setCookie, null);
+    }
 });
 
 test('el superadmin sale de isSuperadmin, no de rol', async () => {
