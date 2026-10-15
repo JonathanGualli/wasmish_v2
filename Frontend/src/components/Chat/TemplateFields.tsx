@@ -3,6 +3,7 @@ import { Dialog, DialogPanel, DialogTitle, Listbox, ListboxButton, ListboxOption
 import { Check, ChevronDown, ChevronLeft, Lock } from 'lucide-react';
 import { SearchInput } from '../SearchInput/SearchInput';
 import { PHONE_QUERY, useMediaQuery } from '../../hooks/useMediaQuery';
+import { useHistoryEntry } from '../../hooks/useHistoryEntry';
 import { Pill, type PillTone } from '../Pill/Pill';
 import { AuthField } from '../Auth/AuthField';
 import { isPositional, buttonFieldLabel } from '../../utils/templatePlaceholders';
@@ -131,6 +132,9 @@ const PhoneTemplatePicker = ({ templates, selected, onSelect, disabledReason }: 
     return q ? templates.filter(t => t.name.toLowerCase().includes(q) || t.bodyText?.toLowerCase().includes(q)) : templates;
   }, [templates, query]);
   const close = () => { setOpen(false); setQuery(''); };
+  // «Atrás» cierra la lista y vuelve a la hoja, sin perder lo escrito en ella
+  // (revisión de Codex del PR #50: cerraba el chat entero).
+  useHistoryEntry(open, 'templatePickerOpen', close);
 
   return (
     <>

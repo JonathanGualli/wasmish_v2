@@ -12,6 +12,8 @@ import { useLines } from '../../hooks/useLines';
 import type { Line } from '../../models/line.model';
 import { lineLabel } from '../../utils/lineDisplay';
 import { LineSwatch } from '../Line/LineSwatch';
+import { PHONE_QUERY, useMediaQuery } from '../../hooks/useMediaQuery';
+import { useHistoryEntry } from '../../hooks/useHistoryEntry';
 
 interface Props {
   open: boolean;
@@ -51,6 +53,11 @@ export const SendTemplateDialog = ({ open, onClose, conversationId, line, contac
     form.reset();
     onClose();
   };
+
+  // En el teléfono, la hoja tiene su entrada en el historial: «atrás» la
+  // cierra y deja el chat, en vez de cerrar el chat con la hoja encima.
+  const isPhone = useMediaQuery(PHONE_QUERY);
+  useHistoryEntry(isPhone && open, 'templateSheetOpen', handleClose);
 
   // El aviso de error vive en otro portal: para el Dialog, pulsar su X (o ESC
   // con él abierto) es un «clic fuera», y cerraría el diálogo con lo escrito.
