@@ -6,9 +6,14 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En producción
 
-**Versión 1.0.20**, desplegada el 2026-10-15 (etiqueta `v1.0.20`; comprobar con `curl https://wasmish.solventyc.com/api/version`). Lleva:
+**Versión 1.0.21**, desplegada el 2026-10-15 (etiqueta `v1.0.21`; comprobar con `curl https://wasmish.solventyc.com/api/version`). Lleva:
 
-- **Pulido de la app móvil** (PRs #55 y #56, solo frontend; sin migración. Se reconstruyen `wasmish-web` y `wasmish-api`, esta solo para que `/api/version` diga 1.0.20):
+- **Pantallas de carga (skeletons)** (PRs #61, #62 y #63, cada uno con su revisión de Codex; plan `docs/superpowers/plans/2026-10-15-pantallas-de-carga.md`, diseño `Design/Wasmish Pantallas de carga.html`): en lugar de «Cargando…», círculos o páginas en blanco, bloques con la forma de lo que va a llegar, en las tablas, al entrar a la app, en Chats (bandeja, hilo y ficha), en el detalle de campaña, Admin, Ajustes y los diálogos. Al pasar de página, las filas se atenúan con una barra fina. Detalle en [frontend.md § Pantallas de carga](arquitectura/frontend.md#pantallas-de-carga-skeletons). Probado en Chrome emulando escritorio y teléfono, no en un teléfono de verdad.
+- **La sesión dura 30 días desde el último uso** (PR #58): se renueva al usar la app, como mucho una vez al día; antes caducaba a las 24 h. Las sesiones abiertas pasan a 30 días la primera vez que se usa la app tras el despliegue.
+- **`index.html` sin caché** (PR #58, en `nginx.conf`): tras un despliegue, el celular coge la versión nueva enseguida.
+- **Al desplegar:** se reconstruyen `wasmish-api` (la sesión) y `wasmish-web` (los skeletons y `nginx.conf`). Sin migración ni variables nuevas.
+
+- **Pulido de la app móvil** (en producción desde la 1.0.20; PRs #55 y #56, solo frontend):
   - Si activar los avisos falla, el aviso dice si es del navegador o de Wasmish; en Brave, qué ajuste encender (#55). Sin probar en un Brave de verdad.
   - En el teléfono: el menú ya no se abre y se cierra solo al recargar, la etiqueta del menú ya no se queda en el borde tras elegir una opción, y un nombre de archivo largo ya no saca de la pantalla el botón de quitarlo (#56). Probado en Chrome emulando un Android, no en un teléfono.
 - **Wasmish en el celular: app instalable y avisos push** (en producción desde la 1.0.19, desplegada la noche del 2026-10-14, hora de Ecuador; PRs #41 a #50, cada uno con su revisión de Codex; plan `docs/superpowers/plans/2026-10-14-app-movil.md`, diseño `Design/Wasmish Móvil - App instalable y avisos.html`):
@@ -40,8 +45,7 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En curso
 
-- **Pantallas de carga (skeletons)** — plan `docs/superpowers/plans/2026-10-15-pantallas-de-carga.md` (unido en el PR #60), empezado el 2026-10-15 por Claude. Tres PRs apilados, para unir en orden: #61 (piezas comunes y tablas), #62 (entrar a la app y Chats) y el PR 3 (detalle de campaña, Admin, Ajustes y diálogos, rama `skeletons-resto`).
-  Hecho: los tres, con sus pruebas en el navegador · Falta: unirlos y desplegar · Sin probar: en un teléfono de verdad, y el skeleton de editar un contacto (solo sale si el contacto no está en caché, y desde la app se llega con él ya cargado).
+Nada en curso.
 
 <!-- Formato de una entrada:
 - **<qué>** — rama `<rama>`, PR #<n>, empezado el <fecha> por <Claude|Codex|Jonathan>.
