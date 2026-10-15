@@ -6,12 +6,19 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En producción
 
-**Versión 1.0.21**, desplegada el 2026-10-15 (etiqueta `v1.0.21`; comprobar con `curl https://wasmish.solventyc.com/api/version`). Lleva:
+**Versión 1.0.22**, desplegada el 2026-10-15 (etiqueta `v1.0.22`; comprobar con `curl https://wasmish.solventyc.com/api/version`). Lleva:
 
-- **Pantallas de carga (skeletons)** (PRs #61, #62 y #63, cada uno con su revisión de Codex; plan `docs/superpowers/plans/2026-10-15-pantallas-de-carga.md`, diseño `Design/Wasmish Pantallas de carga.html`): en lugar de «Cargando…», círculos o páginas en blanco, bloques con la forma de lo que va a llegar, en las tablas, al entrar a la app, en Chats (bandeja, hilo y ficha), en el detalle de campaña, Admin, Ajustes y los diálogos. Al pasar de página, las filas se atenúan con una barra fina. Detalle en [frontend.md § Pantallas de carga](arquitectura/frontend.md#pantallas-de-carga-skeletons). Probado en Chrome emulando escritorio y teléfono, no en un teléfono de verdad.
-- **La sesión dura 30 días desde el último uso** (PR #58): se renueva al usar la app, como mucho una vez al día; antes caducaba a las 24 h. Las sesiones abiertas pasan a 30 días la primera vez que se usa la app tras el despliegue.
-- **`index.html` sin caché** (PR #58, en `nginx.conf`): tras un despliegue, el celular coge la versión nueva enseguida.
-- **Al desplegar:** se reconstruyen `wasmish-api` (la sesión) y `wasmish-web` (los skeletons y `nginx.conf`). Sin migración ni variables nuevas.
+- **Pantallas de carga sin espera y app abierta al momento** (PR #65, con su revisión de Codex; solo frontend). Jonathan vio en producción que con internet rápido se veía un cuadro en blanco y después el skeleton, y al abrir la app siempre la misma página genérica.
+  - **Sin la espera de 300 ms ni el mínimo de 400:** el skeleton sale desde el primer momento y se va al llegar los datos.
+  - **El usuario recordado:** la última sesión confirmada se guarda en el navegador. Al abrir, la barra real y la página salen al momento, y sus datos se piden a la vez que `/verify`. El SSE y los avisos esperan a que la sesión se confirme.
+  - **El marco de entrada,** solo la barra, y solo cuando el navegador no recuerda a nadie.
+  - Detalle en [frontend.md § AuthProvider](arquitectura/frontend.md#authprovider--lógica-no-obvia) y en [§ Pantallas de carga](arquitectura/frontend.md#pantallas-de-carga-skeletons).
+  - Probado en Chrome con respuestas retrasadas, no en un teléfono de verdad.
+  - **Al desplegar:** se reconstruye `wasmish-web`, y `wasmish-api` solo para que `/api/version` diga 1.0.22. Sin migración ni variables nuevas. La primera vez que se abra en cada dispositivo todavía no hay nadie recordado: sale el marco de entrada, y desde la siguiente ya no.
+
+- **Pantallas de carga (skeletons)** (en producción desde la 1.0.21; PRs #61, #62 y #63, cada uno con su revisión de Codex; plan `docs/superpowers/plans/2026-10-15-pantallas-de-carga.md`, diseño `Design/Wasmish Pantallas de carga.html`): en lugar de «Cargando…», círculos o páginas en blanco, bloques con la forma de lo que va a llegar, en las tablas, al entrar a la app, en Chats (bandeja, hilo y ficha), en el detalle de campaña, Admin, Ajustes y los diálogos. Al pasar de página, las filas se atenúan con una barra fina. Detalle en [frontend.md § Pantallas de carga](arquitectura/frontend.md#pantallas-de-carga-skeletons). Probado en Chrome emulando escritorio y teléfono, no en un teléfono de verdad.
+- **La sesión dura 30 días desde el último uso** (desde la 1.0.21; PR #58): se renueva al usar la app, como mucho una vez al día; antes caducaba a las 24 h. Las sesiones abiertas pasan a 30 días la primera vez que se usa la app tras el despliegue.
+- **`index.html` sin caché** (desde la 1.0.21; PR #58, en `nginx.conf`): tras un despliegue, el celular coge la versión nueva enseguida.
 
 - **Pulido de la app móvil** (en producción desde la 1.0.20; PRs #55 y #56, solo frontend):
   - Si activar los avisos falla, el aviso dice si es del navegador o de Wasmish; en Brave, qué ajuste encender (#55). Sin probar en un Brave de verdad.
