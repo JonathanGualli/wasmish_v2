@@ -50,6 +50,7 @@ Nada en curso.
 ## Lo siguiente
 
 - **Avisar al cliente real** de que ya puede usar Wasmish en el celular, con los avisos.
+- **Pantallas de carga (skeletons)** en lugar de los «Cargando…»: brief listo (`docs/superpowers/specs/2026-10-15-skeletons-brief-ui.md`), **esperando el diseño** de Claude Design. Jonathan tiene una captura de referencia de Contactos.
 - **Multi-línea y multi-agente, fases 1 a 4** (diseño aprobado, sin preguntas abiertas: `docs/superpowers/specs/2026-10-11-multi-linea-multi-agente-design.md`). Fases 1, 2a y 2b en producción (la 2b, enrutar por línea, desde la 1.0.14). La **Fase 2c** está en producción desde la 1.0.15.
   - **Para encender varias líneas** (plan de la 2c, «Después de desplegar»):
     1. La prueba del token: ¿un token nuevo del Embedded Signup cubre todos los números del WABA? (spec § 2.2). Se puede hacer en producción con la cuenta de prueba de Jonathan (`maxLines: 2`), pero necesita **dos números en el mismo WABA**: hoy tiene uno conectado. Una cuenta con dos líneas de WABA distintos ya se probó el 2026-10-14.
