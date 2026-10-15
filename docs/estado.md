@@ -32,10 +32,10 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
     - la app instalable con su service worker y los íconos menta del diseño (PR #43);
     - el arreglo de un test intermitente (PR #44).
   - **Antes de desplegar el #42:** generar las claves VAPID (ver `deploy/config/api.env.example`). Sin ellas, los avisos quedan apagados.
-  - **Siguiente: PR 3, rama `app-movil-avisos-ui`**, ya creada, con el diseño de Claude Design (`Design/Wasmish Móvil - App instalable y avisos.html`) y el plan ajustado (§ «Lo que cambió con el diseño»).
-    - Hecho: revisar el diseño contra el código y las decisiones de Jonathan.
-    - Falta: todo el código de las Tareas 5 y 6, y después los PRs 4a y 4b.
-    - Sin probar: un aviso real en un teléfono, el toque en el aviso, y todo lo de iPhone (Jonathan no tiene uno).
+  - **PR 3a, rama `app-movil-avisos-ui`** (la Tarea 5, sin UI): activar, apagar y sincronizar los avisos en el navegador (`libs/push.ts`, `usePushNotifications`), apagarlos al cerrar sesión, volver a la página pedida después del login y abrir la conversación al tocar el aviso.
+    - Probado en Chrome (local, contra FCM de verdad): activar dos veces, el aviso al llegar un mensaje, tocarlo con la app abierta o cerrada y sin sesión, cerrar sesión (también con el `DELETE` bloqueado), y la sincronización.
+  - **Después: PR 3b, rama `app-movil-avisos-ajustes`** (la Tarea 6): la UI del diseño de Claude Design (`Design/Wasmish Móvil - App instalable y avisos.html`); y los PRs 4a y 4b (Chats en el teléfono). Ver § «Lo que cambió con el diseño» del plan.
+  - Sin probar: un aviso real en un teléfono, el toque en un aviso del sistema (en Chrome se simuló el mensaje del service worker), y todo lo de iPhone (Jonathan no tiene uno).
 
 <!-- Formato de una entrada:
 - **<qué>** — rama `<rama>`, PR #<n>, empezado el <fecha> por <Claude|Codex|Jonathan>.
