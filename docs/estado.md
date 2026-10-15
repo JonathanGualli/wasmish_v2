@@ -32,10 +32,11 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
     - la app instalable con su service worker y los íconos menta del diseño (PR #43);
     - el arreglo de un test intermitente (PR #44);
     - los avisos en el navegador, sin UI: activar, apagarlos al cerrar sesión y abrir la conversación al tocar el aviso (PR #45, el «PR 3a» del plan);
-    - Ajustes → «Este dispositivo»: los avisos con los estados A1 a A9 del diseño, «Instalar Wasmish» y la guía de iPhone (PR #47, el «PR 3b»).
+    - Ajustes → «Este dispositivo»: los avisos con los estados A1 a A9 del diseño, «Instalar Wasmish» y la guía de iPhone (PR #47, el «PR 3b»);
+    - la invitación a los avisos en la bandeja, la hoja «Último paso» del iPhone y el aviso del login en la app (PR #48, el «PR 3c»).
   - **Antes de desplegar el #42:** generar las claves VAPID (ver `deploy/config/api.env.example`). Sin ellas, los avisos quedan apagados.
-  - **PR 3c, rama `app-movil-avisos-invitacion`** (PR #48): la invitación en la bandeja (B1, B2), el aviso del primer login en la app del iPhone (C3) y la hoja «Último paso» (C4). Probado en Chrome emulando Android, iPhone (Safari e instalada) y la compu.
-  - **Después:** los PRs 4a y 4b (Chats en el teléfono). Ver § «Lo que cambió con el diseño» del plan.
+  - **PR 4a, rama `app-movil-chats`:** Chats en el teléfono (bandeja, hilo, teclado, zonas seguras y «atrás» de Android). Probado en Chrome emulando un Android, con las zonas seguras fingidas.
+  - **Después: PR 4b**: la ficha a pantalla completa con «‹ Chat» (E4), enviar plantilla como hoja (E5) y la conversación nueva como pantalla (E6).
   - Sin probar: un aviso real en un teléfono, el toque en un aviso del sistema (en Chrome se simuló el mensaje del service worker), y todo lo de iPhone (Jonathan no tiene uno).
 
 <!-- Formato de una entrada:
