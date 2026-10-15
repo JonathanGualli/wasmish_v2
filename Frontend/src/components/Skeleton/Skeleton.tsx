@@ -62,10 +62,10 @@ export const SkeletonNumber = ({ width, className = 'h-3', visible }: { width: s
     <SkeletonBox width={width} visible={visible} className={`rounded-[4px] ${className}`} />
 );
 
-/** Un campo de formulario: su etiqueta real y la caja del alto del campo. */
-export const SkeletonField = ({ label }: { label: string }) => (
+/** Un campo de formulario: su etiqueta real y la caja del alto del campo (`boxClassName`: el alto y el radio del real). */
+export const SkeletonField = ({ label, boxClassName = 'h-[42px] rounded-[8px]' }: { label: string; boxClassName?: string }) => (
     <div className="grid gap-[7px]">
         <span className="text-[13px] font-semibold text-brand-strong">{label}</span>
-        <SkeletonBox className="h-[42px] w-full rounded-[8px]" />
+        <SkeletonBox className={`w-full ${boxClassName}`} />
     </div>
 );
