@@ -79,17 +79,26 @@ export const ChatPage = () => {
     // siendo la misma página. Va después de los efectos que consumen la
     // petición (`?c=`), porque el suyo reemplaza la entrada de arriba del
     // historial, y tiene que ser la de antes, no esta.
+    //
+    // La entrada es de «hay un chat abierto», no de cuál: pasar de uno a otro
+    // (desde la ficha) no la toca. Si fuera por chat, el `back()` de la
+    // limpieza llegaba (es asíncrono) con el chat nuevo ya abierto y lo cerraba
+    // (revisión de Codex del PR #49). Por lo mismo, `popstate` solo cierra si
+    // se volvió a una entrada sin chat.
+    const threadOpen = isPhone && Boolean(selectedId);
     useEffect(() => {
-        if (!isPhone || !selectedId) return;
-        window.history.pushState({ ...window.history.state, chatOpen: selectedId }, '');
-        const onPopState = () => setSelectedId(null);
+        if (!threadOpen) return;
+        window.history.pushState({ ...window.history.state, chatOpen: true }, '');
+        const onPopState = () => {
+            if (!window.history.state?.chatOpen) setSelectedId(null);
+        };
         window.addEventListener('popstate', onPopState);
         return () => {
             window.removeEventListener('popstate', onPopState);
-            // Se cerró desde la app (‹, Esc, otro chat): la entrada sobra.
-            if (window.history.state?.chatOpen === selectedId) window.history.back();
+            // Se cerró desde la app (‹, Esc): la entrada sobra.
+            if (window.history.state?.chatOpen) window.history.back();
         };
-    }, [isPhone, selectedId]);
+    }, [threadOpen]);
 
     // ESC cierra lo que esté abierto, de fuera hacia dentro: primero la ficha,
     // luego la conversación. El borrador solo se oculta: no se pierde.
