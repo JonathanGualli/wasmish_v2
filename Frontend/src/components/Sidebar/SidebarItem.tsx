@@ -8,6 +8,8 @@ interface Props {
   isSelected: boolean;
   /** Contador (ej. chats sin leer). Colapsado se convierte en punto menta. */
   badge?: number;
+  /** Tooltip al colapsar. En el teléfono no: ahí colapsada es cerrada, y el dedo dejaba el hover puesto. */
+  tooltip?: boolean;
 }
 
 /**
@@ -18,9 +20,11 @@ interface Props {
  * Foco de teclado: anillo menta (lo aporta el `:focus-visible` global).
  *
  * Colapsado muestra un tooltip en verde 900 a la derecha, con 400ms de espera
- * para que no aparezca al barrer el ratón por la barra.
+ * para que no aparezca al barrer el ratón por la barra. En el teléfono no lo
+ * lleva: al tocar un ítem la barra se cierra (colapsa) y el hover pegado del
+ * toque dejaba la etiqueta flotando en el borde de la pantalla.
  */
-export const SidebarItem = ({ icon, text, collapsed, onTap, isSelected, badge }: Props) => (
+export const SidebarItem = ({ icon, text, collapsed, onTap, isSelected, badge, tooltip = true }: Props) => (
   <button
     onClick={onTap}
     type="button"
@@ -54,7 +58,7 @@ export const SidebarItem = ({ icon, text, collapsed, onTap, isSelected, badge }:
     )}
 
     {/* Tooltip de la variante colapsada */}
-    {collapsed && (
+    {collapsed && tooltip && (
       <span
         role="tooltip"
         className="pointer-events-none absolute left-full ml-2 z-50 whitespace-nowrap

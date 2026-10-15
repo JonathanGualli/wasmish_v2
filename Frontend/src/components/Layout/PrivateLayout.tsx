@@ -21,8 +21,10 @@ import { MobileMenuContext } from './MobileMenuContext';
  * `--safe-top` y `--safe-bottom` (`App.css`).
  */
 export const PrivateLayout = ({ children }: { children: ReactNode }) => {
-  const [isCollapsed, setIsCollapsed] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
+  // El primer valor sale del ancho ya, no del efecto de abajo: si no, el
+  // teléfono pintaba la barra abierta y la cerraba con la animación al recargar.
+  const [isCollapsed, setIsCollapsed] = useState(() => window.innerWidth < 1180);
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const inChats = pathname.startsWith(ChatsPath);
