@@ -1,5 +1,5 @@
 import { useLines } from "../../hooks/useLines";
-import { SkeletonBox } from "../Skeleton/Skeleton";
+import { SkeletonBox, SkeletonField } from "../Skeleton/Skeleton";
 import { SkeletonFrame } from "../Skeleton/SkeletonFrame";
 import { SkeletonListRow } from "../Skeleton/SkeletonListRow";
 
@@ -48,3 +48,15 @@ export const ThreadSkeleton = ({ visible }: { visible: boolean }) => (
         })}
     </SkeletonFrame>
 );
+
+/**
+ * Elegir plantilla mientras cargan (enviar plantilla y conversación nueva): el
+ * selector cerrado de `TemplatePicker`, con su etiqueta, del alto del real. El
+ * diseño dibuja una lista abierta, pero aquí es un selector.
+ */
+export const TemplateFormSkeleton = ({ visible }: { visible: boolean }) => (
+    <SkeletonFrame label="Cargando plantillas" visible={visible}>
+        <SkeletonField label="Plantilla" boxClassName="h-[46px] rounded-[8px]" />
+    </SkeletonFrame>
+);
+
