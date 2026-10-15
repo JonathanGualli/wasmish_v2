@@ -43,6 +43,12 @@ export const isStandalone = () =>
     window.matchMedia('(display-mode: standalone)').matches ||
     (navigator as Navigator & { standalone?: boolean }).standalone === true;
 
+// Sube con cada activación y cada apagado. Una sincronización que ve que cambió
+// mientras esperaba se descarta: si no, una que estaba creando la suscripción
+// la dejaba viva después de apagarlos o de cerrar sesión (revisión de Codex del
+// PR #45).
+let generation = 0;
+
 const isSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 
 const urlBase64ToUint8Array = (base64: string) => {
@@ -89,6 +95,7 @@ export const enablePush = async (publicKey: string): Promise<PushState> => {
     if (permission === 'denied') return 'denied';
     if (permission !== 'granted') return 'off';
 
+    generation += 1;
     writeEnabled(false);
     const registration = await readyRegistration();
     if (!registration) return 'unsupported';
@@ -105,6 +112,7 @@ export const enablePush = async (publicKey: string): Promise<PushState> => {
  * falle el DELETE, el dispositivo deja de recibir. Nunca rechaza.
  */
 export const disablePush = async (): Promise<void> => {
+    generation += 1;
     writeEnabled(false);
     if (!isSupported()) return;
     try {
@@ -125,11 +133,20 @@ export const disablePush = async (): Promise<void> => {
  */
 export const syncPushSubscription = async (publicKey: string | null): Promise<void> => {
     if (!publicKey || !isSupported() || Notification.permission !== 'granted' || !readEnabled()) return;
+    const started = generation;
+    const stale = () => generation !== started;
     let subscription: PushSubscription | null = null;
     try {
         const registration = await readyRegistration();
-        if (!registration) return;
-        subscription = await registration.pushManager.getSubscription() ?? await subscribe(registration, publicKey);
+        if (!registration || stale()) return;
+        const existing = await registration.pushManager.getSubscription();
+        subscription = existing ?? await subscribe(registration, publicKey);
+        if (stale()) {
+            // La creó esta sincronización y ya no la quiere nadie (las que ya
+            // existían las cancela quien apagó o activó).
+            if (!existing) await subscription.unsubscribe();
+            return;
+        }
         await syncPushSubscriptionService(subscription.toJSON());
     } catch (error) {
         // 409: la suscripción de este navegador es de otra persona, cuya sesión

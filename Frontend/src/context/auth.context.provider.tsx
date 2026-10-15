@@ -14,6 +14,10 @@ import { disablePush, syncPushSubscription } from "../libs/push";
 import { useSignUp } from "../hooks/useSignUp";
 import { useLogOut } from "../hooks/useLogOut";
 
+// Cuánto espera cerrar sesión a que se apaguen los avisos. El navegador ya
+// canceló la suscripción antes del DELETE; más espera solo retrasaría /logout.
+const DISABLE_PUSH_TIMEOUT_MS = 3000;
+
 interface AuthProps{
     children: ReactNode;
 }
@@ -145,9 +149,13 @@ export const AuthProvider = ({ children }: AuthProps) => {
         setUser(null);
         setErrors([]);
         // Este dispositivo deja de recibir los avisos de quien sale. Antes de
-        // /logout, porque borrarla en el backend necesita la sesión; nunca
-        // rechaza, así que no impide cerrarla.
-        await disablePush();
+        // /logout, porque borrarla en el backend necesita la sesión. Con un
+        // límite: un DELETE colgado dejaba la sesión abierta en el servidor
+        // (revisión de Codex del PR #45).
+        await Promise.race([
+            disablePush(),
+            new Promise(resolve => setTimeout(resolve, DISABLE_PUSH_TIMEOUT_MS)),
+        ]);
         logOutMutation.mutate();
     };
 
