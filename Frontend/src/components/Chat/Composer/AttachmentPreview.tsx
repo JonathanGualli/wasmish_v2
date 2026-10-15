@@ -17,6 +17,8 @@ interface Props {
  * El archivo listo para enviar, encima del campo de escribir: miniatura o
  * icono, nombre, formato y peso, y cambiarlo o quitarlo. Si no vale, el motivo
  * va dentro, con «Enviar como documento» si es una imagen que así sí cabe.
+ * `minmax(0,1fr)`: sin él, la columna crecía con un nombre largo y sacaba el
+ * botón de quitar de la pantalla del teléfono.
  */
 export const AttachmentPreview = ({ attachment, onChange, disabled = false, withText = false }: Props) => {
     const { file, kind, issue, totalDropped } = attachment;
@@ -31,7 +33,7 @@ export const AttachmentPreview = ({ attachment, onChange, disabled = false, with
     ].filter(Boolean);
 
     return (
-        <div className={`bg-brand-surface border rounded-xl p-2.5 md:p-3 grid gap-2.5
+        <div className={`bg-brand-surface border rounded-xl p-2.5 md:p-3 grid grid-cols-[minmax(0,1fr)] gap-2.5
             ${issue ? 'border-brand-danger' : 'border-brand-border'} ${disabled ? 'opacity-60' : ''}`}>
             <div className="flex items-center gap-3">
                 {kind === 'audio' && !issue
