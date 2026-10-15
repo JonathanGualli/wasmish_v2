@@ -6,9 +6,12 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En producción
 
-**Versión 1.0.19**, desplegada la noche del 2026-10-14, hora de Ecuador (etiqueta `v1.0.19`; comprobar con `curl https://wasmish.solventyc.com/api/version`). Lleva:
+**Versión 1.0.20**, desplegada el 2026-10-15 (etiqueta `v1.0.20`; comprobar con `curl https://wasmish.solventyc.com/api/version`). Lleva:
 
-- **Wasmish en el celular: app instalable y avisos push** (PRs #41 a #50, cada uno con su revisión de Codex; plan `docs/superpowers/plans/2026-10-14-app-movil.md`, diseño `Design/Wasmish Móvil - App instalable y avisos.html`):
+- **Pulido de la app móvil** (PRs #55 y #56, solo frontend; reconstruye `wasmish-web`, sin migración):
+  - Si activar los avisos falla, el aviso dice si es del navegador o de Wasmish; en Brave, qué ajuste encender (#55). Sin probar en un Brave de verdad.
+  - En el teléfono: el menú ya no se abre y se cierra solo al recargar, la etiqueta del menú ya no se queda en el borde tras elegir una opción, y un nombre de archivo largo ya no saca de la pantalla el botón de quitarlo (#56). Probado en Chrome emulando un Android, no en un teléfono.
+- **Wasmish en el celular: app instalable y avisos push** (en producción desde la 1.0.19, desplegada la noche del 2026-10-14, hora de Ecuador; PRs #41 a #50, cada uno con su revisión de Codex; plan `docs/superpowers/plans/2026-10-14-app-movil.md`, diseño `Design/Wasmish Móvil - App instalable y avisos.html`):
   - **Avisos push:** una suscripción por dispositivo (`PushSubscription`) y un aviso por cada mensaje que la persona puede ver, aunque la app esté cerrada. El webhook no lo espera. Tocar el aviso abre la conversación.
   - **La app instalable:** manifest, íconos menta y service worker sin caché.
   - **Ajustes → «Este dispositivo»:** activar o apagar los avisos con todos sus estados, «Instalar Wasmish» y la guía de iPhone.
