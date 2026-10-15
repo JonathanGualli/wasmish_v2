@@ -126,8 +126,11 @@ export function DataTable<T>({
 return (
     <div ref={tableRef} aria-busy={pending} className="rounded-xl border border-brand-border bg-brand-surface relative overflow-hidden">
       <SkeletonStatus label={status} />
+      {/* Mientras carga, lo de elegir filas también queda bloqueado (inert): con
+          las filas de la página anterior aún a la vista, «Seleccionar esta página»
+          elegía esas y no las de la página que se pidió (revisión de Codex del PR #61). */}
       {selection?.banner && (
-        <div className="px-4 py-3 bg-brand-green-50 border-b border-brand-accent-soft text-[13px] text-brand-strong text-center">
+        <div inert={pending} className="px-4 py-3 bg-brand-green-50 border-b border-brand-accent-soft text-[13px] text-brand-strong text-center">
           {selection.banner}
         </div>
       )}
@@ -136,7 +139,8 @@ return (
           {reloading && visible && <div className="absolute inset-x-0 top-0 z-10"><TableLoadingBar /></div>}
           {/* En móvil no hay cabecera de tabla: la casilla de la página va aquí. */}
           {selection && rows.length > 0 && !showSkeleton && (
-            <div onClick={selection.onTogglePage} className="flex items-center gap-3 pl-4 pr-4 py-3 bg-brand-bg cursor-pointer">
+            <div inert={pending} onClick={selection.onTogglePage}
+              className={`flex items-center gap-3 pl-4 pr-4 py-3 bg-brand-bg cursor-pointer ${pending ? 'opacity-50' : ''}`}>
               <Checkbox
                 checked={selection.pageState === 'all'}
                 indeterminate={selection.pageState === 'some'}
@@ -174,7 +178,7 @@ return (
             {table.getHeaderGroups().map(group => (
               <tr key={group.id}>
                 {selection && (
-                  <th className="w-[1%] pl-4 pr-0 py-3">
+                  <th inert={pending} className={`w-[1%] pl-4 pr-0 py-3 ${pending ? 'opacity-50' : ''}`}>
                     <Checkbox
                       checked={selection.pageState === 'all'}
                       indeterminate={selection.pageState === 'some'}
