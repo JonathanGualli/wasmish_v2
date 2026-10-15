@@ -6,10 +6,12 @@ import { LinesCard } from "./Lines/LinesCard";
 import { ApiKeysCard } from "./ApiKeysCard";
 import { TeamCard } from "./Team/TeamCard";
 import { MyAccessCards } from "./MyAccessCards";
+import { PushNotificationsCard } from "./PushNotificationsCard";
 
 /**
  * Ajustes. Cada rol ve lo suyo (Fase 3): owner y admin gestionan las líneas, el
  * equipo y las API keys; supervisor y agente consultan sus líneas y su acceso.
+ * Primero, para todos, lo de este dispositivo: los avisos y la instalación.
  */
 export const SettingsPage = () => {
     const { isMultiLine } = useLines();
@@ -30,6 +32,7 @@ export const SettingsPage = () => {
             <PageHeader icon={<SettingsIcon size={20} />} title="Ajustes" description={description} />
 
             <div className="flex flex-col gap-6">
+                <PushNotificationsCard />
                 {canManageLines ? <LinesCard /> : <MyAccessCards />}
                 {canTeam && <TeamCard />}
                 {can('apiKeys.manage') && (

@@ -38,6 +38,27 @@ export const isIos = () =>
     /iPhone|iPad|iPod/.test(navigator.userAgent) ||
     (navigator.userAgent.includes('Macintosh') && navigator.maxTouchPoints > 1);
 
+/** Safari de verdad: en iPhone, Chrome, Firefox y Edge no pueden añadir Wasmish a la pantalla de inicio. */
+export const isIosSafari = () => isIos() && !/CriOS|FxiOS|EdgiOS|OPiOS/.test(navigator.userAgent);
+
+/** Cómo se nombra el dispositivo en los textos: «este iPhone», «este celular», «esta compu». */
+export type DeviceKind = 'iphone' | 'phone' | 'computer';
+
+export const deviceKind = (): DeviceKind =>
+    isIos() ? 'iphone' : /Android|Mobi/i.test(navigator.userAgent) ? 'phone' : 'computer';
+
+/** El navegador, para decir dónde están bloqueados («Bloqueados en Chrome»); `null` si no se reconoce. */
+export const browserName = (): string | null => {
+    const ua = navigator.userAgent;
+    if (/EdgiOS|Edg\//.test(ua)) return 'Edge';
+    if (/SamsungBrowser/.test(ua)) return 'Samsung Internet';
+    if (/OPR\/|OPiOS/.test(ua)) return 'Opera';
+    if (/Firefox|FxiOS/.test(ua)) return 'Firefox';
+    if (/Chrome|CriOS/.test(ua)) return 'Chrome';
+    if (/Safari/.test(ua)) return 'Safari';
+    return null;
+};
+
 /** Abierta como app instalada (desde su ícono), no en una pestaña del navegador. */
 export const isStandalone = () =>
     window.matchMedia('(display-mode: standalone)').matches ||
