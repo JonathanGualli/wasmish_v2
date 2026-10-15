@@ -19,6 +19,10 @@ import { CampaignPaths, ContactImportPath, ContactsPath } from "../../../models/
 import type { Contact, ContactFilter, ContactsNavigationState } from "../../../models/contact.model";
 import { hasSeenPickIntro, markPickIntroSeen, newCampaignDraft } from "../../../utils/campaignDraft";
 import { pluralize } from "../../../utils/campaignDisplay";
+import { AVATAR_LG } from "../../../components/Skeleton/SkeletonListRow";
+import { SkeletonLine } from "../../../components/Skeleton/Skeleton";
+import { SkeletonVisibleContext } from "../../../components/Skeleton/skeletonShared";
+import { useDelayedLoading } from "../../../hooks/useDelayedLoading";
 import { DraftConflictDialog } from "../Campaigns/DraftConflictDialog";
 import { CampaignWizardHeader } from "../Campaigns/NewCampaign/CampaignWizardHeader";
 import { contactColumns } from "./ContactColumns";
@@ -148,6 +152,7 @@ export const ContactsPage = () => {
     };
 
     const totalCount = data?.totalCount ?? 0;
+    const countLoading = useDelayedLoading(isLoading && !data);
     const pageIds = data?.contacts.map(c => c.id) ?? [];
     const pageState = selection.pageState(pageIds);
     const selectedCount = selection.count(totalCount);
@@ -310,6 +315,9 @@ export const ContactsPage = () => {
                 pagination={pagination}
                 setPagination={setPagination}
                 isLoading={isLoading || isPlaceholderData}
+                loadingLabel="Cargando contactos"
+                resultLabel={total => pluralize(total, 'contacto', 'contactos')}
+                mobileSkeleton={{ avatar: AVATAR_LG, trailing: 'time', pills: 1 }}
                 getRowId={contact => contact.id}
                 onRowClick={openContact}
                 activeRowId={panel && panel.mode !== 'create' ? panel.id : null}
@@ -400,9 +408,16 @@ export const ContactsPage = () => {
                         ))}
                         <TagFilter tags={tags} value={tagIds} onChange={changeTags} onManage={canManageTags ? () => setManagingTags(true) : undefined} />
                     </div>
-                    {data && (
+                    {data ? (
                         <span className="md:ml-auto font-mono text-xs text-brand-muted tabular-nums">
                             {totalCount === 1 ? '1 contacto' : `${totalCount.toLocaleString('es-EC')} contactos`}
+                        </span>
+                    ) : countLoading.pending && (
+                        // Su sitio mientras carga: si no, al llegar movía los filtros.
+                        <span className="md:ml-auto h-[18px] flex items-center">
+                            <SkeletonVisibleContext.Provider value={countLoading.visible}>
+                                <SkeletonLine soft width="92px" />
+                            </SkeletonVisibleContext.Provider>
                         </span>
                     )}
                 </div>

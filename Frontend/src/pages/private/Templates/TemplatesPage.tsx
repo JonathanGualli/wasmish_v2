@@ -64,6 +64,7 @@ export const TemplatesPage = () => {
                 pagination={pagination}
                 setPagination={setPagination}
                 isLoading={isLoading || isSyncing}
+                loadingLabel="Cargando plantillas"
             />
         </PageShell>
     );

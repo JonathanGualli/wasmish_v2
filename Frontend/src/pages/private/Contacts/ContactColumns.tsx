@@ -15,6 +15,7 @@ export const contactColumns = (tags: Tag[], highlightIds: string[]): ColumnDef<C
     {
         id: "contact",
         header: "Contacto",
+        meta: { skeleton: 'avatar' },
         cell: ({ row }) => (
             <div className="flex items-center gap-3 min-w-0">
                 <ContactAvatar contact={row.original} />
@@ -32,6 +33,7 @@ export const contactColumns = (tags: Tag[], highlightIds: string[]): ColumnDef<C
     {
         id: "company",
         header: "Empresa",
+        meta: { skeleton: 'line' },
         cell: ({ row }) => (
             <Cell>
                 <span className={`max-w-[200px] truncate ${row.original.company ? 'text-brand-strong' : 'text-brand-subtle'}`}>
@@ -43,6 +45,7 @@ export const contactColumns = (tags: Tag[], highlightIds: string[]): ColumnDef<C
     {
         id: "tags",
         header: "Etiquetas",
+        meta: { skeleton: 'pill' },
         cell: ({ row }) => (
             <Cell><TagChips tags={tagsFromIds(tags, row.original.tagIds)} highlightIds={highlightIds} /></Cell>
         ),
@@ -50,6 +53,7 @@ export const contactColumns = (tags: Tag[], highlightIds: string[]): ColumnDef<C
     {
         id: "lastInteraction",
         header: "Última",
+        meta: { skeleton: 'line' },
         cell: ({ row }) => (
             <Cell><span className="font-mono text-[12px] text-brand-muted tabular-nums">{lastInteractionLabel(row.original)}</span></Cell>
         ),
@@ -57,6 +61,7 @@ export const contactColumns = (tags: Tag[], highlightIds: string[]): ColumnDef<C
     {
         id: "status",
         header: "Estado",
+        meta: { skeleton: 'pill' },
         cell: ({ row }) => {
             const status = contactStatus(row.original);
             return <Cell><Pill tone={status.tone}>{status.label}</Pill></Cell>;

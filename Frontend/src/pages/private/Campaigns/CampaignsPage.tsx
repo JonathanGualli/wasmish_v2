@@ -132,6 +132,8 @@ export const CampaignsPage = () => {
                         pagination={pagination}
                         setPagination={setPagination}
                         isLoading={isLoading || isPlaceholderData}
+                        loadingLabel="Cargando campañas"
+                        mobileSkeleton={{ trailing: 'time', pills: 2 }}
                         getRowId={campaign => campaign.id}
                         onRowClick={campaign => navigate(CampaignPaths.detail(campaign.id))}
                         renderMobileRow={campaign => <CampaignMobileRow campaign={campaign} />}

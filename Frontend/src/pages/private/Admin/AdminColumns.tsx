@@ -20,6 +20,7 @@ const formatRelative = (value: string | null) => {
 export const adminClientColumns: ColumnDef<AdminClient>[] = [
     {
         header: 'Cliente',
+        meta: { skeleton: 'title' },
         accessorKey: 'name',
         cell: ({ row }) => (
             <div className="flex flex-col min-w-0">
@@ -30,6 +31,7 @@ export const adminClientColumns: ColumnDef<AdminClient>[] = [
     },
     {
         header: 'WhatsApp',
+        meta: { skeleton: 'pill' },
         accessorKey: 'whatsappConnected',
         cell: ({ row }) => (
             row.original.whatsappConnected ? (
@@ -52,27 +54,32 @@ export const adminClientColumns: ColumnDef<AdminClient>[] = [
     },
     {
         header: 'Líneas',
+        meta: { skeleton: 'number' },
         id: 'lines',
         cell: ({ row }) => <LimitCell client={row.original} kind="lines" />,
     },
     {
         // Personas activas e invitaciones pendientes / máximo (Fase 3).
         header: 'Usuarios',
+        meta: { skeleton: 'number' },
         id: 'users',
         cell: ({ row }) => <LimitCell client={row.original} kind="users" />,
     },
     {
         header: 'Convs',
+        meta: { skeleton: 'number' },
         accessorKey: 'conversations',
         cell: ({ row }) => <span className="font-mono text-[13px] tabular-nums">{row.original.conversations}</span>,
     },
     {
         header: 'Mensajes',
+        meta: { skeleton: 'number' },
         accessorKey: 'messages',
         cell: ({ row }) => <span className="font-mono text-[13px] tabular-nums">{row.original.messages.toLocaleString('es-EC')}</span>,
     },
     {
         header: 'Fallidos',
+        meta: { skeleton: 'number' },
         accessorKey: 'failed',
         cell: ({ row }) => (
             <span className={`font-mono text-[13px] tabular-nums ${row.original.failed > 0 ? 'font-bold text-brand-danger' : 'text-brand-subtle'}`}>
@@ -82,11 +89,13 @@ export const adminClientColumns: ColumnDef<AdminClient>[] = [
     },
     {
         header: 'Últ. actividad',
+        meta: { skeleton: 'line' },
         accessorKey: 'lastActivityAt',
         cell: ({ row }) => <span className="text-brand-muted whitespace-nowrap">{formatRelative(row.original.lastActivityAt)}</span>,
     },
     {
         header: 'Alta',
+        meta: { skeleton: 'line' },
         accessorKey: 'createdAt',
         cell: ({ row }) => <span className="text-brand-muted whitespace-nowrap">{formatDate(row.original.createdAt)}</span>,
     },

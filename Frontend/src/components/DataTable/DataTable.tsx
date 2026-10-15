@@ -1,6 +1,12 @@
-import type { ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { getCoreRowModel, useReactTable, flexRender, type ColumnDef, type OnChangeFn, type PaginationState } from "@tanstack/react-table";
 import { Checkbox } from "../Checkbox/Checkbox";
+import { SkeletonStatus } from "../Skeleton/SkeletonFrame";
+import { SkeletonNumber } from "../Skeleton/Skeleton";
+import { SkeletonListRow, type SkeletonListRowProps } from "../Skeleton/SkeletonListRow";
+import { SkeletonVisibleContext, useSyncedPulse } from "../Skeleton/skeletonShared";
+import { useDelayedLoading } from "../../hooks/useDelayedLoading";
+import { CELL_CLASS, CHECK_CELL_CLASS, TableLoadingBar, TableSkeletonRows } from "./TableSkeleton";
 
 /**
  * Casillas para elegir filas. La tabla solo pinta: qué está elegido lo decide
@@ -36,7 +42,31 @@ interface Props<T> {
      */
     renderMobileRow?: (row: T) => ReactNode;
     selection?: TableSelection<T>;
+    /** Para el lector de pantalla en la primera carga: «Cargando contactos». */
+    loadingLabel: string;
+    /** Lo que se anuncia al terminar de cargar: «248 contactos». */
+    resultLabel?: (total: number) => string;
+    /** La fila de carga del móvil (con `renderMobileRow`): avatar, píldoras… */
+    mobileSkeleton?: Omit<SkeletonListRowProps, 'index'>;
 }
+
+/**
+ * Con qué empezó la carga en curso: sin filas, se enseña el skeleton; con
+ * filas, se atenúan. Se decide al empezar y no cambia aunque los datos lleguen
+ * durante el mínimo visible del skeleton. `finishedOnce`: ya terminó alguna
+ * carga (para no anunciar «248 contactos» con datos que ya estaban).
+ */
+const useLoadPhase = (isLoading: boolean, hasRows: boolean) => {
+    const [startedWithRows, setStartedWithRows] = useState(hasRows);
+    const [wasLoading, setWasLoading] = useState(isLoading);
+    const [finishedOnce, setFinishedOnce] = useState(false);
+    if (isLoading !== wasLoading) {
+        setWasLoading(isLoading);
+        if (isLoading) setStartedWithRows(hasRows);
+        else setFinishedOnce(true);
+    }
+    return { startedWithRows, finishedOnce };
+};
 
 export function DataTable<T>({
     data,
@@ -50,6 +80,9 @@ export function DataTable<T>({
     activeRowId,
     renderMobileRow,
     selection,
+    loadingLabel,
+    resultLabel,
+    mobileSkeleton,
 }: Props<T>) {
 
     const pageCount = Math.ceil(totalCount / pagination.pageSize);
@@ -66,6 +99,16 @@ export function DataTable<T>({
     });
 
     const rows = table.getRowModel().rows;
+    const { pending, visible } = useDelayedLoading(isLoading);
+    const { startedWithRows, finishedOnce } = useLoadPhase(isLoading, rows.length > 0);
+    const showSkeleton = pending && !startedWithRows;
+    const reloading = pending && startedWithRows;
+    const tableRef = useRef<HTMLDivElement>(null);
+    useSyncedPulse(tableRef, visible);
+
+    const status = pending
+        ? (visible ? (reloading ? `Cargando la página ${pagination.pageIndex + 1}` : loadingLabel) : '')
+        : (finishedOnce && resultLabel ? resultLabel(totalCount) : '');
     const columnCount = columns.length + (selection ? 1 : 0);
     const rowBackground = (row: T, id: string) => {
       if (selection?.isSelected(row)) return 'bg-brand-green-50';
@@ -81,25 +124,23 @@ export function DataTable<T>({
     );
 
 return (
-    <div className="rounded-xl border border-brand-border bg-brand-surface relative overflow-hidden">
-      {isLoading && (
-        <div className="absolute inset-0 bg-brand-surface/75 z-10 items-center justify-center flex">
-          <div className="flex flex-col items-center gap-2">
-            <div className="w-8 h-8 border-[3px] border-brand-accent border-t-transparent rounded-full animate-spin" />
-            <span className="text-sm font-medium text-brand-muted">Cargando datos…</span>
-          </div>
-        </div>
-      )}
+    <div ref={tableRef} aria-busy={pending} className="rounded-xl border border-brand-border bg-brand-surface relative overflow-hidden">
+      <SkeletonStatus label={status} />
+      {/* Mientras carga, lo de elegir filas también queda bloqueado (inert): con
+          las filas de la página anterior aún a la vista, «Seleccionar esta página»
+          elegía esas y no las de la página que se pidió (revisión de Codex del PR #61). */}
       {selection?.banner && (
-        <div className="px-4 py-3 bg-brand-green-50 border-b border-brand-accent-soft text-[13px] text-brand-strong text-center">
+        <div inert={pending} className="px-4 py-3 bg-brand-green-50 border-b border-brand-accent-soft text-[13px] text-brand-strong text-center">
           {selection.banner}
         </div>
       )}
       {renderMobileRow && (
-        <div className="md:hidden divide-y divide-brand-border">
+        <div className="md:hidden relative divide-y divide-brand-border">
+          {reloading && visible && <div className="absolute inset-x-0 top-0 z-10"><TableLoadingBar /></div>}
           {/* En móvil no hay cabecera de tabla: la casilla de la página va aquí. */}
-          {selection && rows.length > 0 && (
-            <div onClick={selection.onTogglePage} className="flex items-center gap-3 pl-4 pr-4 py-3 bg-brand-bg cursor-pointer">
+          {selection && rows.length > 0 && !showSkeleton && (
+            <div inert={pending} onClick={selection.onTogglePage}
+              className={`flex items-center gap-3 pl-4 pr-4 py-3 bg-brand-bg cursor-pointer ${pending ? 'opacity-50' : ''}`}>
               <Checkbox
                 checked={selection.pageState === 'all'}
                 indeterminate={selection.pageState === 'some'}
@@ -110,12 +151,17 @@ return (
               <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-brand-muted">Seleccionar esta página</span>
             </div>
           )}
-          {rows.length > 0 ? rows.map(row => (
+          {showSkeleton ? (
+            <SkeletonVisibleContext.Provider value={visible}>
+              {Array.from({ length: 9 }, (_, i) => <SkeletonListRow key={i} index={i} {...mobileSkeleton} />)}
+            </SkeletonVisibleContext.Provider>
+          ) : rows.length > 0 ? rows.map(row => (
             <div
               key={row.id}
               onClick={onRowClick ? () => onRowClick(row.original) : undefined}
+              inert={reloading}
               className={`${onRowClick ? 'cursor-pointer' : ''} ${rowBackground(row.original, row.id)}
-                ${selection ? 'flex items-center pl-4' : ''}`}
+                ${selection ? 'flex items-center pl-4' : ''} ${reloading ? 'opacity-50' : ''}`}
             >
               {rowCheckbox(row.original, true)}
               <div className="flex-1 min-w-0">{renderMobileRow(row.original)}</div>
@@ -132,7 +178,7 @@ return (
             {table.getHeaderGroups().map(group => (
               <tr key={group.id}>
                 {selection && (
-                  <th className="w-[1%] pl-4 pr-0 py-3">
+                  <th inert={pending} className={`w-[1%] pl-4 pr-0 py-3 ${pending ? 'opacity-50' : ''}`}>
                     <Checkbox
                       checked={selection.pageState === 'all'}
                       indeterminate={selection.pageState === 'some'}
@@ -148,10 +194,21 @@ return (
                 ))}
               </tr>
             ))}
+            {reloading && visible && (
+              <tr aria-hidden>
+                <td colSpan={columnCount} className="p-0 h-0 relative">
+                  <div className="absolute inset-x-0 top-0 z-10"><TableLoadingBar /></div>
+                </td>
+              </tr>
+            )}
           </thead>
 
-          <tbody className="divide-y divide-brand-border">
-            {rows.length > 0 ? (
+          <tbody inert={reloading} className={`divide-y divide-brand-border ${reloading ? 'opacity-50' : ''}`}>
+            {showSkeleton ? (
+              <SkeletonVisibleContext.Provider value={visible}>
+                <TableSkeletonRows columns={columns} hasSelection={Boolean(selection)} />
+              </SkeletonVisibleContext.Provider>
+            ) : rows.length > 0 ? (
               rows.map(row => {
                 const isActive = row.id === activeRowId;
                 return (
@@ -161,13 +218,13 @@ return (
                   className={`hover:bg-brand-bg transition-colors
                     ${onRowClick ? 'cursor-pointer' : ''} ${rowBackground(row.original, row.id)}`}
                 >
-                  {selection && <td className="w-[1%] pl-4 pr-0 py-3.5 align-top"><div className="min-h-[34px] flex items-center">{rowCheckbox(row.original)}</div></td>}
+                  {selection && <td className={CHECK_CELL_CLASS}><div className="min-h-[34px] flex items-center">{rowCheckbox(row.original)}</div></td>}
                   {row.getVisibleCells().map((cell, i) => (
                     <td
                       key={cell.id}
                       // La barra de la fila abierta va en la primera celda: el borde
                       // de un <tr> no se pinta con border-collapse.
-                      className={`px-4 py-3.5 text-sm text-brand-text align-top
+                      className={`${CELL_CLASS}
                         ${isActive && i === 0 ? 'shadow-[inset_3px_0_0_var(--color-brand-deep)]' : ''}`}
                     >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -197,7 +254,12 @@ return (
           >
             {[10, 20, 50].map(size => <option key={size} value={size}>Mostrar {size}</option>)}
           </select>
-          <span>Total: <span className="font-mono tabular-nums text-brand-text">{totalCount}</span></span>
+          <span className="flex items-center gap-1">Total:{' '}
+            {showSkeleton
+              ? <SkeletonVisibleContext.Provider value={visible}><SkeletonNumber width="28px" /></SkeletonVisibleContext.Provider>
+              : <span className="font-mono tabular-nums text-brand-text">{totalCount}</span>}
+          </span>
+          {reloading && visible && <span className="text-xs font-semibold text-brand-accent-strong">Cargando…</span>}
         </div>
 
         <div className="flex gap-2 items-center">

@@ -22,6 +22,7 @@ export const templateColumns: ColumnDef<Template>[] = [
     {
         accessorKey: "name",
         header: "Nombre",
+        meta: { skeleton: 'title' },
         // El nombre es el identificador que el usuario copia a su llamada a la
         // API: va en mono, como manda la regla de datos del manual.
         cell: ({ row }) => (
@@ -36,6 +37,7 @@ export const templateColumns: ColumnDef<Template>[] = [
     {
         accessorKey: "templateId",
         header: "ID",
+        meta: { skeleton: 'line' },
         cell: ({ row }) => (
             <span className="font-mono text-[12px] text-brand-subtle tabular-nums">
                 {row.original.templateId}
@@ -45,6 +47,7 @@ export const templateColumns: ColumnDef<Template>[] = [
     {
         accessorKey: "bodyText",
         header: "Cuerpo del mensaje",
+        meta: { skeleton: 'title' },
         cell: ({ row }) => (
             <div className="max-w-[260px] truncate text-brand-muted" title={row.original.bodyText}>
                 {row.original.bodyText}
@@ -54,11 +57,13 @@ export const templateColumns: ColumnDef<Template>[] = [
     {
         id: "header",
         header: "Cabecera",
+        meta: { skeleton: 'line' },
         cell: ({ row }) => <TemplateHeaderCell template={row.original} />,
     },
     {
         accessorKey: "language",
         header: "Idioma",
+        meta: { skeleton: 'line' },
         cell: ({ row }) => (
             <span className="text-brand-muted whitespace-nowrap">
                 {LANGUAGES[row.original.language] || row.original.language}
@@ -68,6 +73,7 @@ export const templateColumns: ColumnDef<Template>[] = [
     {
         accessorKey: "status",
         header: "Estado",
+        meta: { skeleton: 'pill' },
         cell: ({ row }) => {
             const s = STATUS[row.original.status];
             return (
@@ -85,5 +91,6 @@ export const templateColumns: ColumnDef<Template>[] = [
 export const templateLinesColumn: ColumnDef<Template> = {
     id: "lines",
     header: "Se envía desde",
+    meta: { skeleton: 'pill' },
     cell: ({ row }) => <TemplateLinesCell template={row.original} />,
 };
