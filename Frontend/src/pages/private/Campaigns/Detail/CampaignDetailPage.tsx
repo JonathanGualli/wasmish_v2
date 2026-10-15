@@ -27,7 +27,6 @@ import { CampaignStatusPill } from "../CampaignCells";
 import { CampaignFunnel, CampaignMetrics, CampaignProgressCard, FailureReasons } from "./CampaignStatsBlocks";
 import { recipientColumns, recipientMobileSkeleton } from "./RecipientColumns";
 import { CampaignDetailSkeleton } from "./CampaignDetailSkeleton";
-import { useDelayedLoading } from "../../../../hooks/useDelayedLoading";
 import { RecipientMobileRow } from "./RecipientCells";
 
 const FIRST_PAGE = { pageIndex: 0, pageSize: 20 };
@@ -109,7 +108,6 @@ export const CampaignDetailPage = () => {
     const [confirmingCancel, setConfirmingCancel] = useState(false);
 
     const { data: campaign, isError, dataUpdatedAt, refetch } = useCampaign(id);
-    const loading = useDelayedLoading(!campaign && !isError);
     const recipients = useCampaignRecipients(id, stateFilter, pagination.pageIndex, pagination.pageSize);
     const { data: failureReasons } = useCampaignFailures(id, (campaign?.stats.failed ?? 0) > 0);
     const { pause, resume, cancel } = useCampaignMutations();
@@ -134,7 +132,7 @@ export const CampaignDetailPage = () => {
             </PageShell>
         );
     }
-    if (loading.pending || !campaign || !id) return <CampaignDetailSkeleton visible={loading.visible} />;
+    if (!campaign || !id) return <CampaignDetailSkeleton />;
 
     const { stats } = campaign;
     const counts = recipientStateCounts(stats);

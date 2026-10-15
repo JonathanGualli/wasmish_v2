@@ -8,10 +8,10 @@ const INBOX_ROWS = Array.from({ length: 10 }, (_, i) => i);
 const INBOX_AVATAR = 'w-[38px] h-[38px] rounded-[10px] max-md:w-[46px] max-md:h-[46px] max-md:rounded-xl';
 
 /** La bandeja mientras carga: filas con las medidas de las reales y, con varias líneas, el sitio de su etiqueta. */
-export const ConversationListSkeleton = ({ visible }: { visible: boolean }) => {
+export const ConversationListSkeleton = () => {
     const { showLines } = useLines();
     return (
-        <SkeletonFrame label="Cargando conversaciones" visible={visible}>
+        <SkeletonFrame label="Cargando conversaciones">
             {INBOX_ROWS.map(i => (
                 <SkeletonListRow key={i} index={i} avatar={INBOX_AVATAR} trailing="time" lineTag={showLines}
                     className="px-[18px] max-md:px-4 py-3.5 max-md:py-3 border-b border-brand-bg border-l-[3px] border-l-transparent" />
@@ -32,8 +32,8 @@ const BUBBLES = [
 ] as const;
 
 /** El hilo mientras llegan los mensajes. La cabecera y el cuadro de escribir ya están. */
-export const ThreadSkeleton = ({ visible }: { visible: boolean }) => (
-    <SkeletonFrame label="Cargando mensajes" visible={visible} className="flex flex-col gap-3">
+export const ThreadSkeleton = () => (
+    <SkeletonFrame label="Cargando mensajes" className="flex flex-col gap-3">
         {BUBBLES.map((bubble, i) => {
             if (bubble.kind === 'day') return <div key={i} className="self-center"><SkeletonBox className="w-16 h-[22px] rounded-full" /></div>;
             const mine = bubble.kind === 'mine';
@@ -54,8 +54,8 @@ export const ThreadSkeleton = ({ visible }: { visible: boolean }) => (
  * selector cerrado de `TemplatePicker`, con su etiqueta, del alto del real. El
  * diseño dibuja una lista abierta, pero aquí es un selector.
  */
-export const TemplateFormSkeleton = ({ visible }: { visible: boolean }) => (
-    <SkeletonFrame label="Cargando plantillas" visible={visible}>
+export const TemplateFormSkeleton = () => (
+    <SkeletonFrame label="Cargando plantillas">
         <SkeletonField label="Plantilla" boxClassName="h-[46px] rounded-[8px]" />
     </SkeletonFrame>
 );

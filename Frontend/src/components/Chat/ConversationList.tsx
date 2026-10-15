@@ -8,7 +8,6 @@ import { formatChatTime } from "../../utils/formatChatTime";
 import { initials } from "../../utils/initials";
 import { draftTitle, type ConversationDraft } from "../../utils/conversationDraft";
 import { useLines } from "../../hooks/useLines";
-import { useDelayedLoading } from "../../hooks/useDelayedLoading";
 import { ConversationListSkeleton } from "./ChatSkeletons";
 import { SkeletonLine } from "../Skeleton/Skeleton";
 import { LineChip } from "../Line/LineChip";
@@ -53,7 +52,6 @@ const CenteredState = ({ children, tone = 'muted' }: { children: React.ReactNode
  */
 export const ChatconversationList = ({ onSelect, selectedId, onNewConversation, draft, draftActive, onOpenDraft, banner }: Props) => {
     const { data: conversations, isLoading, isError } = useConversations();
-    const loading = useDelayedLoading(isLoading);
     const { templates } = useTemplates();
     const { lineById, showLines } = useLines();
     const openMenu = useOpenMobileMenu();
@@ -80,7 +78,7 @@ export const ChatconversationList = ({ onSelect, selectedId, onNewConversation, 
     }, [ofLine, query]);
 
     const renderRows = () => {
-        if (loading.pending) return <ConversationListSkeleton visible={loading.visible} />;
+        if (isLoading) return <ConversationListSkeleton />;
         if (isError) return <CenteredState tone="danger">¡Error al cargar las conversaciones!</CenteredState>;
         if (!conversations || conversations.length === 0) {
             return <CenteredState>Todavía no hay conversaciones. Empieza una con el botón +.</CenteredState>;
@@ -165,8 +163,8 @@ export const ChatconversationList = ({ onSelect, selectedId, onNewConversation, 
                     </h2>
                     <span className="text-[13px] text-brand-muted md:ml-auto">
                         {/* Mientras carga no se sabe: «Todo al día» sería falso. */}
-                        {loading.pending
-                            ? <SkeletonLine soft width="64px" visible={loading.visible} />
+                        {isLoading
+                            ? <SkeletonLine soft width="64px" />
                             : unread > 0 ? `${unread} sin leer` : 'Todo al día'}
                     </span>
                     <button

@@ -8,7 +8,6 @@ import { useNoticeContext } from '../../../components/Notice/context/UseNoticeCo
 import { tagError, useTagMutations, useTags } from '../../../hooks/useTags';
 import type { Tag } from '../../../models/tag.model';
 import { TAG_NAME_MAX, cleanTagName, findTagByName } from '../../../utils/tags';
-import { useDelayedLoading } from '../../../hooks/useDelayedLoading';
 import { SkeletonBox, SkeletonLine } from '../../../components/Skeleton/Skeleton';
 import { SkeletonFrame } from '../../../components/Skeleton/SkeletonFrame';
 
@@ -25,7 +24,6 @@ export const TagManager = ({ open, onClose, onShowContacts }: {
     onShowContacts: (tag: Tag) => void;
 }) => {
     const { data: tags, isLoading, isError } = useTags();
-    const loading = useDelayedLoading(isLoading);
     const { state: noticeVisible } = useNoticeContext();
     const [editingId, setEditingId] = useState<string | null>(null);
     const [deleting, setDeleting] = useState<Tag | null>(null);
@@ -56,14 +54,14 @@ export const TagManager = ({ open, onClose, onShowContacts }: {
                         </button>
                     </div>
 
-                    {loading.pending && <TagListSkeleton visible={loading.visible} />}
+                    {isLoading && <TagListSkeleton />}
                     {isError && !tags && (
                         <div className="flex-1 flex items-center justify-center gap-2 p-8 text-sm text-brand-muted">
                             <AlertCircle size={16} />No se pudieron cargar las etiquetas.
                         </div>
                     )}
-                    {!loading.pending && tags && tags.length === 0 && <EmptyTags />}
-                    {!loading.pending && tags && tags.length > 0 && (
+                    {!isLoading && tags && tags.length === 0 && <EmptyTags />}
+                    {!isLoading && tags && tags.length > 0 && (
                         <div className="flex-1 overflow-y-auto">
                             <p className="px-4 md:px-6 pt-4 pb-3 text-[13px] leading-[1.55] text-brand-muted">
                                 {TAG_INTRO}
@@ -114,8 +112,8 @@ const TAG_INTRO = 'Se crean al etiquetar un contacto, desde la lista o su ficha.
 const CHIP_WIDTHS = ['72px', '96px', '64px', '110px', '84px'];
 
 /** La lista mientras carga (diseño 3.7): las filas reales, con la etiqueta y su cuenta como bloques. */
-const TagListSkeleton = ({ visible }: { visible: boolean }) => (
-    <SkeletonFrame label="Cargando etiquetas" visible={visible} className="flex-1 overflow-hidden">
+const TagListSkeleton = () => (
+    <SkeletonFrame label="Cargando etiquetas" className="flex-1 overflow-hidden">
         <p className="px-4 md:px-6 pt-4 pb-3 text-[13px] leading-[1.55] text-brand-muted">{TAG_INTRO}</p>
         <ul className="px-4 md:px-6 pb-6">
             {CHIP_WIDTHS.map(width => (

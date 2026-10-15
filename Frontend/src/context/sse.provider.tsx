@@ -3,13 +3,15 @@ import { useQueryClient } from "@tanstack/react-query";
 import { createSSEConnection } from "../services/api.service";
 import { SSEContext, type SSEEventMap, type SSEEventType, type SSEHandler } from "./sse.context";
 import { useAuthContext } from "./auth.context";
+import { VERIFY_QUERY_KEY } from "../hooks/useVerifyLogin";
 
 // Espera antes de reconectar: 1 s, 2 s, 4 s… hasta 30 s.
 const RETRY_BASE_MS = 1000;
 const RETRY_MAX_MS = 30_000;
 
 export const SSEProvider = ({ children }: { children: ReactNode }) => {
-    const { user, onAccessChanged } = useAuthContext();
+    const { user, isConfirmed, onAccessChanged } = useAuthContext();
+    const sessionId = isConfirmed ? user?.id : undefined;
     // En un ref: la conexión no se rehace cada vez que cambia la función.
     const accessChanged = useRef(onAccessChanged);
     useEffect(() => { accessChanged.current = onAccessChanged; }, [onAccessChanged]);
@@ -27,7 +29,7 @@ export const SSEProvider = ({ children }: { children: ReactNode }) => {
 
     // Abrir UNA conexión SSE, solo cuando hay sesión.
     useEffect(() => {
-        if (!user?.id) return; // sin sesión no conectamos (/api/stream requiere auth)
+        if (!sessionId) return; // sin sesión confirmada no conectamos (/api/stream requiere auth)
 
         // Crea un despachador para un tipo de evento: parsea y reparte.
         const dispatch = <E extends SSEEventType>(event: E) => (e: MessageEvent) => {
@@ -48,6 +50,7 @@ export const SSEProvider = ({ children }: { children: ReactNode }) => {
         let retryTimer: ReturnType<typeof setTimeout> | undefined;
         let attempt = 0;
         let interrupted = false;
+        let firstOpen = true;
 
         const connect = () => {
             connection = createSSEConnection("stream", {
@@ -62,7 +65,16 @@ export const SSEProvider = ({ children }: { children: ReactNode }) => {
                     if (interrupted) {
                         interrupted = false;
                         queryClient.invalidateQueries(); // solo vuelve a pedir las que están a la vista
+                    } else if (firstOpen) {
+                        // Con el usuario recordado, la página carga mientras se
+                        // confirma la sesión, antes de esta conexión: lo que pasó
+                        // entre su respuesta y ahora no llegó por aquí (revisión
+                        // de Codex del PR #65). Se repite lo que ya tenía datos.
+                        queryClient.invalidateQueries({
+                            predicate: (query) => query.state.dataUpdatedAt > 0 && query.queryKey[0] !== VERIFY_QUERY_KEY[0],
+                        });
                     }
+                    firstOpen = false;
                 },
                 onError: () => {
                     interrupted = true;
@@ -80,7 +92,7 @@ export const SSEProvider = ({ children }: { children: ReactNode }) => {
             clearTimeout(retryTimer);
             connection?.close();
         };
-    }, [user?.id, queryClient]);
+    }, [sessionId, queryClient]);
 
     // Función estable para suscribirse. Devuelve el "des-suscribir".
     const subscribe = useCallback(<E extends SSEEventType>(event: E, handler: SSEHandler<E>) => {

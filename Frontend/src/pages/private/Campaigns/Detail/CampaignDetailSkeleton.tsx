@@ -16,9 +16,9 @@ const noop = () => {};
  * que no depende de ella (volver a Campañas, las etiquetas de las cifras) ya se
  * ve; los filtros de destinatarios no, porque llevan la cuenta de cada estado.
  */
-export const CampaignDetailSkeleton = ({ visible }: { visible: boolean }) => (
+export const CampaignDetailSkeleton = () => (
     <PageShell width="wide">
-        <SkeletonFrame label="Cargando la campaña" visible={visible}>
+        <SkeletonFrame label="Cargando la campaña">
             <Link to={CampaignPaths.list} className="inline-flex items-center gap-1 text-[13px] font-semibold text-brand-accent-strong hover:underline">
                 <ChevronLeft size={15} />Campañas
             </Link>

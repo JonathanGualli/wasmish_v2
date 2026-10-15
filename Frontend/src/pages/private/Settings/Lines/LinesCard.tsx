@@ -14,7 +14,6 @@ import { PreviousLines } from "./PreviousLines";
 import { DisconnectLineDialog } from "./DisconnectLineDialog";
 import { ManualCredentialsForm } from "./ManualCredentialsForm";
 import { isBusy } from "./lineActionError";
-import { useDelayedLoading } from "../../../../hooks/useDelayedLoading";
 import { LINE_SWATCH_SKELETON, SettingsListSkeleton } from "../SettingsListSkeleton";
 import { SkeletonBox, SkeletonPill } from "../../../../components/Skeleton/Skeleton";
 
@@ -72,7 +71,6 @@ const connectState = ({ activeCount, maxLines, isMultiLine, isConnecting }: {
  */
 export const LinesCard = () => {
     const { isLoading, isError, refresh, activeLines, previousLines, maxLines, isMultiLine, colorOf } = useLines();
-    const loading = useDelayedLoading(isLoading);
     const connectWhatsapp = useConnectWhatsapp();
     const [toDisconnect, setToDisconnect] = useState<Line | null>(null);
 
@@ -100,8 +98,8 @@ export const LinesCard = () => {
                         </p>
                     </div>
                     {/* El estado y el botón dependen de las líneas: mientras cargan, «Sin conectar» sería falso. */}
-                    {loading.pending ? (
-                        <SkeletonPill width="104px" visible={loading.visible} />
+                    {isLoading ? (
+                        <SkeletonPill width="104px" />
                     ) : isMultiLine ? (
                         <span className="flex-none rounded-full bg-brand-bg px-3 py-1.5 font-mono text-[12.5px] font-semibold text-brand-strong tabular-nums">
                             {activeLines.length} de {plural(maxLines, 'línea', 'líneas')}
@@ -134,8 +132,8 @@ export const LinesCard = () => {
                     </Callout>
                 )}
 
-                {loading.pending && (
-                    <SettingsListSkeleton label="Cargando las líneas" visible={loading.visible} rows={2}
+                {isLoading && (
+                    <SettingsListSkeleton label="Cargando las líneas" rows={2}
                         avatar={LINE_SWATCH_SKELETON} rowClassName="px-[18px] py-4 max-sm:px-3.5" />
                 )}
                 {isError && (
@@ -145,7 +143,7 @@ export const LinesCard = () => {
                     </p>
                 )}
 
-                {!loading.pending && !isError && activeLines.length === 0 && (
+                {!isLoading && !isError && activeLines.length === 0 && (
                     <div className="grid gap-1.5 rounded-[10px] border border-dashed border-brand-border-strong p-7 max-sm:p-5">
                         <p className="text-[15px] font-semibold text-brand-text">Aún no hay ningún número conectado</p>
                         <p className="max-w-[520px] text-sm leading-[1.55] text-brand-gray-600">
@@ -155,12 +153,12 @@ export const LinesCard = () => {
                     </div>
                 )}
 
-                {!loading.pending && groups.length > 1 && (
+                {!isLoading && groups.length > 1 && (
                     <p className="-mb-2 text-[13px] text-brand-muted">Las líneas de una misma cuenta de WhatsApp Business comparten plantillas.</p>
                 )}
-                {!loading.pending && groups.map(group => (
+                {!isLoading && groups.map(group => (
                     <div key={group.waBusinessId} className="rounded-[10px] border border-brand-border divide-y divide-brand-raised">
-                        {!loading.pending && groups.length > 1 && (
+                        {groups.length > 1 && (
                             <div className="flex items-center gap-2.5 rounded-t-[10px] bg-brand-bg px-[18px] py-2 text-xs text-brand-muted">
                                 <span className="font-mono font-semibold text-brand-strong">WABA {maskWabaId(group.waBusinessId)}</span>
                                 <span className="ml-auto">{plural(group.lines.length, 'línea', 'líneas')}</span>
@@ -185,8 +183,8 @@ export const LinesCard = () => {
                     </div>
                 )}
 
-                {loading.pending ? (
-                    <SkeletonBox visible={loading.visible} className="h-10 max-sm:h-12 w-full sm:w-[190px] rounded-[8px]" />
+                {isLoading ? (
+                    <SkeletonBox className="h-10 max-sm:h-12 w-full sm:w-[190px] rounded-[8px]" />
                 ) : (
                     <div className="flex flex-wrap items-center gap-4">
                         <div className="h-10 w-full sm:w-auto max-sm:h-12">

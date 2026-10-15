@@ -16,7 +16,6 @@ import type { NewConversationRequest } from "../../models/conversation.mode.ts";
 import { whatsappErrorLabel, whatsappErrorText } from "../../utils/whatsappErrors";
 import { ChatHeader } from "./ChatHeader.tsx";
 import { ThreadSkeleton } from "./ChatSkeletons.tsx";
-import { useDelayedLoading } from "../../hooks/useDelayedLoading";
 import { ContactSidebar } from "./ContactSidebar/ContactSidebar.tsx";
 import { ChatComposer } from "./Composer/ChatComposer.tsx";
 import { MessageUploadStatus } from "./MessageUploadStatus.tsx";
@@ -123,7 +122,6 @@ export const ChatThread = ({
 }: Props) => {
     const { data: messages, isLoading, isError, error, fetchNextPage, hasNextPage } =
         useConversationMessages(conversationId || "");
-    const loading = useDelayedLoading(isLoading);
     const { setState: showNotice, setContent: setNoticeContent } = useNoticeContext();
 
     // La conversación dejó de existir para esta sesión: le quitaron su línea con
@@ -153,7 +151,7 @@ export const ChatThread = ({
 
     const renderContent = () => {
         if (!conversationId) return <CenteredMessage>Selecciona una conversación</CenteredMessage>;
-        if (loading.pending) return <ThreadSkeleton visible={loading.visible} />;
+        if (isLoading) return <ThreadSkeleton />;
         if (isError) return <CenteredMessage>¡Error al cargar los mensajes!</CenteredMessage>;
         if (!messages || messages.length === 0) return <CenteredMessage>No hay mensajes todavía.</CenteredMessage>;
 

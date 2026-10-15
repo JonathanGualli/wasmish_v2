@@ -24,7 +24,6 @@ import { ReferralCard } from '../../../components/Contact/ReferralCard';
 import { LineWindowList } from '../../../components/Contact/LineWindowList';
 import { useLines } from '../../../hooks/useLines';
 import { useAuthContext } from "../../../context/auth.context";
-import { useDelayedLoading } from '../../../hooks/useDelayedLoading';
 import { SkeletonBox, SkeletonField, SkeletonLine } from '../../../components/Skeleton/Skeleton';
 import { SkeletonFrame } from '../../../components/Skeleton/SkeletonFrame';
 import { skeletonWidth } from '../../../components/Skeleton/skeletonShared';
@@ -137,8 +136,8 @@ const FIELD_BOX = 'h-[56px] lg:h-[50px] rounded-[10px] lg:rounded-[8px]';
 const DATA_LABELS = ['Etiquetas', 'Email', 'Empresa', 'Notas', 'Origen', 'Creado'];
 
 /** La ficha (`ContactDetails`): identidad, acciones, actividad y datos, con sus títulos reales. */
-const ContactViewSkeleton = ({ visible }: { visible: boolean }) => (
-    <SkeletonFrame label="Cargando el contacto" visible={visible} className="flex-1 overflow-y-auto px-4 md:px-6 py-5 grid gap-[22px] content-start">
+const ContactViewSkeleton = () => (
+    <SkeletonFrame label="Cargando el contacto" className="flex-1 overflow-y-auto px-4 md:px-6 py-5 grid gap-[22px] content-start">
         <div className="flex gap-3.5 items-center">
             <SkeletonBox className="w-[52px] h-[52px] rounded-[13px]" />
             <div className="flex-1 grid gap-2.5">
@@ -173,8 +172,8 @@ const ContactViewSkeleton = ({ visible }: { visible: boolean }) => (
 );
 
 /** Editar (`ContactForm`): sus campos con su etiqueta real. */
-const ContactFormSkeleton = ({ visible }: { visible: boolean }) => (
-    <SkeletonFrame label="Cargando el contacto" visible={visible} className="flex-1 overflow-y-auto px-4 md:px-6 py-5 grid gap-[18px] content-start">
+const ContactFormSkeleton = () => (
+    <SkeletonFrame label="Cargando el contacto" className="flex-1 overflow-y-auto px-4 md:px-6 py-5 grid gap-[18px] content-start">
         {FORM_FIELDS.map(label => <SkeletonField key={label} label={label} boxClassName={FIELD_BOX} />)}
     </SkeletonFrame>
 );
@@ -186,12 +185,12 @@ const EditContact = ({ id, onCancel, onChange }: {
     onChange: (state: ContactPanelState | null) => void;
 }) => {
     const { data: contact, isError } = useContact(id);
-    const loading = useDelayedLoading(!contact && !isError);
+    const loading = !contact && !isError;
     return (
         <>
             <PanelHeader title="Editar contacto" strong onClose={onCancel} />
-            {loading.pending ? (
-                <ContactFormSkeleton visible={loading.visible} />
+            {loading ? (
+                <ContactFormSkeleton />
             ) : contact ? (
                 <ContactForm
                     contact={contact}
@@ -212,14 +211,14 @@ const SectionLabel = ({ children }: { children: ReactNode }) => (
 
 const ContactView = ({ id, onClose, onEdit }: { id: string; onClose: () => void; onEdit: () => void }) => {
     const { data: contact, isError } = useContact(id);
-    const loading = useDelayedLoading(!contact && !isError);
+    const loading = !contact && !isError;
 
     return (
         <>
             <PanelHeader
                 title="Ficha de contacto"
                 onClose={onClose}
-                mobileAction={contact && !loading.pending && (
+                mobileAction={contact && (
                     <button
                         type="button"
                         onClick={onEdit}
@@ -229,8 +228,8 @@ const ContactView = ({ id, onClose, onEdit }: { id: string; onClose: () => void;
                     </button>
                 )}
             />
-            {loading.pending ? (
-                <ContactViewSkeleton visible={loading.visible} />
+            {loading ? (
+                <ContactViewSkeleton />
             ) : contact ? (
                 <ContactDetails contact={contact} onClose={onClose} onEdit={onEdit} />
             ) : (

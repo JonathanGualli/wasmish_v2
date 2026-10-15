@@ -4,8 +4,7 @@ import { Checkbox } from "../Checkbox/Checkbox";
 import { SkeletonStatus } from "../Skeleton/SkeletonFrame";
 import { SkeletonNumber } from "../Skeleton/Skeleton";
 import { SkeletonListRow, type SkeletonListRowProps } from "../Skeleton/SkeletonListRow";
-import { SkeletonVisibleContext, useSyncedPulse } from "../Skeleton/skeletonShared";
-import { useDelayedLoading } from "../../hooks/useDelayedLoading";
+import { useSyncedPulse } from "../Skeleton/skeletonShared";
 import { CELL_CLASS, CHECK_CELL_CLASS, TableLoadingBar, TableSkeletonRows } from "./TableSkeleton";
 
 /**
@@ -52,9 +51,9 @@ interface Props<T> {
 
 /**
  * Con qué empezó la carga en curso: sin filas, se enseña el skeleton; con
- * filas, se atenúan. Se decide al empezar y no cambia aunque los datos lleguen
- * durante el mínimo visible del skeleton. `finishedOnce`: ya terminó alguna
- * carga (para no anunciar «248 contactos» con datos que ya estaban).
+ * filas, se atenúan. Se decide al empezar y no cambia durante la carga.
+ * `finishedOnce`: ya terminó alguna carga (para no anunciar «248 contactos»
+ * con datos que ya estaban).
  */
 const useLoadPhase = (isLoading: boolean, hasRows: boolean) => {
     const [startedWithRows, setStartedWithRows] = useState(hasRows);
@@ -99,15 +98,14 @@ export function DataTable<T>({
     });
 
     const rows = table.getRowModel().rows;
-    const { pending, visible } = useDelayedLoading(isLoading);
     const { startedWithRows, finishedOnce } = useLoadPhase(isLoading, rows.length > 0);
-    const showSkeleton = pending && !startedWithRows;
-    const reloading = pending && startedWithRows;
+    const showSkeleton = isLoading && !startedWithRows;
+    const reloading = isLoading && startedWithRows;
     const tableRef = useRef<HTMLDivElement>(null);
-    useSyncedPulse(tableRef, visible);
+    useSyncedPulse(tableRef, isLoading);
 
-    const status = pending
-        ? (visible ? (reloading ? `Cargando la página ${pagination.pageIndex + 1}` : loadingLabel) : '')
+    const status = isLoading
+        ? (reloading ? `Cargando la página ${pagination.pageIndex + 1}` : loadingLabel)
         : (finishedOnce && resultLabel ? resultLabel(totalCount) : '');
     const columnCount = columns.length + (selection ? 1 : 0);
     const rowBackground = (row: T, id: string) => {
@@ -124,23 +122,23 @@ export function DataTable<T>({
     );
 
 return (
-    <div ref={tableRef} aria-busy={pending} className="rounded-xl border border-brand-border bg-brand-surface relative overflow-hidden">
+    <div ref={tableRef} aria-busy={isLoading} className="rounded-xl border border-brand-border bg-brand-surface relative overflow-hidden">
       <SkeletonStatus label={status} />
       {/* Mientras carga, lo de elegir filas también queda bloqueado (inert): con
           las filas de la página anterior aún a la vista, «Seleccionar esta página»
           elegía esas y no las de la página que se pidió (revisión de Codex del PR #61). */}
       {selection?.banner && (
-        <div inert={pending} className="px-4 py-3 bg-brand-green-50 border-b border-brand-accent-soft text-[13px] text-brand-strong text-center">
+        <div inert={isLoading} className="px-4 py-3 bg-brand-green-50 border-b border-brand-accent-soft text-[13px] text-brand-strong text-center">
           {selection.banner}
         </div>
       )}
       {renderMobileRow && (
         <div className="md:hidden relative divide-y divide-brand-border">
-          {reloading && visible && <div className="absolute inset-x-0 top-0 z-10"><TableLoadingBar /></div>}
+          {reloading && <div className="absolute inset-x-0 top-0 z-10"><TableLoadingBar /></div>}
           {/* En móvil no hay cabecera de tabla: la casilla de la página va aquí. */}
           {selection && rows.length > 0 && !showSkeleton && (
-            <div inert={pending} onClick={selection.onTogglePage}
-              className={`flex items-center gap-3 pl-4 pr-4 py-3 bg-brand-bg cursor-pointer ${pending ? 'opacity-50' : ''}`}>
+            <div inert={isLoading} onClick={selection.onTogglePage}
+              className={`flex items-center gap-3 pl-4 pr-4 py-3 bg-brand-bg cursor-pointer ${isLoading ? 'opacity-50' : ''}`}>
               <Checkbox
                 checked={selection.pageState === 'all'}
                 indeterminate={selection.pageState === 'some'}
@@ -152,9 +150,7 @@ return (
             </div>
           )}
           {showSkeleton ? (
-            <SkeletonVisibleContext.Provider value={visible}>
-              {Array.from({ length: 9 }, (_, i) => <SkeletonListRow key={i} index={i} {...mobileSkeleton} />)}
-            </SkeletonVisibleContext.Provider>
+            Array.from({ length: 9 }, (_, i) => <SkeletonListRow key={i} index={i} {...mobileSkeleton} />)
           ) : rows.length > 0 ? rows.map(row => (
             <div
               key={row.id}
@@ -178,7 +174,7 @@ return (
             {table.getHeaderGroups().map(group => (
               <tr key={group.id}>
                 {selection && (
-                  <th inert={pending} className={`w-[1%] pl-4 pr-0 py-3 ${pending ? 'opacity-50' : ''}`}>
+                  <th inert={isLoading} className={`w-[1%] pl-4 pr-0 py-3 ${isLoading ? 'opacity-50' : ''}`}>
                     <Checkbox
                       checked={selection.pageState === 'all'}
                       indeterminate={selection.pageState === 'some'}
@@ -194,7 +190,7 @@ return (
                 ))}
               </tr>
             ))}
-            {reloading && visible && (
+            {reloading && (
               <tr aria-hidden>
                 <td colSpan={columnCount} className="p-0 h-0 relative">
                   <div className="absolute inset-x-0 top-0 z-10"><TableLoadingBar /></div>
@@ -205,9 +201,7 @@ return (
 
           <tbody inert={reloading} className={`divide-y divide-brand-border ${reloading ? 'opacity-50' : ''}`}>
             {showSkeleton ? (
-              <SkeletonVisibleContext.Provider value={visible}>
-                <TableSkeletonRows columns={columns} hasSelection={Boolean(selection)} />
-              </SkeletonVisibleContext.Provider>
+              <TableSkeletonRows columns={columns} hasSelection={Boolean(selection)} />
             ) : rows.length > 0 ? (
               rows.map(row => {
                 const isActive = row.id === activeRowId;
@@ -256,10 +250,10 @@ return (
           </select>
           <span className="flex items-center gap-1">Total:{' '}
             {showSkeleton
-              ? <SkeletonNumber width="28px" visible={visible} />
+              ? <SkeletonNumber width="28px" />
               : <span className="font-mono tabular-nums text-brand-text">{totalCount}</span>}
           </span>
-          {reloading && visible && <span className="text-xs font-semibold text-brand-accent-strong">Cargando…</span>}
+          {reloading && <span className="text-xs font-semibold text-brand-accent-strong">Cargando…</span>}
         </div>
 
         <div className="flex gap-2 items-center">

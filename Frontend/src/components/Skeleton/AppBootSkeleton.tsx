@@ -1,14 +1,11 @@
 import { Menu } from "lucide-react";
 import { Logo, LogoLockup } from "../Logo/Logo";
-import { PageShell } from "../Page/PageShell";
-import { SkeletonBox, SkeletonLine } from "./Skeleton";
+import { SkeletonBox } from "./Skeleton";
 import { SkeletonFrame } from "./SkeletonFrame";
-import { AVATAR_LG, AVATAR_SM, SkeletonListRow } from "./SkeletonListRow";
 
 // Los anchos de los accesos de la barra, del diseño (3.1a): todavía no se sabe
 // el rol, así que no se escriben.
 const NAV_WIDTHS = ['64px', '52px', '70px', '66px', '74px', '90px'];
-const ROWS = Array.from({ length: 9 }, (_, i) => i);
 
 /** Un acceso de la barra: el icono y, con la barra abierta, su nombre. */
 const NavItem = ({ width }: { width: string }) => (
@@ -46,30 +43,15 @@ const SidebarSkeleton = () => (
     </aside>
 );
 
-/** Una página cualquiera de Wasmish: su cabecera y una lista. */
-const PageSkeleton = () => (
-    <PageShell width="wide">
-        <div className="flex gap-4 mb-10">
-            <SkeletonBox className="w-10 h-10 rounded-[10px]" />
-            <div className="grid gap-3 content-start pt-2">
-                <SkeletonBox width="180px" className="h-3.5 rounded-[7px]" />
-                <SkeletonLine soft width="300px" />
-            </div>
-        </div>
-        <div className="rounded-xl border border-brand-border overflow-hidden divide-y divide-brand-border">
-            <div className="h-10 bg-brand-bg" />
-            {ROWS.map(i => <SkeletonListRow key={i} index={i} avatar={AVATAR_SM} />)}
-        </div>
-    </PageShell>
-);
-
 /**
- * Lo que se ve al abrir Wasmish mientras se comprueba la sesión (diseño 3.1):
- * el marco de la app, no una página en blanco. En el teléfono, la cabecera y
- * una lista.
+ * Lo que se ve al abrir Wasmish mientras se comprueba la sesión (diseño 3.1),
+ * solo cuando el navegador no recuerda a nadie (con alguien recordado, la app
+ * abre al momento): el marco de la app, no una página en blanco. El contenido
+ * queda en blanco, porque aún no se sabe qué página es la que llega; cada una
+ * trae su skeleton. En el teléfono, la cabecera.
  */
-export const AppBootSkeleton = ({ visible }: { visible: boolean }) => (
-    <SkeletonFrame label="Cargando Wasmish" visible={visible} className="flex h-[var(--app-height,100dvh)] bg-brand-bg">
+export const AppBootSkeleton = () => (
+    <SkeletonFrame label="Cargando Wasmish" className="flex h-[var(--app-height,100dvh)] bg-brand-bg">
         <SidebarSkeleton />
         <div className="flex-1 min-w-0 flex flex-col bg-brand-surface">
             <header className="md:hidden h-[calc(56px+var(--safe-top))] pt-[var(--safe-top)] border-b border-brand-border
@@ -77,10 +59,6 @@ export const AppBootSkeleton = ({ visible }: { visible: boolean }) => (
                 <Menu size={20} className="text-brand-muted" />
                 <LogoLockup size="sm" />
             </header>
-            <div className="md:hidden divide-y divide-brand-border overflow-hidden">
-                {ROWS.map(i => <SkeletonListRow key={i} index={i} avatar={AVATAR_LG} trailing="time" className="px-4 py-3" />)}
-            </div>
-            <div className="hidden md:block flex-1 overflow-hidden"><PageSkeleton /></div>
         </div>
     </SkeletonFrame>
 );

@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertCircle, ChevronLeft, LayoutTemplate, MessageSquare, Plus, Send } from 'lucide-react';
 import { TemplateFormSkeleton } from './ChatSkeletons';
-import { useDelayedLoading } from '../../hooks/useDelayedLoading';
 import { AuthField } from '../Auth/AuthField';
 import { CustomButton } from '../Button/Button';
 import { Callout } from '../Callout/Callout';
@@ -76,7 +75,6 @@ export const NewConversationPanel = ({ initialDraft, onClose, onBack, onCreated,
   const lineUnresolved = Boolean(lineId) && (linesLoading || linesError);
 
   const form = useTemplateForm(initialDraft, line ? line.waBusinessId : undefined);
-  const templatesLoading = useDelayedLoading(form.isLoading);
   const startConversation = useStartConversation();
   const { data: conversations } = useConversations();
 
@@ -177,7 +175,7 @@ export const NewConversationPanel = ({ initialDraft, onClose, onBack, onCreated,
   };
 
   const renderComposer = () => {
-    if (templatesLoading.pending) return <TemplateFormSkeleton visible={templatesLoading.visible} />;
+    if (form.isLoading) return <TemplateFormSkeleton />;
     if (form.approved.length === 0) {
       return (
         <Callout tone="info" icon={<LayoutTemplate size={16} />}
