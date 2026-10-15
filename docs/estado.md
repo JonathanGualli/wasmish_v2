@@ -8,7 +8,7 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 **Versión 1.0.20**, desplegada el 2026-10-15 (etiqueta `v1.0.20`; comprobar con `curl https://wasmish.solventyc.com/api/version`). Lleva:
 
-- **Pulido de la app móvil** (PRs #55 y #56, solo frontend; reconstruye `wasmish-web`, sin migración):
+- **Pulido de la app móvil** (PRs #55 y #56, solo frontend; sin migración. Se reconstruyen `wasmish-web` y `wasmish-api`, esta solo para que `/api/version` diga 1.0.20):
   - Si activar los avisos falla, el aviso dice si es del navegador o de Wasmish; en Brave, qué ajuste encender (#55). Sin probar en un Brave de verdad.
   - En el teléfono: el menú ya no se abre y se cierra solo al recargar, la etiqueta del menú ya no se queda en el borde tras elegir una opción, y un nombre de archivo largo ya no saca de la pantalla el botón de quitarlo (#56). Probado en Chrome emulando un Android, no en un teléfono.
 - **Wasmish en el celular: app instalable y avisos push** (en producción desde la 1.0.19, desplegada la noche del 2026-10-14, hora de Ecuador; PRs #41 a #50, cada uno con su revisión de Codex; plan `docs/superpowers/plans/2026-10-14-app-movil.md`, diseño `Design/Wasmish Móvil - App instalable y avisos.html`):
