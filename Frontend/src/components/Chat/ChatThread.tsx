@@ -190,7 +190,7 @@ export const ChatThread = ({
                         </div>
                     )}
                     <div
-                        className={`px-3.5 py-2.5 text-sm leading-[1.5] whitespace-pre-line
+                        className={`px-3.5 py-2.5 text-sm max-md:text-[15px] leading-[1.5] whitespace-pre-line
                             ${mine
                                 ? "bg-brand-deep text-white rounded-[12px_12px_3px_12px]"
                                 : "bg-brand-surface text-brand-text border border-brand-border rounded-[12px_12px_12px_3px]"}`}
@@ -274,7 +274,7 @@ export const ChatThread = ({
                 )}
 
                 {/* Lienzo */}
-                <div className="flex-1 overflow-y-auto min-h-0 px-6 py-[22px] flex flex-col-reverse gap-3">
+                <div className="flex-1 overflow-y-auto min-h-0 px-6 max-md:px-4 py-[22px] max-md:py-4 flex flex-col-reverse gap-3">
                     {renderContent()}
                 </div>
 

@@ -164,7 +164,10 @@ export const ChatComposer = ({ conversationId, conversation, title, onStartConve
                 </div>
             )}
 
-            <div className="bg-brand-surface border-t border-brand-border px-4 md:px-6 py-3.5 flex-none grid gap-3">
+            {/* En el teléfono, el fondo blanco baja hasta el borde y el campo queda sobre la barra de inicio (E2, E7).
+                `minmax(0,1fr)`: sin él, el ancho mínimo del campo a 16 px sacaba el botón de enviar de la pantalla. */}
+            <div className="bg-brand-surface border-t border-brand-border px-4 md:px-6 py-3.5 max-md:pt-2.5
+                pb-[calc(14px+var(--safe-bottom))] md:pb-3.5 flex-none grid grid-cols-[minmax(0,1fr)] gap-3 max-md:gap-2.5">
                 {lineBlock ? (
                     <LineClosedNotice reason={lineBlock} sendFrom={defaultLine}
                         onWrite={conversation?.phone
@@ -179,6 +182,13 @@ export const ChatComposer = ({ conversationId, conversation, title, onStartConve
                     </>
                 ) : (
                     <>
+                        {/* En el teléfono, la ventana vive en una línea sobre el campo (E2). Cerca del final, el aviso de abajo. */}
+                        {isOpen && !endingSoon && (
+                            <p className="md:hidden flex items-center gap-1.5 text-xs text-brand-muted">
+                                <span className="w-1.5 h-1.5 rounded-full bg-brand-success flex-none" />
+                                Puedes escribir libremente · quedan <span className="font-mono tabular-nums">{formatRemaining(msRemaining)}</span>
+                            </p>
+                        )}
                         {endingSoon && (
                             <Callout tone="warning" icon={<Clock size={16} />}>
                                 La ventana de 24 h cierra en{" "}
@@ -221,7 +231,7 @@ export const ChatComposer = ({ conversationId, conversation, title, onStartConve
                                 rows={1}
                                 placeholder={noCaption ? 'Los audios se envían sin texto' : file ? 'Añade un texto (opcional)' : 'Escribe un mensaje…'}
                                 style={{ lineHeight: "21px" }}
-                                className="flex-1 min-w-0 resize-none text-sm text-brand-text bg-brand-bg
+                                className="flex-1 min-w-0 resize-none text-base md:text-sm text-brand-text bg-brand-bg
                                     border border-brand-border rounded-[10px] px-3.5 py-3
                                     placeholder:text-brand-subtle disabled:placeholder:italic disabled:cursor-not-allowed
                                     focus:outline-none focus:bg-brand-surface focus:border-brand-success
@@ -296,12 +306,31 @@ const WindowClosedNotice = ({ hasWindow, interrupted, title, lineName, onSendTem
         );
     }
     return (
-        <Callout tone="info" icon={hasWindow ? <LayoutTemplate size={16} /> : <Clock size={16} />}
-            title={hasWindow ? `La ventana de 24 h se cerró${lineName ? ` en ${lineName}` : ''}` : "Esperando respuesta"} action={action}>
-            {hasWindow
-                ? `Pasaron más de 24 h desde su último mensaje${lineName ? ' a este número' : ''}. WhatsApp solo permite retomar la conversación con una plantilla aprobada.`
-                : `Cuando ${title} conteste, se abre la ventana de 24 h y podrás escribir libremente. Mientras tanto, solo plantillas.`}
-        </Callout>
+        <>
+            {/* En el teléfono, una frase y el botón a todo el ancho (diseño «Wasmish Móvil», E7). */}
+            <div className="md:hidden grid gap-2.5">
+                <p className="flex gap-2 text-sm leading-[1.45] text-brand-strong">
+                    <Clock size={16} className="flex-none mt-0.5 text-brand-muted" />
+                    <span>
+                        <strong className="text-brand-text">
+                            {hasWindow ? `La ventana de 24 h se cerró${lineName ? ` en ${lineName}` : ''}.` : 'Esperando respuesta.'}
+                        </strong>{' '}
+                        Solo puedes enviar una plantilla hasta que {title} responda.
+                    </span>
+                </p>
+                <div className="h-12">
+                    <CustomButton onClick={onSendTemplate}><LayoutTemplate size={17} /> Enviar plantilla</CustomButton>
+                </div>
+            </div>
+            <div className="max-md:hidden">
+                <Callout tone="info" icon={hasWindow ? <LayoutTemplate size={16} /> : <Clock size={16} />}
+                    title={hasWindow ? `La ventana de 24 h se cerró${lineName ? ` en ${lineName}` : ''}` : "Esperando respuesta"} action={action}>
+                    {hasWindow
+                        ? `Pasaron más de 24 h desde su último mensaje${lineName ? ' a este número' : ''}. WhatsApp solo permite retomar la conversación con una plantilla aprobada.`
+                        : `Cuando ${title} conteste, se abre la ventana de 24 h y podrás escribir libremente. Mientras tanto, solo plantillas.`}
+                </Callout>
+            </div>
+        </>
     );
 };
 
