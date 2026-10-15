@@ -6,7 +6,7 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En producción
 
-**Versión 1.0.19**, desplegada el 2026-10-14 (etiqueta `v1.0.19`; comprobar con `curl https://wasmish.solventyc.com/api/version`). Lleva:
+**Versión 1.0.19**, desplegada la noche del 2026-10-14, hora de Ecuador (etiqueta `v1.0.19`; comprobar con `curl https://wasmish.solventyc.com/api/version`). Lleva:
 
 - **Wasmish en el celular: app instalable y avisos push** (PRs #41 a #50, cada uno con su revisión de Codex; plan `docs/superpowers/plans/2026-10-14-app-movil.md`, diseño `Design/Wasmish Móvil - App instalable y avisos.html`):
   - **Avisos push:** una suscripción por dispositivo (`PushSubscription`) y un aviso por cada mensaje que la persona puede ver, aunque la app esté cerrada. El webhook no lo espera. Tocar el aviso abre la conversación.
@@ -15,7 +15,12 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
   - **En Chats:** la invitación en la bandeja del celular, la hoja «Último paso» del iPhone y el aviso del login en la app instalada.
   - **Chats en el teléfono:** bandeja, hilo, teclado, zonas seguras, «atrás» de Android, la ficha, la plantilla como hoja y la conversación nueva como pantalla.
   - **Despliegue:** con las claves VAPID de producción en `api.env` (generadas una vez y **no se cambian**: cambiarlas obliga a todos a volver a activar los avisos). Sin migración: la colección nueva crea su índice al arrancar. Reconstruye `wasmish-api` y `wasmish-web` (cambió `nginx.conf`).
-  - **Probado en Chrome emulando teléfonos**; en un teléfono real, solo activar los avisos en el Android de Jonathan con el frontend local por ngrok (instalar no se pudo probar ahí: ngrok gratis pone su página de aviso delante del manifest). **Sin probar en producción** al desplegar, ni nada en un iPhone.
+  - **Probado en Chrome emulando teléfonos.** Al desplegar: `/api/version` 1.0.19, logs limpios, el manifest como `application/manifest+json` y `sw.js` con `no-cache`. En local por ngrok no se pudo probar instalar: ngrok gratis pone su página de aviso delante del manifest.
+  - **La prueba en el Android de Jonathan quedó a medias** (la noche del 2026-10-14):
+    - Al instalar, Android avisó «Esta app se diseñó para una versión anterior de Android…». Es del paquete que Chrome genera con Google para instalar la web, no de Wasmish; no está claro si se instaló.
+    - Los avisos con la app cerrada y el toque en el aviso, sin confirmar.
+    - En la compu, con **Brave**, activar los avisos da «No pudimos activarlos»: Brave trae apagado el servicio de push de Google (ver «Cabos sueltos»).
+    - Nada en un iPhone.
 
 - **Multi-línea · Fase 3: equipo, roles y acceso por línea** (PRs #33 a #37, cada uno con su revisión de Codex): permisos por rol (`requirePermission`, 403) y acceso por línea (`conversationScope`, 404), el tiempo real filtrado por línea y permiso (`canReceive`), el equipo y las invitaciones (`/api/team`, `/api/invitations/:token`, `maxUsers`), quién envió cada mensaje (`Message.sentBy` y `origin`), Ajustes → Equipo, la página de aceptar la invitación y la columna de usuarios del superadmin. Plan: `docs/superpowers/plans/2026-10-14-multi-linea-fase-3.md`. Con un solo usuario por cuenta (todas las reales) se ve y funciona como antes. Sin migración de datos: `mongodump` antes, y los logs sin «MODO DE PRUEBA» ni E11000. Jonathan lo comprobó en el navegador; queda por ver en los logs un `POST /api/v1/templates/send` con 200 del cliente real. **No subir `maxUsers` en una cuenta real** hasta el ensayo de la vuelta atrás con dos usuarios (ver «Lo siguiente»).
 - **Esperar a `/register` hasta 60 s** al conectar un número nuevo (#30, de la 1.0.17, que no llegó a desplegarse sola), con el candado de líneas de 90 s mientras tanto. En la 1.0.16, la primera conexión de un número nuevo daba 502 porque Meta tarda más de 10 s.
@@ -44,7 +49,14 @@ Nada en curso.
 
 ## Lo siguiente
 
-- **Probar la app móvil en producción** con la cuenta de prueba de Jonathan en su Android: instalar, activar los avisos, recibir uno con la app cerrada, tocarlo, el teclado y «atrás». Después, avisar al cliente real. En un iPhone, cuando haya uno a mano.
+- **Terminar la prueba de la app móvil en producción** con la cuenta de prueba de Jonathan, en su Android con Chrome:
+  1. ¿se instaló?, ¿abre sin la barra de Chrome?;
+  2. activar los avisos dentro de la app;
+  3. recibir uno con la app cerrada (escribiéndole por WhatsApp desde otro teléfono) y tocarlo;
+  4. el teclado y «atrás».
+  - **Sin sacar la cuenta del cliente real**: con ella, el dispositivo recibe un aviso por cada mensaje de sus clientes.
+  - Después, avisar al cliente real. En un iPhone, cuando haya uno a mano.
+- **Un PR pequeño para el error de activar los avisos:** distinguir «el navegador no pudo suscribirse» (Brave sin el push de Google, el servicio de push caído) de «no se pudo guardar en Wasmish». Hoy los dos dicen «falló la conexión con Wasmish», y en Brave engaña.
 - **Multi-línea y multi-agente, fases 1 a 4** (diseño aprobado, sin preguntas abiertas: `docs/superpowers/specs/2026-10-11-multi-linea-multi-agente-design.md`). Fases 1, 2a y 2b en producción (la 2b, enrutar por línea, desde la 1.0.14). La **Fase 2c** está en producción desde la 1.0.15.
   - **Para encender varias líneas** (plan de la 2c, «Después de desplegar»):
     1. La prueba del token: ¿un token nuevo del Embedded Signup cubre todos los números del WABA? (spec § 2.2). Se puede hacer en producción con la cuenta de prueba de Jonathan (`maxLines: 2`), pero necesita **dos números en el mismo WABA**: hoy tiene uno conectado. Una cuenta con dos líneas de WABA distintos ya se probó el 2026-10-14.
@@ -59,6 +71,8 @@ Nada en curso.
 - Checks azules a Meta (`status: read`) como opción del usuario en Ajustes: Jonathan lo quiere, pero **no es prioridad**.
 
 ## Cabos sueltos conocidos
+
+- **Avisos push en Brave:** Brave trae apagado «Usar los servicios de Google para la mensajería push» (`brave://settings/privacy`), y sin eso la suscripción falla en el navegador antes de llegar al backend. Activándolo debería funcionar (sin comprobar). Ver el PR pendiente en «Lo siguiente».
 
 - **Archivos de cabecera y líneas (Fase 3):** `GET /templates/media/:id` solo comprueba la cuenta, no la línea: alguien de la cuenta que conozca el id de una cabecera de una plantilla de otro WABA puede descargarla. Los archivos (`TemplateMedia`) no son de ninguna línea ni WABA (una campaña puede usar cualquiera, y se suben antes de elegir) y su contenido es lo que la cuenta manda a sus clientes. Atarlos a un WABA es un cambio de modelo aparte, si Jonathan lo quiere (revisión de Codex del PR #34).
 - **Conectar WhatsApp contra Meta de verdad:** el Embedded Signup se probó en producción el 2026-10-14 (conectar, registrar, renovar el token, crear su `Waba` y su `Line`). Falta el formulario manual contra Meta y ver que un número de otro WABA da 400. **El `.env` local está mezclado** (el backend con la app WasmishTest y el frontend con la de producción): para el Embedded Signup en local, los dos tienen que apuntar a WasmishTest, con un Config ID propio de esa app.
