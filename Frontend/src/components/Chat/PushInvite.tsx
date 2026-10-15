@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Bell, ChevronRight, X } from "lucide-react";
 import type { PushNotifications } from "../../hooks/usePushNotifications";
 import { useInstallPrompt } from "../../hooks/useInstallPrompt";
-import { deviceKind, iosInstallStepCount } from "../../libs/push";
+import { browserName, deviceKind, iosInstallStepCount } from "../../libs/push";
 import { dismissPushInvite, isPushInviteDismissed, retirePushInvite } from "../../libs/pushPrompts";
 import { SettingsPath } from "../../models/routes.models";
 
@@ -43,13 +43,18 @@ export const PushInvite = ({ push }: { push: PushNotifications }) => {
         text = 'Los avisos están bloqueados.';
         actions = toSettings('Ver cómo permitirlos');
     } else {
-        text = error ? 'No pudimos activar los avisos. Revisa tu internet y vuelve a intentarlo.'
+        // Brave necesita un ajuste: el cómo está en Ajustes, no cabe aquí.
+        const braveSetting = error === 'browser' && browserName() === 'Brave';
+        text = error === 'server' ? 'No pudimos activar los avisos. Revisa tu internet y vuelve a intentarlo.'
+            : braveSetting ? 'Brave no pudo activar los avisos: necesita un ajuste.'
+            : error === 'browser' ? 'Tu navegador no pudo activar los avisos. Vuelve a intentarlo en un rato.'
             : 'Entérate de cada mensaje aunque cierres Wasmish.';
         actions = (
             <>
                 {isWorking
                     ? <span className="text-sm font-semibold text-brand-muted">Activando…</span>
                     : <button type="button" onClick={enable} className={linkClass}>{error ? 'Reintentar' : 'Activar avisos'}</button>}
+                {braveSetting && !isWorking && toSettings('Ver cómo')}
                 {canInstall && (
                     <button type="button" onClick={install}
                         className="text-sm font-semibold text-brand-gray-600 cursor-pointer hover:underline">
