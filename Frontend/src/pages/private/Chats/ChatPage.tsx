@@ -3,6 +3,9 @@ import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ChatThread } from "../../../components/Chat/ChatThread";
 import { ChatconversationList } from "../../../components/Chat/ConversationList";
 import { NewConversationPanel } from "../../../components/Chat/NewConversationPanel";
+import { PushInvite } from "../../../components/Chat/PushInvite";
+import { ActivatePushSheet } from "../../../components/Push/ActivatePushSheet";
+import { usePushNotifications } from "../../../hooks/usePushNotifications";
 import { useAuthContext } from "../../../context/auth.context";
 import {
     EMPTY_DRAFT, clearDraft, loadDraft, saveDraft, type ConversationDraft,
@@ -33,6 +36,9 @@ export const ChatPage = () => {
     const userId = user?.id ?? "";
     const location = useLocation();
     const navigate = useNavigate();
+    // Uno solo para la invitación y la hoja «Último paso»: activar desde una
+    // tiene que cambiar también la otra.
+    const push = usePushNotifications();
     const incoming = location.state as ChatsNavigationState | null;
     const [searchParams] = useSearchParams();
     const requestedId = incoming?.conversationId ?? searchParams.get("c");
@@ -138,6 +144,7 @@ export const ChatPage = () => {
                     draft={draft}
                     draftActive={draftOpen}
                     onOpenDraft={openDraft}
+                    banner={<PushInvite push={push} />}
                 />
             </div>
 
@@ -162,6 +169,7 @@ export const ChatPage = () => {
                     />
                 )}
             </div>
+            <ActivatePushSheet push={push} />
         </div>
     );
 };
