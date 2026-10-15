@@ -4,6 +4,8 @@ import { LineSwatch } from "../../../components/Line/LineSwatch";
 import { lineLabel, lineNumber } from "../../../utils/lineDisplay";
 import { ROLE_LABEL } from "../../../utils/roleDisplay";
 import { SettingsCard } from "./SettingsCard";
+import { useDelayedLoading } from "../../../hooks/useDelayedLoading";
+import { LINE_SWATCH_SKELETON, SettingsListSkeleton } from "./SettingsListSkeleton";
 
 /** «Jonathan Gualli (owner) o a Ana Pérez (admin)»: a quién pedirle más acceso. */
 const managersText = (managers: { name: string; role: string }[]) => {
@@ -19,6 +21,7 @@ const managersText = (managers: { name: string; role: string }[]) => {
 export const MyAccessCards = () => {
     const { user } = useAuthContext();
     const { activeLines, colorOf, isLoading } = useLines();
+    const loading = useDelayedLoading(isLoading);
     const managers = user?.account?.managers ?? [];
 
     return (
@@ -31,8 +34,9 @@ export const MyAccessCards = () => {
                             Ves las conversaciones de estas líneas. Las conecta y gestiona un admin.
                         </p>
                     </div>
-                    {isLoading ? (
-                        <p className="text-sm text-brand-muted">Cargando las líneas…</p>
+                    {loading.pending ? (
+                        <SettingsListSkeleton label="Cargando las líneas" visible={loading.visible} rows={3}
+                            avatar={LINE_SWATCH_SKELETON} pillBelow rowClassName="px-[18px] py-[15px] max-sm:px-3.5" />
                     ) : activeLines.length === 0 ? (
                         <p className="text-sm text-brand-gray-600">Todavía no tienes ninguna línea asignada.</p>
                     ) : (

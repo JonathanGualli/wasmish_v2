@@ -10,11 +10,14 @@ import { useCopyToClipboard } from "../../../hooks/useCopyToClipboard";
 import { apiErrorOf } from "../../../utils/apiError";
 import type { ApiKey } from "../../../models/apikey.model";
 import { SettingsCard } from "./SettingsCard";
+import { useDelayedLoading } from "../../../hooks/useDelayedLoading";
+import { SettingsListSkeleton } from "./SettingsListSkeleton";
 
 /** Las API keys de la cuenta: generarlas (la key se ve una sola vez), listarlas y revocarlas. */
 export const ApiKeysCard = ({ description }: { description: string }) => {
     const { setState, setContent } = useNoticeContext();
     const { apiKeys, isLoading: apiKeysLoading, generate, revoke } = useApiKey();
+    const loading = useDelayedLoading(apiKeysLoading);
     const [apiKeyName, setApiKeyName] = useState('');
     const [newKey, setNewKey] = useState<string | null>(null);
     const { copied, copy } = useCopyToClipboard(2000);
@@ -93,8 +96,9 @@ export const ApiKeysCard = ({ description }: { description: string }) => {
 
             {/* Listado de keys */}
             <div className="mt-5 border border-brand-border rounded-xl overflow-hidden">
-                {apiKeysLoading ? (
-                    <p className="text-sm text-brand-muted p-5">Cargando…</p>
+                {loading.pending ? (
+                    <SettingsListSkeleton label="Cargando las API keys" visible={loading.visible} rows={2}
+                        rowClassName="px-4 py-3.5" bordered={false} />
                 ) : apiKeys.length === 0 ? (
                     <p className="text-sm text-brand-muted p-5">
                         Aún no tienes API keys. Genera una para empezar a usar la API.
