@@ -1,5 +1,6 @@
 import { TOKEN_SECRET } from "../config.js";
 import jwt from "jsonwebtoken";
+import { SESSION_DAYS } from "../utils/session.js";
 
 export function createAccessToken(payload) {
     return new Promise((resolve, reject) => {
@@ -7,7 +8,7 @@ export function createAccessToken(payload) {
             payload, 
             TOKEN_SECRET,
             {
-                expiresIn: "1d"
+                expiresIn: `${SESSION_DAYS}d`
             }, (err, token) => {
                 if(err) reject(err);
                 // res.json({ token });  

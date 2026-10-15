@@ -3,11 +3,18 @@ import { createAccessToken } from '../libs/jwt.js';
 import User from '../models/user.model.js'
 import { createAccountWithOwner, sessionAccessFor } from '../services/account.service.js';
 import { sessionAuthFor } from '../utils/account.js';
+import { sessionCookieOptions, shouldRenewSession } from '../utils/session.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'node:crypto';
 
 const isProd = process.env.NODE_ENV === 'production';
+
+// Abre (o renueva) la sesión en el navegador: un token nuevo de 30 días en la cookie.
+const setSessionCookie = async (res, userId) => {
+    const token = await createAccessToken({ id: userId });
+    res.cookie('token', token, sessionCookieOptions(isProd));
+};
 
 // Respuesta única del login. Que un correo no exista y que la contraseña sea
 // incorrecta tienen que ser indistinguibles: si no, cualquiera puede averiguar
@@ -45,13 +52,7 @@ export const register = async (req, res) => {
             throw error;
         }
 
-        const token = await createAccessToken({ id: userSaved._id });
-
-        res.cookie('token', token, {
-            httpOnly: true,
-            secure: isProd,      // OBLIGATORIO: Porque la web es HTTPS
-            sameSite: isProd ? 'none' : 'lax',  // OBLIGATORIO: Porque localhost != solventyc.com
-        });
+        await setSessionCookie(res, userSaved._id);
 
         res.json({
             id: userSaved._id,
@@ -75,13 +76,7 @@ export const register = async (req, res) => {
  * login y aceptar una invitación (Fase 3), que entra directamente.
  */
 export const startSession = async (res, user) => {
-    const token = await createAccessToken({ id: user._id });
-
-    res.cookie('token', token, {
-        httpOnly: true,
-        secure: isProd,                     // OBLIGATORIO EN PROD: Porque la web es HTTPS
-        sameSite: isProd ? 'none' : 'lax',  // OBLIGATORIO EN PROD: Porque localhost != solventyc.com , lax funciona en http 
-    });
+    await setSessionCookie(res, user._id);
 
     return res.json({
         id: user._id,
@@ -157,7 +152,10 @@ export const verifyToken = async (req, res) => {
         const userFound = await User.findById(user.id);
         // Lo mismo que authRequired: inexistente, desactivado o sin cuenta, fuera.
         if(!sessionAuthFor(userFound)) return res.status(401).json([{message: 'Unauthorized'}]);
-        
+
+        // Abrir la app alarga la sesión: solo pide entrar otra vez tras 30 días sin abrirla.
+        if (shouldRenewSession(user.exp)) await setSessionCookie(res, userFound._id);
+
         return res.json({
             id: userFound._id,
             name: userFound.name,
