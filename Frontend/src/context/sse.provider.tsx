@@ -9,7 +9,8 @@ const RETRY_BASE_MS = 1000;
 const RETRY_MAX_MS = 30_000;
 
 export const SSEProvider = ({ children }: { children: ReactNode }) => {
-    const { user, onAccessChanged } = useAuthContext();
+    const { user, isConfirmed, onAccessChanged } = useAuthContext();
+    const sessionId = isConfirmed ? user?.id : undefined;
     // En un ref: la conexión no se rehace cada vez que cambia la función.
     const accessChanged = useRef(onAccessChanged);
     useEffect(() => { accessChanged.current = onAccessChanged; }, [onAccessChanged]);
@@ -27,7 +28,7 @@ export const SSEProvider = ({ children }: { children: ReactNode }) => {
 
     // Abrir UNA conexión SSE, solo cuando hay sesión.
     useEffect(() => {
-        if (!user?.id) return; // sin sesión no conectamos (/api/stream requiere auth)
+        if (!sessionId) return; // sin sesión confirmada no conectamos (/api/stream requiere auth)
 
         // Crea un despachador para un tipo de evento: parsea y reparte.
         const dispatch = <E extends SSEEventType>(event: E) => (e: MessageEvent) => {
@@ -80,7 +81,7 @@ export const SSEProvider = ({ children }: { children: ReactNode }) => {
             clearTimeout(retryTimer);
             connection?.close();
         };
-    }, [user?.id, queryClient]);
+    }, [sessionId, queryClient]);
 
     // Función estable para suscribirse. Devuelve el "des-suscribir".
     const subscribe = useCallback(<E extends SSEEventType>(event: E, handler: SSEHandler<E>) => {

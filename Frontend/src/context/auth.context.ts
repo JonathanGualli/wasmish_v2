@@ -9,6 +9,12 @@ interface AuthContextProps {
     isAuthenticated: boolean;
     errors: string[];
     isLoading: boolean;
+    /**
+     * `user` ya lo confirmó el backend. Mientras es el recordado en este
+     * navegador (al abrir la app, o sin red), la app se ve pero lo que actúa
+     * por su cuenta (el SSE, los avisos) espera.
+     */
+    isConfirmed: boolean;
     /** Si la sesión tiene esa acción (`permissions` del backend; la autoridad sigue siendo él). */
     can: (action: string) => boolean;
     /** Entra con la sesión que ya abrió el backend (aceptar una invitación). */
