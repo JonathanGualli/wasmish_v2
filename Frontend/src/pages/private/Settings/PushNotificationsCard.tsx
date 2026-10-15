@@ -11,7 +11,7 @@ import { NumberedSteps, type NumberedStep } from "../../../components/Push/Numbe
 import { usePushNotifications } from "../../../hooks/usePushNotifications";
 import { useInstallPrompt } from "../../../hooks/useInstallPrompt";
 import { useCopyToClipboard } from "../../../hooks/useCopyToClipboard";
-import { browserName, deviceKind, type DeviceKind, type PushState } from "../../../libs/push";
+import { browserName, deviceKind, type DeviceKind, type PushFailure, type PushState } from "../../../libs/push";
 import { SettingsCard } from "./SettingsCard";
 
 /**
@@ -106,6 +106,31 @@ const blockedSteps = (kind: DeviceKind): NumberedStep[] => {
     ];
 };
 
+// El ajuste de Brave que deja pasar los avisos (lo trae apagado).
+const BRAVE_PUSH_SETTING = '«Usar los servicios de Google para la mensajería push»';
+
+/**
+ * Por qué no se activaron (A4). El diseño solo traía el fallo de Wasmish; si
+ * falla el navegador, decir «revisa tu internet» manda a buscar donde no es.
+ */
+const failureMessage = (failure: PushFailure, kind: DeviceKind): ReactNode => {
+    if (failure === 'server') return <>
+        {strong('No pudimos activarlos.')} El permiso está dado; falló la conexión con Wasmish.
+        Revisa tu internet y vuelve a intentarlo.
+    </>;
+    const browser = browserName();
+    if (browser === 'Brave') return <>
+        {strong('Brave no pudo activarlos.')} Trae apagado el servicio de avisos que usan las páginas.
+        {kind === 'computer'
+            ? <> Abre <span className="font-mono text-[13px]">brave://settings/privacy</span>, enciende {BRAVE_PUSH_SETTING} y vuelve a intentarlo.</>
+            : <> En su configuración, en {strong('Privacidad y seguridad')}, enciende {BRAVE_PUSH_SETTING} y vuelve a intentarlo.</>}
+    </>;
+    return <>
+        {strong(`${kind === 'iphone' ? 'El iPhone' : browser ?? 'Tu navegador'} no pudo activarlos.`)} Falló su servicio de avisos, no Wasmish.
+        {kind === 'iphone' ? ' Vuelve a intentarlo en un rato.' : ' Vuelve a intentarlo en un rato; si sigue, prueba con otro navegador.'}
+    </>;
+};
+
 const SUPPORTED_BROWSERS: [string, string][] = [
     ['Android', 'Chrome, Edge o Samsung Internet'],
     ['iPhone', 'Safari, añadida a la pantalla de inicio'],
@@ -153,8 +178,7 @@ export const PushNotificationsCard = () => {
         off: error ? {
             detail: (
                 <Callout tone="danger" icon={<AlertCircle size={16} />}>
-                    {strong('No pudimos activarlos.')} El permiso está dado; falló la conexión con Wasmish.
-                    Revisa tu internet y vuelve a intentarlo.
+                    {failureMessage(error, kind)}
                 </Callout>
             ),
             action: activating ? activateButton : buttonFor(<CustomButton onClick={enable}><RefreshCw size={16} /> Reintentar</CustomButton>),

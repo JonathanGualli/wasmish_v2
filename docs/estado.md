@@ -47,7 +47,6 @@ Nada en curso.
 ## Lo siguiente
 
 - **Avisar al cliente real** de que ya puede usar Wasmish en el celular, con los avisos.
-- **Un PR pequeño para el error de activar los avisos:** distinguir «el navegador no pudo suscribirse» (Brave sin el push de Google, el servicio de push caído) de «no se pudo guardar en Wasmish». Hoy los dos dicen «falló la conexión con Wasmish», y en Brave engaña.
 - **Multi-línea y multi-agente, fases 1 a 4** (diseño aprobado, sin preguntas abiertas: `docs/superpowers/specs/2026-10-11-multi-linea-multi-agente-design.md`). Fases 1, 2a y 2b en producción (la 2b, enrutar por línea, desde la 1.0.14). La **Fase 2c** está en producción desde la 1.0.15.
   - **Para encender varias líneas** (plan de la 2c, «Después de desplegar»):
     1. La prueba del token: ¿un token nuevo del Embedded Signup cubre todos los números del WABA? (spec § 2.2). Se puede hacer en producción con la cuenta de prueba de Jonathan (`maxLines: 2`), pero necesita **dos números en el mismo WABA**: hoy tiene uno conectado. Una cuenta con dos líneas de WABA distintos ya se probó el 2026-10-14.
@@ -63,7 +62,7 @@ Nada en curso.
 
 ## Cabos sueltos conocidos
 
-- **Avisos push en Brave:** Brave trae apagado «Usar los servicios de Google para la mensajería push» (`brave://settings/privacy`), y sin eso la suscripción falla en el navegador antes de llegar al backend. Activándolo debería funcionar (sin comprobar). Ver el PR pendiente en «Lo siguiente».
+- **Avisos push en Brave:** Brave trae apagado «Usar los servicios de Google para la mensajería push» (`brave://settings/privacy`), y sin eso la suscripción falla en el navegador antes de llegar al backend. Desde el PR `fix-push-error-navegador`, Wasmish lo dice y explica el ajuste (antes culpaba a la conexión). Sin comprobar: que activándolo funcione, y que Brave en Android tenga ese ajuste.
 
 - **Archivos de cabecera y líneas (Fase 3):** `GET /templates/media/:id` solo comprueba la cuenta, no la línea: alguien de la cuenta que conozca el id de una cabecera de una plantilla de otro WABA puede descargarla. Los archivos (`TemplateMedia`) no son de ninguna línea ni WABA (una campaña puede usar cualquiera, y se suben antes de elegir) y su contenido es lo que la cuenta manda a sus clientes. Atarlos a un WABA es un cambio de modelo aparte, si Jonathan lo quiere (revisión de Codex del PR #34).
 - **Conectar WhatsApp contra Meta de verdad:** el Embedded Signup se probó en producción el 2026-10-14 (conectar, registrar, renovar el token, crear su `Waba` y su `Line`). Falta el formulario manual contra Meta y ver que un número de otro WABA da 400. **El `.env` local está mezclado** (el backend con la app WasmishTest y el frontend con la de producción): para el Embedded Signup en local, los dos tienen que apuntar a WasmishTest, con un Config ID propio de esa app.
