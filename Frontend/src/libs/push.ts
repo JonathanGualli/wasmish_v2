@@ -41,6 +41,9 @@ export const isIos = () =>
 /** Safari de verdad: en iPhone, Chrome, Firefox y Edge no pueden añadir Wasmish a la pantalla de inicio. */
 export const isIosSafari = () => isIos() && !/CriOS|FxiOS|EdgiOS|OPiOS/.test(navigator.userAgent);
 
+/** Cuántos pasos tiene la guía de iPhone (`IosInstallSteps`): uno más fuera de Safari, para ir a él. */
+export const iosInstallStepCount = () => (isIosSafari() ? 5 : 6);
+
 /** Cómo se nombra el dispositivo en los textos: «este iPhone», «este celular», «esta compu». */
 export type DeviceKind = 'iphone' | 'phone' | 'computer';
 

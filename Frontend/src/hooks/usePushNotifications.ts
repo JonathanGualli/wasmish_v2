@@ -82,3 +82,6 @@ export const usePushNotifications = () => {
         disable: () => { void disable(); },
     };
 };
+
+/** Lo que devuelve el hook: la bandeja lo comparte entre la invitación y la hoja «Último paso». */
+export type PushNotifications = ReturnType<typeof usePushNotifications>;
