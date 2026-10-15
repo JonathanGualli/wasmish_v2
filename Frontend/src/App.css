@@ -101,6 +101,18 @@
 }
 
 @layer base {
+  /* App móvil: las zonas seguras (la muesca y la barra de inicio del iPhone, con
+     `viewport-fit=cover`). Como variables, para poder fingirlas al probar; en la
+     compu valen 0. Con el teclado abierto la barra de inicio queda tapada y su
+     relleno sobra (diseño E3; `data-keyboard` lo pone `libs/viewport.ts`). */
+  :root {
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  html[data-keyboard='open'] {
+    --safe-bottom: 0px;
+  }
+
   html,
   body {
     background-color: var(--color-brand-bg);

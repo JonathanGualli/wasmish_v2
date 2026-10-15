@@ -85,10 +85,10 @@ export const Sidebar = ({ collapsed, toggle, isMobile }: Props) => {
   return (
     <div
       className={`
-        bg-brand-deep h-screen flex flex-col px-[14px] pt-5 pb-4
+        bg-brand-deep flex flex-col px-[14px] pt-[calc(20px+var(--safe-top))] pb-[calc(16px+var(--safe-bottom))]
         transition-all duration-300
         ${collapsed ? 'w-[76px]' : 'w-[236px]'}
-        ${isMobile ? 'fixed top-0 left-0 z-50 h-full' : 'relative'}
+        ${isMobile ? 'fixed top-0 left-0 z-50 h-full' : 'relative h-full'}
         ${isMobile && collapsed ? '-translate-x-full' : 'translate-x-0'}
       `}
     >
