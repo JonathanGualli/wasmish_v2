@@ -130,4 +130,11 @@ Lógica no obvia del `AuthProvider`, los errores de WhatsApp en palabras y la li
   - **En Chats** (`ContactSidebarSkeleton.tsx`): la identidad sobre el verde y las tarjetas reales (Notas, Datos con sus etiquetas, la actividad).
   - **En Contactos** (dentro de `ContactPanel.tsx`): `ContactViewSkeleton` sigue `ContactDetails` y `ContactFormSkeleton` sigue `ContactForm` (sus campos, con `SkeletonField`).
 - **Un bloque suelto,** fuera de una zona (el total de la tabla, los contadores), recibe `visible` como prop.
+- **El detalle de una campaña** (`CampaignDetailSkeleton`): ya no sale en blanco. El enlace a Campañas, la cabecera como bloques, las cifras con sus etiquetas reales (`CampaignMetricsSkeleton`, sobre `MetricGridSkeleton`) y la tabla de destinatarios cargando. Los filtros de destinatarios no salen, porque llevan la cuenta de cada estado.
+- **Admin:** las cifras de arriba son bloques mientras cargan (`StatTile` acepta un `ReactNode`), no «—».
+- **Ajustes** (`SettingsListSkeleton`): cada tarjeta mantiene su título, su explicación y su botón, y solo la lista es skeleton, con la forma de su fila: el cuadrito de la línea (`LINE_SWATCH_SKELETON`), el avatar de la persona, la key. Es así en Líneas, Equipo, API keys y «Tus líneas». En la tarjeta de líneas, el estado («Sin conectar») y el botón de conectar son bloques mientras cargan, porque dependen de las líneas.
+- **Los diálogos:**
+  - **Enviar plantilla** monta el formulario con su pie desde el principio y solo el selector es skeleton (`TemplateFormSkeleton`: la etiqueta «Plantilla» y la caja del alto del real), así el diálogo no crece al llegar. La conversación nueva usa el mismo.
+  - **Gestionar etiquetas** pinta sus filas reales como bloques.
+  - Las plantillas y las etiquetas se piden al entrar en Chats y en Contactos, así que un diálogo hereda el tiempo que ya lleva esa carga: si se abre tarde, el skeleton sale enseguida.
 
