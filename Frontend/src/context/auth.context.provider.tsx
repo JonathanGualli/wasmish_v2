@@ -8,9 +8,15 @@ import { clearAllCampaignDrafts } from "../utils/campaignDraft";
 import type { User } from "../models/user.mode";
 import type { AxiosError } from "axios";
 import { useVerifyLogin, VERIFY_QUERY_KEY } from "../hooks/useVerifyLogin";
-import { verifyService } from "../services/api.service";
+import { getPushConfigService, verifyService } from "../services/api.service";
+import { PUSH_CONFIG_QUERY_KEY } from "../hooks/usePushNotifications";
+import { disablePush, syncPushSubscription } from "../libs/push";
 import { useSignUp } from "../hooks/useSignUp";
 import { useLogOut } from "../hooks/useLogOut";
+
+// Cuánto espera cerrar sesión a que se apaguen los avisos. El navegador ya
+// canceló la suscripción antes del DELETE; más espera solo retrasaría /logout.
+const DISABLE_PUSH_TIMEOUT_MS = 3000;
 
 interface AuthProps{
     children: ReactNode;
@@ -71,6 +77,17 @@ export const AuthProvider = ({ children }: AuthProps) => {
         if (verifyError) setUser(null);/*  */
     }, [verifyData, verifyError]); 
 
+    // Con la sesión dentro: si la persona tenía los avisos activos en este
+    // navegador y la suscripción se perdió (Safari la tira sin avisar), se
+    // recrea. Sin esperar: nunca frena la entrada ni rechaza.
+    const sessionId = user?.id;
+    useEffect(() => {
+        if (!sessionId) return;
+        queryClient.fetchQuery({ queryKey: PUSH_CONFIG_QUERY_KEY, queryFn: getPushConfigService, staleTime: Infinity })
+            .then(({ publicKey }) => syncPushSubscription(publicKey))
+            .catch(() => {});
+    }, [sessionId, queryClient]);
+
     useEffect(() => {
         if(errors.length > 0) {
             const timer = setTimeout(()=>{
@@ -123,7 +140,7 @@ export const AuthProvider = ({ children }: AuthProps) => {
 
     };
  
-    const logOut = () => {
+    const logOut = async () => {
         // Los borradores (conversación nueva, campaña) son de esta sesión:
         // no debe verlos quien entre después en el mismo navegador.
         clearAllDrafts();
@@ -131,6 +148,14 @@ export const AuthProvider = ({ children }: AuthProps) => {
         clearSessionCache();
         setUser(null);
         setErrors([]);
+        // Este dispositivo deja de recibir los avisos de quien sale. Antes de
+        // /logout, porque borrarla en el backend necesita la sesión. Con un
+        // límite: un DELETE colgado dejaba la sesión abierta en el servidor
+        // (revisión de Codex del PR #45).
+        await Promise.race([
+            disablePush(),
+            new Promise(resolve => setTimeout(resolve, DISABLE_PUSH_TIMEOUT_MS)),
+        ]);
         logOutMutation.mutate();
     };
 

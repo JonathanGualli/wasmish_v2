@@ -16,6 +16,20 @@ export const AppRoutes = {
         admin: 'admin',
     }
 }
+/** Lo que el `PrivateGuard` le pasa al login: a dónde se iba sin sesión. */
+export interface LoginNavigationState {
+    from?: string;
+}
+
+/** A dónde ir después de entrar: lo que se pedía, si es una página privada; si no, el inicio. */
+export const afterLoginPath = (state: unknown) => {
+    const from = (state as LoginNavigationState | null)?.from;
+    // Solo rutas propias: nada de URLs de fuera ni `//otro-sitio`.
+    return typeof from === 'string' && from.startsWith(`${AppRoutes.private.root}/`)
+        ? from
+        : `${AppRoutes.private.root}/${AppRoutes.private.quickStart}`;
+};
+
 const privatePath = (path: string) => `${AppRoutes.private.root}/${path}`;
 
 /** Rutas completas de Campañas, para navegar a ellas. */

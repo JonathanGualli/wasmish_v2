@@ -487,3 +487,26 @@ export const acceptInvitationService = async (token: string, input: { name: stri
     const { data } = await axios.post(`${API_URL}/invitations/${encodeURIComponent(token)}/accept`, input, { withCredentials: true });
     return data;
 };
+
+// --- Avisos push (app móvil) ----------------------------------------------------
+
+/** La clave pública VAPID; `null` si el servidor no tiene los avisos configurados. */
+export const getPushConfigService = async (): Promise<{ publicKey: string | null }> => {
+    const { data } = await axios.get(`${API_URL}/push/config`, { withCredentials: true });
+    return data;
+};
+
+/** La persona ACTIVA los avisos en este navegador (un toque suyo): el dispositivo pasa a ser suyo. */
+export const savePushSubscriptionService = async (subscription: PushSubscriptionJSON): Promise<void> => {
+    await axios.post(`${API_URL}/push/subscriptions`, subscription, { withCredentials: true });
+};
+
+/** Automático, al abrir la app: nunca se queda con el dispositivo de otra persona (409 `push_owned_by_other`). */
+export const syncPushSubscriptionService = async (subscription: PushSubscriptionJSON): Promise<void> => {
+    await axios.post(`${API_URL}/push/subscriptions/sync`, subscription, { withCredentials: true });
+};
+
+/** Apagar los avisos de este navegador (o cerrar sesión). 404 si ya no estaba. */
+export const deletePushSubscriptionService = async (endpoint: string): Promise<void> => {
+    await axios.delete(`${API_URL}/push/subscriptions`, { data: { endpoint }, withCredentials: true });
+};

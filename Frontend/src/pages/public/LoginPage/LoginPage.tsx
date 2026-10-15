@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { CustomButton } from '../../../components/Button/Button';
 import { AuthField, AuthPasswordField } from '../../../components/Auth/AuthField';
 import { AuthShell, AuthHero, AuthAvatars } from '../../../components/Auth/AuthShell';
 import { LogoLockup } from '../../../components/Logo/Logo';
 import { useAuthContext } from '../../../context/auth.context';
-import { AppRoutes } from '../../../models/routes.models';
+import { AppRoutes, afterLoginPath } from '../../../models/routes.models';
 import { useNoticeContext } from '../../../components/Notice/context/UseNoticeContext';
 
 export const LoginPage = () => {
@@ -14,12 +14,13 @@ export const LoginPage = () => {
   const { signIn, errors, isAuthenticated, isLoading } = useAuthContext();
   const { setState, setContent } = useNoticeContext();
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     if (isAuthenticated) {
-      navigate(`${AppRoutes.private.root}/${AppRoutes.private.quickStart}`);
+      navigate(afterLoginPath(location.state), { replace: true });
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, navigate, location.state]);
 
   const handleLogin = (event: React.FormEvent) => {
     event.preventDefault();
