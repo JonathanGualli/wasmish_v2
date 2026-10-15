@@ -35,6 +35,10 @@ interface Props {
  *
  * No se elige línea: es la de la conversación. Con varias, la cabecera dice
  * cuál, y solo se ofrecen las plantillas de su cuenta de WhatsApp Business.
+ *
+ * En el teléfono es una hoja casi a pantalla completa (se ve que el chat sigue
+ * detrás) con «Enviar plantilla» fijo abajo, sobre la barra de inicio o el
+ * teclado (diseño «Wasmish Móvil», E5). El pie queda fijo también en la compu.
  */
 export const SendTemplateDialog = ({ open, onClose, conversationId, line, contactName, windowOpen, keepsDraft }: Props) => {
   const form = useTemplateForm(undefined, line ? line.waBusinessId : undefined);
@@ -71,16 +75,18 @@ export const SendTemplateDialog = ({ open, onClose, conversationId, line, contac
     <Dialog open={open} onClose={handleDialogClose} className="relative z-50">
       <div className="fixed inset-0 bg-brand-ink/50" aria-hidden="true" />
 
-      <div className="fixed inset-0 flex items-center justify-center p-4">
-        <DialogPanel className="w-full max-w-[480px] max-h-[90vh] overflow-y-auto bg-brand-surface
-          border border-brand-border rounded-2xl shadow-[0_18px_40px_rgba(14,17,22,0.12)] p-6">
+      <div className="fixed inset-0 flex items-center justify-center p-4 max-md:p-0 max-md:items-end max-md:pt-[calc(28px+var(--safe-top))]">
+        <DialogPanel className="w-full max-w-[480px] max-h-[90vh] flex flex-col bg-brand-surface
+          border border-brand-border rounded-2xl shadow-[0_18px_40px_rgba(14,17,22,0.12)]
+          max-md:max-w-none max-md:h-full max-md:max-h-none max-md:rounded-b-none max-md:border-b-0">
+          <div aria-hidden className="md:hidden flex-none mx-auto mt-2.5 h-1 w-9 rounded-full bg-brand-border-strong" />
 
-          <div className="flex items-start gap-3">
+          <div className="flex-none flex items-start gap-3 px-6 pt-6 max-md:px-[18px] max-md:pt-3">
             <div className="min-w-0">
-              <DialogTitle className="text-[22px] font-bold tracking-[-0.02em] text-brand-text">
+              <DialogTitle className="text-[22px] max-md:text-lg font-bold tracking-[-0.02em] text-brand-text">
                 Enviar plantilla
               </DialogTitle>
-              <p className="text-[15px] text-brand-muted mt-1.5">
+              <p className="text-[15px] max-md:text-sm text-brand-muted mt-1.5 max-md:mt-0.5">
                 A <span className="font-semibold text-brand-strong">{contactName}</span>.
                 {!windowOpen && ' Fuera de la ventana de 24 h, WhatsApp solo entrega plantillas aprobadas.'}
               </p>
@@ -97,7 +103,8 @@ export const SendTemplateDialog = ({ open, onClose, conversationId, line, contac
             <button
               type="button"
               onClick={handleClose}
-              className="ml-auto text-brand-subtle hover:text-brand-text transition-colors cursor-pointer"
+              className="ml-auto max-md:-mr-2 max-md:w-10 max-md:h-10 flex items-center justify-center flex-none
+                text-brand-subtle hover:text-brand-text transition-colors cursor-pointer"
               title="Cerrar"
             >
               <X size={18} />
@@ -105,41 +112,46 @@ export const SendTemplateDialog = ({ open, onClose, conversationId, line, contac
           </div>
 
           {form.isLoading ? (
-            <p className="text-sm text-brand-muted mt-6">Cargando plantillas…</p>
+            <p className="text-sm text-brand-muted px-6 max-md:px-[18px] py-6">Cargando plantillas…</p>
           ) : form.approved.length === 0 ? (
-            <div className="mt-6">
+            <div className="px-6 max-md:px-[18px] py-6">
               <Callout tone="info" icon={<LayoutTemplate size={16} />} title="No tienes plantillas aprobadas">
                 Créalas en el Administrador de WhatsApp de Meta y sincronízalas desde la
                 página de Plantillas.
               </Callout>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="grid gap-[18px] mt-6">
-              <TemplatePicker templates={form.approved} selected={form.selected} onSelect={t => form.selectTemplate(t.name)}
-                disabledReason={templateHeaderIssue} />
-              {form.headerIssue && <p className="text-xs text-brand-danger -mt-2.5">{form.headerIssue}</p>}
-              <TemplateFields form={form} />
+            <form onSubmit={handleSubmit} className="flex-1 min-h-0 flex flex-col">
+              <div className="flex-1 min-h-0 overflow-y-auto px-6 max-md:px-[18px] pt-6 max-md:pt-5 pb-2 grid grid-cols-[minmax(0,1fr)] gap-[18px] content-start">
+                <TemplatePicker templates={form.approved} selected={form.selected} onSelect={t => form.selectTemplate(t.name)}
+                  disabledReason={templateHeaderIssue} />
+                {form.headerIssue && <p className="text-xs text-brand-danger -mt-2.5">{form.headerIssue}</p>}
+                <TemplateFields form={form} />
 
-              {form.selected && (
-                <div className="grid gap-[7px]">
-                  <span className="text-[13px] font-semibold text-brand-strong">Vista previa</span>
-                  <div>
-                    <TemplateBubble bodyText={form.selected.bodyText ?? ''} values={form.values} template={form.selected} />
-                    <TemplateButtons buttons={form.selected.buttons} />
+                {form.selected && (
+                  <div className="grid gap-[7px]">
+                    <span className="text-[13px] font-semibold text-brand-strong">
+                      <span className="max-md:hidden">Vista previa</span><span className="md:hidden">Así le llega</span>
+                    </span>
+                    <div>
+                      <TemplateBubble bodyText={form.selected.bodyText ?? ''} values={form.values} template={form.selected} />
+                      <TemplateButtons buttons={form.selected.buttons} />
+                    </div>
                   </div>
-                </div>
-              )}
-
-              <div className="flex items-center gap-2.5 justify-end">
-                {keepsDraft && (
-                  <p className="mr-auto min-w-0 text-[13px] text-brand-muted">Lo que escribiste en el chat se queda ahí.</p>
                 )}
-                <div className="h-10">
+              </div>
+
+              <div className="flex-none flex items-center gap-2.5 justify-end px-6 max-md:px-[18px] pt-3 pb-6
+                max-md:pb-[calc(14px+var(--safe-bottom))] max-md:border-t max-md:border-brand-border">
+                {keepsDraft && (
+                  <p className="mr-auto min-w-0 text-[13px] text-brand-muted max-md:hidden">Lo que escribiste en el chat se queda ahí.</p>
+                )}
+                <div className="h-10 max-md:hidden">
                   <CustomButton variant="outline" onClick={handleClose}>Cancelar</CustomButton>
                 </div>
-                <div className="h-10">
+                <div className="h-10 max-md:h-12 max-md:flex-1">
                   <CustomButton type="submit" isLoading={sendTemplate.isPending} disabled={!form.selected || form.missing > 0 || Boolean(form.headerIssue)}>
-                    {sendTemplate.isPending ? 'Enviando…' : 'Enviar'}
+                    {sendTemplate.isPending ? 'Enviando…' : <><span className="max-md:hidden">Enviar</span><span className="md:hidden">Enviar plantilla</span></>}
                   </CustomButton>
                 </div>
               </div>
