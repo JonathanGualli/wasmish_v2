@@ -23,7 +23,7 @@ Si alguna falla, **se para** y se explica qué falta. No se «arregla» sobre la
    ```bash
    git switch master && git pull && git status --short
    ```
-   `git status` tiene que salir vacío: el `tar` sube la carpeta local tal cual.
+   `git status` tiene que salir vacío: `git archive` sube el commit en el que estás (`HEAD`), y un cambio sin commit no viaja aunque se vea en local.
 2. **CI en verde en el commit a desplegar:**
    ```bash
    gh api repos/JonathanGualli/wasmish_v2/commits/$(git rev-parse HEAD)/check-runs \
@@ -54,12 +54,12 @@ Se le presenta a Jonathan un resumen con:
   git diff --quiet $LAST HEAD -- Backend ':(exclude,glob)Backend/**/*.md' ':(exclude)Backend/tests' || echo "api"
   git diff --quiet $LAST HEAD -- Frontend ':(exclude,glob)Frontend/**/*.md' || echo "web"
   ```
-- **Archivos que hay que borrar en el servidor:** el `tar` no borra.
+- **Archivos que hay que borrar en el servidor:** subir con `git archive` no borra nada.
   ```bash
   git diff --no-renames --diff-filter=D --name-only $LAST HEAD -- Backend Frontend
   ```
   Sin `--no-renames`, los archivos renombrados no aparecen y se quedan en el servidor.
-- **`deploy/compose.yml` cambiado:** no viaja con el `tar`; se sube aparte.
+- **`deploy/compose.yml` cambiado:** no viaja con el código (solo suben `Backend/` y `Frontend/`); se sube aparte.
   ```bash
   git diff --quiet $LAST HEAD -- deploy/compose.yml || echo "compose cambió"
   ```

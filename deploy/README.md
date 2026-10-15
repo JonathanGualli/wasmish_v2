@@ -245,7 +245,7 @@ docker compose up -d --no-build wasmish-api wasmish-web
 ```
 Ojo: el código en `app/` sigue siendo el nuevo, así que el siguiente `up --build` lo volvería a desplegar. Para dejarlo también:
 1. En local, `git switch --detach v<versión anterior>` (la etiqueta del despliegue anterior).
-2. Re-sube con `tar` (sección 5), reconstruye y vuelve a `master`.
+2. Re-sube con `git archive` (sección 5), reconstruye y vuelve a `master`.
 
 Un despliegue revertido **no** recibe su etiqueta `vX.Y.Z`.
 
