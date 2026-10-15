@@ -13,8 +13,10 @@ const TONE = {
     soft: 'bg-brand-skeleton-soft',
     bubble: 'bg-brand-skeleton-bubble',
     'bubble-own': 'bg-brand-skeleton-bubble-own',
-    /** Sobre la barra oscura. */
+    /** Sobre la barra oscura: los accesos, su avatar y, dentro del bloque de identidad, sus líneas. */
     deep: 'bg-brand-deep-active',
+    'deep-hover': 'bg-brand-deep-hover',
+    'deep-dim': 'bg-brand-deep',
 };
 
 interface BoxProps {
