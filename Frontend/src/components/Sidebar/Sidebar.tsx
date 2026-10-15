@@ -126,6 +126,7 @@ export const Sidebar = ({ collapsed, toggle, isMobile }: Props) => {
             text={text}
             badge={badge}
             collapsed={collapsed}
+            tooltip={!isMobile}
             onTap={() => handleButton({ value, path })}
             isSelected={valueSelected === value}
           />
@@ -141,6 +142,7 @@ export const Sidebar = ({ collapsed, toggle, isMobile }: Props) => {
           icon={<Settings size={18} />}
           text="Ajustes"
           collapsed={collapsed}
+          tooltip={!isMobile}
           onTap={() => handleButton({ value: 'settings', path: `${AppRoutes.private.root}/${AppRoutes.private.settings}` })}
           isSelected={valueSelected === 'settings'}
         />
@@ -149,6 +151,7 @@ export const Sidebar = ({ collapsed, toggle, isMobile }: Props) => {
           icon={<LogOut size={18} />}
           text="Cerrar sesión"
           collapsed={collapsed}
+          tooltip={!isMobile}
           onTap={logOut}
           isSelected={false}
         />
