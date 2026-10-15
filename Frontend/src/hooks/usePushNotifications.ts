@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getPushConfigService } from "../services/api.service";
-import { disablePush, enablePush, getPushState, type PushState } from "../libs/push";
-import { apiErrorOf } from "../utils/apiError";
+import { BrowserPushError, disablePush, enablePush, getPushState, type PushFailure, type PushState } from "../libs/push";
 
 export const PUSH_CONFIG_QUERY_KEY = ['pushConfig'];
+
+// El último fallo al activar, fuera del componente: «Ver cómo» de la bandeja
+// lleva a Ajustes, que monta su propio hook y, sin esto, ya no sabría por qué
+// falló (y no enseñaría el ajuste de Brave).
+let lastFailure: PushFailure | null = null;
 
 /**
  * Los avisos push de este navegador: en qué estado están, y activarlos o
@@ -19,7 +23,11 @@ export const usePushNotifications = () => {
     const publicKey = config?.publicKey ?? null;
     const [state, setState] = useState<PushState | null>(null);
     const [isWorking, setIsWorking] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setErrorState] = useState<PushFailure | null>(() => lastFailure);
+    const setError = (failure: PushFailure | null) => {
+        lastFailure = failure;
+        setErrorState(failure);
+    };
 
     const refresh = useCallback(async () => {
         if (config) setState(await getPushState(config.publicKey));
@@ -36,7 +44,7 @@ export const usePushNotifications = () => {
         try {
             setState(await enablePush(publicKey));
         } catch (err) {
-            setError(apiErrorOf(err).message);
+            setError(err instanceof BrowserPushError ? 'browser' : 'server');
             setState(await getPushState(publicKey));
         } finally {
             setIsWorking(false);
@@ -76,7 +84,7 @@ export const usePushNotifications = () => {
     return {
         state,
         isWorking,
-        /** Por qué falló el último intento de activar (diseño A4). */
+        /** Por qué falló el último intento de activar (diseño A4): del navegador o de Wasmish. */
         error,
         enable: () => { void enable(); },
         disable: () => { void disable(); },

@@ -12,6 +12,21 @@ import { deletePushSubscriptionService, savePushSubscriptionService, syncPushSub
  */
 export type PushState = 'unavailable' | 'unsupported' | 'needs-install' | 'denied' | 'off' | 'on';
 
+/**
+ * Por qué falló activar los avisos: `browser`, el navegador no pudo suscribirse
+ * a su servicio de push (Brave lo trae apagado, o el servicio no respondió);
+ * `server`, la suscripción existe pero Wasmish no la pudo guardar.
+ */
+export type PushFailure = 'browser' | 'server';
+
+/** El navegador no pudo suscribirse: el fallo es suyo, no de Wasmish. */
+export class BrowserPushError extends Error {
+    constructor(cause: unknown) {
+        super('El navegador no pudo suscribirse a los avisos', { cause });
+        this.name = 'BrowserPushError';
+    }
+}
+
 // Si la persona QUIERE avisos en este navegador. Distingue «los apagó» de «la
 // suscripción desapareció sola» (Safari la pierde sin avisar): solo la segunda
 // se recrea al abrir la app.
@@ -52,6 +67,8 @@ export const deviceKind = (): DeviceKind =>
 
 /** El navegador, para decir dónde están bloqueados («Bloqueados en Chrome»); `null` si no se reconoce. */
 export const browserName = (): string | null => {
+    // Brave dice ser Chrome en el `userAgent`: solo se delata con `navigator.brave`.
+    if ('brave' in navigator) return 'Brave';
     const ua = navigator.userAgent;
     if (/EdgiOS|Edg\//.test(ua)) return 'Edge';
     if (/SamsungBrowser/.test(ua)) return 'Samsung Internet';
@@ -124,7 +141,12 @@ export const enablePush = async (publicKey: string): Promise<PushState> => {
     const registration = await readyRegistration();
     if (!registration) return 'unsupported';
     await (await registration.pushManager.getSubscription())?.unsubscribe();
-    const subscription = await subscribe(registration, publicKey);
+    let subscription: PushSubscription;
+    try {
+        subscription = await subscribe(registration, publicKey);
+    } catch (error) {
+        throw new BrowserPushError(error);
+    }
     await savePushSubscriptionService(subscription.toJSON());
     writeEnabled(true);
     return 'on';
