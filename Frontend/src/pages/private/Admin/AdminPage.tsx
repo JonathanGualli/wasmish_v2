@@ -39,7 +39,7 @@ export const AdminPage = () => {
     const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 });
 
     const { data: stats, isLoading: statsLoading } = useAdminStats();
-    const { data: clientsPage, isLoading: clientsLoading } =
+    const { data: clientsPage, isLoading: clientsLoading, isPlaceholderData: clientsPlaceholder } =
         useAdminClients(pagination.pageIndex, pagination.pageSize);
 
     const tile = (value?: number) =>
@@ -69,7 +69,9 @@ export const AdminPage = () => {
                 totalCount={clientsPage?.totalCount ?? 0}
                 pagination={pagination}
                 setPagination={setPagination}
-                isLoading={clientsLoading}
+                // Al pasar de página siguen las filas de antes (keepPreviousData): también es carga.
+                isLoading={clientsLoading || clientsPlaceholder}
+                loadingLabel="Cargando clientes"
             />
         </PageShell>
     );

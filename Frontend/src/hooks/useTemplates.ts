@@ -29,9 +29,9 @@ export const useTemplates = () => {
 
     const syncMutation = useMutation({
         mutationFn: () => syncTemplatesService(),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['templates'] });
-        },
+        // Devolver la promesa: la sincronización sigue «en curso» hasta que
+        // llega la lista nueva, y la tabla no deja de estar atenuada antes.
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['templates'] }),
     });
 
     // La respuesta es la plantilla ya actualizada: se cambia en la caché sin

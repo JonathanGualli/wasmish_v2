@@ -7,6 +7,7 @@ import { LineChip } from "../../../components/Line/LineChip";
 const lineColumn: ColumnDef<Campaign> = {
     id: 'line',
     header: 'Línea',
+    meta: { skeleton: 'pill' },
     cell: ({ row }) => <LineChip lineId={row.original.lineId} wide />,
 };
 
@@ -15,6 +16,7 @@ export const campaignColumns = (showLines: boolean): ColumnDef<Campaign>[] => [
     {
         id: 'name',
         header: 'Campaña',
+        meta: { skeleton: 'title' },
         cell: ({ row }) => (
             <div className="min-w-0">
                 <div className="max-w-[280px] truncate text-sm font-semibold text-brand-text">{row.original.name}</div>
@@ -26,13 +28,14 @@ export const campaignColumns = (showLines: boolean): ColumnDef<Campaign>[] => [
     {
         id: 'date',
         header: 'Fecha',
+        meta: { skeleton: 'line' },
         cell: ({ row }) => (
             <span className="font-mono text-xs text-brand-gray-600 tabular-nums whitespace-nowrap">
                 {formatDateTime(row.original.createdAt)}
             </span>
         ),
     },
-    { id: 'status', header: 'Estado', cell: ({ row }) => <CampaignStatusPill campaign={row.original} /> },
-    { id: 'progress', header: 'Progreso', cell: ({ row }) => <CampaignProgressCell campaign={row.original} /> },
-    { id: 'results', header: 'Resultados', cell: ({ row }) => <CampaignResults campaign={row.original} /> },
+    { id: 'status', header: 'Estado', meta: { skeleton: 'pill' }, cell: ({ row }) => <CampaignStatusPill campaign={row.original} /> },
+    { id: 'progress', header: 'Progreso', meta: { skeleton: 'line' }, cell: ({ row }) => <CampaignProgressCell campaign={row.original} /> },
+    { id: 'results', header: 'Resultados', meta: { skeleton: 'line' }, cell: ({ row }) => <CampaignResults campaign={row.original} /> },
 ];

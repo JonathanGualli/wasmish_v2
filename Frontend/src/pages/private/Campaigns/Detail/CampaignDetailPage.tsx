@@ -255,6 +255,8 @@ export const CampaignDetailPage = () => {
                     pagination={pagination}
                     setPagination={setPagination}
                     isLoading={recipients.isLoading || recipients.isPlaceholderData}
+                    loadingLabel="Cargando destinatarios"
+                    mobileSkeleton={{ trailing: 'time', pills: 1 }}
                     getRowId={recipient => recipient.id}
                     onRowClick={openChat}
                     renderMobileRow={recipient => <RecipientMobileRow recipient={recipient} />}

@@ -17,17 +17,20 @@ export const useDelayedLoading = (isLoading: boolean) => {
     const [visible, setVisible] = useState(false);
     const shownAt = useRef(0);
 
+    // Cuándo se pintó: los efectos corren después de pintar, así los 400 ms
+    // cuentan desde que se ve, no desde que se decidió enseñarlo.
+    useEffect(() => {
+        if (visible) shownAt.current = performance.now();
+    }, [visible]);
+
     useEffect(() => {
         if (isLoading) {
             if (visible) return;
-            const timer = setTimeout(() => {
-                shownAt.current = Date.now();
-                setVisible(true);
-            }, SKELETON_DELAY_MS);
+            const timer = setTimeout(() => setVisible(true), SKELETON_DELAY_MS);
             return () => clearTimeout(timer);
         }
         if (!visible) return;
-        const left = SKELETON_MIN_VISIBLE_MS - (Date.now() - shownAt.current);
+        const left = SKELETON_MIN_VISIBLE_MS - (performance.now() - shownAt.current);
         const timer = setTimeout(() => setVisible(false), Math.max(0, left));
         return () => clearTimeout(timer);
     }, [isLoading, visible]);
