@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ChatThread } from "../../../components/Chat/ChatThread";
 import { ChatconversationList } from "../../../components/Chat/ConversationList";
 import { NewConversationPanel } from "../../../components/Chat/NewConversationPanel";
@@ -21,7 +21,9 @@ import type { ChatsNavigationState, NewConversationRequest } from "../../../mode
  *
  * Otra página puede pedir al navegar que se abra una conversación o un
  * borrador nuevo (`ChatsNavigationState`, desde la ficha de un contacto). El
- * borrador pedido reemplaza al que hubiera, sin preguntar.
+ * borrador pedido reemplaza al que hubiera, sin preguntar. Un aviso push abre
+ * su conversación con `?c=<id>` (con la app cerrada) o con el mismo estado (con
+ * la app abierta, también si Chats ya está en pantalla).
  *
  * La ficha del contacto se abre para una conversación: abrir otra, o volver a
  * Chats desde otra página, la deja cerrada.
@@ -32,8 +34,10 @@ export const ChatPage = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const incoming = location.state as ChatsNavigationState | null;
+    const [searchParams] = useSearchParams();
+    const requestedId = incoming?.conversationId ?? searchParams.get("c");
 
-    const [selectedId, setSelectedId] = useState<string | null>(incoming?.conversationId ?? null);
+    const [selectedId, setSelectedId] = useState<string | null>(requestedId);
     const [draft, setDraft] = useState<ConversationDraft | null>(() =>
         incoming?.draft ? { ...EMPTY_DRAFT, ...incoming.draft } : (userId ? loadDraft(userId) : null));
     const [draftOpen, setDraftOpen] = useState(Boolean(incoming?.draft));
@@ -44,10 +48,21 @@ export const ChatPage = () => {
 
     // La petición se usa una sola vez: si se quedara en el historial, recargar
     // la página volvería a pisar el borrador. (El borrador pedido lo guarda el
-    // propio panel al montarse, vía handleDraftChange.)
+    // propio panel al montarse, vía handleDraftChange.) Quitarla también quita
+    // el `?c=` de la URL.
+    const hasRequest = Boolean(incoming) || searchParams.has("c");
     useEffect(() => {
-        if (incoming) navigate(location.pathname, { replace: true, state: null });
-    }, [incoming, navigate, location.pathname]);
+        if (hasRequest) navigate(location.pathname, { replace: true, state: null });
+    }, [hasRequest, navigate, location.pathname]);
+
+    // Con Chats ya en pantalla no se vuelve a montar: la conversación pedida
+    // (al tocar un aviso) se abre aquí. Al montarse ya la tomó `useState`.
+    useEffect(() => {
+        if (!requestedId) return;
+        setDraftOpen(false);
+        setSelectedId(requestedId);
+        setContactSidebarFor(null);
+    }, [requestedId]);
 
     // ESC cierra lo que esté abierto, de fuera hacia dentro: primero la ficha,
     // luego la conversación. El borrador solo se oculta: no se pierde.

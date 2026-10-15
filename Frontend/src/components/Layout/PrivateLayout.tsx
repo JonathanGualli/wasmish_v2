@@ -1,7 +1,10 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Menu } from 'lucide-react';
 import { Sidebar } from '../Sidebar/Sidebar';
 import { LogoLockup } from '../Logo/Logo';
+import { ChatsPath } from '../../models/routes.models';
+import type { ChatsNavigationState } from '../../models/conversation.mode';
 
 /**
  * Sin barra de título: la maqueta «Sidebar y Chats» da toda la altura al
@@ -14,6 +17,20 @@ import { LogoLockup } from '../Logo/Logo';
 export const PrivateLayout = ({ children }: { children: ReactNode }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const navigate = useNavigate();
+
+  // Tocar el aviso de un mensaje con Wasmish ya abierta: el service worker
+  // enfoca esta ventana y pide abrir la conversación, sin recargar (public/sw.js).
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    const onMessage = (event: MessageEvent) => {
+      if (event.data?.type !== 'open-conversation' || typeof event.data.conversationId !== 'string') return;
+      const state: ChatsNavigationState = { conversationId: event.data.conversationId };
+      navigate(ChatsPath, { state });
+    };
+    navigator.serviceWorker.addEventListener('message', onMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage);
+  }, [navigate]);
 
   useEffect(() => {
     const checkSize = () => {
