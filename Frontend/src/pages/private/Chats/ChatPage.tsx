@@ -6,6 +6,7 @@ import { NewConversationPanel } from "../../../components/Chat/NewConversationPa
 import { PushInvite } from "../../../components/Chat/PushInvite";
 import { ActivatePushSheet } from "../../../components/Push/ActivatePushSheet";
 import { usePushNotifications } from "../../../hooks/usePushNotifications";
+import { PHONE_QUERY, useMediaQuery } from "../../../hooks/useMediaQuery";
 import { useAuthContext } from "../../../context/auth.context";
 import {
     EMPTY_DRAFT, clearDraft, loadDraft, saveDraft, type ConversationDraft,
@@ -51,6 +52,7 @@ export const ChatPage = () => {
     // deja cerrada sin tener que acordarse de cerrarla.
     const [contactSidebarFor, setContactSidebarFor] = useState<string | null>(null);
     const contactSidebarOpen = Boolean(selectedId) && contactSidebarFor === selectedId;
+    const isPhone = useMediaQuery(PHONE_QUERY);
 
     // La petición se usa una sola vez: si se quedara en el historial, recargar
     // la página volvería a pisar el borrador. (El borrador pedido lo guarda el
@@ -69,6 +71,25 @@ export const ChatPage = () => {
         setSelectedId(requestedId);
         setContactSidebarFor(null);
     }, [requestedId]);
+
+    // En el teléfono, abrir un chat crea una entrada en el historial: «atrás»
+    // (el botón de Android, o el gesto) vuelve a la bandeja en vez de salir de
+    // la app. Cerrarlo con ‹ o con Esc quita esa entrada. Se escribe en el
+    // historial sin el router (que conserva su estado al lado): para él sigue
+    // siendo la misma página. Va después de los efectos que consumen la
+    // petición (`?c=`), porque el suyo reemplaza la entrada de arriba del
+    // historial, y tiene que ser la de antes, no esta.
+    useEffect(() => {
+        if (!isPhone || !selectedId) return;
+        window.history.pushState({ ...window.history.state, chatOpen: selectedId }, '');
+        const onPopState = () => setSelectedId(null);
+        window.addEventListener('popstate', onPopState);
+        return () => {
+            window.removeEventListener('popstate', onPopState);
+            // Se cerró desde la app (‹, Esc, otro chat): la entrada sobra.
+            if (window.history.state?.chatOpen === selectedId) window.history.back();
+        };
+    }, [isPhone, selectedId]);
 
     // ESC cierra lo que esté abierto, de fuera hacia dentro: primero la ficha,
     // luego la conversación. El borrador solo se oculta: no se pierde.
