@@ -71,14 +71,17 @@ export const LineFilter = ({ value, onChange, conversations }: Props) => {
                 {({ open }) => (
                     <>
                         <ListboxButton
-                            className={`inline-flex items-center gap-[7px] h-[30px] max-sm:h-9 pl-2.5 pr-2 rounded-[8px] border
+                            className={`inline-flex items-center gap-[7px] h-[30px] max-sm:h-9 max-md:h-full max-md:min-h-11 pl-2.5 pr-2 rounded-[8px] border
                                 text-[12.5px] font-semibold text-brand-strong cursor-pointer transition-colors
                                 ${selected || open ? 'border-brand-accent-strong' : 'border-brand-border-strong'}
                                 ${open ? 'bg-brand-bg' : 'bg-brand-surface'}`}>
                             <span className="flex gap-0.5">
                                 {selected ? swatchOf(selected) : lines.slice(0, 4).map(line => <Fragment key={line.id}>{swatchOf(line)}</Fragment>)}
                             </span>
-                            <span className="max-w-[160px] truncate">{selected ? lineLabel(selected) : 'Todas las líneas'}</span>
+                            {/* En el teléfono comparte fila con el buscador: «Todas» (diseño E1). */}
+                            <span className="max-w-[160px] max-md:max-w-[96px] truncate">
+                                {selected ? lineLabel(selected) : <><span className="md:hidden">Todas</span><span className="max-md:hidden">Todas las líneas</span></>}
+                            </span>
                             <ChevronDown size={13} strokeWidth={2.2} />
                         </ListboxButton>
                         {open && <div aria-hidden className="sm:hidden fixed inset-0 z-40 bg-brand-ink/50" />}
