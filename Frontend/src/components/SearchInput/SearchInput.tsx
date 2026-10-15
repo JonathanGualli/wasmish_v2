@@ -8,7 +8,10 @@ type SearchInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'onChange' |
     className?: string;
 };
 
-/** Caja de búsqueda con la lupa: la de la bandeja, Contactos y los destinatarios de una campaña. */
+/**
+ * Caja de búsqueda con la lupa: la de la bandeja, Contactos y los destinatarios de una campaña.
+ * En el teléfono, a 16 px: con menos, el iPhone hace zoom al tocarla.
+ */
 export const SearchInput = ({ value, onChange, className = '', ...props }: SearchInputProps) => (
     <div className={`relative flex items-center ${className}`}>
         <Search size={16} className="absolute left-[11px] text-brand-subtle pointer-events-none" />
@@ -17,7 +20,7 @@ export const SearchInput = ({ value, onChange, className = '', ...props }: Searc
             {...props}
             value={value}
             onChange={e => onChange(e.target.value)}
-            className="w-full box-border text-[13px] text-brand-text bg-brand-bg
+            className="w-full box-border text-base md:text-[13px] text-brand-text bg-brand-bg
                 border border-brand-border rounded-lg py-2.5 pl-[34px] pr-3
                 placeholder:text-brand-subtle
                 focus:outline-none focus:bg-brand-surface focus:border-brand-success

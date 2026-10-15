@@ -17,6 +17,7 @@ SSE y sus eventos, no leídos, y la UI del chat: hilo, bandeja, conversación nu
   - [`useConversations` — reglas del handler de `message_created`](#useconversations--reglas-del-handler-de-message_created)
   - [Ventana de 24 h en la UI (`ChatThread`)](#ventana-de-24-h-en-la-ui-chatthread)
   - [Varias líneas en Chats](#varias-líneas-en-chats)
+  - [Chats en el teléfono](#chats-en-el-teléfono)
   - [Conversación nueva (`NewConversationPanel`)](#conversación-nueva-newconversationpanel)
   - [Ir de la ficha al chat (`ChatsNavigationState`)](#ir-de-la-ficha-al-chat-chatsnavigationstate)
   - [Ficha del contacto en el chat](#ficha-del-contacto-en-el-chat)
@@ -107,6 +108,16 @@ Dónde:
 - **Campo de escribir** (`ChatComposer`): una conversación de una **línea desconectada** queda para consulta, con «Escribirle desde Ventas» (la línea por defecto). Ese botón abre la conversación nueva con el contacto ya puesto (`onStartConversation` → `ChatPage.startDraft`, que reemplaza el borrador como al llegar desde la ficha). No aparece si el contacto escribió sin compartir su teléfono. **Sin ninguna línea conectada**, el mismo estado lleva a Ajustes. Mientras las líneas no han cargado no se bloquea, igual que con la ventana. Con la ventana cerrada, el aviso dice de qué línea es («La ventana de 24 h se cerró en Soporte»).
 - **Enviar plantilla** (`SendTemplateDialog`): no se elige línea, es la de la conversación. Solo se ofrecen las plantillas de su WABA (`useTemplateForm(initial, waBusinessId)` filtra por `Template.waBusinessId`) y, con varias líneas, la cabecera dice por cuál sale.
 - **Conversación nueva** y **ficha**: en sus secciones, abajo.
+
+### Chats en el teléfono
+
+**Chats en el teléfono** (app móvil, PR 4a; diseño `Design/Wasmish Móvil - App instalable y avisos.html` § 6). Por debajo de `md` (768 px), Chats se ve como una app de mensajería; el resto de páginas sigue su diseño adaptable y solo hereda las zonas seguras. Todo va con variantes `max-md:`/`md:`: en la compu no cambia nada.
+- **Bandeja (E1):** sin la barra de la app (`PrivateLayout` no la pinta en Chats); el ☰ del menú lateral va en la cabecera de la bandeja (`useOpenMobileMenu`, de `components/Layout/MobileMenuContext`). Título «Chats», buscador y «Todas» en una fila, filas más altas (avatar de 46), la línea junto al último mensaje y la hora en verde con no leídos.
+- **Hilo (E2):** bajo el nombre, la línea y el número del contacto. Burbujas a 15 px. Sobre el campo, en una línea, «Puedes escribir libremente · quedan…» (cerca del final, el aviso de siempre). El campo de escribir y los buscadores van a **16 px**: con menos, el iPhone hace zoom al tocarlos. Con la ventana cerrada, una frase y «Enviar plantilla» a todo el ancho (E7).
+- **«Atrás» (Android, o el gesto):** abrir un chat en el teléfono crea una entrada en el historial con `history.pushState` (sin el router, que conserva su estado al lado) y `popstate` lo cierra. Cerrarlo con ‹ o Esc quita la entrada. El efecto va **después** de los que consumen `?c=`: el `replace` de esos pisaría la entrada nueva, y «atrás» volvería a abrir el chat. La entrada es de «hay un chat abierto», no de cuál: pasar de uno a otro desde la ficha no la toca, porque el `back()` (asíncrono) llegaba con el chat nuevo abierto y lo cerraba; y `popstate` solo cierra si se volvió a una entrada sin chat (revisión de Codex del PR #49).
+- **Teclado (E3):** en Android, `interactive-widget=resizes-content` (en `index.html`) achica la página y `100dvh` lo sigue. En iPhone no: `libs/viewport.ts` mide lo visible (`visualViewport`), lo pone en `--app-height` (el alto de `PrivateLayout`) y devuelve la página arriba. Con el teclado abierto, `data-keyboard="open"` en `<html>` quita el relleno de la barra de inicio.
+- **Zonas seguras (E7):** `viewport-fit=cover`, y `--safe-top`/`--safe-bottom` (`App.css`, de `env(safe-area-inset-*)`) en las cabeceras de la bandeja y del hilo, el campo de escribir, el final de la bandeja, el menú lateral y la barra de las demás páginas. Son variables para poder fingirlas al probar: Chrome no las emula.
+- **Sin probar en un iPhone de verdad:** el teclado y las zonas seguras se comprobaron fingiendo las variables en Chrome.
 
 ### Conversación nueva (`NewConversationPanel`)
 

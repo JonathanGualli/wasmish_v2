@@ -1,10 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Menu } from 'lucide-react';
 import { Sidebar } from '../Sidebar/Sidebar';
 import { LogoLockup } from '../Logo/Logo';
 import { ChatsPath } from '../../models/routes.models';
 import type { ChatsNavigationState } from '../../models/conversation.mode';
+import { MobileMenuContext } from './MobileMenuContext';
 
 /**
  * Sin barra de título: la maqueta «Sidebar y Chats» da toda la altura al
@@ -12,12 +13,19 @@ import type { ChatsNavigationState } from '../../models/conversation.mode';
  * página trae su propio encabezado.
  *
  * En móvil sí queda una barra fina, porque sin ella no habría forma de abrir
- * el sidebar, que ahí está fuera de pantalla.
+ * el sidebar, que ahí está fuera de pantalla. Menos en Chats, que se ve como una
+ * app de mensajería y lleva su propio ☰ (diseño «Wasmish Móvil», E1).
+ *
+ * El alto es `--app-height` (el que se ve con el teclado del iPhone abierto,
+ * `libs/viewport.ts`) o `100dvh`; las zonas seguras (muesca, barra de inicio),
+ * `--safe-top` y `--safe-bottom` (`App.css`).
  */
 export const PrivateLayout = ({ children }: { children: ReactNode }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const inChats = pathname.startsWith(ChatsPath);
 
   // Tocar el aviso de un mensaje con Wasmish ya abierta: el service worker
   // enfoca esta ventana y pide abrir la conversación, sin recargar (public/sw.js).
@@ -47,7 +55,7 @@ export const PrivateLayout = ({ children }: { children: ReactNode }) => {
   }, []);
 
   return (
-    <div className="flex h-screen bg-brand-bg">
+    <div className="flex h-[var(--app-height,100dvh)] bg-brand-bg">
       <Sidebar
         collapsed={isCollapsed}
         toggle={() => setIsCollapsed(!isCollapsed)}
@@ -62,9 +70,10 @@ export const PrivateLayout = ({ children }: { children: ReactNode }) => {
       )}
 
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Solo móvil: acceso al menú */}
-        {isMobile && (
-          <header className="h-14 bg-brand-surface border-b border-brand-border flex items-center gap-3 px-4 shrink-0">
+        {/* Solo móvil: acceso al menú (Chats trae el suyo) */}
+        {isMobile && !inChats && (
+          <header className="h-[calc(56px+var(--safe-top))] pt-[var(--safe-top)] bg-brand-surface border-b border-brand-border
+            flex items-center gap-3 px-4 shrink-0">
             <button
               className="text-brand-muted hover:text-brand-text transition-colors cursor-pointer"
               onClick={() => setIsCollapsed(false)}
@@ -76,8 +85,11 @@ export const PrivateLayout = ({ children }: { children: ReactNode }) => {
           </header>
         )}
 
-        <main className="flex-1 overflow-y-auto bg-brand-surface min-h-0">
-          {children}
+        {/* Fuera de Chats, lo último de la página no queda bajo la barra de inicio. */}
+        <main className={`flex-1 overflow-y-auto bg-brand-surface min-h-0 ${inChats ? '' : 'pb-[var(--safe-bottom)]'}`}>
+          <MobileMenuContext.Provider value={isMobile ? () => setIsCollapsed(false) : null}>
+            {children}
+          </MobileMenuContext.Provider>
         </main>
       </div>
     </div>

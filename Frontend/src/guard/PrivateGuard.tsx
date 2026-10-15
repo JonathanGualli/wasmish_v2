@@ -9,7 +9,7 @@ export const PrivateGuard = () => {
 
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center h-screen">
+      <div className="flex justify-center items-center h-dvh">
         <p className="text-lg text-gray-500">Cargando...</p>
       </div>
     );

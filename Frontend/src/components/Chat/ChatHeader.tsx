@@ -16,7 +16,8 @@ interface Props {
  * avatar también (no todo el mundo descubre el clic en el nombre, por eso el
  * botón). Una conversación anterior a los contactos sin enlazar no tiene ficha.
  * Con más de una línea, dice de cuál es la conversación: en escritorio, la
- * pastilla con el número; en móvil, la etiqueta corta.
+ * pastilla con el número; en el teléfono, la etiqueta corta junto al número
+ * del contacto, bajo el nombre (diseño «Wasmish Móvil», E2).
  */
 export const ChatHeader = ({ conversation, onBack, contactSidebarOpen, onToggleContactSidebar }: Props) => {
     const title = conversation.title || conversation.phone || "";
@@ -24,7 +25,8 @@ export const ChatHeader = ({ conversation, onBack, contactSidebarOpen, onToggleC
     const hasContact = Boolean(conversation.contactId);
 
     return (
-        <div className="bg-brand-surface border-b border-brand-border px-4 md:px-6 py-3.5 flex items-center gap-3 flex-none">
+        <div className="bg-brand-surface border-b border-brand-border px-4 md:px-6 py-3.5 max-md:pt-[calc(12px+var(--safe-top))] max-md:pb-3
+            flex items-center gap-3 flex-none">
             {onBack && (
                 <button
                     type="button"
@@ -47,16 +49,17 @@ export const ChatHeader = ({ conversation, onBack, contactSidebarOpen, onToggleC
                     {initials(title)}
                 </span>
                 <span className="min-w-0">
-                    <span className="block text-[15px] font-semibold text-brand-text truncate">{title}</span>
-                    <span className={`font-mono text-[11px] text-brand-muted ${hasContact ? 'hidden md:block' : 'block'}`}>
-                        {identity}
+                    <span className="block text-[15px] max-md:text-base font-semibold text-brand-text truncate">{title}</span>
+                    <span className="flex items-center gap-1.5 min-w-0">
+                        <span className="peer md:hidden flex empty:hidden"><LineChip lineId={conversation.lineId} /></span>
+                        {/* El punto, solo si hay línea que separar (con una sola, LineChip no pinta nada). */}
+                        {identity && <span className="md:hidden peer-empty:hidden text-[11px] text-brand-subtle">·</span>}
+                        <span className="font-mono text-[11px] text-brand-muted truncate">{identity}</span>
                     </span>
-                    {hasContact && <span className="block md:hidden text-xs text-brand-muted">Toca para ver la ficha</span>}
                 </span>
             </button>
             <div className="ml-auto flex-none flex items-center gap-2">
                 <span className="hidden md:contents"><LineChip lineId={conversation.lineId} variant="header" /></span>
-                <span className="md:hidden contents"><LineChip lineId={conversation.lineId} /></span>
                 {hasContact && (
                     <button
                         type="button"
