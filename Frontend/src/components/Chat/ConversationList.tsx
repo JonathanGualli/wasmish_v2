@@ -185,11 +185,12 @@ export const ChatconversationList = ({ onSelect, selectedId, onNewConversation, 
 
             <div className="flex-1 overflow-y-auto min-h-0 flex flex-col pb-[var(--safe-bottom)]">
                 {banner}
+                {/* En el teléfono la conversación nueva es una pantalla, no una fila (diseño E6): el «+» la recupera. */}
                 {draft && (
                     <button
                         type="button"
                         onClick={onOpenDraft}
-                        className={`w-full text-left flex gap-3 px-[18px] py-3.5 border-b border-brand-bg
+                        className={`max-md:hidden w-full text-left flex gap-3 px-[18px] py-3.5 border-b border-brand-bg
                             border-l-[3px] cursor-pointer transition-colors
                             ${draftActive
                                 ? 'bg-brand-bg border-l-brand-deep'

@@ -41,7 +41,8 @@ export const ContactSidebar = ({ contactId, conversationId, windowExpiresAt, onO
 
     return (
         <aside aria-label="Ficha del contacto" className="h-full flex flex-col bg-brand-raised">
-            <div className="flex-none bg-brand-deep text-white px-4 pt-3.5 pb-4 grid gap-3.5">
+            {/* En el teléfono, a pantalla completa: el verde baja bajo la muesca y «Ver en Contactos» queda sobre la barra de inicio. */}
+            <div className="flex-none bg-brand-deep text-white px-4 pt-3.5 max-md:pt-[calc(10px+var(--safe-top))] pb-4 grid gap-3.5">
                 <SidebarTopBar onClose={onClose} />
                 {contact && (
                     <ContactIdentity contact={contact} windowSlot={byLine ? null : <WindowLine expiresAt={windowExpiresAt} />} />
@@ -65,7 +66,7 @@ export const ContactSidebar = ({ contactId, conversationId, windowExpiresAt, onO
                         <ContactDataCard key={`data-${contact.id}`} contact={contact} />
                         <ActivityCard contact={contact} conversationCount={byLine ? contact.conversations.length : 1} />
                     </div>
-                    <div className="flex-none px-3.5 pb-3.5">
+                    <div className="flex-none px-3.5 pb-3.5 max-md:pb-[calc(14px+var(--safe-bottom))]">
                         <SeeInContacts contactId={contact.id} />
                     </div>
                 </>

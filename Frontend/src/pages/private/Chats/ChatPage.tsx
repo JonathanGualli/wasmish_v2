@@ -7,6 +7,7 @@ import { PushInvite } from "../../../components/Chat/PushInvite";
 import { ActivatePushSheet } from "../../../components/Push/ActivatePushSheet";
 import { usePushNotifications } from "../../../hooks/usePushNotifications";
 import { PHONE_QUERY, useMediaQuery } from "../../../hooks/useMediaQuery";
+import { useHistoryEntry } from "../../../hooks/useHistoryEntry";
 import { useAuthContext } from "../../../context/auth.context";
 import {
     EMPTY_DRAFT, clearDraft, loadDraft, saveDraft, type ConversationDraft,
@@ -72,33 +73,26 @@ export const ChatPage = () => {
         setContactSidebarFor(null);
     }, [requestedId]);
 
-    // En el teléfono, abrir un chat crea una entrada en el historial: «atrás»
-    // (el botón de Android, o el gesto) vuelve a la bandeja en vez de salir de
-    // la app. Cerrarlo con ‹ o con Esc quita esa entrada. Se escribe en el
-    // historial sin el router (que conserva su estado al lado): para él sigue
-    // siendo la misma página. Va después de los efectos que consumen la
-    // petición (`?c=`), porque el suyo reemplaza la entrada de arriba del
-    // historial, y tiene que ser la de antes, no esta.
+    // En el teléfono, abrir un chat (o la conversación nueva) crea una entrada
+    // en el historial: «atrás» (el botón de Android, o el gesto) vuelve a la
+    // bandeja en vez de salir de la app. Cerrarlo con ‹ o con Esc quita esa
+    // entrada. Se escribe en el historial sin el router (que conserva su estado
+    // al lado): para él sigue siendo la misma página. Va después de los efectos
+    // que consumen la petición (`?c=`), porque el suyo reemplaza la entrada de
+    // arriba del historial, y tiene que ser la de antes, no esta.
     //
-    // La entrada es de «hay un chat abierto», no de cuál: pasar de uno a otro
+    // La entrada es de «hay algo abierto», no de cuál: pasar de un chat a otro
     // (desde la ficha) no la toca. Si fuera por chat, el `back()` de la
     // limpieza llegaba (es asíncrono) con el chat nuevo ya abierto y lo cerraba
     // (revisión de Codex del PR #49). Por lo mismo, `popstate` solo cierra si
     // se volvió a una entrada sin chat.
-    const threadOpen = isPhone && Boolean(selectedId);
-    useEffect(() => {
-        if (!threadOpen) return;
-        window.history.pushState({ ...window.history.state, chatOpen: true }, '');
-        const onPopState = () => {
-            if (!window.history.state?.chatOpen) setSelectedId(null);
-        };
-        window.addEventListener('popstate', onPopState);
-        return () => {
-            window.removeEventListener('popstate', onPopState);
-            // Se cerró desde la app (‹, Esc): la entrada sobra.
-            if (window.history.state?.chatOpen) window.history.back();
-        };
-    }, [threadOpen]);
+    const phonePaneOpen = isPhone && Boolean(selectedId || draftOpen);
+    useHistoryEntry(phonePaneOpen, 'chatOpen', () => {
+        setSelectedId(null);
+        setDraftOpen(false);
+    });
+    // La ficha, encima del chat: su propia entrada, y «atrás» vuelve al chat.
+    useHistoryEntry(isPhone && contactSidebarOpen, 'contactOpen', () => setContactSidebarFor(null));
 
     // ESC cierra lo que esté abierto, de fuera hacia dentro: primero la ficha,
     // luego la conversación. El borrador solo se oculta: no se pierde.
