@@ -35,8 +35,13 @@ Monorepo con dos workspaces independientes: `Backend/` y `Frontend/`. Cada uno t
 Jonathan es el único desarrollador. Lo que espera de cualquier agente:
 
 - **Responder siempre en español.** Los identificadores nuevos van en inglés; los comentarios, los commits, los PRs y la documentación, en español. Lo que ya existe con nombre en español (`procesarEntrante`, `descargarAdjunto`) no se renombra sin que lo pida.
-- **Por defecto, guiar sin editar**: explicar qué hacer y por qué, paso a paso, y dar el código para que él lo escriba. **Si dice «aplícalo tú»**, el agente escribe: una rama, commits pequeños, el PR, y espera el CI. **El PR no lo une el agente**: revisar y unir es de Jonathan, salvo que diga lo contrario.
-- **Al darle un bloque de código, completo y ejecutable.** Lo pega tal cual: un comentario como `// ← sin tocar` o `/* …lo que ya tenías… */` en lugar del código borra lo que funcionaba, y los tests no lo detectan. Si es largo, se parte en pasos.
+- **El agente escribe el código** (desde el 2026-10-14; antes, por defecto, guiaba y Jonathan escribía). El orden:
+  1. **Primero le cuenta qué va a hacer**: el PR, los archivos, los pasos y las decisiones discutibles.
+  2. **Lo escribe** en una rama, en commits pequeños, y lo prueba.
+  3. **Abre el PR** y espera el CI.
+  4. **Revisión cruzada** del otro agente (ver abajo): corrige lo que encuentre y responde punto por punto.
+  5. **Jonathan revisa el PR y lo une.** El agente no lo une, salvo que él diga lo contrario.
+- **Si pide que lo guíe** («guíame», «quiero escribirlo yo»), el agente explica qué hacer y por qué, paso a paso, sin editar. **Cada bloque de código va completo y ejecutable:** lo pega tal cual, y un comentario como `// ← sin tocar` o `/* …lo que ya tenías… */` en lugar del código borra lo que funcionaba sin que los tests lo detecten. Si es largo, se parte en pasos.
 - **Código limpio y reutilizar** lo que ya hay antes de crear algo nuevo. Ninguna carpeta nueva sin preguntar (`Backend/src/services/` ya está aprobada).
 - **Al terminar algo**, un resumen con lo reutilizado, lo nuevo y las decisiones que el agente tomó por su cuenta, para que las revise.
 - **Probar de verdad antes de decir «hecho»** (tests, `tsc`, lint y, si toca la UI, el navegador: ver [pruebas-y-scripts.md](docs/arquitectura/pruebas-y-scripts.md)). Si algo no se pudo probar, decirlo.
