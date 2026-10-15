@@ -21,7 +21,6 @@ import { hasSeenPickIntro, markPickIntroSeen, newCampaignDraft } from "../../../
 import { pluralize } from "../../../utils/campaignDisplay";
 import { AVATAR_LG } from "../../../components/Skeleton/SkeletonListRow";
 import { SkeletonLine } from "../../../components/Skeleton/Skeleton";
-import { SkeletonVisibleContext } from "../../../components/Skeleton/skeletonShared";
 import { useDelayedLoading } from "../../../hooks/useDelayedLoading";
 import { DraftConflictDialog } from "../Campaigns/DraftConflictDialog";
 import { CampaignWizardHeader } from "../Campaigns/NewCampaign/CampaignWizardHeader";
@@ -415,9 +414,7 @@ export const ContactsPage = () => {
                     ) : countLoading.pending && (
                         // Su sitio mientras carga: si no, al llegar movía los filtros.
                         <span className="md:ml-auto h-[18px] flex items-center">
-                            <SkeletonVisibleContext.Provider value={countLoading.visible}>
-                                <SkeletonLine soft width="92px" />
-                            </SkeletonVisibleContext.Provider>
+                            <SkeletonLine soft width="92px" visible={countLoading.visible} />
                         </span>
                     )}
                 </div>
