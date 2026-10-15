@@ -65,7 +65,6 @@ Lógica no obvia del `AuthProvider`, los errores de WhatsApp en palabras y la li
 - `useContacts(pageIndex, pageSize, search, filter, tagIds)`, `useContact(id)`, `useLiveContact(id, conversationId)`, `useContactByPhone(phone)`, `useContactMutations` (create/update/remove, y `saveNotes`/`setTags` para la ficha del chat) — en `useContacts.ts`
 - `useTags`, `useTagSelectionSummary(selection, enabled)`, `useTagMutations` (create/rename/remove/bulk y `createMissing`), `tagError` — etiquetas (en `useTags.ts`)
 - `useDebouncedValue` — retrasa un valor (la búsqueda de contactos)
-- `useDelayedLoading(isLoading)` — cuándo se ve el skeleton de una carga: `{ pending, visible }` (ver [Pantallas de carga](#pantallas-de-carga-skeletons))
 - `useOnVisible(onVisible, enabled)` — centinela de scroll infinito (IntersectionObserver); al reactivarse vuelve a avisar si sigue a la vista
 - `useThrottledInvalidate(queryKey, ms)` — invalida como mucho una vez por intervalo (la primera al momento, la última al final). Lo usan `useConversations` (conversaciones nuevas), `useContacts` y `useCampaign`: sin él, una campaña pedía la lista entera en cada evento SSE, y como invalidar cancela la petición en curso, la lista podía no pintarse hasta el final
 - `useCampaigns(pageIndex, pageSize)`, `useCampaign(id)`, `useCampaignRecipients(id, state, …)`, `useCampaignFailures(id, enabled)`, `useCampaignPreview(input)` (devuelve también `isUpdating`), `useCampaignAudience(input, search, pageSize)` (infinita), `useCampaignMutations` (create/pause/resume/cancel), `campaignErrors` — campañas (en `useCampaigns.ts`). `campaign_progress` actualiza la campaña en la caché sin pedir nada; el detalle escucha también los `message_status` con su `campaignId`, porque entregas y lecturas llegan horas después. La vista previa espera 400 ms y mantiene la anterior mientras recalcula
@@ -105,16 +104,13 @@ Lógica no obvia del `AuthProvider`, los errores de WhatsApp en palabras y la li
 
 **Pantallas de carga (skeletons)** (2026-10-15; diseño `Design/Wasmish Pantallas de carga.html`, plan `docs/superpowers/plans/2026-10-15-pantallas-de-carga.md`). En lugar de «Cargando…», un círculo que gira o una página en blanco, bloques con la forma de lo que va a llegar. Lo que no depende de los datos (títulos, buscador, filtros, botones, cabeceras) se ve desde el principio.
 
-- **Cuándo se ven** (`hooks/useDelayedLoading.ts`):
-  - si los datos llegan en menos de **300 ms**, no se enseña nada;
-  - una vez visible, el skeleton se queda al menos **400 ms**, contados desde que se pinta.
-- **El contrato de cada pantalla:** `const { pending, visible } = useDelayedLoading(isLoading)`. Mientras `pending`, el skeleton (con `visible`), aunque `isLoading` ya sea `false`; el contenido, solo con `!pending`.
+- **Cuándo se ven:** mientras `isLoading`, desde el primer fotograma, y se van en cuanto llegan los datos. Con los datos ya en la caché de React Query no sale ninguno.
+  - **Sin espera ni mínimo** (2026-10-15, en la 1.0.22). El diseño pedía no enseñar nada los primeros 300 ms y, una vez visible, dejarlo al menos 400 ms. Pero producción responde en unos 300 ms, así que casi siempre caía en el peor caso: 300 ms con la estructura en blanco, 400 ms de skeleton y después el contenido, el doble de lo que tardaban los datos. Un skeleton con la forma del contenido no molesta aunque se vea poco.
 - **Las piezas** (`components/Skeleton/`):
   - `SkeletonLine` (texto principal de 10 px, o con `soft` el secundario de 8 px), `SkeletonPill`, `SkeletonNumber`, `SkeletonBox` (avatares, burbujas, cajas) y `SkeletonField` (la etiqueta real de un campo y su caja);
   - `SkeletonListRow`, la fila de lista de las tablas en el móvil, la bandeja y Ajustes, con `AVATAR_SM` y `AVATAR_LG`.
   - **Cada bloque late por su cuenta** (`motion-safe:animate-skeleton-pulse`, quieto con «reducir movimiento») y lleva `aria-hidden`. Así el texto real de alrededor se sigue leyendo, y anidar zonas no multiplica la opacidad.
-  - **`SkeletonFrame`** anuncia la zona (`aria-busy` y un `role="status"` que se rellena al hacerse visible) y sincroniza el pulso de todo su subárbol con el de las demás zonas (`useSyncedPulse`, `startTime = 0`).
-  - **Durante los 300 ms** los bloques se ocultan con `SkeletonVisibleContext` (en `skeletonShared.ts`, con `skeletonWidth`): ocupan su sitio sin verse.
+  - **`SkeletonFrame`** anuncia la zona (`aria-busy` y un `role="status"` que se rellena un fotograma después de montarse, porque uno montado ya relleno no siempre se anuncia) y sincroniza el pulso de todo su subárbol con el de las demás zonas (`useSyncedPulse`, `startTime = 0`).
 - **Las tablas** (`DataTable`, `TableSkeleton.tsx`):
   - **Cada columna declara la forma de su dato** en `meta.skeleton`: `avatar`, `title`, `line`, `pill`, `number` o `none` (sin ella, `line`).
   - **La tabla pide** `loadingLabel` («Cargando contactos», obligatoria), `resultLabel` (lo que se anuncia al terminar: «63 contactos») y `mobileSkeleton` (la fila del móvil).
@@ -129,12 +125,11 @@ Lógica no obvia del `AuthProvider`, los errores de WhatsApp en palabras y la li
 - **La ficha del contacto:**
   - **En Chats** (`ContactSidebarSkeleton.tsx`): la identidad sobre el verde y las tarjetas reales (Notas, Datos con sus etiquetas, la actividad).
   - **En Contactos** (dentro de `ContactPanel.tsx`): `ContactViewSkeleton` sigue `ContactDetails` y `ContactFormSkeleton` sigue `ContactForm` (sus campos, con `SkeletonField`).
-- **Un bloque suelto,** fuera de una zona (el total de la tabla, los contadores), recibe `visible` como prop.
 - **El detalle de una campaña** (`CampaignDetailSkeleton`): ya no sale en blanco. El enlace a Campañas, la cabecera como bloques, las cifras con sus etiquetas reales (`CampaignMetricsSkeleton`, sobre `MetricGridSkeleton`) y la tabla de destinatarios cargando. Los filtros de destinatarios no salen, porque llevan la cuenta de cada estado.
 - **Admin:** las cifras de arriba son bloques mientras cargan (`StatTile` acepta un `ReactNode`), no «—».
 - **Ajustes** (`SettingsListSkeleton`): cada tarjeta mantiene su título, su explicación y su botón, y solo la lista es skeleton, con la forma de su fila: el cuadrito de la línea (`LINE_SWATCH_SKELETON`), el avatar de la persona, la key. Es así en Líneas, Equipo, API keys y «Tus líneas». En la tarjeta de líneas, el estado («Sin conectar») y el botón de conectar son bloques mientras cargan, porque dependen de las líneas.
 - **Los diálogos:**
   - **Enviar plantilla** monta el formulario con su pie desde el principio y solo el selector es skeleton (`TemplateFormSkeleton`: la etiqueta «Plantilla» y la caja del alto del real), así el diálogo no crece al llegar. La conversación nueva usa el mismo.
   - **Gestionar etiquetas** pinta sus filas reales como bloques.
-  - Las plantillas y las etiquetas se piden al entrar en Chats y en Contactos, así que un diálogo hereda el tiempo que ya lleva esa carga: si se abre tarde, el skeleton sale enseguida.
+  - Las plantillas y las etiquetas se piden al entrar en Chats y en Contactos: si ya llegaron, el diálogo abre sin skeleton.
 
