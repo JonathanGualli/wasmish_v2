@@ -256,7 +256,7 @@ return (
           </select>
           <span className="flex items-center gap-1">Total:{' '}
             {showSkeleton
-              ? <SkeletonVisibleContext.Provider value={visible}><SkeletonNumber width="28px" /></SkeletonVisibleContext.Provider>
+              ? <SkeletonNumber width="28px" visible={visible} />
               : <span className="font-mono tabular-nums text-brand-text">{totalCount}</span>}
           </span>
           {reloading && visible && <span className="text-xs font-semibold text-brand-accent-strong">Cargando…</span>}

@@ -122,4 +122,12 @@ Lógica no obvia del `AuthProvider`, los errores de WhatsApp en palabras y la li
     - **sin filas**, 9 filas de skeleton, con la misma `CELL_CLASS` que las reales, para que midan igual y el pie no salte;
     - **con filas** (pasar de página, filtrar, «Sincronizar»), las filas al 50 % e `inert` (tampoco con el teclado), la barra fina bajo la cabecera y «Cargando…» en el pie.
   - **Una carga «con filas» pasa la prop `isLoading || isPlaceholderData`** (las queries con `keepPreviousData`). «Sincronizar» en Plantillas sigue en curso hasta que llega la lista nueva: el `onSuccess` devuelve la promesa de `invalidateQueries`.
+- **Entrar a la app** (`AppBootSkeleton`, en `PrivateGuard`): mientras se comprueba la sesión, el marco de Wasmish. La barra oscura con el logo y la forma de los accesos (236 px, o 76 por debajo de 1180, como `Sidebar`) y una página genérica; en el teléfono, la cabecera y una lista. Antes, «Cargando...» en una página en blanco.
+- **Chats** (`components/Chat/ChatSkeletons.tsx`):
+  - **La bandeja** (`ConversationListSkeleton`): filas con las medidas de las reales (avatar de 38 px, 46 en el teléfono) y, con varias líneas, el sitio de su etiqueta. La cabecera lleva un bloque en lugar de «Todo al día», que mientras carga sería falso.
+  - **El hilo** (`ThreadSkeleton`): burbujas de los dos lados, con su día. La cabecera y el cuadro de escribir ya funcionan mientras llegan los mensajes.
+- **La ficha del contacto:**
+  - **En Chats** (`ContactSidebarSkeleton.tsx`): la identidad sobre el verde y las tarjetas reales (Notas, Datos con sus etiquetas, la actividad).
+  - **En Contactos** (dentro de `ContactPanel.tsx`): `ContactViewSkeleton` sigue `ContactDetails` y `ContactFormSkeleton` sigue `ContactForm` (sus campos, con `SkeletonField`).
+- **Un bloque suelto,** fuera de una zona (el total de la tabla, los contadores), recibe `visible` como prop.
 
