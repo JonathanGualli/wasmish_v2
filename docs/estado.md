@@ -40,8 +40,8 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En curso
 
-- **Pantallas de carga (skeletons)** — plan `docs/superpowers/plans/2026-10-15-pantallas-de-carga.md` (unido en el PR #60), empezado el 2026-10-15 por Claude. Tres PRs.
-  Hecho: el PR 1 (piezas comunes y tablas, PR #61, rama `skeletons-tablas`) y el PR 2 (entrar a la app y Chats, rama `skeletons-chats`, apilada sobre el PR 1) · Falta: el PR 3 (detalle de campaña, Admin, Ajustes y diálogos) · Sin probar: en un teléfono de verdad, y el skeleton de editar un contacto (solo sale si el contacto no está en caché, y desde la app se llega con él ya cargado).
+- **Pantallas de carga (skeletons)** — plan `docs/superpowers/plans/2026-10-15-pantallas-de-carga.md` (unido en el PR #60), empezado el 2026-10-15 por Claude. Tres PRs apilados, para unir en orden: #61 (piezas comunes y tablas), #62 (entrar a la app y Chats) y el PR 3 (detalle de campaña, Admin, Ajustes y diálogos, rama `skeletons-resto`).
+  Hecho: los tres, con sus pruebas en el navegador · Falta: unirlos y desplegar · Sin probar: en un teléfono de verdad, y el skeleton de editar un contacto (solo sale si el contacto no está en caché, y desde la app se llega con él ya cargado).
 
 <!-- Formato de una entrada:
 - **<qué>** — rama `<rama>`, PR #<n>, empezado el <fecha> por <Claude|Codex|Jonathan>.

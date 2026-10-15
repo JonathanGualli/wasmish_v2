@@ -14,6 +14,8 @@ import { lineLabel } from '../../utils/lineDisplay';
 import { LineSwatch } from '../Line/LineSwatch';
 import { PHONE_QUERY, useMediaQuery } from '../../hooks/useMediaQuery';
 import { useHistoryEntry } from '../../hooks/useHistoryEntry';
+import { useDelayedLoading } from '../../hooks/useDelayedLoading';
+import { TemplateFormSkeleton } from './ChatSkeletons';
 
 interface Props {
   open: boolean;
@@ -44,6 +46,7 @@ interface Props {
  */
 export const SendTemplateDialog = ({ open, onClose, conversationId, line, contactName, windowOpen, keepsDraft }: Props) => {
   const form = useTemplateForm(undefined, line ? line.waBusinessId : undefined);
+  const loading = useDelayedLoading(form.isLoading);
   const { showLines, colorOf } = useLines();
   const sendTemplate = useSendTemplate();
   const { state: errorVisible, setState, setContent } = useNoticeContext();
@@ -118,33 +121,32 @@ export const SendTemplateDialog = ({ open, onClose, conversationId, line, contac
             </button>
           </div>
 
-          {form.isLoading ? (
-            <p className="text-sm text-brand-muted px-6 max-md:px-[18px] py-6">Cargando plantillas…</p>
-          ) : form.approved.length === 0 ? (
-            <div className="px-6 max-md:px-[18px] py-6">
-              <Callout tone="info" icon={<LayoutTemplate size={16} />} title="No tienes plantillas aprobadas">
-                Créalas en el Administrador de WhatsApp de Meta y sincronízalas desde la
-                página de Plantillas.
-              </Callout>
-            </div>
-          ) : (
+          {/* Mientras cargan las plantillas, el formulario ya está (con su pie): solo el
+              selector es skeleton, y el diálogo no crece al llegar. */}
+          {loading.pending || form.approved.length > 0 ? (
             <form onSubmit={handleSubmit} className="flex-1 min-h-0 flex flex-col">
               <div className="flex-1 min-h-0 overflow-y-auto px-6 max-md:px-[18px] pt-6 max-md:pt-5 pb-2 grid grid-cols-[minmax(0,1fr)] gap-[18px] content-start">
-                <TemplatePicker templates={form.approved} selected={form.selected} onSelect={t => form.selectTemplate(t.name)}
-                  disabledReason={templateHeaderIssue} />
-                {form.headerIssue && <p className="text-xs text-brand-danger -mt-2.5">{form.headerIssue}</p>}
-                <TemplateFields form={form} />
+                {loading.pending ? (
+                  <TemplateFormSkeleton visible={loading.visible} />
+                ) : (
+                  <>
+                    <TemplatePicker templates={form.approved} selected={form.selected} onSelect={t => form.selectTemplate(t.name)}
+                      disabledReason={templateHeaderIssue} />
+                    {form.headerIssue && <p className="text-xs text-brand-danger -mt-2.5">{form.headerIssue}</p>}
+                    <TemplateFields form={form} />
 
-                {form.selected && (
-                  <div className="grid gap-[7px]">
-                    <span className="text-[13px] font-semibold text-brand-strong">
-                      <span className="max-md:hidden">Vista previa</span><span className="md:hidden">Así le llega</span>
-                    </span>
-                    <div>
-                      <TemplateBubble bodyText={form.selected.bodyText ?? ''} values={form.values} template={form.selected} />
-                      <TemplateButtons buttons={form.selected.buttons} />
-                    </div>
-                  </div>
+                    {form.selected && (
+                      <div className="grid gap-[7px]">
+                        <span className="text-[13px] font-semibold text-brand-strong">
+                          <span className="max-md:hidden">Vista previa</span><span className="md:hidden">Así le llega</span>
+                        </span>
+                        <div>
+                          <TemplateBubble bodyText={form.selected.bodyText ?? ''} values={form.values} template={form.selected} />
+                          <TemplateButtons buttons={form.selected.buttons} />
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
 
@@ -163,6 +165,13 @@ export const SendTemplateDialog = ({ open, onClose, conversationId, line, contac
                 </div>
               </div>
             </form>
+          ) : (
+            <div className="px-6 max-md:px-[18px] py-6">
+              <Callout tone="info" icon={<LayoutTemplate size={16} />} title="No tienes plantillas aprobadas">
+                Créalas en el Administrador de WhatsApp de Meta y sincronízalas desde la
+                página de Plantillas.
+              </Callout>
+            </div>
           )}
         </DialogPanel>
       </div>

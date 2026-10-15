@@ -4,6 +4,9 @@ import type { CampaignRecipient } from "../../../../models/campaign.model";
 import { recipientTime } from "../../../../utils/campaignDisplay";
 import { RecipientContact, RecipientState } from "./RecipientCells";
 
+/** La fila de carga en el móvil (`RecipientMobileRow`: nombre, hora y estado). */
+export const recipientMobileSkeleton = { trailing: 'time', pills: 1 } as const;
+
 export const recipientColumns: ColumnDef<CampaignRecipient>[] = [
     { id: 'contact', header: 'Contacto', meta: { skeleton: 'title' }, cell: ({ row }) => <RecipientContact recipient={row.original} /> },
     { id: 'state', header: 'Estado del mensaje', meta: { skeleton: 'pill' }, cell: ({ row }) => <RecipientState recipient={row.original} /> },

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
-import { AlertCircle, ChevronLeft, LoaderCircle, Pencil, Tag as TagIcon, Trash2, Users, X } from 'lucide-react';
+import { AlertCircle, ChevronLeft, Pencil, Tag as TagIcon, Trash2, Users, X } from 'lucide-react';
 import { CustomButton } from '../../../components/Button/Button';
 import { ConfirmDialog } from '../../../components/Dialog/ConfirmDialog';
 import { TagChip } from '../../../components/Tag/TagChip';
@@ -8,6 +8,9 @@ import { useNoticeContext } from '../../../components/Notice/context/UseNoticeCo
 import { tagError, useTagMutations, useTags } from '../../../hooks/useTags';
 import type { Tag } from '../../../models/tag.model';
 import { TAG_NAME_MAX, cleanTagName, findTagByName } from '../../../utils/tags';
+import { useDelayedLoading } from '../../../hooks/useDelayedLoading';
+import { SkeletonBox, SkeletonLine } from '../../../components/Skeleton/Skeleton';
+import { SkeletonFrame } from '../../../components/Skeleton/SkeletonFrame';
 
 const iconButton = `w-11 h-11 md:w-8 md:h-8 flex-none rounded-lg flex items-center justify-center text-brand-gray-600
     transition-colors cursor-pointer`;
@@ -22,6 +25,7 @@ export const TagManager = ({ open, onClose, onShowContacts }: {
     onShowContacts: (tag: Tag) => void;
 }) => {
     const { data: tags, isLoading, isError } = useTags();
+    const loading = useDelayedLoading(isLoading);
     const { state: noticeVisible } = useNoticeContext();
     const [editingId, setEditingId] = useState<string | null>(null);
     const [deleting, setDeleting] = useState<Tag | null>(null);
@@ -52,21 +56,17 @@ export const TagManager = ({ open, onClose, onShowContacts }: {
                         </button>
                     </div>
 
-                    {isLoading && (
-                        <div className="flex-1 flex items-center justify-center gap-2 text-sm text-brand-muted">
-                            <LoaderCircle size={16} className="animate-spin" />Cargando…
-                        </div>
-                    )}
+                    {loading.pending && <TagListSkeleton visible={loading.visible} />}
                     {isError && !tags && (
                         <div className="flex-1 flex items-center justify-center gap-2 p-8 text-sm text-brand-muted">
                             <AlertCircle size={16} />No se pudieron cargar las etiquetas.
                         </div>
                     )}
-                    {tags && tags.length === 0 && <EmptyTags />}
-                    {tags && tags.length > 0 && (
+                    {!loading.pending && tags && tags.length === 0 && <EmptyTags />}
+                    {!loading.pending && tags && tags.length > 0 && (
                         <div className="flex-1 overflow-y-auto">
                             <p className="px-4 md:px-6 pt-4 pb-3 text-[13px] leading-[1.55] text-brand-muted">
-                                Se crean al etiquetar un contacto, desde la lista o su ficha. Aquí puedes renombrarlas o borrarlas.
+                                {TAG_INTRO}
                             </p>
                             <ul className="px-4 md:px-6 pb-6">
                                 {tags.map(tag => (
@@ -109,6 +109,25 @@ export const TagManager = ({ open, onClose, onShowContacts }: {
         </Dialog>
     );
 };
+
+const TAG_INTRO = 'Se crean al etiquetar un contacto, desde la lista o su ficha. Aquí puedes renombrarlas o borrarlas.';
+const CHIP_WIDTHS = ['72px', '96px', '64px', '110px', '84px'];
+
+/** La lista mientras carga (diseño 3.7): las filas reales, con la etiqueta y su cuenta como bloques. */
+const TagListSkeleton = ({ visible }: { visible: boolean }) => (
+    <SkeletonFrame label="Cargando etiquetas" visible={visible} className="flex-1 overflow-hidden">
+        <p className="px-4 md:px-6 pt-4 pb-3 text-[13px] leading-[1.55] text-brand-muted">{TAG_INTRO}</p>
+        <ul className="px-4 md:px-6 pb-6">
+            {CHIP_WIDTHS.map(width => (
+                <li key={width} className="border-b border-brand-raised flex items-center gap-3 min-h-14 py-1.5">
+                    <SkeletonBox tone="soft" width={width} className="h-[26px] rounded-md" />
+                    <SkeletonLine soft width="70px" />
+                    <span className="ml-auto"><SkeletonBox className="w-24 h-8 rounded-lg" /></span>
+                </li>
+            ))}
+        </ul>
+    </SkeletonFrame>
+);
 
 const EmptyTags = () => (
     <div className="flex-1 flex items-center justify-center p-8">

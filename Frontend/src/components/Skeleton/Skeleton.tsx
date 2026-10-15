@@ -53,8 +53,8 @@ export const SkeletonLine = ({ width, soft = false, className = '', visible }: {
 );
 
 /** Una píldora de estado. */
-export const SkeletonPill = ({ width }: { width: string }) => (
-    <SkeletonBox width={width} tone="soft" className="h-5 rounded-[10px]" />
+export const SkeletonPill = ({ width, visible }: { width: string; visible?: boolean }) => (
+    <SkeletonBox width={width} tone="soft" visible={visible} className="h-5 rounded-[10px]" />
 );
 
 /** Una cifra. `className` cambia el alto cuando la cifra es grande. */

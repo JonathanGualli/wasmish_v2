@@ -25,7 +25,9 @@ import {
 } from "../../../../utils/campaignDisplay";
 import { CampaignStatusPill } from "../CampaignCells";
 import { CampaignFunnel, CampaignMetrics, CampaignProgressCard, FailureReasons } from "./CampaignStatsBlocks";
-import { recipientColumns } from "./RecipientColumns";
+import { recipientColumns, recipientMobileSkeleton } from "./RecipientColumns";
+import { CampaignDetailSkeleton } from "./CampaignDetailSkeleton";
+import { useDelayedLoading } from "../../../../hooks/useDelayedLoading";
 import { RecipientMobileRow } from "./RecipientCells";
 
 const FIRST_PAGE = { pageIndex: 0, pageSize: 20 };
@@ -107,6 +109,7 @@ export const CampaignDetailPage = () => {
     const [confirmingCancel, setConfirmingCancel] = useState(false);
 
     const { data: campaign, isError, dataUpdatedAt, refetch } = useCampaign(id);
+    const loading = useDelayedLoading(!campaign && !isError);
     const recipients = useCampaignRecipients(id, stateFilter, pagination.pageIndex, pagination.pageSize);
     const { data: failureReasons } = useCampaignFailures(id, (campaign?.stats.failed ?? 0) > 0);
     const { pause, resume, cancel } = useCampaignMutations();
@@ -131,9 +134,7 @@ export const CampaignDetailPage = () => {
             </PageShell>
         );
     }
-    if (!campaign || !id) {
-        return <PageShell width="wide"><div className="h-40" /></PageShell>;
-    }
+    if (loading.pending || !campaign || !id) return <CampaignDetailSkeleton visible={loading.visible} />;
 
     const { stats } = campaign;
     const counts = recipientStateCounts(stats);
@@ -256,7 +257,7 @@ export const CampaignDetailPage = () => {
                     setPagination={setPagination}
                     isLoading={recipients.isLoading || recipients.isPlaceholderData}
                     loadingLabel="Cargando destinatarios"
-                    mobileSkeleton={{ trailing: 'time', pills: 1 }}
+                    mobileSkeleton={recipientMobileSkeleton}
                     getRowId={recipient => recipient.id}
                     onRowClick={openChat}
                     renderMobileRow={recipient => <RecipientMobileRow recipient={recipient} />}

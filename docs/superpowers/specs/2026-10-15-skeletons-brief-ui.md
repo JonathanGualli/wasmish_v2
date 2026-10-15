@@ -1,5 +1,7 @@
 # Brief de diseño: pantallas de carga (skeletons)
 
+> **Diseño entregado:** `Design/Wasmish Pantallas de carga.html`. Plan: `docs/superpowers/plans/2026-10-15-pantallas-de-carga.md`.
+
 > Para la IA de diseño. Describe **qué** tiene que poder hacer cada persona y **qué información** ve, no cómo se ve. Ya conoces la marca y todas las pantallas de Wasmish (Chats con su bandeja, hilo y ficha; Contactos, Campañas, Plantillas, Ajustes, el panel de administración y la app en el celular). El diseño tiene que sentirse parte de ellas y reutilizar sus piezas.
 
 ---
