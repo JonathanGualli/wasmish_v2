@@ -12,6 +12,7 @@ Lógica no obvia del `AuthProvider`, los errores de WhatsApp en palabras y la li
 - [Hooks disponibles](#hooks-disponibles)
 - [App instalable y service worker (`public/sw.js`)](#app-instalable-y-service-worker-publicswjs)
 - [Avisos push en el navegador (`libs/push.ts`)](#avisos-push-en-el-navegador-libspushts)
+- [Pantallas de carga (skeletons)](#pantallas-de-carga-skeletons)
 
 ---
 
@@ -64,6 +65,7 @@ Lógica no obvia del `AuthProvider`, los errores de WhatsApp en palabras y la li
 - `useContacts(pageIndex, pageSize, search, filter, tagIds)`, `useContact(id)`, `useLiveContact(id, conversationId)`, `useContactByPhone(phone)`, `useContactMutations` (create/update/remove, y `saveNotes`/`setTags` para la ficha del chat) — en `useContacts.ts`
 - `useTags`, `useTagSelectionSummary(selection, enabled)`, `useTagMutations` (create/rename/remove/bulk y `createMissing`), `tagError` — etiquetas (en `useTags.ts`)
 - `useDebouncedValue` — retrasa un valor (la búsqueda de contactos)
+- `useDelayedLoading(isLoading)` — cuándo se ve el skeleton de una carga: `{ pending, visible }` (ver [Pantallas de carga](#pantallas-de-carga-skeletons))
 - `useOnVisible(onVisible, enabled)` — centinela de scroll infinito (IntersectionObserver); al reactivarse vuelve a avisar si sigue a la vista
 - `useThrottledInvalidate(queryKey, ms)` — invalida como mucho una vez por intervalo (la primera al momento, la última al final). Lo usan `useConversations` (conversaciones nuevas), `useContacts` y `useCampaign`: sin él, una campaña pedía la lista entera en cada evento SSE, y como invalidar cancela la petición en curso, la lista podía no pintarse hasta el final
 - `useCampaigns(pageIndex, pageSize)`, `useCampaign(id)`, `useCampaignRecipients(id, state, …)`, `useCampaignFailures(id, enabled)`, `useCampaignPreview(input)` (devuelve también `isUpdating`), `useCampaignAudience(input, search, pageSize)` (infinita), `useCampaignMutations` (create/pause/resume/cancel), `campaignErrors` — campañas (en `useCampaigns.ts`). `campaign_progress` actualiza la campaña en la caché sin pedir nada; el detalle escucha también los `message_status` con su `campaignId`, porque entregas y lecturas llegan horas después. La vista previa espera 400 ms y mantiene la anterior mientras recalcula
@@ -98,3 +100,26 @@ Lógica no obvia del `AuthProvider`, los errores de WhatsApp en palabras y la li
 - **En el login** (C3): la primera vez que la app instalada del iPhone se abre sin sesión, un aviso verde explica que la app no comparte la sesión con Safari.
 - Lo que se recuerda para no insistir vive en `libs/pushPrompts.ts` (`localStorage`, en un `try`): `wasmish.pushInviteDismissed` (la fecha de la ×, o `forever`), `wasmish.pushSheetShown` y `wasmish.installedWelcomeShown`. En iPhone, la app instalada tiene su propio almacenamiento, distinto del de Safari: por eso «la primera vez» es la de la app.
 - **Probarlo en local:** claves VAPID en el backend ([pruebas-y-scripts.md § Avisos push en local](pruebas-y-scripts.md#avisos-push-en-local)), Chrome en `localhost` y `npm run webhook:simulate`. Con Vite, desde la consola: `const { enablePush } = await import('/src/libs/push.ts')`. **Chrome no deja suscribirse a push en incógnito** (ni en un contexto nuevo de Playwright, que lo es): para probar con «Activos», un perfil normal.
+
+### Pantallas de carga (skeletons)
+
+**Pantallas de carga (skeletons)** (2026-10-15; diseño `Design/Wasmish Pantallas de carga.html`, plan `docs/superpowers/plans/2026-10-15-pantallas-de-carga.md`). En lugar de «Cargando…», un círculo que gira o una página en blanco, bloques con la forma de lo que va a llegar. Lo que no depende de los datos (títulos, buscador, filtros, botones, cabeceras) se ve desde el principio.
+
+- **Cuándo se ven** (`hooks/useDelayedLoading.ts`):
+  - si los datos llegan en menos de **300 ms**, no se enseña nada;
+  - una vez visible, el skeleton se queda al menos **400 ms**, contados desde que se pinta.
+- **El contrato de cada pantalla:** `const { pending, visible } = useDelayedLoading(isLoading)`. Mientras `pending`, el skeleton (con `visible`), aunque `isLoading` ya sea `false`; el contenido, solo con `!pending`.
+- **Las piezas** (`components/Skeleton/`):
+  - `SkeletonLine` (texto principal de 10 px, o con `soft` el secundario de 8 px), `SkeletonPill`, `SkeletonNumber`, `SkeletonBox` (avatares, burbujas, cajas) y `SkeletonField` (la etiqueta real de un campo y su caja);
+  - `SkeletonListRow`, la fila de lista de las tablas en el móvil, la bandeja y Ajustes, con `AVATAR_SM` y `AVATAR_LG`.
+  - **Cada bloque late por su cuenta** (`motion-safe:animate-skeleton-pulse`, quieto con «reducir movimiento») y lleva `aria-hidden`. Así el texto real de alrededor se sigue leyendo, y anidar zonas no multiplica la opacidad.
+  - **`SkeletonFrame`** anuncia la zona (`aria-busy` y un `role="status"` que se rellena al hacerse visible) y sincroniza el pulso de todo su subárbol con el de las demás zonas (`useSyncedPulse`, `startTime = 0`).
+  - **Durante los 300 ms** los bloques se ocultan con `SkeletonVisibleContext` (en `skeletonShared.ts`, con `skeletonWidth`): ocupan su sitio sin verse.
+- **Las tablas** (`DataTable`, `TableSkeleton.tsx`):
+  - **Cada columna declara la forma de su dato** en `meta.skeleton`: `avatar`, `title`, `line`, `pill`, `number` o `none` (sin ella, `line`).
+  - **La tabla pide** `loadingLabel` («Cargando contactos», obligatoria), `resultLabel` (lo que se anuncia al terminar: «63 contactos») y `mobileSkeleton` (la fila del móvil).
+  - **La tabla decide sola**, según con qué empezó la carga (`useLoadPhase`):
+    - **sin filas**, 9 filas de skeleton, con la misma `CELL_CLASS` que las reales, para que midan igual y el pie no salte;
+    - **con filas** (pasar de página, filtrar, «Sincronizar»), las filas al 50 % e `inert` (tampoco con el teclado), la barra fina bajo la cabecera y «Cargando…» en el pie.
+  - **Una carga «con filas» pasa la prop `isLoading || isPlaceholderData`** (las queries con `keepPreviousData`). «Sincronizar» en Plantillas sigue en curso hasta que llega la lista nueva: el `onSuccess` devuelve la promesa de `invalidateQueries`.
+

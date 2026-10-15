@@ -226,6 +226,31 @@ paginación sobre `brand-bg` con los contadores en mono.
 plantilla, IDs de Meta, cifras de las columnas y de las tarjetas de estadística
 (con `tabular-nums`). Es la regla de datos del manual aplicada a tablas.
 
+Mientras carga no lleva círculo ni velo: la primera carga es un skeleton con la
+forma de cada columna (`meta.skeleton` en sus `ColumnDef`) y al recargar las
+filas se atenúan con una barra fina bajo la cabecera. Ver «Pantallas de carga».
+
+### Pantallas de carga — `components/Skeleton/`
+
+Fuente: `Design/Wasmish Pantallas de carga.html`. Nunca «Cargando…» suelto ni
+un spinner para una pantalla o una lista: bloques con la medida de lo que va a
+llegar, y el texto que no depende de los datos ya visible.
+
+| Bloque | Medida | Color |
+|---|---|---|
+| Texto principal | 10 px, radio 5, en una caja del alto del texto real | `bg-brand-raised` |
+| Texto secundario | 8 px, radio 4 | `bg-brand-skeleton-soft` |
+| Píldora | 20 px, radio 10 | `bg-brand-skeleton-soft` |
+| Avatar | el tamaño y el radio del real | `bg-brand-raised` |
+| Burbuja ajena / propia | radio con la cola del lado correcto | `bg-brand-skeleton-bubble` / `-bubble-own` |
+| Sobre la barra oscura | — | `bg-brand-deep-active` |
+
+Pulso de opacidad 100 → 50 % en 1,6 s, todos los bloques a la vez, sin brillo
+que recorra (`animate-skeleton-pulse`, solo con `motion-safe:`). La barra de
+recarga: 2 px, fondo `brand-accent-soft` y tramo `brand-success`
+(`animate-loading-bar`). Las esperas de una acción («Enviando…» en un botón)
+siguen con su `isLoading`.
+
 ### CustomButton — `components/Button/Button.tsx`
 
 Alto 40px, radio 8px, `font-semibold text-sm`.
