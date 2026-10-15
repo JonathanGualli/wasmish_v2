@@ -6,7 +6,16 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En producción
 
-**Versión 1.0.18**, desplegada el 2026-10-14 (etiqueta `v1.0.18`; comprobar con `curl https://wasmish.solventyc.com/api/version`). Lleva:
+**Versión 1.0.19**, desplegada el 2026-10-14 (etiqueta `v1.0.19`; comprobar con `curl https://wasmish.solventyc.com/api/version`). Lleva:
+
+- **Wasmish en el celular: app instalable y avisos push** (PRs #41 a #50, cada uno con su revisión de Codex; plan `docs/superpowers/plans/2026-10-14-app-movil.md`, diseño `Design/Wasmish Móvil - App instalable y avisos.html`):
+  - **Avisos push:** una suscripción por dispositivo (`PushSubscription`) y un aviso por cada mensaje que la persona puede ver, aunque la app esté cerrada. El webhook no lo espera. Tocar el aviso abre la conversación.
+  - **La app instalable:** manifest, íconos menta y service worker sin caché.
+  - **Ajustes → «Este dispositivo»:** activar o apagar los avisos con todos sus estados, «Instalar Wasmish» y la guía de iPhone.
+  - **En Chats:** la invitación en la bandeja del celular, la hoja «Último paso» del iPhone y el aviso del login en la app instalada.
+  - **Chats en el teléfono:** bandeja, hilo, teclado, zonas seguras, «atrás» de Android, la ficha, la plantilla como hoja y la conversación nueva como pantalla.
+  - **Despliegue:** con las claves VAPID de producción en `api.env` (generadas una vez y **no se cambian**: cambiarlas obliga a todos a volver a activar los avisos). Sin migración: la colección nueva crea su índice al arrancar. Reconstruye `wasmish-api` y `wasmish-web` (cambió `nginx.conf`).
+  - **Probado en Chrome emulando teléfonos**; en un teléfono real, solo activar los avisos en el Android de Jonathan con el frontend local por ngrok (instalar no se pudo probar ahí: ngrok gratis pone su página de aviso delante del manifest). **Sin probar en producción** al desplegar, ni nada en un iPhone.
 
 - **Multi-línea · Fase 3: equipo, roles y acceso por línea** (PRs #33 a #37, cada uno con su revisión de Codex): permisos por rol (`requirePermission`, 403) y acceso por línea (`conversationScope`, 404), el tiempo real filtrado por línea y permiso (`canReceive`), el equipo y las invitaciones (`/api/team`, `/api/invitations/:token`, `maxUsers`), quién envió cada mensaje (`Message.sentBy` y `origin`), Ajustes → Equipo, la página de aceptar la invitación y la columna de usuarios del superadmin. Plan: `docs/superpowers/plans/2026-10-14-multi-linea-fase-3.md`. Con un solo usuario por cuenta (todas las reales) se ve y funciona como antes. Sin migración de datos: `mongodump` antes, y los logs sin «MODO DE PRUEBA» ni E11000. Jonathan lo comprobó en el navegador; queda por ver en los logs un `POST /api/v1/templates/send` con 200 del cliente real. **No subir `maxUsers` en una cuenta real** hasta el ensayo de la vuelta atrás con dos usuarios (ver «Lo siguiente»).
 - **Esperar a `/register` hasta 60 s** al conectar un número nuevo (#30, de la 1.0.17, que no llegó a desplegarse sola), con el candado de líneas de 90 s mientras tanto. En la 1.0.16, la primera conexión de un número nuevo daba 502 porque Meta tarda más de 10 s.
@@ -26,18 +35,7 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En curso
 
-- **Wasmish en el celular: app instalable (PWA) y avisos push** — plan: `docs/superpowers/plans/2026-10-14-app-movil.md` (PR #41, unido); spec y brief de la UI en `docs/superpowers/specs/2026-10-14-app-movil-*`. Empezado el 2026-10-14 por Claude.
-  - **Unidos en `master`, sin desplegar:**
-    - el backend de los avisos (PR #42);
-    - la app instalable con su service worker y los íconos menta del diseño (PR #43);
-    - el arreglo de un test intermitente (PR #44);
-    - los avisos en el navegador, sin UI: activar, apagarlos al cerrar sesión y abrir la conversación al tocar el aviso (PR #45, el «PR 3a» del plan);
-    - Ajustes → «Este dispositivo»: los avisos con los estados A1 a A9 del diseño, «Instalar Wasmish» y la guía de iPhone (PR #47, el «PR 3b»);
-    - la invitación a los avisos en la bandeja, la hoja «Último paso» del iPhone y el aviso del login en la app (PR #48, el «PR 3c»);
-    - Chats en el teléfono: bandeja, hilo, teclado, zonas seguras y «atrás» de Android (PR #49, el «PR 4a»).
-  - **Antes de desplegar el #42:** generar las claves VAPID (ver `deploy/config/api.env.example`). Sin ellas, los avisos quedan apagados.
-  - **PR 4b, rama `app-movil-chats-2`:** la ficha a pantalla completa con «atrás» (E4), enviar plantilla como hoja con la lista a pantalla completa (E5) y la conversación nueva como pantalla (E6). Probado en Chrome emulando un Android. Con él termina el plan; queda probar en teléfonos reales y desplegar (con las claves VAPID).
-  - Sin probar: un aviso real en un teléfono, el toque en un aviso del sistema (en Chrome se simuló el mensaje del service worker), y todo lo de iPhone (Jonathan no tiene uno).
+Nada en curso.
 
 <!-- Formato de una entrada:
 - **<qué>** — rama `<rama>`, PR #<n>, empezado el <fecha> por <Claude|Codex|Jonathan>.
@@ -46,7 +44,7 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## Lo siguiente
 
-- **Prioridad desde el 2026-10-14: Wasmish en el celular** (ver «En curso»). Lo de abajo espera hasta terminarlo, salvo errores.
+- **Probar la app móvil en producción** con la cuenta de prueba de Jonathan en su Android: instalar, activar los avisos, recibir uno con la app cerrada, tocarlo, el teclado y «atrás». Después, avisar al cliente real. En un iPhone, cuando haya uno a mano.
 - **Multi-línea y multi-agente, fases 1 a 4** (diseño aprobado, sin preguntas abiertas: `docs/superpowers/specs/2026-10-11-multi-linea-multi-agente-design.md`). Fases 1, 2a y 2b en producción (la 2b, enrutar por línea, desde la 1.0.14). La **Fase 2c** está en producción desde la 1.0.15.
   - **Para encender varias líneas** (plan de la 2c, «Después de desplegar»):
     1. La prueba del token: ¿un token nuevo del Embedded Signup cubre todos los números del WABA? (spec § 2.2). Se puede hacer en producción con la cuenta de prueba de Jonathan (`maxLines: 2`), pero necesita **dos números en el mismo WABA**: hoy tiene uno conectado. Una cuenta con dos líneas de WABA distintos ya se probó el 2026-10-14.
