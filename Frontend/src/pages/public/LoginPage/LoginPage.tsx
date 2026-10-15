@@ -7,6 +7,9 @@ import { LogoLockup } from '../../../components/Logo/Logo';
 import { useAuthContext } from '../../../context/auth.context';
 import { AppRoutes, afterLoginPath } from '../../../models/routes.models';
 import { useNoticeContext } from '../../../components/Notice/context/UseNoticeContext';
+import { isIos, isStandalone } from '../../../libs/push';
+import { markInstalledWelcomeShown, wasInstalledWelcomeShown } from '../../../libs/pushPrompts';
+import { Check } from 'lucide-react';
 
 export const LoginPage = () => {
   const [email, setEmail] = useState('');
@@ -15,6 +18,14 @@ export const LoginPage = () => {
   const { setState, setContent } = useNoticeContext();
   const navigate = useNavigate();
   const location = useLocation();
+  // La app del iPhone recién instalada se abre sin sesión (no comparte la de
+  // Safari): la primera vez se explica, para que nadie crea que se cerró la
+  // suya (diseño C3).
+  const [installedWelcome] = useState(() => isIos() && isStandalone() && !wasInstalledWelcomeShown());
+
+  useEffect(() => {
+    if (installedWelcome) markInstalledWelcomeShown();
+  }, [installedWelcome]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -66,6 +77,17 @@ export const LoginPage = () => {
       <div className="mb-11 lg:hidden">
         <LogoLockup size="lg" />
       </div>
+
+      {installedWelcome && (
+        <div className="mb-7 flex gap-2.5 rounded-xl border border-brand-green-200 bg-brand-green-50 px-4 py-3.5
+          text-sm leading-[1.5] text-brand-strong">
+          <Check size={17} className="flex-none mt-0.5 text-brand-accent-strong" />
+          <p>
+            <strong className="text-brand-text">Wasmish ya está en tu pantalla de inicio.</strong> Inicia sesión una
+            vez más: la app no comparte la sesión con Safari. Después activamos los avisos.
+          </p>
+        </div>
+      )}
 
       <h1 className="font-bold text-[30px] leading-none tracking-[-0.03em] text-brand-text">
         Entrar

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { SearchInput } from "../SearchInput/SearchInput";
 import { Plus } from "lucide-react";
 import { useConversations } from "../../hooks/useConversations";
@@ -20,6 +20,8 @@ interface Props {
     /** El borrador es lo que está abierto ahora (si no, otra conversación). */
     draftActive?: boolean;
     onOpenDraft?: () => void;
+    /** Una fila arriba de la lista, que se va con el scroll (la invitación a los avisos). */
+    banner?: ReactNode;
 }
 
 const CenteredState = ({ children, tone = 'muted' }: { children: React.ReactNode; tone?: 'muted' | 'danger' }) => (
@@ -41,7 +43,7 @@ const CenteredState = ({ children, tone = 'muted' }: { children: React.ReactNode
  * Los filtros (Todos / Míos / Sin asignar) y las etiquetas de la maqueta no
  * están: dependen de asignación y etiquetado, que el backend todavía no tiene.
  */
-export const ChatconversationList = ({ onSelect, selectedId, onNewConversation, draft, draftActive, onOpenDraft }: Props) => {
+export const ChatconversationList = ({ onSelect, selectedId, onNewConversation, draft, draftActive, onOpenDraft, banner }: Props) => {
     const { data: conversations, isLoading, isError } = useConversations();
     const { templates } = useTemplates();
     const { lineById, showLines } = useLines();
@@ -157,6 +159,7 @@ export const ChatconversationList = ({ onSelect, selectedId, onNewConversation, 
             </div>
 
             <div className="flex-1 overflow-y-auto min-h-0 flex flex-col">
+                {banner}
                 {draft && (
                     <button
                         type="button"
