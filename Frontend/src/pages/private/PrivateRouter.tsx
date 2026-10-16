@@ -13,6 +13,7 @@ import { CampaignDetailPage } from "./Campaigns/Detail/CampaignDetailPage";
 import { TemplatesPage } from "./Templates/TemplatesPage";
 import { DocsPage } from "./Docs/DocsPage";
 import { AdminPage } from "./Admin/AdminPage";
+import { AutoRepliesPage } from "./AutoReplies/AutoRepliesPage";
 import { useAuthContext } from "../../context/auth.context";
 
 // Aparte del resto: trae la lista de países y los formatos de teléfono, que
@@ -49,6 +50,7 @@ export const PrivateRouter = () => {
                 <Route path={`${AppRoutes.private.campaigns}/new`} element={<RequirePermission action="campaigns.manage"><NewCampaignPage /></RequirePermission>} />
                 <Route path={`${AppRoutes.private.campaigns}/:id`} element={<RequirePermission action="campaigns.manage"><CampaignDetailPage /></RequirePermission>} />
                 <Route path={AppRoutes.private.templates} element={<TemplatesPage />} />
+                <Route path={AppRoutes.private.autoReplies} element={<RequirePermission action="autoReplies.manage"><AutoRepliesPage /></RequirePermission>} />
                 <Route path={AppRoutes.private.docs} element={<DocsPage />} />
             </RoutesWithNotFound>
         </PrivateLayout>

@@ -9,6 +9,7 @@ import type { Message } from '../models/message.mode';
 import type { Line, LineUpdate, LinesResponse } from '../models/line.model';
 import type { InvitationInfo, InvitationInput, MemberChange, TeamInvitation, TeamMember, TeamResponse } from '../models/team.model';
 import type { User } from '../models/user.mode';
+import type { AutoRepliesResponse, AutoReplyPreview, AutoReplySettings } from '../models/autoReply.model';
 
 const API_URL = '/api'; // configuracion puesta en vite.config.ts
 // const API_URL = 'https://wasmish-api.solventyc.com/api';
@@ -509,4 +510,25 @@ export const syncPushSubscriptionService = async (subscription: PushSubscription
 /** Apagar los avisos de este navegador (o cerrar sesión). 404 si ya no estaba. */
 export const deletePushSubscriptionService = async (endpoint: string): Promise<void> => {
     await axios.delete(`${API_URL}/push/subscriptions`, { data: { endpoint }, withCredentials: true });
+};
+
+// ---------------------------------------------------------------------------
+// Respuestas automáticas (solo owner y admin: `autoReplies.manage`)
+// ---------------------------------------------------------------------------
+
+export const getAutoRepliesService = async (): Promise<AutoRepliesResponse> => {
+    const { data } = await axios.get(`${API_URL}/auto-replies`, { withCredentials: true });
+    return data;
+};
+
+/** Reemplaza la configuración entera; responde como el `GET`. */
+export const saveAutoRepliesService = async (settings: AutoReplySettings): Promise<AutoRepliesResponse> => {
+    const { data } = await axios.put(`${API_URL}/auto-replies`, settings, { withCredentials: true });
+    return data;
+};
+
+/** Qué respondería `settings` (sin guardarla) ahora a un contacto nuevo que escribe `text`. */
+export const previewAutoReplyService = async (settings: AutoReplySettings, text: string): Promise<AutoReplyPreview> => {
+    const { data } = await axios.post(`${API_URL}/auto-replies/preview`, { settings, text }, { withCredentials: true });
+    return data;
 };

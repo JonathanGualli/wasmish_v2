@@ -1,4 +1,4 @@
-import { Menu, Rocket, Settings, MessageSquare, Users, Send, LayoutTemplate, BookOpen, X, ShieldCheck, LogOut } from 'lucide-react';
+import { Menu, Rocket, Settings, MessageSquare, Users, Send, LayoutTemplate, BookOpen, X, ShieldCheck, LogOut, Reply } from 'lucide-react';
 import { SidebarItem } from './SidebarItem';
 import { useAuthContext } from '../../context/auth.context';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -10,6 +10,7 @@ import { useConversations } from '../../hooks/useConversations';
 import { initials } from '../../utils/initials';
 import { APP_VERSION } from '../../config/version';
 import { ROLE_LABEL, hasTeam } from "../../utils/roleDisplay";
+import { useGuardedNavigation } from '../Layout/NavigationGuardContext';
 
 interface Props {
   collapsed: boolean;
@@ -28,7 +29,9 @@ export const Sidebar = ({ collapsed, toggle, isMobile }: Props) => {
   const [valueSelected, setValueSelected] = useState('');
 
   const { user, logOut, can } = useAuthContext();
+  const guarded = useGuardedNavigation();
   const canCampaigns = can('campaigns.manage');
+  const canAutoReplies = can('autoReplies.manage');
   const { data: conversations } = useConversations();
 
   // El contador de la barra es el total de conversaciones con mensajes sin leer.
@@ -45,6 +48,8 @@ export const Sidebar = ({ collapsed, toggle, isMobile }: Props) => {
       // El agente no tiene campañas (Fase 3): no se le enseñan, ni apagadas.
       ...(canCampaigns ? [{ icon: <Send size={18} />, text: 'Campañas', value: 'campaigns', path: `${AppRoutes.private.root}/${AppRoutes.private.campaigns}`, badge: undefined }] : []),
       { icon: <LayoutTemplate size={18} />, text: 'Plantillas',     value: 'templates',  path: `${AppRoutes.private.root}/${AppRoutes.private.templates}`,  badge: undefined },
+      // Solo owner y admin: la configuración vale para todas las líneas.
+      ...(canAutoReplies ? [{ icon: <Reply size={18} />, text: 'Respuestas automáticas', value: 'autoReplies', path: `${AppRoutes.private.root}/${AppRoutes.private.autoReplies}`, badge: undefined }] : []),
       { icon: <BookOpen size={18} />,       text: 'Documentación',  value: 'docs',       path: `${AppRoutes.private.root}/${AppRoutes.private.docs}`,       badge: undefined },
     ];
 
@@ -55,18 +60,19 @@ export const Sidebar = ({ collapsed, toggle, isMobile }: Props) => {
     }
 
     return items;
-  }, [user?.isSuperadmin, unread, canCampaigns]);
+  }, [user?.isSuperadmin, unread, canCampaigns, canAutoReplies]);
 
   const allItems = useMemo(
     () => [...navItems, { value: 'settings', path: `${AppRoutes.private.root}/${AppRoutes.private.settings}` }],
     [navItems]
   );
 
-  const handleButton = ({ value, path }: HandleButtonProps) => {
+  // Con cambios sin guardar, la página abierta puede preguntar antes (NavigationGuardContext).
+  const handleButton = ({ value, path }: HandleButtonProps) => guarded(() => {
     setValueSelected(value);
     navigate(path);
     if (isMobile) toggle();
-  };
+  });
 
   // Contactos eligiendo los destinatarios de una campaña es el paso 1 de esa
   // campaña: se marca «Campañas», no «Contactos».
@@ -152,7 +158,7 @@ export const Sidebar = ({ collapsed, toggle, isMobile }: Props) => {
           text="Cerrar sesión"
           collapsed={collapsed}
           tooltip={!isMobile}
-          onTap={logOut}
+          onTap={() => guarded(logOut)}
           isSelected={false}
         />
 

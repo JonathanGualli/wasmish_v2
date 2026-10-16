@@ -6,6 +6,7 @@ import { LogoLockup } from '../Logo/Logo';
 import { ChatsPath } from '../../models/routes.models';
 import type { ChatsNavigationState } from '../../models/conversation.mode';
 import { MobileMenuContext } from './MobileMenuContext';
+import { NavigationGuardContext, useNavigationGuardValue } from './NavigationGuardContext';
 
 /**
  * Sin barra de título: la maqueta «Sidebar y Chats» da toda la altura al
@@ -28,6 +29,7 @@ export const PrivateLayout = ({ children }: { children: ReactNode }) => {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const inChats = pathname.startsWith(ChatsPath);
+  const navigationGuard = useNavigationGuardValue();
 
   // Tocar el aviso de un mensaje con Wasmish ya abierta: el service worker
   // enfoca esta ventana y pide abrir la conversación, sin recargar (public/sw.js).
@@ -57,6 +59,7 @@ export const PrivateLayout = ({ children }: { children: ReactNode }) => {
   }, []);
 
   return (
+    <NavigationGuardContext.Provider value={navigationGuard}>
     <div className="flex h-[var(--app-height,100dvh)] bg-brand-bg">
       <Sidebar
         collapsed={isCollapsed}
@@ -95,5 +98,6 @@ export const PrivateLayout = ({ children }: { children: ReactNode }) => {
         </main>
       </div>
     </div>
+    </NavigationGuardContext.Provider>
   );
 };
