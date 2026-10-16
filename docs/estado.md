@@ -71,7 +71,8 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
 ## En curso
 
 - **Coexistencia con la app de WhatsApp Business** — rama `coexistencia`, empezado el 2026-10-16 por Claude. Spec `docs/superpowers/specs/2026-10-16-coexistencia-design.md` y brief de la interfaz `2026-10-16-coexistencia-brief-ui.md` (para Claude Design).
-  Hecho: el spec y el brief. · Falta: la revisión de Codex del spec, el plan, el backend, el frontend y la prueba real con un número en la app de WhatsApp Business. · Sin probar: nada todavía.
+  Plan `docs/superpowers/plans/2026-10-16-coexistencia.md` (PR #78, spec y plan, revisados por Codex). Backend en la rama `coexistencia-backend` (tareas 1 a 6: conectar por los dos caminos, ecos, `PARTNER_REMOVED`, simulador), con sus tests.
+  Hecho: el backend, probado con los tests y con `webhook:simulate` (`eco`, `retiro-acceso`) contra un backend local. · Falta: la revisión de Codex del backend, el frontend (con el diseño `Design/Wasmish Líneas - Junto con la app.html`), suscribir los campos en el panel de Meta, desplegar y la prueba real con un número en la app de WhatsApp Business. · Sin probar: nada con Meta de verdad.
 
 ## Lo siguiente
 

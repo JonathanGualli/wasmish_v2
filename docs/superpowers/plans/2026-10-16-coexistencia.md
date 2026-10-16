@@ -175,11 +175,11 @@
 ### Tarea 6: Simular sin Meta, y cerrar el PR del backend
 
 **Archivos:**
-- Modificar: `Backend/scripts/simulate-webhook.js` (`--echo` y `--partner-removed [--reason R]`)
+- Modificar: `Backend/scripts/simulate-webhook.js` (los avisos `eco` y `retiro-acceso [--reason R]`, con los nombres de los que ya tiene)
 - Modificar: `docs/arquitectura/pruebas-y-scripts.md`, `docs/estado.md` («En curso»)
 
-- [ ] **Paso 1:** `--echo --from <número de la línea> --to 5939…` manda un eco de texto (firmado como hoy); `--partner-removed --waba <id> --reason PRIMARY_INACTIVITY` manda el `account_update` con la forma del ejemplo de Meta (`entry.id` distinto del WABA).
-- [ ] **Paso 2:** probarlo contra un backend local en otro puerto (3999, como en `pruebas-navegador-local` de la memoria), con una BD desechable: el eco aparece en la conversación y `--partner-removed` desconecta la línea. Limpiar con `--clean`.
+- [ ] **Paso 1:** `eco` manda un eco de texto al contacto de prueba (`--from`), firmado como hoy; `retiro-acceso --reason PRIMARY_INACTIVITY` manda el `account_update` del WABA de la línea activa con la forma del ejemplo de Meta (`entry.id` distinto del WABA).
+- [ ] **Paso 2:** probarlo contra un backend local en otro puerto (3999, como en `pruebas-navegador-local` de la memoria), con una BD desechable: el eco aparece en la conversación y `retiro-acceso` desconecta la línea. Limpiar con `--clean`.
 - [ ] **Paso 3:** `npm test`, `npm run test:isolation` y `node .github/scripts/check-docs.mjs` en verde.
 - [ ] **Paso 4:** commit, abrir el **PR del backend** contra `master` y revisión cruzada de Codex (`codex exec … < /dev/null`), responder punto por punto. Jonathan lo une; **se puede desplegar solo**.
 
