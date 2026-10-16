@@ -30,7 +30,7 @@ Las respuestas que Wasmish manda solo: bienvenida, fuera de horario y palabras c
 Cada texto, hasta 800 caracteres (`AUTO_REPLY_TEXT_MAX`): bienvenida + 3 palabras clave + fuera de horario caben en los 4.096 de WhatsApp. Una respuesta encendida necesita texto; una apagada puede quedar vacía.
 
 **Las rutas** (`GET`/`PUT /api/auto-replies`, `POST /api/auto-replies/preview`) llevan `requirePermission('autoReplies.manage')`: **owner y admin**, porque la configuración afecta a todas las líneas. Su detalle está en [api.md § Endpoints](api.md#endpoints-completos).
-- `PUT` reemplaza la configuración entera. Las reglas que traen `id` lo conservan y las nuevas estrenan uno: con él, cada conversación recuerda cuándo respondió esa regla. Un `lineIds` que no es de la cuenta da 400.
+- `PUT` reemplaza la configuración entera. Las reglas que traen `id` lo conservan y las nuevas estrenan uno: con él, cada conversación recuerda cuándo respondió esa regla. Un `lineIds` que no es de la cuenta da 404, como cualquier recurso ajeno, y dos reglas con el mismo `id` dan 400.
 - **Probar** (`preview`) usa la configuración **del cuerpo, sin guardarla**, y responde como a un contacto nuevo, ahora y sin estado, así la bienvenida sale si está encendida. Devuelve las posiciones de las reglas que coincidieron (`matchedRuleIndexes`), porque una regla nueva todavía no tiene id. No envía nada.
 
 ### Decidir qué responder (`utils/auto.reply.js`)

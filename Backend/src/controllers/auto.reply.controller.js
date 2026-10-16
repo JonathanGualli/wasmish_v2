@@ -59,11 +59,12 @@ export const saveAutoReplies = async (req, res) => {
         const accountId = req.auth.accountId;
         const data = autoReplySettingsSchema.parse(req.body);
 
-        // Una regla solo puede apuntar a líneas de esta cuenta.
+        // Una regla solo puede apuntar a líneas de esta cuenta: una ajena es
+        // una línea que no existe (404), como en el resto de la API.
         const lineIds = [...new Set(data.keywordRules.flatMap(rule => rule.lineIds))];
         if (lineIds.length > 0) {
             const owned = await Line.countDocuments({ _id: { $in: lineIds }, accountId });
-            if (owned !== lineIds.length) return sendError(res, 400, 'Una regla apunta a una línea que no es de la cuenta');
+            if (owned !== lineIds.length) return sendError(res, 404, 'Línea no encontrada');
         }
 
         // Las reglas que ya tenían id lo conservan: con él se recuerda en cada

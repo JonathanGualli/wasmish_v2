@@ -80,14 +80,14 @@ test('solo owner y admin: supervisor y agente reciben 403; sin sesión, 401', as
     assert.equal((await getSettings(ANONYMOUS)).status, 401);
 });
 
-test('una regla que apunta a una línea de otra cuenta da 400 y no guarda nada', async () => {
+test('una regla que apunta a una línea de otra cuenta da 404 y no guarda nada', async () => {
     const a = await newAccount('ARE');
     const b = await newAccount('ARF');
 
     const response = await saveSettings(a, settingsBody({
         keywordRules: [{ enabled: true, keywords: ['precio'], text: 'Cuesta $10', lineIds: [b.lineId] }],
     }));
-    assert.equal(response.status, 400);
+    assert.equal(response.status, 404);
     assert.equal((await getSettings(a)).body.enabled, false);
 
     const ownLine = await saveSettings(a, settingsBody({
@@ -109,6 +109,15 @@ test('lo que no es una configuración válida da 400', async () => {
         bienvenidaSinTexto: { ...base, welcome: { ...base.welcome, text: '  ' } },
         reglaSinFrases: { ...base, keywordRules: [{ enabled: true, keywords: [], text: 'x', lineIds: [] }] },
         textoLargo: { ...base, welcome: { ...base.welcome, text: 'x'.repeat(801) } },
+        // Dos reglas con el mismo id se callaban la una a la otra durante 24 h
+        // (revisión de Codex del PR #68).
+        idsRepetidos: {
+            ...base,
+            keywordRules: [
+                { id: 'aaaaaaaaaaaaaaaaaaaaaaaa', enabled: true, keywords: ['precio'], text: 'Cuesta $10', lineIds: [] },
+                { id: 'AAAAAAAAAAAAAAAAAAAAAAAA', enabled: true, keywords: ['direccion'], text: 'En el centro', lineIds: [] },
+            ],
+        },
         fueraDeHorarioSinDias: {
             ...base,
             outOfHours: {

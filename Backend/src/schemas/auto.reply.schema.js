@@ -64,7 +64,14 @@ export const autoReplySettingsSchema = z.object({
             ({ enabled, schedule }) => !enabled || WEEK_DAYS.some(day => !schedule[day].closed),
             { message: 'Abre al menos un día', path: ['schedule'] },
         ),
-    keywordRules: z.array(keywordRuleSchema).max(KEYWORD_RULES_MAX, `Como mucho ${KEYWORD_RULES_MAX} reglas`),
+    keywordRules: z.array(keywordRuleSchema)
+        .max(KEYWORD_RULES_MAX, `Como mucho ${KEYWORD_RULES_MAX} reglas`)
+        // Cada regla recuerda por su id cuándo respondió en cada conversación:
+        // dos con el mismo id se callarían la una a la otra durante 24 h.
+        .refine(rules => {
+            const ids = rules.filter(rule => rule.id).map(rule => rule.id.toLowerCase());
+            return new Set(ids).size === ids.length;
+        }, 'Dos reglas no pueden tener el mismo id'),
 });
 
 // POST /auto-replies/preview — qué respondería esta configuración, sin guardarla.

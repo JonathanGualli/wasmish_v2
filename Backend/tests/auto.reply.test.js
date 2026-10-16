@@ -181,6 +181,17 @@ test('la misma regla no se repite en 24 h en la conversación', () => {
     assert.deepEqual(at(25).parts, ['Cuesta $10']);
 });
 
+test('que una regla haya respondido no calla a las demás', () => {
+    const result = decide({
+        state: { keywordRepliedAt: { 'r-precio': hoursBefore(OPEN, 1) } },
+        message: text('precio y ubicación?'),
+        previousInboundAt: KNOWN,
+    });
+
+    assert.deepEqual(result.parts, ['Estamos en el centro']);
+    assert.deepEqual(result.claims.keywordRuleIds, ['r-ubicacion']);
+});
+
 test('dos reglas con el mismo texto salen una vez', () => {
     const settings = { ...SETTINGS, keywordRules: [rule('a', ['precio'], 'Cuesta $10'), rule('b', ['valor'], 'Cuesta $10')] };
     const result = decide({ settings, message: text('precio y valor'), previousInboundAt: KNOWN });

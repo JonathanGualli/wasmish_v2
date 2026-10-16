@@ -137,7 +137,7 @@ No se aplica a `/api/webhook` (Meta manda ráfagas) ni a `/api/stream` (conexió
 | POST | `/api/push/subscriptions/sync` | JWT | Lo mismo, automático (al abrir la app o al renovarse la suscripción): crea la suscripción o actualiza la suya, pero **nunca** se queda con la de otra persona: 409 `push_owned_by_other` |
 | DELETE | `/api/push/subscriptions` | JWT | `{ endpoint }`: apaga los avisos de este navegador (también al cerrar sesión). 204; 404 si no es de la persona de la sesión |
 | GET | `/api/auto-replies` | JWT + `autoReplies.manage` | Las respuestas automáticas de la cuenta: `{ enabled, timezone, handoffHours, welcome: { enabled, text, returnAfterDays }, outOfHours: { enabled, text, schedule }, keywordRules: [{ id, enabled, keywords, text, lineIds }] }`. Sin guardar nunca, las de por defecto (apagadas) |
-| PUT | `/api/auto-replies` | JWT + `autoReplies.manage` | La misma forma (sin `id` en las reglas nuevas): la reemplaza entera y responde como el `GET`. 400 si no es válida o una regla apunta a una línea ajena |
+| PUT | `/api/auto-replies` | JWT + `autoReplies.manage` | La misma forma (sin `id` en las reglas nuevas): la reemplaza entera y responde como el `GET`. 400 si no es válida (también dos reglas con el mismo `id`); 404 si una regla apunta a una línea ajena |
 | POST | `/api/auto-replies/preview` | JWT + `autoReplies.manage` | `{ settings, text }` → `{ reply, parts, matchedRuleIndexes, outOfHours }`: qué respondería **esa** configuración (sin guardarla) ahora, a un contacto nuevo. No envía nada; `reply: null` si no respondería |
 | GET | `/api/webhook` | No | Verificación webhook Meta (hub.challenge) |
 | POST | `/api/webhook` | **Firma HMAC** | Recibir mensajes/status de WhatsApp |

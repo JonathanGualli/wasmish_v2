@@ -165,14 +165,14 @@ Expected: PASS.
   - `autoReplySettingsSchema` (Zod): los límites de «Global Constraints»; `timezone` con `isValidTimeZone`; `schedule` con `scheduleIssue`; un texto vacío solo si su regla está apagada; `outOfHours.enabled` exige algún día abierto; `keywordRules[].id` opcional (string). `previewSchema` = `{ settings: autoReplySettingsSchema, text: string 1–1000 }`.
   - Rutas (con `authRequired` y `requirePermission('autoReplies.manage')`):
     - `GET /api/auto-replies` → `200` la configuración con cada regla como `{ id, enabled, keywords, text, lineIds }` (sin documento, `defaultAutoReplySettings()` con `keywordRules: []`).
-    - `PUT /api/auto-replies` → `autoReplySettingsSchema.parse(req.body)` (el validador no reemplaza el body) y `findOneAndUpdate({ userId: accountId }, …, { upsert: true, new: true })`; conserva el `_id` de las reglas que traen `id` y estrena los demás → `200` con la misma forma que el GET. `lineIds` que no son líneas de la cuenta → `400`.
+    - `PUT /api/auto-replies` → `autoReplySettingsSchema.parse(req.body)` (el validador no reemplaza el body) y `findOneAndUpdate({ userId: accountId }, …, { upsert: true, new: true })`; conserva el `_id` de las reglas que traen `id` y estrena los demás → `200` con la misma forma que el GET. `lineIds` que no son líneas de la cuenta → `404` (lo ajeno no existe; era 400, revisión de Codex del PR #68). Dos reglas con el mismo `id` → `400`.
     - `POST /api/auto-replies/preview` → `decideAutoReply` con `{ ...settings, enabled: true }`, `state: {}`, `previousInboundAt: null`, `message: { type: 'text', text }`, `lineId: null`, ahora → `200 { reply: string | null, parts: string[], matchedRuleIndexes: number[], outOfHours: boolean }` (posiciones en la lista enviada: una regla nueva no tiene id; cambiado al implementar).
 
 - [ ] **Step 1: Escribir los tests que fallan** en `Backend/tests/isolation/auto-replies.test.js` (con `seedAccount`, `seedMember`, `request`):
   - `A guarda su configuración y B no la ve`: A hace `PUT` con una regla; el `GET` de A la devuelve con su `id`; el `GET` de B da la de por defecto (apagada, sin reglas).
   - `guardar otra vez conserva el id de las reglas`.
   - `un agente y un supervisor reciben 403; sin sesión, 401`.
-  - `una regla con lineIds de una línea de B da 400`.
+  - `una regla con lineIds de una línea de B da 404`.
   - `un horario con tres tramos o una zona inválida da 400`.
   - `preview responde con la configuración sin guardar`: con bienvenida encendida y una regla `precio`, `text: 'precio?'` → `reply` con las dos partes; nada se guardó (el `GET` sigue igual).
   - En `tests/permissions.test.js`: `autoReplies.manage` solo owner y admin.
