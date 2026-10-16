@@ -291,7 +291,7 @@ export const finishPendingReplace = async (accountId) => {
  * `afterLock` es SOLO para los tests: se llama con el candado tomado.
  */
 export const applyConnection = async (
-    { accountId, waBusinessId, tokenWhatsapp, phoneNumberId, details = null, twoStepPin = null },
+    { accountId, waBusinessId, tokenWhatsapp, phoneNumberId, details = null, twoStepPin = null, businessApp = false },
     { afterLock = null } = {},
 ) => withLineLock(accountId, async () => {
     await afterLock?.();
@@ -324,11 +324,17 @@ export const applyConnection = async (
             ...(freshDetails && { displayPhoneNumber: freshDetails.displayPhoneNumber ?? null, verifiedName: freshDetails.verifiedName ?? null }),
             // El PIN del registro (`registerIfNeeded`); sin él, se queda el que hubiera.
             ...(twoStepPin && { twoStepPin }),
-        } },
+            // Lo que dijo Meta en esta conexión (también al renovar).
+            businessApp,
+        },
+        // Conectar de nuevo deja atrás una desconexión de Meta.
+        $unset: { disconnectionReason: '' } },
         { upsert: true, new: true },
     );
     await Waba.updateOne({ _id: waba._id }, {
-        $set: { tokenWhatsapp },
+        // `authorizedAt` también al renovar: es lo que hace viejo un aviso de
+        // Meta de que retiró el acceso (`PARTNER_REMOVED`).
+        $set: { tokenWhatsapp, authorizedAt: new Date() },
         // Ya está en la línea: deja de estar pendiente.
         ...(twoStepPin && { $unset: { [`pendingTwoStepPins.${phoneNumberId}`]: '' } }),
     });

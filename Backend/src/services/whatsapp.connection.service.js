@@ -2,13 +2,14 @@ import Account from "../models/account.model.js";
 import Line from "../models/line.model.js";
 import User from "../models/user.model.js";
 import Waba from "../models/waba.model.js";
-import { REGISTER_TIMEOUT_MS, getWabaPhoneNumbers, registerPhoneNumber } from "../libs/whatsapp.js";
+import { REGISTER_TIMEOUT_MS, getPhoneNumberPlatform, getWabaPhoneNumbers, registerPhoneNumber } from "../libs/whatsapp.js";
 import { withLineLock } from "./line.service.js";
 import { decrypt, encrypt } from "../utils/crypto.js";
 import { planConnection } from "../utils/line.js";
 import {
-    LINE_ERROR_CODES, PHONE_NUMBER_REGISTRATION_FAILED_MESSAGE, describeWabaPhoneNumber, generateTwoStepPin,
-    lineLimitMessage, needsRegistration, nextPageCursor,
+    BUSINESS_APP_NUMBER_UNKNOWN_MESSAGE, LINE_ERROR_CODES, PHONE_NUMBER_REGISTRATION_FAILED_MESSAGE,
+    describePhoneNumberPlatform, describeWabaPhoneNumber, generateTwoStepPin, lineLimitMessage, needsRegistration,
+    nextPageCursor, pickBusinessAppPhoneNumber,
 } from "../utils/whatsapp.line.js";
 
 // Lo que comparten las dos formas de conectar un número (Embedded Signup y el
@@ -97,6 +98,48 @@ export const verifyWabaPhoneNumber = async ({ token, waBusinessId, phoneNumberId
     return line;
 };
 
+// Si el número sigue en la app de WhatsApp Business (coexistencia), según Meta:
+// `{ onBusinessApp: true | false | null, platformType }`. Nunca lanza: si Meta
+// falla, `onBusinessApp` es null («no se sabe») y la conexión sigue.
+export const readPhoneNumberPlatform = async ({ token, phoneNumberId }) => {
+    try {
+        const res = await getPhoneNumberPlatform({ token, phoneNumberId });
+        return describePhoneNumberPlatform(res.data);
+    } catch (error) {
+        console.warn('No se pudo saber si el número está en la app de WhatsApp Business:', error.waErrorDetail ?? error.message);
+        return { onBusinessApp: null, platformType: null };
+    }
+};
+
+// El número a conectar en la coexistencia, deducido del WABA (el evento de la
+// app no trae `phone_number_id`): el único del WABA, o el único que Meta dice
+// que está en la app. Si no queda exactamente uno, 409 y no se guarda nada.
+export const resolveBusinessAppPhoneNumber = async ({ token, waBusinessId }) => {
+    const ids = [];
+    let after = null;
+    for (let page = 0; page < MAX_PHONE_NUMBER_PAGES; page++) {
+        const res = await getWabaPhoneNumbers({ token, waBusinessId, after });
+        for (const entry of Array.isArray(res.data?.data) ? res.data.data : []) {
+            if (entry?.id) ids.push(String(entry.id));
+        }
+        after = nextPageCursor(res.data);
+        if (!after) break;
+    }
+    const numbers = ids.length === 1
+        ? [{ phoneNumberId: ids[0], onBusinessApp: null }]
+        : await Promise.all(ids.map(async phoneNumberId => ({
+            phoneNumberId, onBusinessApp: (await readPhoneNumberPlatform({ token, phoneNumberId })).onBusinessApp,
+        })));
+    const phoneNumberId = pickBusinessAppPhoneNumber(numbers);
+    if (!phoneNumberId) {
+        const error = new Error(BUSINESS_APP_NUMBER_UNKNOWN_MESSAGE);
+        error.statusCode = 409;
+        error.code = LINE_ERROR_CODES.businessAppNumberUnknown;
+        throw error;
+    }
+    return phoneNumberId;
+};
+
 // Registra el número en la Cloud API si Meta dice que no lo está (`details`, de
 // `verifyWabaPhoneNumber`), y devuelve el PIN (cifrado) que tiene que guardar
 // su línea, o null. El `Waba` ya es de esta cuenta (`claimWaba`).
@@ -113,14 +156,16 @@ export const verifyWabaPhoneNumber = async ({ token, waBusinessId, phoneNumberId
 // dura más que la espera a Meta, para no caducar a mitad del registro.
 const REGISTER_LOCK_MS = REGISTER_TIMEOUT_MS + 30_000;
 
-export const registerIfNeeded = async ({ accountId, waBusinessId, token, phoneNumberId, details }) => {
+// `onBusinessApp` y `claimedBusinessApp` (lo que dijo el navegador): un número
+// de la app de WhatsApp Business nunca se registra (`needsRegistration`).
+export const registerIfNeeded = async ({ accountId, waBusinessId, token, phoneNumberId, details, onBusinessApp = null, claimedBusinessApp = false }) => {
     const wabaFilter = { waBusinessId, accountId };
     const pinPath = `pendingTwoStepPins.${phoneNumberId}`;
     const findPendingPin = async () =>
         (await Waba.findOne(wabaFilter).select('pendingTwoStepPins').lean())?.pendingTwoStepPins?.[phoneNumberId] ?? null;
 
-    if (!needsRegistration(details)) {
-        if (details?.platformType !== 'CLOUD_API') {
+    if (!needsRegistration(details, { onBusinessApp, claimedBusinessApp })) {
+        if (details?.platformType !== 'CLOUD_API' && onBusinessApp !== true) {
             console.warn('Registrar número: platform_type inesperado', phoneNumberId, details?.platformType);
         }
         return findPendingPin();

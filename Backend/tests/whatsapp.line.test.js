@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { describePhoneNumberPlatform, describeWabaPhoneNumber, generateTwoStepPin, needsRegistration, nextPageCursor } from '../src/utils/whatsapp.line.js';
+import { describePhoneNumberPlatform, describeWabaPhoneNumber, generateTwoStepPin, needsRegistration, nextPageCursor, pickBusinessAppPhoneNumber } from '../src/utils/whatsapp.line.js';
 
 const BODY = { data: [
     { id: '111', display_phone_number: '+1 555 000 0001', verified_name: 'Negocio de prueba' },
@@ -94,4 +94,13 @@ test('needsRegistration: si no se sabe, no registra lo que el navegador dijo que
     assert.equal(needsRegistration({ platformType: 'NOT_APPLICABLE' }, { onBusinessApp: null }), true);
     assert.equal(needsRegistration({ platformType: 'NOT_APPLICABLE' }, { onBusinessApp: null, claimedBusinessApp: true }), false);
     assert.equal(needsRegistration({ platformType: 'CLOUD_API' }, { onBusinessApp: null, claimedBusinessApp: false }), false);
+});
+
+test('pickBusinessAppPhoneNumber: uno solo; entre varios, el único que está en la app', () => {
+    assert.equal(pickBusinessAppPhoneNumber([{ phoneNumberId: '1', onBusinessApp: null }]), '1');
+    assert.equal(pickBusinessAppPhoneNumber([{ phoneNumberId: '1', onBusinessApp: false }, { phoneNumberId: '2', onBusinessApp: true }]), '2');
+    assert.equal(pickBusinessAppPhoneNumber([{ phoneNumberId: '1', onBusinessApp: true }, { phoneNumberId: '2', onBusinessApp: true }]), null);
+    assert.equal(pickBusinessAppPhoneNumber([{ phoneNumberId: '1', onBusinessApp: false }, { phoneNumberId: '2', onBusinessApp: null }]), null);
+    assert.equal(pickBusinessAppPhoneNumber([]), null);
+    assert.equal(pickBusinessAppPhoneNumber(undefined), null);
 });

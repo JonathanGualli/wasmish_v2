@@ -29,6 +29,10 @@ const wabaSchema = new mongoose.Schema({
         of: String,
         default: undefined,
     },
+    // La última conexión o renovación confirmada de este WABA. Un aviso de
+    // Meta de que retiró el acceso (`PARTNER_REMOVED`) anterior a esta fecha
+    // es viejo y no desconecta nada.
+    authorizedAt: { type: Date, default: null },
 }, {
     timestamps: true,
 });
