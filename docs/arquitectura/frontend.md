@@ -68,6 +68,8 @@ Lógica no obvia del `AuthProvider`, los errores de WhatsApp en palabras y la li
 - `useImportPreview`, `useImportRun`, `importError` — importar contactos (en `useContactImport.ts`); `useRefreshContacts` (en `useContacts.ts`) invalida contactos, bandeja y etiquetas
 - `useTemplates` — sync + listado de plantillas, y `uploadHeaderMedia` / `removeHeaderMedia` (el archivo de la cabecera; `utils/templateHeader.ts` replica `templateHeaderIssue` para los selectores y `TemplateBubble` pinta la cabecera con `template`)
 - `useApiKey` — gestión de API keys (listar / generar / revocar)
+- `useAutoReplies`, `useSaveAutoReplies` (la respuesta reemplaza la caché: trae los ids de las reglas nuevas) y `usePreviewAutoReply(settings, text, enabled)` (una consulta: se repite sola al cambiar la configuración) — respuestas automáticas, solo `autoReplies.manage` ([respuestas-automaticas.md § La página](respuestas-automaticas.md#la-página-pagesprivateautoreplies))
+- `useLeaveGuard(active, onLeave)` (en `components/Layout/NavigationGuardContext.ts`) — preguntar antes de salir por el menú con cambios sin guardar; también `beforeunload`
 - `useAdminStats`, `useAdminClients`, `useUpdateAccountLimits` — el panel de superadmin (en `useAdmin.ts`)
 - `useContacts(pageIndex, pageSize, search, filter, tagIds)`, `useContact(id)`, `useLiveContact(id, conversationId)`, `useContactByPhone(phone)`, `useContactMutations` (create/update/remove, y `saveNotes`/`setTags` para la ficha del chat) — en `useContacts.ts`
 - `useTags`, `useTagSelectionSummary(selection, enabled)`, `useTagMutations` (create/rename/remove/bulk y `createMissing`), `tagError` — etiquetas (en `useTags.ts`)

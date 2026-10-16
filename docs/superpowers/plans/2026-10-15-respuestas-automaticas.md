@@ -371,6 +371,14 @@ Expected: sin errores. En el navegador, con el backend local de la Tarea 7 y **u
 - [ ] **Step 3: Comprobar** con `cd Frontend && npm run lint && npm run build` y en el navegador, con el backend local: encender, escribir, probar un mensaje, guardar, recargar y ver lo guardado; un agente no ve la entrada del menú y la ruta lo saca. En Chrome emulando un teléfono.
 - [ ] **Step 4: Commit** — `git commit -m "respuestas automáticas: la página de configuración"`
 
+**Lo que cambió con el diseño** (v2 de Claude Design, 2026-10-15; decisiones de Jonathan en `docs/decisiones.md`):
+- **Pasos en vez de una página larga**, y un **asistente** la primera vez. Para saber cuándo abrirlo, el `GET` devuelve `configured` (si la cuenta guardó alguna vez): un cambio pequeño en el backend, con su test.
+- **El interruptor general se guarda con un toque**, sin pasar por «Guardar», y pide confirmar al encender. Los demás cambios siguen esperando a «Guardar».
+- **«Ráfagas»** en «Cuándo se calla» (3 respuestas en 10 minutos), que el diseño no tenía: es lo que ya hace el freno del worker.
+- **«Palabras clave» no tiene interruptor propio**, aunque el diseño lo dibuja: el backend no lo tiene. Cada regla se enciende sola, y el paso sale «Encendida» si alguna lo está.
+- **En el teléfono, el horario se edita en la misma pantalla**, sin la hoja inferior por día que proponía el diseño.
+- **Salir con cambios** necesitó `NavigationGuardContext`: la app usa `BrowserRouter`, sin `useBlocker`. Y `ConfirmDialog` cierra con su botón aunque se vea el aviso global: antes «Seguir editando» no hacía nada en esos 5 s.
+
 ## Al terminar
 
 - **PR de versión** (`version-1.0.23`, último commit `version:bump`) con `docs/estado.md` al día.

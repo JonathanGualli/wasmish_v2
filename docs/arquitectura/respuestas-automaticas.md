@@ -15,6 +15,7 @@ Las respuestas que Wasmish manda solo: bienvenida, fuera de horario y palabras c
   - [El worker (`workers/auto.reply.worker.js`)](#el-worker-workersautoreplyworkerjs)
   - [La pausa por respuesta manual (`markHumanReply`)](#la-pausa-por-respuesta-manual-markhumanreply)
 - **Frontend**
+  - [La página (`pages/private/AutoReplies/`)](#la-página-pagesprivateautoreplies)
   - [La marca «Bot» en el chat](#la-marca-bot-en-el-chat)
 
 ---
@@ -94,6 +95,23 @@ Las campañas y la API pública **no** pausan al bot: `processTemplateSending` n
 ---
 
 ## Frontend
+
+### La página (`pages/private/AutoReplies/`)
+
+Diseño: `Design/Wasmish Respuestas automáticas v2.html` (por pasos y a lo ancho), con los estados que solo dibuja la v1 (`Design/Wasmish Respuestas automáticas.html`): la invitación, la carga, el error al cargar, el guardado y salir con cambios. Ruta `AutoRepliesPath` y entrada «Respuestas automáticas» en el menú, las dos solo con `autoReplies.manage`.
+
+- **Tres modos** (`useAutoReplyEditor`):
+  - **`intro`:** la cuenta nunca guardó (`configured: false` en el `GET`). La invitación ofrece «Empezar con un ejemplo» (bienvenida con el nombre del negocio y horario de lunes a viernes con mediodía) o «desde cero»; las dos abren el asistente.
+  - **`wizard`:** el asistente. Los cuatro pasos en orden, con «Siguiente», que no avanza si el paso tiene errores, y al final «Revisar y encender», con el aviso del cobro de Meta. **«Terminar luego» guarda lo hecho apagado**, y la próxima vez la página abre en pestañas.
+  - **`tabs`:** los mismos pasos como pestañas: cada uno dice si está encendido y qué tiene.
+- **Se guarda todo junto** (`PUT`), con «Guardar» y «Descartar». **El interruptor general es la excepción:** se guarda con un toque sobre lo ya guardado (`setEnabledNow`), sin llevarse los demás cambios sin guardar. Encender pregunta antes, cada vez, con el aviso del cobro; apagar no pregunta.
+- **Los errores se ven antes de llamar al backend**, junto a su campo, en el paso (la barra dice cuántos tiene cada uno) y en un aviso arriba. `utils/autoReplyForm.ts` repite las reglas del esquema y de `scheduleIssue`, pero por día y por hora, porque el backend da un solo mensaje para todo el horario. Al guardar con errores se abre el primer paso que tiene uno.
+- **Las horas,** en un desplegable de 24 h en pasos de 15 minutos. El `<input type="time">` salía en 12 h según el idioma del navegador, con su reloj, y no cabía en la fila. Una hora guardada fuera de los cuartos se conserva.
+- **Las palabras clave,** como fichas (Enter o coma). Una repetida, ignorando mayúsculas y tildes, no entra. **El orden se cambia con flechas**, sin arrastrar: no hace falta una librería nueva y funciona igual en el teléfono.
+- **«Probar»** usa `usePreviewAutoReply`, una consulta con lo que hay en pantalla. Tras probar un mensaje, cada cambio lo vuelve a preguntar solo, 400 ms después. **Con errores marcados no prueba** («Corrige lo marcado para probar»): el backend valida la configuración entera. Qué frase coincidió lo calcula el frontend (`matchedKeyword`), con la misma normalización que el backend.
+- **El diseño se reparte según el ancho de la tarjeta, no de la ventana** (*container queries* de Tailwind v4, `@container` y `@min-[…]:`): a 1024 px, con «Probar» al lado, el editor de reglas se aplastaba. Por debajo de 1024 px, «Probar» deja la columna y pasa a un botón que abre una hoja.
+- **En el teléfono:** la lista de pasos con el interruptor general; cada paso, y cada regla, en su propia pantalla, bajo la barra móvil de siempre; «Probar» y «Guardar» fijos abajo (en el asistente, «Anterior» y «Siguiente»).
+- **Salir con cambios** sin guardar pregunta «¿Salir sin guardar?». La app usa `BrowserRouter`, que no tiene `useBlocker`, así que el menú lateral pasa cada navegación por `NavigationGuardContext` (`components/Layout/`) y la página deja ahí su guardián con `useLeaveGuard`. Recargar o cerrar la pestaña lo pregunta el navegador (`beforeunload`). El botón «atrás» del navegador no pregunta.
 
 ### La marca «Bot» en el chat
 
