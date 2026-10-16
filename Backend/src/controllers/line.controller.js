@@ -40,6 +40,10 @@ export const serializeLine = (line, { defaultLineId, waba }) => ({
     // Si Wasmish guardó el PIN de dos pasos al registrar el número: la UI dice
     // «Sin PIN guardado» sin pedirlo. El PIN, solo en GET /lines/:id/pin.
     hasTwoStepPin: Boolean(line.twoStepPin),
+    // Coexistencia: el número sigue en la app de WhatsApp Business, y por qué
+    // lo desconectó Meta (el motivo tal cual; la UI lo dice en palabras).
+    businessApp: Boolean(line.businessApp),
+    disconnectionReason: line.disconnectionReason ?? null,
 });
 
 const serializeAccountLine = async (accountId, line) => {

@@ -43,6 +43,14 @@ const lineSchema = new mongoose.Schema({
     // cliente lo necesita para llevarse el número; solo sale en
     // `GET /lines/:id/pin`. null si el número ya estaba registrado al conectarlo.
     twoStepPin: { type: String, default: null },
+    // El número sigue en la app de WhatsApp Business (coexistencia), según Meta
+    // (`is_on_biz_app`) al conectar. Lo que se responde desde la app llega como
+    // eco (`origin: 'businessApp'`).
+    businessApp: { type: Boolean, default: false },
+    // Por qué la desconectó Meta (`PARTNER_REMOVED`): el motivo tal cual
+    // (`PRIMARY_INACTIVITY`…), o null si no lo dijo o se desconectó desde
+    // Wasmish. Se borra al reconectar o renovar.
+    disconnectionReason: { type: String, default: null },
 }, {
     timestamps: true,
 });

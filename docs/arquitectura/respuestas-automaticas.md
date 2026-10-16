@@ -95,6 +95,8 @@ Cada trabajo terminado deja un log `Respuesta automática: { messageId, conversa
 
 Las campañas y la API pública **no** pausan al bot: `processTemplateSending` no se tocó.
 
+**Lo respondido desde la app de WhatsApp Business** (coexistencia, 2026-10-16) también es una respuesta manual: `procesarEco` llama a `markHumanReply` en cuanto guarda el eco y antes de bajar su archivo ([webhook-adjuntos.md](webhook-adjuntos.md#lo-que-se-responde-desde-la-app-de-whatsapp-business-procesareco)). Un envío del bot ya autorizado no se cancela, y el bot se calla desde que se procesa el eco, no desde que se escribió en la app.
+
 ---
 
 ## Frontend

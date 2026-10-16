@@ -32,6 +32,18 @@ const fakeMeta = (numbers, options = {}) => onMeta(async (config) => {
         })) } };
     }
     if (config.url.endsWith('/subscribed_apps')) return { data: { success: true } };
+    // Si el número está en la app de WhatsApp Business (coexistencia): `bizApp`
+    // es `{ [id]: true | false | 'error' | 'missing' }`; sin dato, `false`.
+    const platformOf = /^\/([^/]+)$/.exec(config.url)?.[1];
+    if (platformOf && config.params?.fields === 'is_on_biz_app,platform_type') {
+        const value = options.bizApp?.[platformOf] ?? false;
+        if (value === 'error') throw Object.assign(new Error('Meta no respondió'), { waErrorCode: 100 });
+        return { data: {
+            id: platformOf,
+            ...(value !== 'missing' && { is_on_biz_app: value }),
+            ...(platformType !== undefined && { platform_type: platformType }),
+        } };
+    }
     if (config.url.endsWith('/register')) {
         await onRegister?.(config);
         return { data: { success: true } };
@@ -90,7 +102,7 @@ test('POST /whatsapp/connect: comprueba el número antes de suscribir la app, y 
     onMeta(null);
     assert.equal(res.status, 200, res.text);
     assert.deepEqual(metaCalls.slice(before).map(c => c.url),
-        ['/oauth/access_token', '/waba-e/phone_numbers', '/waba-e/subscribed_apps']);
+        ['/oauth/access_token', '/waba-e/phone_numbers', '/995', '/waba-e/subscribed_apps']);
     assert.equal((await User.findById(e.userId).lean()).phoneNumberId, '995');
 });
 
@@ -111,6 +123,7 @@ test('dos conexiones a la vez: la segunda recibe 409, no 500, y no guarda nada',
 test('PUT /users/update-user-token-whatsapp: un número en la segunda página del WABA también vale', async () => {
     const h = await seedAccount('H', { seq: 8 });
     onMeta(async (config) => {
+        if (config.url === '/998') return { data: { id: '998', is_on_biz_app: false, platform_type: 'CLOUD_API' } };
         if (!config.url.endsWith('/phone_numbers')) return undefined;
         return config.params?.after === 'pagina-2'
             ? { data: { data: [{ id: '998' }] } }
@@ -477,7 +490,7 @@ test('POST /whatsapp/connect: un número sin registrar se registra con un PIN, y
     onMeta(null);
     assert.equal(res.status, 200, res.text);
     assert.deepEqual(metaCalls.slice(before).map(c => c.url),
-        ['/oauth/access_token', '/waba-RA/phone_numbers', '/waba-RA/subscribed_apps', '/981/register']);
+        ['/oauth/access_token', '/waba-RA/phone_numbers', '/981', '/waba-RA/subscribed_apps', '/981/register']);
     assert.equal(sent.messaging_product, 'whatsapp');
     assert.match(sent.pin, /^\d{6}$/);
     const line = await Line.findOne({ accountId: r.accountId, phoneNumberId: '981' }).lean();
@@ -669,4 +682,124 @@ test('registrar espera a Meta hasta 60 s, con el candado de líneas tomado todo 
     assert.equal(res.status, 200, res.text);
     assert.equal(timeout, 60_000);
     assert.ok(lockLeftMs > 60_000, `al candado le quedaban ${lockLeftMs} ms`);
+});
+
+// --- Coexistencia: un número que sigue en la app de WhatsApp Business ---
+
+const connectBusinessApp = (account) => request(account, 'POST', '/whatsapp/connect',
+    { code: 'x', waBusinessId: `waba-${account.label}`, businessApp: true });
+
+test('coexistencia: sin phoneNumberId, el número se deduce del WABA, no se registra y la línea queda junto con la app', async () => {
+    const c = await seedAccount('CX1', { seq: 120 });
+    fakeMeta(['1201'], { platformType: 'NOT_APPLICABLE', bizApp: { 1201: true } });
+    const before = metaCalls.length;
+    const res = await connectBusinessApp(c);
+    onMeta(null);
+    assert.equal(res.status, 200, res.text);
+    assert.equal(registerCalls(before).length, 0, 'un número de la app no se registra');
+    const line = await Line.findOne({ accountId: c.accountId, phoneNumberId: '1201' }).lean();
+    assert.equal(line.businessApp, true);
+    const waba = await Waba.findOne({ accountId: c.accountId, waBusinessId: 'waba-CX1' }).lean();
+    assert.ok(waba.authorizedAt instanceof Date);
+    const lines = await request(c, 'GET', '/lines');
+    assert.equal(lines.body.lines[0].businessApp, true);
+    assert.equal(lines.body.lines[0].disconnectionReason, null);
+});
+
+test('coexistencia: con dos números sin marcar en el WABA → 409 business_app_number_unknown y nada guardado', async () => {
+    const c = await seedAccount('CX2', { seq: 121 });
+    fakeMeta(['1211', '1212']);
+    const res = await connectBusinessApp(c);
+    onMeta(null);
+    assert.equal(res.status, 409, res.text);
+    assert.equal(res.body[0].code, 'business_app_number_unknown');
+    assert.equal(await Line.countDocuments({ accountId: c.accountId }), 0);
+    assert.equal(await Waba.countDocuments({ accountId: c.accountId }), 0);
+});
+
+test('coexistencia: con dos números, se elige el único que está en la app', async () => {
+    const c = await seedAccount('CX3', { seq: 122 });
+    fakeMeta(['1221', '1222'], { bizApp: { 1222: true } });
+    const res = await connectBusinessApp(c);
+    onMeta(null);
+    assert.equal(res.status, 200, res.text);
+    assert.ok(await Line.exists({ accountId: c.accountId, phoneNumberId: '1222', businessApp: true }));
+    assert.equal(await Line.exists({ accountId: c.accountId, phoneNumberId: '1221' }), null);
+});
+
+test('sin phoneNumberId y sin businessApp → 400, sin llamar a Meta', async () => {
+    const c = await seedAccount('CX4', { seq: 123 });
+    const before = metaCalls.length;
+    const res = await request(c, 'POST', '/whatsapp/connect', { code: 'x', waBusinessId: 'waba-CX4' });
+    assert.equal(res.status, 400, res.text);
+    assert.equal(metaCalls.length, before);
+});
+
+test('un número normal (Meta dice que no está en la app) se registra como siempre y no queda junto con la app', async () => {
+    const c = await seedAccount('CX5', { seq: 124 });
+    fakeMeta(['1241'], { platformType: 'NOT_APPLICABLE', bizApp: { 1241: false } });
+    const before = metaCalls.length;
+    const res = await connectEmbedded(c, '1241');
+    onMeta(null);
+    assert.equal(res.status, 200, res.text);
+    assert.equal(registerCalls(before).length, 1);
+    assert.equal((await Line.findOne({ accountId: c.accountId, phoneNumberId: '1241' }).lean()).businessApp, false);
+});
+
+test('si la consulta de is_on_biz_app falla, la conexión sigue y registra solo si el navegador no dijo que está en la app', async () => {
+    const c = await seedAccount('CX6', { seq: 125 });
+    fakeMeta(['1251'], { platformType: 'NOT_APPLICABLE', bizApp: { 1251: 'error' } });
+    let before = metaCalls.length;
+    let res = await connectEmbedded(c, '1251');
+    assert.equal(res.status, 200, res.text);
+    assert.equal(registerCalls(before).length, 1);
+
+    const d = await seedAccount('CX7', { seq: 126 });
+    fakeMeta(['1261'], { platformType: 'NOT_APPLICABLE', bizApp: { 1261: 'missing' } });
+    before = metaCalls.length;
+    res = await request(d, 'POST', '/whatsapp/connect', { code: 'x', phoneNumberId: '1261', waBusinessId: 'waba-CX7', businessApp: true });
+    onMeta(null);
+    assert.equal(res.status, 200, res.text);
+    assert.equal(registerCalls(before).length, 0, 'sin saberlo, no se registra lo que el navegador dijo que está en la app');
+    assert.equal((await Line.findOne({ accountId: d.accountId, phoneNumberId: '1261' }).lean()).businessApp, false);
+});
+
+test('renovar no cambia connectedAt, pero sí Waba.authorizedAt, y borra el motivo de una desconexión', async () => {
+    const c = await seedAccount('CX8', { seq: 127 });
+    fakeMeta(['1271'], { bizApp: { 1271: true } });
+    assert.equal((await connectEmbedded(c, '1271')).status, 200);
+    const first = await Line.findOne({ accountId: c.accountId, phoneNumberId: '1271' }).lean();
+    const firstAuthorized = (await Waba.findOne({ accountId: c.accountId }).lean()).authorizedAt;
+    await Line.updateOne({ _id: first._id }, { $set: { disconnectionReason: 'PRIMARY_INACTIVITY' } });
+    await new Promise(resolve => setTimeout(resolve, 15));
+
+    assert.equal((await connectEmbedded(c, '1271')).status, 200);
+    onMeta(null);
+    const again = await Line.findById(first._id).lean();
+    assert.equal(again.connectedAt.getTime(), first.connectedAt.getTime());
+    assert.equal(again.disconnectionReason, undefined);
+    assert.ok((await Waba.findOne({ accountId: c.accountId }).lean()).authorizedAt > firstAuthorized);
+});
+
+test('el formulario manual con un número de la app: no lo registra y la línea queda junto con la app', async () => {
+    const c = await seedAccount('CX9', { seq: 128 });
+    fakeMeta(['1281'], { platformType: 'NOT_APPLICABLE', bizApp: { 1281: true } });
+    const before = metaCalls.length;
+    const res = await request(c, 'PUT', '/users/update-user-token-whatsapp',
+        { tokenWhatsapp: 'token-manual', phoneNumberId: '1281', waBusinessId: 'waba-CX9' });
+    onMeta(null);
+    assert.equal(res.status, 200, res.text);
+    assert.equal(registerCalls(before).length, 0);
+    assert.equal((await Line.findOne({ accountId: c.accountId, phoneNumberId: '1281' }).lean()).businessApp, true);
+});
+
+test('coexistencia: si el número deducido ya es de otra cuenta → 409 phone_number_taken y nada guardado', async () => {
+    const c = await seedAccount('CX10', { seq: 129 });
+    fakeMeta([A_NUMBER], { bizApp: { [A_NUMBER]: true } });
+    const res = await connectBusinessApp(c);
+    onMeta(null);
+    assert.equal(res.status, 409, res.text);
+    assert.equal(res.body[0].code, 'phone_number_taken');
+    assert.equal(await Line.countDocuments({ accountId: c.accountId }), 0);
+    assert.equal(await Waba.countDocuments({ accountId: c.accountId }), 0);
 });

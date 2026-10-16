@@ -12,10 +12,16 @@
 //   npm run webhook:simulate -- alta-marketing   ← vuelve a aceptarla
 //   npm run webhook:simulate -- cambio-numero --new-from 593000000001
 //                                                ← cambia de número y de BSUID
+//   npm run webhook:simulate -- eco               ← el negocio responde desde la app
+//                                                  de WhatsApp Business (coexistencia)
+//   npm run webhook:simulate -- retiro-acceso --reason PRIMARY_INACTIVITY
+//                                                ← Meta retira el acceso al WABA de la
+//                                                  línea (--reason ninguno: sin motivo)
 //
 // Opciones: --from <numero>  --url <http://...>  --phone-number-id <id>
 //           --name <nombre de perfil>  --username <usuario>  --new-from <numero>
 //           --display-number <numero visible de la línea, como lo manda Meta>
+//           --reason <motivo de retiro-acceso>
 //
 // Después de cambio-numero, el contacto de prueba es el de --from <número nuevo>.
 //
@@ -34,6 +40,7 @@ import Line from '../src/models/line.model.js';
 import Contact from '../src/models/contact.model.js';
 import Conversation from '../src/models/conversation.model.js';
 import Message from '../src/models/message.model.js';
+import Waba from '../src/models/waba.model.js';
 
 // Formas reales del webhook de Meta, una por tipo. Si alguna no cuadra con lo
 // que manda Meta de verdad, corregir AQUÍ y en utils/inbound.message.js.
@@ -68,6 +75,12 @@ const PREFERENCIAS = {
 // Tampoco es un mensaje: va en `value.user_id_update`. Necesita --new-from.
 const CAMBIO_NUMERO = 'cambio-numero';
 
+// Coexistencia (spec 2026-10-16): lo que el negocio responde desde la app de
+// WhatsApp Business (`smb_message_echoes`) y el aviso de que Meta retiró el
+// acceso al WABA de la línea (`account_update` con `PARTNER_REMOVED`).
+const ECO = 'eco';
+const RETIRO = 'retiro-acceso';
+
 // --- argumentos -------------------------------------------------------------
 const argv = process.argv.slice(2);
 const opcion = (nombre, porDefecto) => {
@@ -84,6 +97,7 @@ const NEW_FROM = opcion('new-from', null);
 // Meta manda en cada webhook el número visible de la línea; el backend lo
 // guarda si la línea no lo tiene (lo usa `from` en la API pública).
 const DISPLAY_NUMBER = opcion('display-number', '15550000000');
+const REASON = opcion('reason', 'PRIMARY_INACTIVITY');
 
 // El BSUID que Meta generaría: país + id. Se deriva del número o del usuario
 // para que el mismo contacto de prueba tenga siempre el mismo.
@@ -93,7 +107,7 @@ const PHONE = USERNAME ? null : FROM;
 // Tras el cambio de número, el BSUID es el que tendría --from <número nuevo>.
 const NEW_USER_ID = NEW_FROM && simulatedUserId(NEW_FROM);
 
-const valoresDeOpciones = [FROM, URL_BASE, phoneNumberIdArg, PROFILE_NAME, USERNAME, NEW_FROM, DISPLAY_NUMBER];
+const valoresDeOpciones = [FROM, URL_BASE, phoneNumberIdArg, PROFILE_NAME, USERNAME, NEW_FROM, DISPLAY_NUMBER, REASON];
 const nombres = argv.filter(a => !a.startsWith('--') && !valoresDeOpciones.includes(a));
 const todos = argv.includes('--all');
 const listar = argv.includes('--list');
@@ -104,7 +118,7 @@ const morir = (mensaje) => { console.error(mensaje); process.exit(1); };
 if (listar) {
     console.log('Tipos disponibles:\n  ' + Object.keys(MUESTRAS).join('\n  '));
     console.log('\nPreferencias de marketing:\n  ' + Object.keys(PREFERENCIAS).join('\n  '));
-    console.log(`\nOtros avisos:\n  ${CAMBIO_NUMERO}   (con --new-from <número>)`);
+    console.log(`\nOtros avisos:\n  ${CAMBIO_NUMERO}   (con --new-from <número>)\n  ${ECO}             (respuesta desde la app de WhatsApp Business)\n  ${RETIRO}   (Meta retira el acceso al WABA; --reason <motivo> o ninguno)`);
     process.exit(0);
 }
 
@@ -116,7 +130,7 @@ if (!limpiar && elegidos.length === 0) {
     morir('Dime qué mandar.  Ej: npm run webhook:simulate -- audio boton   (o --all, o --list)');
 }
 
-const desconocidos = elegidos.filter(n => !MUESTRAS[n] && !PREFERENCIAS[n] && n !== CAMBIO_NUMERO);
+const desconocidos = elegidos.filter(n => !MUESTRAS[n] && !PREFERENCIAS[n] && ![CAMBIO_NUMERO, ECO, RETIRO].includes(n));
 if (desconocidos.length > 0) morir(`No conozco: ${desconocidos.join(', ')}.  Usa --list para ver los tipos.`);
 if (elegidos.includes(CAMBIO_NUMERO) && !NEW_FROM) morir(`${CAMBIO_NUMERO} necesita el número nuevo:  --new-from 593000000001`);
 
@@ -215,8 +229,40 @@ const valorDe = (nombre) => {
     };
 };
 
+// El aviso de que Meta retiró el acceso: con la forma del ejemplo de Meta, en
+// la que `entry.id` NO es el WABA (va en `waba_info.waba_id`).
+const retiroDeAcceso = async () => {
+    const waba = lineaActiva?.wabaId ? await Waba.findById(lineaActiva.wabaId).select('waBusinessId').lean() : null;
+    if (!waba) morir(`${RETIRO} necesita una línea activa con su WABA (Fase 2c).`);
+    return {
+        entry: [{
+            id: 'entrada-simulada', time: Math.floor(Date.now() / 1000),
+            changes: [{ field: 'account_update', value: {
+                event: 'PARTNER_REMOVED',
+                waba_info: { waba_id: waba.waBusinessId, owner_business_id: 'negocio-simulado' },
+                ...(REASON !== 'ninguno' && { disconnection_info: { reason: REASON, initiated_by: 'SYSTEM' } }),
+            } }],
+        }],
+    };
+};
+
+// Un eco: el negocio le respondió desde la app al contacto de prueba.
+const eco = () => ({
+    field: 'smb_message_echoes',
+    value: {
+        messaging_product: 'whatsapp',
+        metadata: { display_phone_number: DISPLAY_NUMBER, phone_number_id: phoneNumberId },
+        message_echoes: [{
+            from: DISPLAY_NUMBER, to: PHONE ?? FROM,
+            id: `wamid.eco.${Date.now()}.${Math.random().toString(36).slice(2)}`,
+            timestamp: String(Math.floor(Date.now() / 1000)),
+            type: 'text', text: { body: 'Respondido desde la app de WhatsApp Business (simulado)' },
+        }],
+    },
+});
+
 for (const nombre of elegidos) {
-    const body = JSON.stringify({
+    const body = nombre === RETIRO ? JSON.stringify(await retiroDeAcceso()) : nombre === ECO ? JSON.stringify({ entry: [{ changes: [eco()] }] }) : JSON.stringify({
         entry: [{ changes: [{ value: {
             metadata: { display_phone_number: DISPLAY_NUMBER, phone_number_id: phoneNumberId },
             // Desde abril de 2026 llega siempre el BSUID; el teléfono, no siempre.

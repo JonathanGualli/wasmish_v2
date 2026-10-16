@@ -25,11 +25,39 @@ export const describeWabaPhoneNumber = (body, phoneNumberId) => {
 // registrado (renovar el token, un cliente que viene de otro proveedor), en
 // On-Premises o con un valor desconocido no se toca, porque registrarlo con un
 // PIN distinto del suyo haría fallar la conexión.
-export const needsRegistration = (details) => details?.platformType === 'NOT_APPLICABLE';
+//
+// Un número que sigue en la app de WhatsApp Business (coexistencia) ya está
+// registrado: no se toca nunca (`onBusinessApp: true`, lo dice Meta). Si no se
+// sabe (`null`: la consulta falló o no trajo el campo) y el navegador dijo que
+// el número está en la app, tampoco: registrarlo con otro PIN podría romperlo.
+export const needsRegistration = (details, { onBusinessApp = null, claimedBusinessApp = false } = {}) => {
+    if (onBusinessApp === true) return false;
+    if (onBusinessApp === null && claimedBusinessApp) return false;
+    return details?.platformType === 'NOT_APPLICABLE';
+};
+
+// Lo que dice Meta del número en `GET /{phone-number-id}?fields=is_on_biz_app,platform_type`:
+// si también se usa en la app de WhatsApp Business. `onBusinessApp` es `null`
+// cuando Meta no lo dice (sin el campo, o un valor que no es booleano).
+export const describePhoneNumberPlatform = (body) => ({
+    onBusinessApp: typeof body?.is_on_biz_app === 'boolean' ? body.is_on_biz_app : null,
+    platformType: body?.platform_type ?? null,
+});
 
 // El PIN de la verificación en dos pasos con el que se registra un número: seis
 // dígitos al azar, con los ceros a la izquierda.
 export const generateTwoStepPin = () => String(crypto.randomInt(0, 1_000_000)).padStart(6, '0');
+
+// El número a conectar en la coexistencia: el evento de la app solo trae el
+// WABA (`data: { waba_id }`), así que se deduce de sus números (`numbers`:
+// `[{ phoneNumberId, onBusinessApp }]`). Uno solo, ese; entre varios, el único
+// que Meta dice que está en la app. Si no queda exactamente uno, null.
+export const pickBusinessAppPhoneNumber = (numbers) => {
+    if (!Array.isArray(numbers)) return null;
+    if (numbers.length === 1) return numbers[0].phoneNumberId;
+    const inApp = numbers.filter(number => number.onBusinessApp === true);
+    return inApp.length === 1 ? inApp[0].phoneNumberId : null;
+};
 
 // El cursor de la página siguiente de una lista de Meta, o null si es la última.
 // Meta manda `paging.cursors.after` también en la última página: lo que dice que
@@ -56,6 +84,7 @@ export const LINE_ERROR_CODES = {
     phoneNumberNotInWaba: 'phone_number_not_in_waba',
     wabaTaken: 'waba_taken',
     registrationFailed: 'phone_number_registration_failed',
+    businessAppNumberUnknown: 'business_app_number_unknown',
     chooseLine: 'choose_line',
 };
 
@@ -71,6 +100,8 @@ export const CHOOSE_LINE_MESSAGE = 'Elige por qué línea enviar.';
 export const PHONE_NUMBER_REGISTRATION_FAILED_MESSAGE = 'WhatsApp no dejó activar este número para enviar mensajes. Inténtalo de nuevo en unos minutos; si se repite, escríbenos.';
 
 // Otro cambio en las líneas de la misma cuenta a la vez (`withLineLock`).
+export const BUSINESS_APP_NUMBER_UNKNOWN_MESSAGE = 'No pudimos saber qué número de la app de WhatsApp Business conectar. Vuelve a intentarlo; si se repite, escríbenos.';
+
 export const LINE_BUSY_MESSAGE = 'Hay otro cambio en las líneas de esta cuenta en curso. Inténtalo de nuevo en unos segundos.';
 
 // Hacer por defecto una línea desconectada (Fase 2c).

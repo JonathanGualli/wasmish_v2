@@ -103,7 +103,7 @@ Revisado el 2026-10-16 en la documentación de Meta para desarrolladores: la [gu
 ## 5. Datos
 
 - `Line.businessApp: Boolean` (por defecto `false`).
-- `Line.disconnectionReason: String | null`: el motivo de Meta tal cual (`PRIMARY_INACTIVITY`…); el frontend lo traduce a palabras. Se borra al reconectar o renovar.
+- `Line.disconnectionReason: String | null`: el motivo de Meta tal cual (`PRIMARY_INACTIVITY`…), o `'UNKNOWN'` si Meta no lo dio; `null` = desconectada desde Wasmish (el diseño deja en la lista, con su aviso, las que desconectó Meta, y en «Números anteriores» las demás). El frontend lo traduce a palabras. Se borra al reconectar o renovar.
 - `Message.origin` admite `'businessApp'`.
 - `Waba.authorizedAt: Date | null`: la última conexión o renovación confirmada de ese WABA.
 - Sin migración: los documentos anteriores leen los valores por defecto.

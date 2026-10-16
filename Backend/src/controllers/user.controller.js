@@ -1,6 +1,7 @@
 import { encrypt } from "../utils/crypto.js";
 import {
     isPhoneNumberTaken, isWabaTaken, checkLineLimit, claimWaba, verifyWabaPhoneNumber, registerIfNeeded,
+    readPhoneNumberPlatform,
 } from "../services/whatsapp.connection.service.js";
 import { applyConnection } from "../services/line.service.js";
 import { connectionErrorResponse, sendPhoneNumberTaken, sendWabaTaken } from "./whatsapp.controller.js";
@@ -22,12 +23,17 @@ export const updateUserTokenWhatsapp = async (req, res) => {
         await checkLineLimit(accountId, phoneNumberId);
 
         const details = await verifyWabaPhoneNumber({ token: tokenWhatsapp, waBusinessId, phoneNumberId });
+        // Un número que sigue en la app de WhatsApp Business no se registra. La
+        // coexistencia solo se ofrece por el Embedded Signup (este camino no
+        // suscribe la app al WABA), pero no se rompe el número si llega por aquí.
+        const { onBusinessApp } = await readPhoneNumberPlatform({ token: tokenWhatsapp, phoneNumberId });
         // El WABA para esta cuenta, antes de guardar nada.
         await claimWaba(accountId, waBusinessId);
-        const twoStepPin = await registerIfNeeded({ accountId, waBusinessId, token: tokenWhatsapp, phoneNumberId, details });
+        const twoStepPin = await registerIfNeeded({ accountId, waBusinessId, token: tokenWhatsapp, phoneNumberId, details, onBusinessApp });
 
         const { lineId } = await applyConnection({
             accountId, waBusinessId, tokenWhatsapp: encrypt(tokenWhatsapp), phoneNumberId, details, twoStepPin,
+            businessApp: onBusinessApp === true,
         });
 
         return res.json({ message: 'Token updated successfully', lineId: String(lineId) });

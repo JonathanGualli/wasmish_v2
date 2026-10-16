@@ -2,7 +2,7 @@ import { encrypt } from "../utils/crypto.js";
 import { exchangeCodeForToken, subscribeAppToWaba } from "../libs/whatsapp.js";
 import {
     isPhoneNumberTaken, isWabaTaken, checkLineLimit, claimWaba, verifyWabaPhoneNumber, registerIfNeeded,
-    PHONE_NUMBER_TAKEN_MESSAGE, WABA_TAKEN_MESSAGE,
+    readPhoneNumberPlatform, resolveBusinessAppPhoneNumber, PHONE_NUMBER_TAKEN_MESSAGE, WABA_TAKEN_MESSAGE,
 } from "../services/whatsapp.connection.service.js";
 import { applyConnection } from "../services/line.service.js";
 import { LINE_ERROR_CODES } from "../utils/whatsapp.line.js";
@@ -28,26 +28,40 @@ export const sendWabaTaken = (res) =>
 
 export const connectWhatsappEmbedded = async (req, res) => {
     try {
-        const { code, phoneNumberId, waBusinessId } = req.body;
+        const { code, waBusinessId, businessApp: claimedBusinessApp = false } = req.body;
         const { accountId } = req.auth;
+        // En la coexistencia, Meta solo da el WABA: el número se deduce después
+        // de canjear el código, y sus comprobaciones van detrás.
+        let phoneNumberId = req.body.phoneNumberId ?? null;
 
         // 1. Lo que se sabe sin molestar a Meta: el número y el WABA no pueden
         //    estar en otra cuenta, y el número tiene que caber en el plan.
-        if (await isPhoneNumberTaken(accountId, phoneNumberId)) {
+        if (phoneNumberId && await isPhoneNumberTaken(accountId, phoneNumberId)) {
             return sendPhoneNumberTaken(res);
         }
         if (await isWabaTaken(accountId, waBusinessId)) {
             return sendWabaTaken(res);
         }
-        await checkLineLimit(accountId, phoneNumberId);
+        if (phoneNumberId) await checkLineLimit(accountId, phoneNumberId);
 
         // 2. Canjear el "code" por el token permanente
         const accessToken = await exchangeCodeForToken(code);
         if ( !accessToken ) return res.status(400).json([{message: 'No se pudo obtener el token de Meta'}]);
 
+        if (!phoneNumberId) {
+            phoneNumberId = await resolveBusinessAppPhoneNumber({ token: accessToken, waBusinessId });
+            if (await isPhoneNumberTaken(accountId, phoneNumberId)) return sendPhoneNumberTaken(res);
+            await checkLineLimit(accountId, phoneNumberId);
+        }
+
         // 3. El número tiene que ser del WABA de ese token. Antes de suscribir
-        //    la app: si no lo es, no se toca nada en Meta.
+        //    la app: si no lo es, no se toca nada en Meta. Y si sigue en la app
+        //    de WhatsApp Business (coexistencia): lo dice Meta, no el navegador.
         const details = await verifyWabaPhoneNumber({ token: accessToken, waBusinessId, phoneNumberId });
+        const { onBusinessApp } = await readPhoneNumberPlatform({ token: accessToken, phoneNumberId });
+        if (claimedBusinessApp && onBusinessApp === false) {
+            console.warn('Conectar: el navegador dijo que el número está en la app y Meta dice que no', { waBusinessId });
+        }
         // El WABA para esta cuenta, antes de suscribir la app y de guardar nada.
         await claimWaba(accountId, waBusinessId);
 
@@ -56,11 +70,14 @@ export const connectWhatsappEmbedded = async (req, res) => {
 
         // 5. Registrar el número en la Cloud API, si Meta dice que no lo está:
         //    sin esto, uno recién estrenado no puede enviar (133010).
-        const twoStepPin = await registerIfNeeded({ accountId, waBusinessId, token: accessToken, phoneNumberId, details });
+        const twoStepPin = await registerIfNeeded({
+            accountId, waBusinessId, token: accessToken, phoneNumberId, details, onBusinessApp, claimedBusinessApp,
+        });
 
         // 6. La línea, con el token (cifrado) en su WABA
         const { lineId } = await applyConnection({
             accountId, waBusinessId, tokenWhatsapp: encrypt(accessToken), phoneNumberId, details, twoStepPin,
+            businessApp: onBusinessApp === true,
         });
 
         return res.json({

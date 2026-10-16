@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { describeWabaPhoneNumber, generateTwoStepPin, needsRegistration, nextPageCursor } from '../src/utils/whatsapp.line.js';
+import { describePhoneNumberPlatform, describeWabaPhoneNumber, generateTwoStepPin, needsRegistration, nextPageCursor, pickBusinessAppPhoneNumber } from '../src/utils/whatsapp.line.js';
 
 const BODY = { data: [
     { id: '111', display_phone_number: '+1 555 000 0001', verified_name: 'Negocio de prueba' },
@@ -60,4 +60,47 @@ test('nextPageCursor: sin `paging.next` es la última página, aunque haya curso
     for (const body of [undefined, {}, { paging: { cursors: { after: 'abc' } } }, { paging: { next: 'x', cursors: {} } }]) {
         assert.equal(nextPageCursor(body), null);
     }
+});
+
+test('describePhoneNumberPlatform: si el número está en la app de WhatsApp Business, como lo dice Meta', () => {
+    assert.deepEqual(describePhoneNumberPlatform({ is_on_biz_app: true, platform_type: 'CLOUD_API', id: '1' }),
+        { onBusinessApp: true, platformType: 'CLOUD_API' });
+    assert.deepEqual(describePhoneNumberPlatform({ is_on_biz_app: false, platform_type: 'NOT_APPLICABLE' }),
+        { onBusinessApp: false, platformType: 'NOT_APPLICABLE' });
+});
+
+test('describePhoneNumberPlatform: sin el campo, o si no es un booleano, no se sabe (null)', () => {
+    assert.equal(describePhoneNumberPlatform({ platform_type: 'CLOUD_API' }).onBusinessApp, null);
+    assert.equal(describePhoneNumberPlatform({ is_on_biz_app: 'true' }).onBusinessApp, null);
+    for (const body of [null, undefined, 'x']) {
+        assert.deepEqual(describePhoneNumberPlatform(body), { onBusinessApp: null, platformType: null });
+    }
+});
+
+// Regresión que vigila: un número de la app con `NOT_APPLICABLE` se registraría con un PIN ajeno y se rompería.
+test('needsRegistration: un número de la app nunca se registra', () => {
+    for (const platformType of ['NOT_APPLICABLE', 'CLOUD_API', null]) {
+        assert.equal(needsRegistration({ platformType }, { onBusinessApp: true }), false, String(platformType));
+    }
+});
+
+test('needsRegistration: Meta dice que no está en la app → como siempre', () => {
+    assert.equal(needsRegistration({ platformType: 'NOT_APPLICABLE' }, { onBusinessApp: false }), true);
+    assert.equal(needsRegistration({ platformType: 'NOT_APPLICABLE' }, { onBusinessApp: false, claimedBusinessApp: true }), true);
+    assert.equal(needsRegistration({ platformType: 'CLOUD_API' }, { onBusinessApp: false }), false);
+});
+
+test('needsRegistration: si no se sabe, no registra lo que el navegador dijo que está en la app', () => {
+    assert.equal(needsRegistration({ platformType: 'NOT_APPLICABLE' }, { onBusinessApp: null }), true);
+    assert.equal(needsRegistration({ platformType: 'NOT_APPLICABLE' }, { onBusinessApp: null, claimedBusinessApp: true }), false);
+    assert.equal(needsRegistration({ platformType: 'CLOUD_API' }, { onBusinessApp: null, claimedBusinessApp: false }), false);
+});
+
+test('pickBusinessAppPhoneNumber: uno solo; entre varios, el único que está en la app', () => {
+    assert.equal(pickBusinessAppPhoneNumber([{ phoneNumberId: '1', onBusinessApp: null }]), '1');
+    assert.equal(pickBusinessAppPhoneNumber([{ phoneNumberId: '1', onBusinessApp: false }, { phoneNumberId: '2', onBusinessApp: true }]), '2');
+    assert.equal(pickBusinessAppPhoneNumber([{ phoneNumberId: '1', onBusinessApp: true }, { phoneNumberId: '2', onBusinessApp: true }]), null);
+    assert.equal(pickBusinessAppPhoneNumber([{ phoneNumberId: '1', onBusinessApp: false }, { phoneNumberId: '2', onBusinessApp: null }]), null);
+    assert.equal(pickBusinessAppPhoneNumber([]), null);
+    assert.equal(pickBusinessAppPhoneNumber(undefined), null);
 });
