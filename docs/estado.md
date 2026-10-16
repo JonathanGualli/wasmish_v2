@@ -12,7 +12,7 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
   - **Qué responde:** bienvenida, fuera de horario, palabras clave y «Si no entiende», unidas en un solo mensaje. Se calla tras una respuesta manual (`handoffHours`) y con el freno de 3 respuestas en 10 minutos.
   - **Cómo sale:** la cola es el propio entrante (`Message.bot`) y la vacía un worker propio, con el mismo envío que el chat (`processMessageSending`). En el chat, esos mensajes llevan la marca «Bot».
   - **La página** «Respuestas automáticas», con «Probar» como conversación. Toda cuenta empieza con todo apagado: nadie recibe respuestas solas sin que alguien lo encienda.
-  - **Sin probar con Meta de verdad** antes de desplegar (los envíos del bot, con el Meta falso de los tests de aislamiento); la página, en Chrome con datos sembrados (escritorio y teléfono emulado).
+  - **Probado en producción el 2026-10-16** por Jonathan, con su cuenta de prueba y Meta de verdad: funciona. Antes de desplegar solo se había probado con el Meta falso de los tests de aislamiento, y la página en Chrome con datos sembrados (escritorio y teléfono emulado).
   - **Al desplegar:** se reconstruyen `wasmish-api` y `wasmish-web`. Sin migración ni variables nuevas: la colección `autoreplysettings` y los índices (`auto_reply_queue`, parcial sobre `messages`) se crean al arrancar. En los logs, que el worker arrancó y ningún `uncertain`.
 - **El texto de los botones, centrado** aunque su contenedor mida menos de 42 px (PR #74): antes caía hasta 5 px en el popover de límites del superadmin, el nombre de la línea y los diálogos.
 
@@ -79,7 +79,7 @@ Nada en curso.
     3. `maxLines: 2` en una cuenta de prueba desde el panel.
   - La **Fase 3** (equipo, roles y acceso por línea) está en producción desde la 1.0.18. **Para encender equipos en una cuenta real** (subir su `maxUsers`): antes, el ensayo de la vuelta atrás con dos usuarios (plan de la Fase 3, «Al terminar»), porque con una imagen anterior a la Fase 3 el agente vería y haría todo; y se enciende primero en la cuenta de prueba de Jonathan. Volver atrás a las imágenes `:1.0.16` solo es seguro mientras ninguna cuenta tenga más de un usuario.
   - Sigue la **Fase 4**: asignar conversaciones («Mías / Sin asignar / Todas») y transferirlas.
-- **Respuestas automáticas:** probarlas con Meta de verdad en producción, con la cuenta de prueba de Jonathan. Después, quitar la forma vieja de `POST /api/auto-replies/preview` (`{ settings, text }`), que solo seguía para las pestañas abiertas durante el despliegue de la 1.0.23. Y más adelante, las mejoras del spec, § 2: «un mensaje por regla», fotos en las respuestas, agrupar ráfagas, reglas por línea, feriados; y luego menús con botones o IA.
+- **Respuestas automáticas:** quitar la forma vieja de `POST /api/auto-replies/preview` (`{ settings, text }`), que solo seguía para las pestañas abiertas durante el despliegue de la 1.0.23. Y más adelante, las mejoras del spec, § 2: «un mensaje por regla», fotos en las respuestas, agrupar ráfagas, reglas por línea, feriados; y luego menús con botones o IA.
 - El campo de archivo de cabecera al enviar una plantilla a **un solo contacto** (`SendTemplateDialog` y `NewConversationPanel`); hoy solo existe en las campañas.
 - En la API pública: el campo `header`, la cabecera de texto con variable y las plantillas de carrusel. Toca al cliente de la API: con cuidado.
 - Más adelante: programar campañas para una hora.
