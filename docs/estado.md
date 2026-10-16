@@ -6,7 +6,15 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En producción
 
-**Versión 1.0.23**, desplegada el 2026-10-16 (etiqueta `v1.0.23`; comprobar con `curl https://wasmish.solventyc.com/api/version`). Lleva:
+**Versión 1.0.24**, desplegada el 2026-10-16 (etiqueta `v1.0.24`; comprobar con `curl https://app.wasmish.com/api/version`). Lleva:
+
+- **La app en `app.wasmish.com`** (rama `dominio-wasmish`; solo despliegue y documentación, sin cambios en el código de la app). Un router de Traefik por dominio, cada uno con su certificado, y las redirecciones en Traefik: [deploy/README.md § Dominios](../deploy/README.md#dominios). `wasmish.solventyc.com` **sigue sirviendo `/api` sin fecha de fin** (el webhook de Meta y la API pública del cliente real) y el resto redirige con 301 a la app; `wasmish.com` lleva a la app con 302 hasta que exista la página, y `www.wasmish.com` va a `wasmish.com` con 301.
+  - **Probado** con Traefik v3.7.1 en local, como en el servidor: cada dominio y ruta, `POST` incluidos. Los certificados de Let's Encrypt solo se prueban en producción.
+  - **Antes de desplegar (Jonathan):** los DNS de `wasmish.com` en Namecheap (A de `@`, `www` y `app` al servidor) resolviendo; en la app de Meta, **añadir** `app.wasmish.com` (dominios de la app, URI de OAuth y dominios del SDK de JavaScript), sin quitar el viejo ni tocar el webhook.
+  - **Al desplegar:** subir `deploy/compose.yml` aparte, `FRONTEND_ORIGIN=https://app.wasmish.com` en `config/api.env` y reconstruir las dos imágenes. En el paso 3 de la skill, `PROD` se lee esta vez de `wasmish.solventyc.com` (`app.wasmish.com` aún no existe). Verificar: `app.wasmish.com/api/version`; `wasmish.solventyc.com/api/version` con 200, sin redirección; `wasmish.solventyc.com/` con 301; `wasmish.com` con 302 y `www.wasmish.com` con 301; los certificados de los cuatro, y en los logs, entrantes del webhook y `POST /api/v1/templates/send` con 200.
+  - **Después:** reinstalar la app en los teléfonos de prueba desde `app.wasmish.com`, volver a activar los avisos y probar el Embedded Signup desde el dominio nuevo.
+
+La 1.0.23 (desplegada el 2026-10-16) llevó:
 
 - **Respuestas automáticas (chatbot v1)** (PRs #67 a #73, cada uno con su revisión de Codex; spec `docs/superpowers/specs/2026-10-15-respuestas-automaticas-design.md`, planes `docs/superpowers/plans/2026-10-15-respuestas-automaticas.md` y `2026-10-15-no-entiende-y-conversacion.md`). Detalle en [respuestas-automaticas.md](arquitectura/respuestas-automaticas.md).
   - **Qué responde:** bienvenida, fuera de horario, palabras clave y «Si no entiende», unidas en un solo mensaje. Se calla tras una respuesta manual (`handoffHours`) y con el freno de 3 respuestas en 10 minutos.
@@ -62,15 +70,7 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
 
 ## En curso
 
-- **La app a `app.wasmish.com`** — rama `dominio-wasmish`, empezado el 2026-10-16 por Claude. Solo despliegue y documentación: los routers de Traefik y las redirecciones ([deploy/README.md § Dominios](../deploy/README.md#dominios)). Probado con Traefik v3.7.1 en local (cada dominio y ruta, `POST` incluidos); los certificados de Let's Encrypt solo se prueban en producción.
-  **Antes de desplegar (Jonathan):** los DNS de `wasmish.com` en Namecheap (A de `@`, `www` y `app` al servidor) resolviendo; en la app de Meta, **añadir** `app.wasmish.com` (dominios de la app, URI de OAuth y dominios del SDK de JavaScript), sin quitar el viejo ni tocar el webhook.
-  **Al desplegar:** subir `deploy/compose.yml` aparte, `FRONTEND_ORIGIN=https://app.wasmish.com` en `config/api.env` y reconstruir las dos imágenes. En el paso 3 de la skill, `PROD` se lee esta vez de `wasmish.solventyc.com` (`app.wasmish.com` aún no existe). Verificar: `app.wasmish.com/api/version`; `wasmish.solventyc.com/api/version` con 200, sin redirección; `wasmish.solventyc.com/` con 301; `wasmish.com` con 302 y `www.wasmish.com` con 301; los certificados de los cuatro, y en los logs, entrantes del webhook y `POST /api/v1/templates/send` con 200.
-  **Después:** reinstalar la app en los teléfonos de prueba desde `app.wasmish.com`, volver a activar los avisos y probar el Embedded Signup desde el dominio nuevo.
-
-<!-- Formato de una entrada:
-- **<qué>** — rama `<rama>`, PR #<n>, empezado el <fecha> por <Claude|Codex|Jonathan>.
-  Hecho: … · Falta: … · Sin probar: …
--->
+Nada en curso.
 
 ## Lo siguiente
 
