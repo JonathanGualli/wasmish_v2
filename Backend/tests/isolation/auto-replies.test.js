@@ -779,10 +779,10 @@ test('probar una conversación valida los mensajes', async () => {
     }
 });
 
-test('más de 60 pruebas en un minuto dan 429', async () => {
+test('más de 120 pruebas en un minuto dan 429', async () => {
     const a = await newAccount('PCC');
     const body = { settings: settingsBody(), messages: ['hola'] };
-    for (let i = 0; i < 60; i++) assert.equal((await preview(a, body)).status, 200, `prueba ${i + 1}`);
+    for (let i = 0; i < 120; i++) assert.equal((await preview(a, body)).status, 200, `prueba ${i + 1}`);
     const limited = await preview(a, body);
     assert.equal(limited.status, 429);
     assert.match(limited.body[0].message, /Demasiadas pruebas/);

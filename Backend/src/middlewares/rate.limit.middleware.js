@@ -29,12 +29,13 @@ export const publicApiUserLimiter = rateLimit({
     message: [{ message: 'Límite de envíos excedido. Inténtalo en un minuto.' }],
 });
 
-// «Probar» de las respuestas automáticas: por cuenta. La página pregunta sola al
-// editar (una vez cada 400 ms como mucho): 60 por minuto sobra, y cada petición
-// simula hasta 20 mensajes en el proceso que también atiende los webhooks.
+// «Probar» de las respuestas automáticas: por cuenta. La página pregunta sola
+// tras 1 s sin cambios (60 por minuto como mucho) y con cada mensaje de la
+// conversación (hasta 20): 120 deja margen. Cada petición simula hasta 20
+// mensajes en el proceso que también atiende los webhooks.
 export const previewLimiter = rateLimit({
     windowMs: 60 * 1000,
-    limit: 60,
+    limit: 120,
     keyGenerator: (req) => req.auth.accountId,
     standardHeaders: true,
     legacyHeaders: false,

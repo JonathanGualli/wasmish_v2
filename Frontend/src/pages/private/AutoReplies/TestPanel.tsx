@@ -6,6 +6,7 @@ import { useAutosizeTextarea } from "../../../hooks/useAutosizeTextarea";
 import { PREVIEW_MESSAGES_MAX, type AutoReplyPreviewPart, type AutoReplyPreviewTurn } from "../../../models/autoReply.model";
 import { clockIn, toPayload } from "../../../utils/autoReplyForm";
 import { SkeletonBox } from "../../../components/Skeleton/Skeleton";
+import { apiErrorOf } from "../../../utils/apiError";
 import type { AutoReplyEditor } from "./useAutoReplyEditor";
 
 /** El mismo límite que `autoReplyPreviewSchema` en el backend. */
@@ -43,7 +44,10 @@ export const TestPanel = ({ editor }: { editor: AutoReplyEditor }) => {
     const threadRef = useRef<HTMLDivElement>(null);
     useAutosizeTextarea(inputRef, draft, 96);
 
-    const settings = useDebouncedValue(useMemo(() => toPayload(form), [form]), 400);
+    // Se recalcula tras 1 s sin cambios: así la actualización sola no pasa de 60
+    // por minuto, y con los 20 mensajes de una conversación queda por debajo
+    // del límite del servidor (120 por minuto y cuenta; revisión de Codex).
+    const settings = useDebouncedValue(useMemo(() => toPayload(form), [form]), 1000);
     const blocked = editor.issueTotal > 0;
     const preview = usePreviewAutoReply(settings, messages, !blocked);
     const clock = clockIn(form.timezone);
@@ -97,10 +101,9 @@ export const TestPanel = ({ editor }: { editor: AutoReplyEditor }) => {
                             <div className="self-start max-w-[85%] bg-brand-surface rounded-[10px_10px_10px_3px] px-2.5 py-[7px] text-[13px] leading-[1.45] text-brand-text whitespace-pre-wrap break-words">
                                 {message}
                             </div>
-                            {preview.isError && index === messages.length - 1 ? (
-                                <Note>No se pudo probar. Inténtalo de nuevo.</Note>
-                            ) : !turn ? (
-                                <SkeletonBox className="self-end w-[60%] h-14 rounded-[10px_10px_3px_10px]" tone="bubble-own" />
+                            {!turn ? (
+                                // Cargando solo mientras de verdad se pregunta; con un error, el aviso va abajo.
+                                preview.isFetching && <SkeletonBox className="self-end w-[60%] h-14 rounded-[10px_10px_3px_10px]" tone="bubble-own" />
                             ) : turn.reply ? (
                                 <div className={`self-end max-w-[94%] grid gap-1 justify-items-end transition-opacity ${preview.isPlaceholderData ? 'opacity-60' : ''}`}>
                                     <div className="bg-brand-accent-soft rounded-[10px_10px_3px_10px] px-2.5 pt-2 pb-1.5 grid gap-[7px] text-[13px] leading-[1.45] text-brand-text">
@@ -117,6 +120,14 @@ export const TestPanel = ({ editor }: { editor: AutoReplyEditor }) => {
                         </div>
                     );
                 })}
+                {!blocked && preview.isError && !preview.isFetching && (
+                    <Note>
+                        {apiErrorOf(preview.error, 'No se pudo probar.').message}{' '}
+                        <button type="button" onClick={() => preview.refetch()} className="font-semibold text-brand-accent-strong hover:underline cursor-pointer">
+                            Reintentar
+                        </button>
+                    </Note>
+                )}
             </div>
 
             <div className="flex-none flex gap-1.5 items-end">
