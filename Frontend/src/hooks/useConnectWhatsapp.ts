@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { loadFacebookSdk } from "../libs/facebookSdk";
 import { connectWhatsappService } from "../services/api.service";
 import { LINES_QUERY_KEY } from "./useLines";
+import { embeddedSignupFinish, type EmbeddedSignupFinish } from "../utils/embeddedSignup";
 
 const CONFIG_ID = import.meta.env.VITE_META_CONFIG_ID;
 
@@ -11,14 +12,19 @@ export const useConnectWhatsapp = () => {
     // Mientras la ventana de Facebook está abierta: conectar ya empezó, aunque
     // todavía no se haya llamado al backend.
     const [isSigningIn, setIsSigningIn] = useState(false);
+    // El camino de la conexión en curso (o de la última): con la app de WhatsApp
+    // Business, el texto del «Conectando…» habla del código que se escanea.
+    const [businessApp, setBusinessApp] = useState(false);
     const mutation = useMutation({
-        mutationFn: ({ code, phoneNumberId, waBusinessId }: { code: string; phoneNumberId: string; waBusinessId: string }) =>
-            connectWhatsappService(code, phoneNumberId, waBusinessId),
+        mutationFn: ({ code, finish }: { code: string; finish: EmbeddedSignupFinish }) =>
+            connectWhatsappService({ code, ...finish }),
         onSettled: () => queryClient.invalidateQueries({ queryKey: LINES_QUERY_KEY }),
     });
 
-    const connect = async () => {
+    /** `businessApp`: el número sigue en la app de WhatsApp Business (coexistencia). */
+    const connect = async ({ businessApp: viaBusinessApp = false }: { businessApp?: boolean } = {}) => {
         mutation.reset();
+        setBusinessApp(viaBusinessApp);
         setIsSigningIn(true);
         // 1. Nos aseguramos de que el SDK esté cargado e inicializado.
         try {
@@ -28,18 +34,16 @@ export const useConnectWhatsapp = () => {
             throw error;
         }
 
-        // Aquí guardaremos los IDs que llegan por postMessage.
-        const sessionInfo: { phoneNumberId?: string; waBusinessId?: string } = {};
+        // Aquí guardaremos lo que llega por postMessage al terminar.
+        let finish: EmbeddedSignupFinish | null = null;
 
-        // 2. Escuchamos el mensaje del popup con phone_number_id y waba_id.
+        // 2. Escuchamos el mensaje del popup: `FINISH` (WABA y número) o, con la
+        //    app de WhatsApp Business, `FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING`
+        //    (solo el WABA).
         const messageListener = (event: MessageEvent) => {
             if (event.origin !== "https://www.facebook.com" && event.origin !== "https://web.facebook.com") return;
             try {
-                const data = JSON.parse(event.data);
-                if (data.type === "WA_EMBEDDED_SIGNUP" && data.event === "FINISH") {
-                    sessionInfo.phoneNumberId = data.data.phone_number_id;
-                    sessionInfo.waBusinessId = data.data.waba_id;
-                }
+                finish = embeddedSignupFinish(JSON.parse(event.data)) ?? finish;
             } catch {
                 // No era un mensaje nuestro (JSON inválido) → lo ignoramos.
             }
@@ -53,23 +57,19 @@ export const useConnectWhatsapp = () => {
                 setIsSigningIn(false);
                 const code = response?.authResponse?.code;
 
-                // 4. Si tenemos el code Y los IDs → mandamos todo al backend.
-                if (code && sessionInfo.phoneNumberId && sessionInfo.waBusinessId) {
-                    mutation.mutate({
-                        code,
-                        phoneNumberId: sessionInfo.phoneNumberId,
-                        waBusinessId: sessionInfo.waBusinessId,
-                    });
-                }
+                // 4. Si tenemos el code Y el final del popup → mandamos todo al backend.
+                if (code && finish) mutation.mutate({ code, finish });
             },
             {
                 config_id: CONFIG_ID,
                 response_type: "code",
                 override_default_response_type: true,
-                extras: { setup: {}, featureType: "", sessionInfoVersion: "3" },
+                // Solo cambia `featureType`: así se abre el camino de la app de
+                // WhatsApp Business (coexistencia, guía de Meta).
+                extras: { setup: {}, featureType: viaBusinessApp ? "whatsapp_business_app_onboarding" : "", sessionInfoVersion: "3" },
             }
         );
     };
 
-    return { ...mutation, connect, isConnecting: isSigningIn || mutation.isPending };
+    return { ...mutation, connect, businessApp, isConnecting: isSigningIn || mutation.isPending };
 };
