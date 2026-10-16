@@ -65,7 +65,10 @@ export const useLines = () => {
         isError: query.isError,
         lines,
         activeLines,
+        /** Todas las desconectadas (Chats las lista en el filtro de líneas). */
         previousLines: lines.filter(line => line.status === 'disconnected'),
+        /** Las que desconectó Meta (`disconnectionReason`): Ajustes las deja en la lista, con su motivo. */
+        removedLines: lines.filter(line => line.status === 'disconnected' && Boolean(line.disconnectionReason)),
         defaultLine: lines.find(line => line.isDefault) ?? null,
         nextDefaultLine: lines.find(line => line.id === query.data?.nextDefaultLineId) ?? null,
         maxLines,
