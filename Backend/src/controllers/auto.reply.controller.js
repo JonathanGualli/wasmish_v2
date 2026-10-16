@@ -14,7 +14,9 @@ import { WEEK_DAYS } from "../utils/business.hours.js";
 const sendError = (res, status, message) => res.status(status).json([{ message }]);
 
 // Lo que ve la página, campo a campo: ni `_id` ni `userId` ni marcas internas.
-const serializeSettings = (settings) => ({
+// `configured`: si la cuenta ya guardó alguna vez (sin eso, la página abre el asistente).
+const serializeSettings = (settings, configured) => ({
+    configured,
     enabled: settings.enabled,
     timezone: settings.timezone,
     handoffHours: settings.handoffHours,
@@ -46,7 +48,7 @@ const findSettings = (accountId) => AutoReplySettings.findOne({ userId: accountI
 export const getAutoReplies = async (req, res) => {
     try {
         const settings = await findSettings(req.auth.accountId);
-        return res.json(serializeSettings(settings ?? defaultAutoReplySettings()));
+        return res.json(serializeSettings(settings ?? defaultAutoReplySettings(), Boolean(settings)));
     } catch (error) {
         console.error('Error leyendo las respuestas automáticas:', error.message);
         return sendError(res, 500, error.message);
@@ -79,7 +81,7 @@ export const saveAutoReplies = async (req, res) => {
             { $set: { ...data, keywordRules } },
             { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true },
         ).lean();
-        return res.json(serializeSettings(saved));
+        return res.json(serializeSettings(saved, true));
     } catch (error) {
         console.error('Error guardando las respuestas automáticas:', error.message);
         return sendError(res, 500, error.message);
