@@ -46,6 +46,7 @@ Cómo se autentica cada ruta, el rate limiting y la tabla completa de endpoints 
   | `campaigns.manage` | ✓ | ✓ | ✓ (sus líneas) | ✗ | todas las de `/campaigns`, también verlas |
   | `apiKeys.manage` | ✓ | ✓ | ✗ | ✗ | las de `/api-key` |
   | `lines.manage` | ✓ | ✓ | ✗ | ✗ | `PATCH /lines/:id`, `POST /lines/:id/disconnect`, `GET /lines/:id/pin`, `POST /whatsapp/connect`, `PUT /users/update-user-token-whatsapp` |
+  | `autoReplies.manage` | ✓ | ✓ | ✗ | ✗ | las de `/auto-replies` |
 
   Lo demás lo hace cualquier rol **en sus líneas**: ver y responder conversaciones, ver y editar contactos, ver plantillas, ver sus líneas.
 - **Las líneas a su alcance** (`lineScope`): owner, admin y la API key, todas (`null`); supervisor y agente, las suyas. Lo de una línea fuera de alcance responde **404**, como lo de otra cuenta:
@@ -135,5 +136,8 @@ No se aplica a `/api/webhook` (Meta manda ráfagas) ni a `/api/stream` (conexió
 | POST | `/api/push/subscriptions` | JWT | La persona **activa** los avisos en este navegador: `{ endpoint, keys: { p256dh, auth } }` (lo de `PushSubscription.toJSON()`). Si el navegador era de otra persona, pasa a ser suyo. 400 si el `endpoint` no es de un servicio de push conocido (`isAllowedPushEndpoint`); 503 `push_disabled` sin claves VAPID |
 | POST | `/api/push/subscriptions/sync` | JWT | Lo mismo, automático (al abrir la app o al renovarse la suscripción): crea la suscripción o actualiza la suya, pero **nunca** se queda con la de otra persona: 409 `push_owned_by_other` |
 | DELETE | `/api/push/subscriptions` | JWT | `{ endpoint }`: apaga los avisos de este navegador (también al cerrar sesión). 204; 404 si no es de la persona de la sesión |
+| GET | `/api/auto-replies` | JWT + `autoReplies.manage` | Las respuestas automáticas de la cuenta: `{ enabled, timezone, handoffHours, welcome: { enabled, text, returnAfterDays }, outOfHours: { enabled, text, schedule }, keywordRules: [{ id, enabled, keywords, text, lineIds }] }`. Sin guardar nunca, las de por defecto (apagadas) |
+| PUT | `/api/auto-replies` | JWT + `autoReplies.manage` | La misma forma (sin `id` en las reglas nuevas): la reemplaza entera y responde como el `GET`. 400 si no es válida (también dos reglas con el mismo `id`); 404 si una regla apunta a una línea ajena |
+| POST | `/api/auto-replies/preview` | JWT + `autoReplies.manage` | `{ settings, text }` → `{ reply, parts, matchedRuleIndexes, outOfHours }`: qué respondería **esa** configuración (sin guardarla) ahora, a un contacto nuevo. No envía nada; `reply: null` si no respondería |
 | GET | `/api/webhook` | No | Verificación webhook Meta (hub.challenge) |
 | POST | `/api/webhook` | **Firma HMAC** | Recibir mensajes/status de WhatsApp |

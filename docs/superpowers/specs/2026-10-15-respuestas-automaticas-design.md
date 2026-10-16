@@ -125,7 +125,7 @@ Todas con `authRequired` y `requirePermission('autoReplies.manage')` (owner y ad
 
 - `GET /api/auto-replies` → la configuración de la cuenta (o la de por defecto).
 - `PUT /api/auto-replies` → la reemplaza entera (Zod). Los `_id` de las reglas se conservan si vienen; las nuevas reciben uno.
-- `POST /api/auto-replies/preview` `{ settings, text }` → `{ parts, reply, matchedRuleIds, outOfHours }`: qué respondería **con esa configuración sin guardar**, ahora, a un contacto nuevo sin estado previo. No envía nada.
+- `POST /api/auto-replies/preview` `{ settings, text }` → `{ parts, reply, matchedRuleIndexes, outOfHours }`: qué respondería **con esa configuración sin guardar**, ahora, a un contacto nuevo sin estado previo. `matchedRuleIndexes` son posiciones en la lista enviada: una regla nueva todavía no tiene id. No envía nada.
 
 ## 7. Cómo se prueba
 

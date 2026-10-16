@@ -53,7 +53,7 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 ## En curso
 
 - **Respuestas automáticas (chatbot v1)** — rama `respuestas-automaticas-motor`, empezado el 2026-10-15 por Claude. Spec `docs/superpowers/specs/2026-10-15-respuestas-automaticas-design.md`, plan `docs/superpowers/plans/2026-10-15-respuestas-automaticas.md` y brief de la UI `docs/superpowers/specs/2026-10-15-respuestas-automaticas-brief-ui.md`.
-  Hecho: spec, plan y brief. · Falta: que Jonathan revise el plan y la revisión de Codex; pasarle el brief a Claude Design; los tres PRs del plan. · Sin probar: nada, todavía no hay código.
+  El plan, revisado por Codex, entró con el PR #67. PR 1 (esta rama): las Tareas 1 a 4: decidir la respuesta, el horario y la configuración (`/api/auto-replies`), sin envío todavía. · Falta: la revisión de Codex del código del PR 1; el PR 2 (`respuestas-automaticas-envio`: el webhook, el worker y la marca «Bot») y el PR 3 (la página, cuando Claude Design entregue el diseño del brief). · Sin probar: en el navegador (no hay UI todavía); la API, con tests de aislamiento.
 
 <!-- Formato de una entrada:
 - **<qué>** — rama `<rama>`, PR #<n>, empezado el <fecha> por <Claude|Codex|Jonathan>.
