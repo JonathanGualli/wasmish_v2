@@ -192,3 +192,9 @@ El ejemplo de Jonathan, con la bienvenida encendida:
 - **Lo que no:** el freno de ráfagas (probando se escriben muchos mensajes seguidos, y desde el cuarto parecería roto) y la pausa por respuesta manual (en la prueba no responde ninguna persona).
 - **Al cambiar la configuración, la conversación se vuelve a simular entera** con lo nuevo: los mensajes del cliente se quedan y las respuestas se recalculan.
 - **Cada respuesta dice por qué:** qué partes salieron y qué regla coincidió y con qué frase; si no respondió, el motivo («ya respondió esto en la conversación», «ninguna regla coincidió»).
+- **Revisión de Codex del plan** (una ronda):
+  - la prueba fuerza el interruptor general encendido, como ya hacía, para poder probar en el asistente;
+  - el motor dice qué salió y qué se calló (`explain`), y el frontend solo lo traduce a palabras;
+  - el `preview` acepta la forma de antes mientras dura el despliegue;
+  - lleva un límite de frecuencia por cuenta;
+  - más tests: concurrencia, rechazos de Meta, límites de la ventana, y los mensajes sin respuesta como entrantes.
