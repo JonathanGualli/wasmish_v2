@@ -118,6 +118,18 @@ export const getWabaPhoneNumbers = async ({ token, waBusinessId, after = null })
     );
 };
 
+// Si el número también se usa en la app de WhatsApp Business (coexistencia):
+// la consulta que indica la guía de Meta. Ver `describePhoneNumberPlatform`.
+export const getPhoneNumberPlatform = async ({ token, phoneNumberId }) => {
+    return whatsappApi.get(
+        `/${phoneNumberId}`,
+        {
+            params: { fields: 'is_on_biz_app,platform_type' },
+            headers: { Authorization: `Bearer ${token}` },
+        }
+    );
+};
+
 export const exchangeCodeForToken = async (code) => {
     const res = await whatsappApi.get('/oauth/access_token', {
         params: {

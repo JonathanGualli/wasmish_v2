@@ -25,7 +25,24 @@ export const describeWabaPhoneNumber = (body, phoneNumberId) => {
 // registrado (renovar el token, un cliente que viene de otro proveedor), en
 // On-Premises o con un valor desconocido no se toca, porque registrarlo con un
 // PIN distinto del suyo haría fallar la conexión.
-export const needsRegistration = (details) => details?.platformType === 'NOT_APPLICABLE';
+//
+// Un número que sigue en la app de WhatsApp Business (coexistencia) ya está
+// registrado: no se toca nunca (`onBusinessApp: true`, lo dice Meta). Si no se
+// sabe (`null`: la consulta falló o no trajo el campo) y el navegador dijo que
+// el número está en la app, tampoco: registrarlo con otro PIN podría romperlo.
+export const needsRegistration = (details, { onBusinessApp = null, claimedBusinessApp = false } = {}) => {
+    if (onBusinessApp === true) return false;
+    if (onBusinessApp === null && claimedBusinessApp) return false;
+    return details?.platformType === 'NOT_APPLICABLE';
+};
+
+// Lo que dice Meta del número en `GET /{phone-number-id}?fields=is_on_biz_app,platform_type`:
+// si también se usa en la app de WhatsApp Business. `onBusinessApp` es `null`
+// cuando Meta no lo dice (sin el campo, o un valor que no es booleano).
+export const describePhoneNumberPlatform = (body) => ({
+    onBusinessApp: typeof body?.is_on_biz_app === 'boolean' ? body.is_on_biz_app : null,
+    platformType: body?.platform_type ?? null,
+});
 
 // El PIN de la verificación en dos pasos con el que se registra un número: seis
 // dígitos al azar, con los ceros a la izquierda.
