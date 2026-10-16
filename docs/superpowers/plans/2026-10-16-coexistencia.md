@@ -110,27 +110,29 @@
 
 **Archivos:**
 - Modificar: `Backend/src/controllers/webhook.controller.js` (`procesarEco` junto a `procesarEntrante`, y el bloque `value.message_echoes` después de `messages`)
+- Modificar: `Backend/src/services/line.service.js` (`findInboundLine` devuelve también `connectedAt`: la de la línea, o `null` en la reserva de `User`, que no filtra)
 - Modificar: `Backend/src/models/message.model.js` (`origin` admite `'businessApp'`)
 - Modificar: `Backend/src/utils/message.origin.js` y su test (`'businessApp'` es un origen válido)
-- Modificar: `Backend/tests/isolation/helpers.js` (`postEcho(phoneNumberId, echoes)`)
+- Modificar: `Backend/tests/isolation/helpers.js`: `postEcho(phoneNumberId, echoes)`; `openStream` gana `count(text)` (cuántas veces llegó); `recordQueries(fn)` registra con `mongoose.set('debug', …)` las escrituras hechas mientras corre `fn` (para contar las que ponen `bot.humanRepliedAt`)
 - Test: `Backend/tests/message.origin.test.js` y `Backend/tests/isolation/webhook.test.js`
 
 **Interfaces:**
 - Consume: `describeEcho` (tarea 3); `resolveContact(accountId, { phone })`; `findOrCreateConversation`; `markHumanReply(conversationId)`; `descargarAdjunto(inbound, entrante)`; `sendToAccount(accountId, evento, datos, { lineId })`.
 - Produce: el evento SSE `message_created` con el mismo contrato que un saliente (`sender: 'me'`, `origin: { kind: 'businessApp' }`) y `conversation_updated` con `{ id, unreadCount }`.
 
-**El orden de `procesarEco`** (spec § 4; no se cambia): `findInboundLine` ya dio la línea → `describeEcho` con `connectedAt` de esa línea → contacto → conversación → **`Message.create` sin archivo** (E11000 → `return` sin efectos) → `markHumanReply` → `descargarAdjunto` y `Message.updateOne` con el archivo → conversación con dos `updateOne` condicionales (`lastMessageAt < t` para la vista previa y `lastMessageAt`; `lastInboundAt` nulo o `<= t` para `unreadCount: 0`) → leer el `unreadCount` resultante → SSE `message_created` y `conversation_updated` → log sin texto. **Sin `notifyInbound`.**
+**El orden de `procesarEco`** (spec § 4; no se cambia): `findInboundLine` ya dio la línea → `describeEcho` con `connectedAt` de esa línea → contacto → conversación → **`Message.create` sin archivo** (E11000 → `return` sin efectos) → `markHumanReply` → `descargarAdjunto` y `Message.updateOne` con el archivo → conversación con dos `updateOne` condicionales (la vista previa y `lastMessageAt` si `lastMessage` está vacío —la conversación recién creada, que nace con `lastMessageAt` = ahora— **o** `lastMessageAt < t`; `unreadCount: 0` si `lastInboundAt` es nulo o `<= t`) → leer el `unreadCount` resultante → SSE `message_created` y `conversation_updated` → log sin texto. **Sin `notifyInbound`.**
 
 - [ ] **Paso 1: Tests de aislamiento que fallan** en `isolation/webhook.test.js` (cuentas A y B, y la cuenta EQ con el agente de una línea que ya existen):
-  - un eco de texto al número de A con `to` de un contacto nuevo: crea el contacto y la conversación en A, un `Message` saliente `origin: 'businessApp'`, sin `sentBy`; `lastInboundAt` de la conversación sigue nulo (la ventana no se abre);
+  - un eco de texto al número de A con `to` de un contacto nuevo: crea el contacto y la conversación en A, un `Message` saliente `origin: 'businessApp'`, sin `sentBy`; la conversación queda con `lastMessage` = el texto del eco y `lastMessageAt` = su hora; `lastInboundAt` sigue nulo (la ventana no se abre);
   - un eco con foto: el mensaje queda con `mediaFile` (Meta falso devuelve el PNG de `helpers.js`);
-  - **dos entregas simultáneas del mismo eco** (`Promise.all`): un solo `Message`, y el bot pausado una sola vez (`Conversation.bot` tocado una vez; comprobarlo con el campo que escribe `markHumanReply`);
+  - **dos entregas simultáneas del mismo eco** (`Promise.all`, dentro de `recordQueries`): un solo `Message`, **una sola** escritura de `bot.humanRepliedAt`, y en el SSE de A `count` da exactamente un `message_created` y un `conversation_updated` con ese id;
   - un eco con el `waMessageId` de un mensaje ya enviado desde Wasmish: no crea otro ni cambia la pausa;
   - no leídos: con `unreadCount: 2` y el último entrante **anterior** al eco → 0; con un entrante **posterior** → se conserva 2; la vista previa no retrocede con un eco más viejo que `lastMessageAt`;
   - `edit` y `revoke`: nada guardado, 200;
   - el eco de A no llega por SSE a B, y en la cuenta EQ no llega al agente sin acceso a esa línea;
   - el SSE de A trae `message_created` y `conversation_updated`;
   - un eco anterior a `connectedAt` de la línea: nada guardado;
+  - **un número que pasó de una cuenta a otra**, con el webhook completo: el número 7xx conectado en C, desconectado, y conectado después en D; un eco con `timestamp` anterior a la conexión en D no crea nada en D ni en C;
   - un eco roto en medio de un lote con un entrante válido: el entrante se guarda y la respuesta es 200.
 - [ ] **Paso 2:** `node --test --test-concurrency=2 tests/isolation/webhook.test.js` → FALLA.
 - [ ] **Paso 3:** implementar `procesarEco`, el bloque del webhook con su `try/catch` por eco, el `enum` de `origin` y `messageOrigin`.
@@ -144,7 +146,7 @@
 - Modificar: `Backend/src/utils/business.app.js` (`parsePartnerRemoved`, `isStalePartnerRemoval`)
 - Modificar: `Backend/src/services/line.service.js` (`disconnectRemovedWaba`)
 - Modificar: `Backend/src/controllers/webhook.controller.js` (bloque `account_update` antes del `continue`; respuesta 500 al final si alguno quedó pendiente)
-- Modificar: `Backend/tests/isolation/helpers.js` (`postWebhookChange(field, value, { entryId, time })`)
+- Modificar: `Backend/tests/isolation/helpers.js`: `postWebhookBody(body)` firma y manda un cuerpo entero (varias `entry` y `changes` en una sola petición) y devuelve `{ status }`; `postWebhook` pasa a usarlo
 - Test: `Backend/tests/business.app.test.js` y `Backend/tests/isolation/lines.test.js`
 
 **Interfaces:**
@@ -162,7 +164,8 @@
   - atrasado tras una **renovación** (`at` anterior a `Waba.authorizedAt`): no desconecta;
   - un `Waba` sin `authorizedAt`: desconecta;
   - WABA desconocido: 200 y nada cambia;
-  - con el candado ocupado (tomarlo con `withLineLock` en el test mientras llega el webhook, con un lote que trae también un entrante): el entrante se guarda, la respuesta es 500; al reenviar el mismo lote con el candado libre: 200, la línea desconectada, el entrante **no** se duplica y no hay un segundo push ni trabajo del bot.
+  - con el candado ocupado (tomarlo con `withLineLock` en el test mientras llega el webhook): **un solo cuerpo** con un entrante al número de A y el `account_update` de su WABA, enviado con `postWebhookBody`. El entrante se guarda y la respuesta es 500. Se reenvía **el mismo cuerpo** con el candado libre: 200, la línea desconectada, un solo `Message` del entrante, `pushCalls` sin un segundo aviso y un solo trabajo del bot;
+  - **la API pública después del evento** (con `twoLines` y `sendOtp` de este archivo): enviar por la línea retirada da 409 sin llamar a Meta; sin ninguna línea activa, el envío sin selector también se bloquea; con otra línea activa de otro WABA, el envío sin selector sale por ese número y busca sus plantillas.
 - [ ] **Paso 3:** `node --test tests/business.app.test.js && node --test --test-concurrency=2 tests/isolation/lines.test.js` → FALLA.
 - [ ] **Paso 4:** implementar.
 - [ ] **Paso 5:** → PASA; suites completas en verde.
@@ -222,6 +225,7 @@ Antes de cada tarea visual, la skill `brand-guidelines`. Se sigue el diseño pan
 ### Tarea 9: El chat (marca, orden y bandeja)
 
 **Archivos:**
+- Modificar: `Frontend/src/models/message.mode.ts:56` (`'businessApp'` en la unión de `origin.kind`, junto a `chat`, `api` y `bot`)
 - Modificar: `Frontend/src/components/Chat/ChatThread.tsx` (`origin.kind === 'businessApp'` → «Desde la app de WhatsApp», donde va «Bot», como en 3a)
 - Modificar: `Frontend/src/hooks/useConversationMessages.ts` (un `message_created` se inserta según su `timestamp`)
 - Modificar: `Frontend/src/hooks/useConversations.ts` (`lastMessage` y `updatedAt` solo con un mensaje más nuevo)
