@@ -237,6 +237,78 @@ export const botStateUpdate = (state, claims, now) => {
 };
 
 /**
+ * `Conversation.bot` tras aplicarle el `$set` de `botStateUpdate`: lo que el
+ * worker deja en la BD, para simular una conversación sin ella.
+ */
+export const applyBotStateUpdate = (state, update) => {
+    const next = { ...state, keywordRepliedAt: { ...(state.keywordRepliedAt instanceof Map ? Object.fromEntries(state.keywordRepliedAt) : state.keywordRepliedAt ?? {}) } };
+    for (const [path, value] of Object.entries(update)) {
+        const [, field, id] = path.split('.');
+        if (field === 'keywordRepliedAt') next.keywordRepliedAt[id] = value;
+        else next[field] = value;
+    }
+    return next;
+};
+
+export const PREVIEW_MESSAGES_MAX = 20;
+
+/**
+ * «Probar» de la página: qué respondería el bot, mensaje a mensaje, a un
+ * contacto nuevo que escribe `messages` ahora (spec § 10). Usa `decideAutoReply`
+ * y `botStateUpdate`, los mismos del worker, así la prueba no se desfasa:
+ * - con el interruptor general forzado a encendido (se prueba antes de encender);
+ * - cada regla, con su posición como id (una regla nueva aún no tiene uno);
+ * - `previousInboundAt` avanza con cada mensaje, también sin respuesta, y lo
+ *   demás solo tras responder, como tras un envío aceptado;
+ * - sin el freno de ráfagas (probando se escribe seguido) ni pausa (no responde nadie).
+ * Cada turno dice qué partes salieron y qué se calló por repetido.
+ */
+export const simulateConversation = ({ settings, messages, now = new Date() }) => {
+    const simulated = {
+        ...settings,
+        enabled: true,
+        keywordRules: (settings.keywordRules ?? []).map((rule, index) => ({ ...rule, _id: index })),
+    };
+    let state = {};
+    let welcomedAt = null;
+    let previousInboundAt = null;
+
+    return messages.map(body => {
+        const result = decideAutoReply({
+            settings: simulated, state, welcomedAt, message: { type: 'text', text: body, caption: null }, previousInboundAt, lineId: null, now,
+        });
+        previousInboundAt = now;
+        if (!result.skip) {
+            if (result.claims.welcomed) welcomedAt = now;
+            state = { ...applyBotStateUpdate(state, botStateUpdate(state, result.claims, now)), recentReplies: [] };
+        }
+        return previewTurn(simulated, result);
+    });
+};
+
+// Las partes con su origen, en el orden del mensaje; una regla con el mismo
+// texto que otra no añade parte (sale una vez), como en `decideAutoReply`.
+const previewTurn = (settings, result) => {
+    const explain = result.explain;
+    const parts = [];
+    if (explain?.welcome) parts.push({ kind: 'welcome', text: settings.welcome.text });
+    for (const { id, keyword } of explain?.keywords ?? []) {
+        const { text } = settings.keywordRules[Number(id)];
+        if (!parts.some(part => part.kind === 'keyword' && part.text === text)) parts.push({ kind: 'keyword', text, ruleIndex: Number(id), keyword });
+    }
+    if (explain?.outOfHours) parts.push({ kind: 'outOfHours', text: settings.outOfHours.text });
+    if (explain?.fallback) parts.push({ kind: 'fallback', text: settings.fallback.text });
+
+    return {
+        reply: result.text ?? null,
+        parts,
+        repeated: (explain?.repeatedKeywords ?? []).map(({ id, keyword }) => ({ ruleIndex: Number(id), keyword })),
+        fallbackRepeated: explain?.fallbackRepeated ?? false,
+        skip: result.skip ?? null,
+    };
+};
+
+/**
  * Cómo termina un trabajo según lo que pasó al enviar (la tabla del spec,
  * § 4.2). `result` es lo que devuelve `processMessageSending`, que NO lanza ni
  * con un rechazo de Meta ni con un corte de red: vuelve con `status: 'failed'`,

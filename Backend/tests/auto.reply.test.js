@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+    simulateConversation, applyBotStateUpdate,
     autoReplyOutcome, botStateUpdate, decideAutoReply, defaultAutoReplySettings, inboundMatchText, matchesKeyword, normalizeForMatch,
 } from '../src/utils/auto.reply.js';
 
@@ -234,17 +235,6 @@ test('sin nada que responder dice por qué', () => {
 
 const WITH_FALLBACK = { ...SETTINGS, fallback: { enabled: true, text: 'No te entendí' } };
 
-// Lo que el worker deja en `Conversation.bot` tras un envío aceptado (`botStateUpdate`).
-const applyUpdate = (state, update) => {
-    const next = { ...state, keywordRepliedAt: { ...(state.keywordRepliedAt ?? {}) } };
-    for (const [path, value] of Object.entries(update)) {
-        const [, field, id] = path.split('.');
-        if (field === 'keywordRepliedAt') next.keywordRepliedAt[id] = value;
-        else next[field] = value;
-    }
-    return next;
-};
-
 /**
  * Una conversación real, mensaje a mensaje, separados `gapMinutes`: lo que
  * marcaría el worker tras cada respuesta, y `previousInboundAt` con CADA entrante.
@@ -258,7 +248,7 @@ const converse = (settings, bodies, { start = OPEN, gapMinutes = 11 } = {}) => {
         const result = decideAutoReply({ settings, state, welcomedAt, message: text(body), previousInboundAt, lineId: 'l1', now });
         if (!result.skip) {
             if (result.claims.welcomed) welcomedAt = now;
-            state = applyUpdate(state, botStateUpdate(state, result.claims, now));
+            state = applyBotStateUpdate(state, botStateUpdate(state, result.claims, now));
         }
         previousInboundAt = now;
         return result;
@@ -368,6 +358,57 @@ test('explain dice qué salió y qué se calló', () => {
 test('botStateUpdate marca el no entiendo', () => {
     const update = botStateUpdate({}, { welcomed: false, outOfHoursKey: null, keywordRuleIds: [], fallback: true }, OPEN);
     assert.equal(update['bot.fallbackRepliedAt'], OPEN);
+});
+
+// --- Probar como conversación (spec § 10) ------------------------------------
+
+// En la prueba, cada regla es su posición: 'Cuesta $10' es la 0.
+const simulate = (settings, messages, now = OPEN) => simulateConversation({ settings, messages, now });
+const kinds = (turn) => turn.skip ?? turn.parts.map(part => part.kind);
+
+test('simulateConversation reproduce la tabla de Jonathan, sin freno de ráfagas', () => {
+    // Todos en el mismo minuto: con el freno, el quinto sería `burst`.
+    const turns = simulate(WITH_FALLBACK, [
+        'me gusta el café con pan', 'me gusta el café con pan', 'me gusta el café con pan', 'cuál es el precio', 'cuál es el precio',
+    ]);
+
+    assert.deepEqual(turns.map(kinds), [['welcome'], ['fallback'], 'no_match', ['keyword'], 'no_match']);
+    assert.equal(turns[0].reply, '¡Hola!');
+    assert.equal(turns[2].fallbackRepeated, true);
+    assert.deepEqual(turns[3].parts, [{ kind: 'keyword', text: 'Cuesta $10', ruleIndex: 0, keyword: 'precio' }]);
+    assert.deepEqual(turns[4].repeated, [{ ruleIndex: 0, keyword: 'precio' }]);
+    assert.equal(turns[4].reply, null);
+});
+
+test('simulateConversation no frena las ráfagas', () => {
+    const settings = {
+        ...SETTINGS,
+        welcome: { ...SETTINGS.welcome, enabled: false },
+        keywordRules: ['a', 'b', 'c', 'd', 'e'].map(word => rule(word, [word], `Sobre ${word}`)),
+    };
+    const turns = simulate(settings, ['a', 'b', 'c', 'd', 'e']);
+
+    assert.deepEqual(turns.map(turn => turn.reply), ['Sobre a', 'Sobre b', 'Sobre c', 'Sobre d', 'Sobre e']);
+});
+
+test('simulateConversation responde con el interruptor general apagado', () => {
+    const [turn] = simulate({ ...WITH_FALLBACK, enabled: false }, ['hola']);
+    assert.deepEqual(kinds(turn), ['welcome']);
+});
+
+test('simulateConversation de noche: el fuera de horario una vez por cierre', () => {
+    const turns = simulate(SETTINGS, ['hola', 'precio?', 'hola'], CLOSED);
+    assert.deepEqual(turns.map(kinds), [['welcome', 'outOfHours'], ['keyword'], 'no_match']);
+});
+
+test('applyBotStateUpdate deja el estado como lo deja el worker', () => {
+    const state = { keywordRepliedAt: new Map([['a', hoursBefore(OPEN, 5)]]) };
+    const next = applyBotStateUpdate(state, botStateUpdate(state, { welcomed: false, outOfHoursKey: 'k', keywordRuleIds: ['b'], fallback: true }, OPEN));
+
+    assert.deepEqual(next.keywordRepliedAt, { a: hoursBefore(OPEN, 5), b: OPEN });
+    assert.equal(next.outOfHoursNotified, 'k');
+    assert.equal(next.fallbackRepliedAt, OPEN);
+    assert.deepEqual(next.recentReplies, [OPEN]);
 });
 
 test('defaultAutoReplySettings: apagado y con un horario de ejemplo válido', () => {

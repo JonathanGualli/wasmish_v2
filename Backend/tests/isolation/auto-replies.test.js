@@ -747,3 +747,45 @@ test('un rechazo o un envío incierto no marcan el no entiendo', async () => {
         assert.equal(conversation.bot?.fallbackRepliedAt ?? null, null, label);
     }
 });
+
+// --- Probar como conversación (spec § 10) ------------------------------------
+
+const preview = (account, body) => request(account, 'POST', '/auto-replies/preview', body);
+
+test('probar una conversación responde turno a turno, también apagada, sin guardar nada', async () => {
+    const a = await newAccount('PCA');
+    const settings = settingsBody({ enabled: false, fallback: fallbackOn });
+    const response = await preview(a, { settings, messages: ['me gusta el café', 'me gusta el café', 'me gusta el café', 'precio?', 'precio?'] });
+
+    assert.equal(response.status, 200, response.text);
+    assert.deepEqual(response.body.turns.map(turn => turn.reply), [WELCOME, FALLBACK, null, 'Cuesta $10', null]);
+    assert.deepEqual(response.body.turns[4].repeated, [{ ruleIndex: 0, keyword: 'precio' }]);
+    assert.equal((await getSettings(a)).body.configured, false, 'probar no guarda');
+});
+
+test('probar una conversación valida los mensajes', async () => {
+    const a = await newAccount('PCB');
+    const settings = settingsBody();
+    for (const [label, body] of [
+        ['sin mensajes', { settings, messages: [] }],
+        ['un mensaje vacío', { settings, messages: ['   '] }],
+        ['más de 1.000 caracteres', { settings, messages: ['a'.repeat(1001)] }],
+        ['un número', { settings, messages: [42] }],
+        ['más de 20', { settings, messages: Array.from({ length: 21 }, () => 'hola') }],
+        ['text y messages a la vez', { settings, text: 'hola', messages: ['hola'] }],
+        ['ni text ni messages', { settings }],
+    ]) {
+        assert.equal((await preview(a, body)).status, 400, label);
+    }
+});
+
+test('más de 60 pruebas en un minuto dan 429', async () => {
+    const a = await newAccount('PCC');
+    const body = { settings: settingsBody(), messages: ['hola'] };
+    for (let i = 0; i < 60; i++) assert.equal((await preview(a, body)).status, 200, `prueba ${i + 1}`);
+    const limited = await preview(a, body);
+    assert.equal(limited.status, 429);
+    assert.match(limited.body[0].message, /Demasiadas pruebas/);
+    // Por cuenta: otra cuenta sigue pudiendo.
+    assert.equal((await preview(await newAccount('PCD'), body)).status, 200);
+});
