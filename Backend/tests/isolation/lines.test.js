@@ -6,10 +6,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    seedAccount, connectWhatsapp, request, onMeta, metaCalls, ANONYMOUS, Account, ApiKey, Line, User, Waba,
+    seedAccount, connectWhatsapp, request, onMeta, metaCalls, pushCalls, postWebhookBody, ANONYMOUS, Account, ApiKey, Line,
+    Message, Template, User, Waba,
 } from './helpers.js';
 
-const { syncLinesFromOwner, findInboundLine } = await import('../../src/services/line.service.js');
+const { syncLinesFromOwner, findInboundLine, withLineLock } = await import('../../src/services/line.service.js');
 const { lineStateIssues } = await import('../../src/utils/line.js');
 const { encrypt, hashApiKey } = await import('../../src/utils/crypto.js');
 const { DEFAULT_LINE_INACTIVE_MESSAGE, LINE_BUSY_MESSAGE, WHATSAPP_NOT_CONNECTED_MESSAGE, lineLimitMessage } = await import('../../src/utils/whatsapp.line.js');
@@ -475,4 +476,123 @@ test('GET /lines dice si cada línea tiene PIN (hasTwoStepPin), sin el PIN', asy
     assert.equal(byId.get(a.first).hasTwoStepPin, true);
     assert.equal(byId.get(a.second).hasTwoStepPin, false);
     assert.ok(!res.text.includes('123456'));
+});
+
+
+// --- Coexistencia: Meta retira el acceso a un WABA (account_update, PARTNER_REMOVED) ---
+
+const nowSec = () => Math.floor(Date.now() / 1000);
+// Con la forma del ejemplo de Meta: `entry.id` no es el WABA.
+// La hora por defecto, unos segundos después de conectar: un aviso del mismo segundo se ignora (isStalePartnerRemoval).
+const partnerRemoved = (waBusinessId, { reason = 'PRIMARY_INACTIVITY', time = nowSec() + 5 } = {}) => ({
+    id: 'entrada-de-meta', time,
+    changes: [{ field: 'account_update', value: {
+        event: 'PARTNER_REMOVED', waba_info: { waba_id: waBusinessId, owner_business_id: 'negocio-del-cliente' },
+        ...(reason !== null && { disconnection_info: { reason, initiated_by: 'SYSTEM' } }),
+    } }],
+});
+const inboundEntry = (phoneNumberId, body) => ({ changes: [{ value: {
+    metadata: { phone_number_id: phoneNumberId },
+    contacts: [{ profile: { name: 'Cliente' }, wa_id: '593990008001' }],
+    messages: [{ from: '593990008001', id: `wamid.lote.${Date.now()}`, timestamp: String(nowSec()), type: 'text', text: { body } }],
+} }] });
+
+test('PARTNER_REMOVED del WABA de A: su línea queda desconectada con el motivo, y B intacta', async () => {
+    const a = await twoLines('PRA', '781');
+    const b = await twoLines('PRB', '782');
+    const res = await postWebhookBody({ entry: [partnerRemoved('waba-PRA')] });
+    assert.equal(res.status, 200);
+    for (const id of [a.first, a.second]) {
+        const line = await lineFor(id);
+        assert.equal(line.status, 'disconnected');
+        assert.equal(line.disconnectionReason, 'PRIMARY_INACTIVITY');
+    }
+    for (const id of [b.first, b.second]) assert.equal((await lineFor(id)).status, 'active');
+    const lines = await request(a, 'GET', '/lines');
+    assert.equal(lines.body.lines.find(line => line.id === a.first).disconnectionReason, 'PRIMARY_INACTIVITY');
+});
+
+test('PARTNER_REMOVED de un cliente normal con dos líneas, sin motivo: las dos desconectadas, motivo null, sin línea por defecto', async () => {
+    const a = await twoLines('PRC', '783');
+    assert.equal((await postWebhookBody({ entry: [partnerRemoved('waba-PRC', { reason: null })] })).status, 200);
+    for (const id of [a.first, a.second]) {
+        const line = await lineFor(id);
+        assert.equal(line.status, 'disconnected');
+        assert.equal(line.disconnectionReason ?? null, null);
+    }
+    assert.equal((await Account.findById(a.accountId).lean()).defaultLineId, null);
+    assert.equal((await User.findById(a.userId).lean()).phoneNumberId, null);
+    // Repetido: no cambia nada.
+    assert.equal((await postWebhookBody({ entry: [partnerRemoved('waba-PRC', { reason: null })] })).status, 200);
+});
+
+test('PARTNER_REMOVED atrasado tras una renovación no desconecta; sobre un Waba sin authorizedAt, sí', async () => {
+    const a = await twoLines('PRD', '784');
+    const old = nowSec() - 120;
+    assert.equal((await postWebhookBody({ entry: [partnerRemoved('waba-PRD', { time: old })] })).status, 200);
+    assert.equal((await lineFor(a.first)).status, 'active', 'un aviso anterior a la renovación desconectó la línea');
+
+    await Waba.updateOne({ waBusinessId: 'waba-PRD' }, { $set: { authorizedAt: null } });
+    assert.equal((await postWebhookBody({ entry: [partnerRemoved('waba-PRD', { time: old })] })).status, 200);
+    assert.equal((await lineFor(a.first)).status, 'disconnected');
+});
+
+test('PARTNER_REMOVED de un WABA desconocido: 200 y nada cambia', async () => {
+    const a = await twoLines('PRE', '785');
+    assert.equal((await postWebhookBody({ entry: [partnerRemoved('waba-que-no-existe')] })).status, 200);
+    assert.equal((await lineFor(a.first)).status, 'active');
+});
+
+test('con el candado ocupado: el resto del lote se procesa, responde 500, y al reentregarlo nada se repite', async () => {
+    const a = await twoLines('PRF', '786');
+    const body = { entry: [inboundEntry('7861', 'entrante del lote ocupado'), partnerRemoved('waba-PRF')] };
+    let release;
+    const held = withLineLock(a.accountId, () => new Promise(resolve => { release = resolve; }));
+    const pushesBefore = pushCalls.length;
+    try {
+        assert.equal((await postWebhookBody(body)).status, 500);
+        assert.equal(await Message.countDocuments({ text: 'entrante del lote ocupado' }), 1);
+        assert.equal((await lineFor(a.first)).status, 'active');
+    } finally {
+        release();
+        await held;
+    }
+    const pushesAfterFirst = pushCalls.length;
+    assert.equal((await postWebhookBody(body)).status, 200);
+    assert.equal((await lineFor(a.first)).status, 'disconnected');
+    assert.equal(await Message.countDocuments({ text: 'entrante del lote ocupado' }), 1, 'el entrante se duplicó al reentregar');
+    assert.equal(pushCalls.length, pushesAfterFirst, 'la reentrega volvió a avisar');
+    assert.ok(pushesAfterFirst >= pushesBefore);
+});
+
+test('la API pública tras PARTNER_REMOVED: la línea retirada no envía, y otra de otro WABA toma el relevo', async () => {
+    const a = await seedAccount('PRG', { seq: seq++, maxLines: 3 });
+    const { lineId: removed } = await connectWhatsapp(a, { phoneNumberId: '7871' });
+    const { lineId: other } = await connectWhatsapp(a, { phoneNumberId: '7872', waBusinessId: 'waba-PRG-otra' });
+    await Template.create({
+        userId: a.accountId, waBusinessId: 'waba-PRG-otra', templateId: 'tpl-PRG-otra', name: a.templateName, language: 'es',
+        category: 'MARKETING', status: 'APPROVED', parameterFormat: 'POSITIONAL', buttons: [], bodyText: 'hola', header: null,
+    });
+    const key = 'wm_prg';
+    await ApiKey.create({ userId: a.accountId, keyHash: hashApiKey(key), keyPreview: 'wm_', name: 'v1' });
+    const withKey = { ...a, key };
+
+    assert.equal((await postWebhookBody({ entry: [partnerRemoved('waba-PRG')] })).status, 200);
+    assert.equal((await lineFor(removed)).status, 'disconnected');
+
+    let calls = metaCalls.length;
+    const byRemoved = await sendOtp(withKey, { lineId: String(removed) });
+    assert.equal(byRemoved.status, 409, byRemoved.text);
+    assert.equal(metaCalls.length, calls);
+
+    const byDefault = await sendOtp(withKey);
+    assert.equal(byDefault.status, 200, byDefault.text);
+    assert.deepEqual(metaCalls.at(-1), { method: 'post', url: '/7872/messages' });
+    assert.equal(String((await Account.findById(a.accountId).lean()).defaultLineId), String(other));
+
+    assert.equal((await postWebhookBody({ entry: [partnerRemoved('waba-PRG-otra')] })).status, 200);
+    calls = metaCalls.length;
+    const none = await sendOtp(withKey);
+    assert.equal(none.status, 409, none.text);
+    assert.equal(metaCalls.length, calls);
 });

@@ -12,6 +12,7 @@ Lo que entra desde Meta: firma, estados de los mensajes, tipos de mensaje, adjun
 - [`caption` vs `text`](#caption-vs-text)
 - [Webhook entrante (`webhook.controller.js`)](#webhook-entrante-webhookcontrollerjs)
 - [Lo que se responde desde la app de WhatsApp Business (`procesarEco`)](#lo-que-se-responde-desde-la-app-de-whatsapp-business-procesareco)
+- [Meta retira el acceso a un WABA (`PARTNER_REMOVED`)](#meta-retira-el-acceso-a-un-waba-partner_removed)
 
 ---
 
@@ -59,3 +60,13 @@ Con la **coexistencia** (2026-10-16; spec `docs/superpowers/specs/2026-10-16-coe
 - **SSE:** `message_created` (el mensaje entero, como uno enviado) y `conversation_updated` con `{ id, unreadCount }`, los dos con `{ lineId }`. **Sin aviso push**: lo escribió el propio negocio.
 - **Un fallo a mitad** (después de `Message.create`) deja el mensaje sin el resto, y un reintento de Meta no lo completa: el mismo límite que los entrantes.
 - Como los demás bloques, cada eco va en su `try/catch`: uno roto no tumba el lote.
+
+### Meta retira el acceso a un WABA (`PARTNER_REMOVED`)
+
+`account_update` con `event: 'PARTNER_REMOVED'` (2026-10-16): el cliente retiró a Wasmish el acceso a su WABA. En la coexistencia trae además `disconnection_info: { reason, initiated_by }` (el celular inactivo unos 14 días, se desconectó desde la app…). Según la referencia de Meta, **es del WABA, no de un número**: el WABA va en `value.waba_info.waba_id` (en su ejemplo, `entry.id` es otro id) y no trae teléfono.
+
+- **Va antes de mirar el número:** `account_update` no trae `metadata.phone_number_id`, así que se trata antes del `continue` de los cambios sin número, en su propio `try/catch`.
+- `parsePartnerRemoved` (`utils/business.app.js`) devuelve `{ waBusinessId, reason, initiatedBy, at }` (`at` = `entry.time`); `disconnectRemovedWaba` (`services/line.service.js`) desconecta **todas las líneas activas de ese WABA**, también las de un cliente normal (sin acceso al WABA, ninguna enviaría). Guarda el motivo en `Line.disconnectionReason` (null sin `disconnection_info`), y la línea por defecto y la copia en `User` siguen la misma lógica que `disconnectLine`.
+- **Un aviso viejo no desconecta una conexión nueva:** si `at` es anterior o del mismo segundo que `Waba.authorizedAt` (la última conexión o renovación), se ignora (`isStalePartnerRemoval`). Un `Waba` sin `authorizedAt` (anterior al campo) aplica el aviso. Todo se revalida dentro del candado de líneas, así que un aviso repetido no hace nada.
+- **Con el candado ocupado** (alguien conecta o desconecta en ese momento) se reintenta 3 veces con 1 s de espera (`PARTNER_REMOVED_LOCK`); si sigue ocupado, **el resto del lote se procesa igual** y el webhook responde **500** para que Meta lo reentregue. Es seguro: en la reentrega, los mensajes ya guardados se saltan por `waMessageId` antes de cualquier efecto (sin repetir push, bot ni descargas) y los acuses son monótonos.
+- Un WABA que no está en ninguna cuenta: solo un aviso en el log. `ACCOUNT_OFFBOARDED` y `ACCOUNT_RECONNECTED` no se tratan en esta versión.

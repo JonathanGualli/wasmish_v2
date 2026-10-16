@@ -15,12 +15,12 @@ import { TIPOS_CON_ARCHIVO, nombreDeArchivo, guardarArchivo } from '../utils/med
 import { getMediaInfo, downloadMedia } from '../libs/whatsapp.js';
 import { decrypt } from '../utils/crypto.js';
 import { MEDIA_DIR, MEDIA_MAX_BYTES } from '../config.js';
-import { findInboundLine, rememberDisplayPhoneNumber } from '../services/line.service.js';
+import { disconnectRemovedWaba, findInboundLine, rememberDisplayPhoneNumber } from '../services/line.service.js';
 import { notifyInbound } from '../services/push.service.js';
 import { buildAutoReplyJob } from '../services/auto.reply.service.js';
 import { wakeAutoReplyWorker } from '../workers/auto.reply.worker.js';
 import { markHumanReply } from '../services/auto.reply.service.js';
-import { describeEcho } from '../utils/business.app.js';
+import { describeEcho, parsePartnerRemoved } from '../utils/business.app.js';
 import { serializeMessage } from './chat.controller.js';
 
 // Baja el adjunto y lo deja en disco. Devuelve SIEMPRE un objeto: si algo falla
@@ -471,9 +471,36 @@ export const handleWebhook = async (req, res) => {
 
         if(!body.entry) return res.sendStatus(200);
 
+        // Un aviso de Meta que no se pudo aplicar porque el candado de líneas
+        // estaba ocupado: el resto del lote se procesa igual y, al final, 500
+        // para que Meta lo reentregue. Es seguro: los mensajes ya guardados se
+        // saltan por `waMessageId` antes de cualquier efecto, y los acuses son
+        // monótonos.
+        let retryBatch = false;
+
         for(const entry of body.entry) {
             for(const change of entry.changes ?? []){
                 const value = change.value;
+
+                // Meta retiró el acceso a un WABA (`PARTNER_REMOVED`). Va antes
+                // de mirar el número: `account_update` no trae `phone_number_id`.
+                if (change.field === 'account_update') {
+                    try {
+                        const removal = parsePartnerRemoved(entry, change);
+                        if (removal) {
+                            const result = await disconnectRemovedWaba(removal);
+                            if (result.status === 'busy') retryBatch = true;
+                            console.log('Meta retiró el acceso a un WABA:', {
+                                waBusinessId: removal.waBusinessId, reason: removal.reason, status: result.status,
+                                lineas: result.lineIds.length,
+                            });
+                        }
+                    } catch (error) {
+                        console.error('Aviso de cuenta descartado por error:', { error: error.message });
+                    }
+                    continue;
+                }
+
                 const phoneNumberId = value?.metadata?.phone_number_id;
 
                 if(!phoneNumberId) continue;
@@ -570,7 +597,7 @@ export const handleWebhook = async (req, res) => {
             }
         }
 
-        res.sendStatus(200);
+        res.sendStatus(retryBatch ? 500 : 200);
     } catch (error) {
         console.error("Error handling webhook:", error);
         res.sendStatus(500);

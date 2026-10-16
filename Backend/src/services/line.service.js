@@ -6,6 +6,7 @@ import { findAccountOwner } from './account.service.js';
 import { withAccountLock } from './account.lock.service.js';
 import { legacyUserFields, nextDefaultLine, ownerConnection, pickSendingLineId, planConnection, sendingLineFor } from '../utils/line.js';
 import { inLineScope, lineScope } from '../utils/permissions.js';
+import { isStalePartnerRemoval } from '../utils/business.app.js';
 import {
     CHOOSE_LINE_MESSAGE, DEFAULT_LINE_INACTIVE_MESSAGE, LINE_BUSY_MESSAGE, LINE_ERROR_CODES, LINE_DISCONNECTED_MESSAGE, LINE_NOT_FOUND_MESSAGE, WHATSAPP_NOT_CONNECTED_MESSAGE,
     lineLimitMessage,
@@ -386,15 +387,61 @@ export const updateLineSettings = (accountId, lineId, { name, makeDefault = fals
 export const disconnectLine = (accountId, lineId) => withLineLock(accountId, async () => {
     await finishPendingReplace(accountId);
     const line = await findAccountLine(accountId, lineId);
-    if (line.status === 'active') await Line.updateOne({ _id: line._id }, { $set: { status: 'disconnected', disconnectedAt: new Date() } });
+    await disconnectLocked(accountId, line);
+    await writeLegacyUser(accountId);
+});
 
+// Desconecta una línea con el candado ya tomado: la línea por defecto pasa a la
+// activa más reciente (`nextDefaultLine`) o a ninguna. `disconnectionReason`:
+// el motivo de Meta, o null si se desconectó desde Wasmish.
+const disconnectLocked = async (accountId, line, { disconnectionReason = null } = {}) => {
+    if (line.status === 'active') {
+        await Line.updateOne({ _id: line._id }, { $set: { status: 'disconnected', disconnectedAt: new Date(), disconnectionReason } });
+    }
     const account = await Account.findById(accountId).select('defaultLineId').lean();
     if (account?.defaultLineId && String(account.defaultLineId) === String(line._id)) {
         const lines = await Line.find({ accountId }).select('_id status connectedAt createdAt').lean();
         await Account.updateOne({ _id: accountId }, { $set: { defaultLineId: nextDefaultLine(lines, line._id)?._id ?? null } });
     }
-    await writeLegacyUser(accountId);
-});
+};
+
+// Cuántas veces y cada cuánto se reintenta el candado ante un aviso de Meta.
+export const PARTNER_REMOVED_LOCK = { attempts: 3, delayMs: 1000 };
+
+/**
+ * Meta retiró el acceso a un WABA (`PARTNER_REMOVED`): desconecta TODAS sus
+ * líneas activas, con el motivo. Vale también para un cliente normal: sin
+ * acceso a su WABA, ningún envío de esas líneas funcionaría. Con el candado de
+ * líneas de la cuenta, revalidando dentro: un aviso viejo (anterior a la última
+ * conexión o renovación, `isStalePartnerRemoval`) o repetido no cambia nada.
+ * Devuelve `{ status: 'done' | 'stale' | 'unknown_waba' | 'busy', lineIds }`;
+ * `busy` si el candado no se libera tras los reintentos (el webhook responde 500
+ * para que Meta lo reentregue).
+ */
+export const disconnectRemovedWaba = async ({ waBusinessId, reason = null, at }) => {
+    const found = await Waba.findOne({ waBusinessId }).select('accountId').lean();
+    if (!found) return { status: 'unknown_waba', lineIds: [] };
+
+    for (let attempt = 1; ; attempt++) {
+        try {
+            return await withLineLock(found.accountId, async () => {
+                const waba = await Waba.findOne({ _id: found._id, accountId: found.accountId }).lean();
+                if (!waba) return { status: 'unknown_waba', lineIds: [] };
+                if (isStalePartnerRemoval(at, waba.authorizedAt)) return { status: 'stale', lineIds: [] };
+
+                await finishPendingReplace(waba.accountId);
+                const lines = await Line.find({ accountId: waba.accountId, wabaId: waba._id, status: 'active' }).lean();
+                for (const line of lines) await disconnectLocked(waba.accountId, line, { disconnectionReason: reason });
+                if (lines.length) await writeLegacyUser(waba.accountId);
+                return { status: 'done', lineIds: lines.map(line => line._id) };
+            });
+        } catch (error) {
+            if (error.code !== LINE_ERROR_CODES.busy) throw error;
+            if (attempt >= PARTNER_REMOVED_LOCK.attempts) return { status: 'busy', lineIds: [] };
+            await new Promise(resolve => setTimeout(resolve, PARTNER_REMOVED_LOCK.delayMs));
+        }
+    }
+};
 
 /**
  * Los WABA de la cuenta con alguna línea activa, como `{ accountId,

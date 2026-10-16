@@ -28,3 +28,36 @@ export const describeEcho = (echoData, { connectedAt = null } = {}) => {
     if (!entrante) return null;
     return { waMessageId: echoData.id, toPhone, timestamp, entrante };
 };
+
+/**
+ * Meta retiró el acceso a un WABA (`account_update` con `PARTNER_REMOVED`):
+ * `{ waBusinessId, reason, initiatedBy, at }`, o null si es otra cosa. El WABA
+ * sale de `waba_info.waba_id` y nunca de `entry.id`, que en el ejemplo de Meta
+ * es otro id. `reason` e `initiatedBy` solo llegan en la coexistencia
+ * (`disconnection_info`); `at` es `entry.time` (segundos).
+ */
+export const parsePartnerRemoved = (entry, change) => {
+    const value = change?.value;
+    if (change?.field !== 'account_update' || value?.event !== 'PARTNER_REMOVED') return null;
+    const waBusinessId = value.waba_info?.waba_id;
+    if (!waBusinessId) return null;
+    const seconds = Number.parseInt(entry?.time, 10);
+    return {
+        waBusinessId: String(waBusinessId),
+        reason: value.disconnection_info?.reason ?? null,
+        initiatedBy: value.disconnection_info?.initiated_by ?? null,
+        at: Number.isFinite(seconds) ? new Date(seconds * 1000) : new Date(),
+    };
+};
+
+/**
+ * Si el aviso de retirada es viejo: anterior (o del mismo segundo) a la última
+ * conexión o renovación confirmada del WABA (`Waba.authorizedAt`). Ante la duda
+ * se ignora: desconectar por error una conexión nueva es peor que un envío que
+ * falla con el error de Meta. Un WABA sin `authorizedAt` (anterior al campo)
+ * aplica el aviso.
+ */
+export const isStalePartnerRemoval = (at, authorizedAt) => {
+    if (!authorizedAt) return false;
+    return Math.floor(at.getTime() / 1000) <= Math.floor(new Date(authorizedAt).getTime() / 1000);
+};

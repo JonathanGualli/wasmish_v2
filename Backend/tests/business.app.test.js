@@ -66,3 +66,44 @@ test('sin timestamp válido, la hora es la de ahora', () => {
     const result = describeEcho(echo({ timestamp: undefined }));
     assert.ok(result.timestamp.getTime() >= before);
 });
+
+// --- PARTNER_REMOVED (account_update) ---
+
+const { parsePartnerRemoved, isStalePartnerRemoval } = await import('../src/utils/business.app.js');
+
+// El ejemplo de la referencia de Meta: `entry.id` NO es el WABA.
+const removedEntry = { id: '2949482758682047', time: 1748477359 };
+const removedChange = (value = {}) => ({ field: 'account_update', value: {
+    event: 'PARTNER_REMOVED', waba_info: { waba_id: '980198427658004', owner_business_id: '2329417887457253' },
+    disconnection_info: { reason: 'PRIMARY_INACTIVITY', initiated_by: 'SYSTEM' }, ...value,
+} });
+
+// Regresión que vigila: el primer diseño tomaba el WABA de `entry.id`, que en el ejemplo de Meta es otro.
+test('parsePartnerRemoved: el WABA de waba_info, la hora de entry.time y el motivo', () => {
+    const removal = parsePartnerRemoved(removedEntry, removedChange());
+    assert.equal(removal.waBusinessId, '980198427658004');
+    assert.equal(removal.reason, 'PRIMARY_INACTIVITY');
+    assert.equal(removal.initiatedBy, 'SYSTEM');
+    assert.equal(removal.at.getTime(), 1748477359 * 1000);
+});
+
+test('parsePartnerRemoved: sin disconnection_info (un cliente normal), el motivo es null', () => {
+    const removal = parsePartnerRemoved(removedEntry, removedChange({ disconnection_info: undefined }));
+    assert.equal(removal.reason, null);
+    assert.equal(removal.initiatedBy, null);
+});
+
+test('parsePartnerRemoved: otro evento, otro campo o sin waba_info → null', () => {
+    assert.equal(parsePartnerRemoved(removedEntry, removedChange({ event: 'ACCOUNT_OFFBOARDED' })), null);
+    assert.equal(parsePartnerRemoved(removedEntry, { ...removedChange(), field: 'messages' }), null);
+    assert.equal(parsePartnerRemoved(removedEntry, removedChange({ waba_info: undefined })), null);
+    assert.equal(parsePartnerRemoved(null, null), null);
+});
+
+test('isStalePartnerRemoval: un aviso anterior o del mismo segundo que la última conexión es viejo', () => {
+    const authorizedAt = new Date('2026-10-16T12:00:00.500Z');
+    assert.equal(isStalePartnerRemoval(new Date('2026-10-16T11:59:59Z'), authorizedAt), true);
+    assert.equal(isStalePartnerRemoval(new Date('2026-10-16T12:00:00Z'), authorizedAt), true);
+    assert.equal(isStalePartnerRemoval(new Date('2026-10-16T12:00:01Z'), authorizedAt), false);
+    assert.equal(isStalePartnerRemoval(new Date('2026-10-16T12:00:00Z'), null), false, 'un Waba sin authorizedAt aplica el evento');
+});
