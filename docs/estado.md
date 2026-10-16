@@ -6,7 +6,17 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En producción
 
-**Versión 1.0.24**, desplegada el 2026-10-16 (etiqueta `v1.0.24`; comprobar con `curl https://app.wasmish.com/api/version`). Lleva:
+**Versión 1.0.25**, desplegada el 2026-10-16 (etiqueta `v1.0.25`; comprobar con `curl https://app.wasmish.com/api/version`). Lleva:
+
+- **Coexistencia con la app de WhatsApp Business** (PRs #78 a #80, cada uno con su revisión de Codex; spec `docs/superpowers/specs/2026-10-16-coexistencia-design.md`, plan `docs/superpowers/plans/2026-10-16-coexistencia.md`, diseño `Design/Wasmish Líneas - Junto con la app.html`). Un cliente conecta un número que sigue usando en la app de WhatsApp Business, sin perderla.
+  - **Al conectar,** Wasmish pregunta si el número está en la app y abre el Embedded Signup por el camino de la app; el backend deduce el número (Meta solo da el WABA), lee `is_on_biz_app` y no llama a `/register`. Detalle en [whatsapp-envio.md](arquitectura/whatsapp-envio.md).
+  - **Lo que el negocio responde desde la app** llega como eco (`smb_message_echoes`) y sale en el chat como «Desde la app de WhatsApp», con su pausa del bot. **`PARTNER_REMOVED`** desconecta las líneas del WABA y Ajustes → Líneas dice el motivo. Detalle en [webhook-adjuntos.md](arquitectura/webhook-adjuntos.md).
+  - **Probado** con los tests, con `webhook:simulate` (`eco`, `retiro-acceso`) y en Chrome contra un backend local. **Sin probar con Meta de verdad**: el popup de Facebook por el camino de la app y un eco con foto.
+  - **En el panel de Meta (hecho por Jonathan el 2026-10-16):** suscritos `smb_message_echoes`, `history` y `smb_app_state_sync`, y comprobado `account_update`. El webhook no se tocó.
+  - **Al desplegar:** se reconstruyen `wasmish-api` y `wasmish-web`. Sin migración, índices ni variables nuevas: los campos nuevos (`Line.businessApp`, `Line.disconnectionReason`, `Waba.authorizedAt`) son opcionales. Para un número normal, conectar funciona como antes: comprobar en los logs entrantes del webhook y `POST /api/v1/templates/send` con 200.
+  - **Después:** la prueba real del spec, § 7, con el chip en la app de WhatsApp Business. **Hasta que salga bien, la página y el guion de ventas no prometen la coexistencia.**
+
+La 1.0.24 (desplegada el 2026-10-16) llevó:
 
 - **La app en `app.wasmish.com`** (rama `dominio-wasmish`; solo despliegue y documentación, sin cambios en el código de la app). Un router de Traefik por dominio, cada uno con su certificado, y las redirecciones en Traefik: [deploy/README.md § Dominios](../deploy/README.md#dominios). `wasmish.solventyc.com` **sigue sirviendo `/api` sin fecha de fin** (el webhook de Meta y la API pública del cliente real) y el resto redirige con 301 a la app; `wasmish.com` lleva a la app con 302 hasta que exista la página, y `www.wasmish.com` va a `wasmish.com` con 301.
   - **Probado** con Traefik v3.7.1 en local, como en el servidor: cada dominio y ruta, `POST` incluidos. Los certificados de Let's Encrypt solo se prueban en producción.
@@ -70,12 +80,11 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
 
 ## En curso
 
-- **Coexistencia con la app de WhatsApp Business** — rama `coexistencia`, empezado el 2026-10-16 por Claude. Spec `docs/superpowers/specs/2026-10-16-coexistencia-design.md` y brief de la interfaz `2026-10-16-coexistencia-brief-ui.md` (para Claude Design).
-  Plan `docs/superpowers/plans/2026-10-16-coexistencia.md` (PR #78, spec y plan, revisados por Codex). Backend en la rama `coexistencia-backend` (tareas 1 a 6: conectar por los dos caminos, ecos, `PARTNER_REMOVED`, simulador), con sus tests.
-  Frontend en la rama `coexistencia-frontend` (tareas 7 a 9: la pregunta antes de conectar, las líneas junto con la app o desconectadas por Meta, la marca en el chat), con el diseño `Design/Wasmish Líneas - Junto con la app.html` y los textos del spec.
-  Hecho: el backend (revisado por Codex, PR #79) y el frontend, probados con los tests, con `webhook:simulate` (`eco`, `retiro-acceso`) y en Chrome (computadora y teléfono emulado) contra un backend local con datos sembrados. · Falta: la revisión de Codex del frontend, suscribir los campos en el panel de Meta, la versión, desplegar y la prueba real con un número en la app de WhatsApp Business. · Sin probar: nada con Meta de verdad; un eco con foto (la descarga necesita a Meta), ni el popup de Facebook con el camino de la app.
+Nada en curso.
 
 ## Lo siguiente
+
+- **La prueba real de la coexistencia** (spec `2026-10-16-coexistencia-design.md`, § 7), con el chip en la app de WhatsApp Business y la cuenta de prueba de Jonathan. Si sale bien, la página pública y el guion de ventas pueden ofrecerla.
 
 - **Avisar al cliente real** de que ya puede usar Wasmish en el celular, con los avisos, **cuando la app ya esté en `app.wasmish.com`** (si la instala antes, tendrá que instalarla dos veces). Cuando le convenga, que cambie la URL de su integración a `app.wasmish.com`; la vieja sigue funcionando.
 - **Multi-línea y multi-agente, fases 1 a 4** (diseño aprobado, sin preguntas abiertas: `docs/superpowers/specs/2026-10-11-multi-linea-multi-agente-design.md`). Fases 1, 2a y 2b en producción (la 2b, enrutar por línea, desde la 1.0.14). La **Fase 2c** está en producción desde la 1.0.15.
