@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
     seedAccount, seedMember, connectWhatsapp, request, onMeta, ANONYMOUS, PNG,
-    ApiKey, Campaign, Conversation,
+    postWebhook, ApiKey, AutoReplySettings, Campaign, Contact, Conversation, Message,
 } from './helpers.js';
 
 const { processNext } = await import('../../src/workers/campaign.worker.js');
@@ -223,4 +223,104 @@ test('un agente sin acceso a la línea recibe 404 y no pausa nada', async () => 
     const response = await request(agent, 'POST', `/chats/${a.conversationId}/messages`, { text: 'hola', temporalId: 't3' });
     assert.equal(response.status, 404);
     assert.equal(await humanRepliedAt(a), null);
+});
+
+// --- El webhook deja el trabajo en el entrante -----------------------------
+
+const waId = () => `wamid.bot.${Date.now()}.${Math.random().toString(36).slice(2)}`;
+const inboundValue = (from, message) => ({
+    contacts: [{ profile: { name: 'Cliente' }, wa_id: from }],
+    messages: [{ from, id: waId(), timestamp: String(Math.floor(Date.now() / 1000)), ...message }],
+});
+const textFrom = (from, body) => inboundValue(from, { type: 'text', text: { body } });
+const numberOf = (account) => `99${account.seq}`;
+
+/** Una cuenta con su línea y las respuestas encendidas. */
+const accountWithBot = async (label, overrides = {}) => {
+    const account = await newAccount(label);
+    const saved = await saveSettings(account, settingsBody(overrides));
+    assert.equal(saved.status, 200, saved.text);
+    return account;
+};
+
+const inboundsOf = async (account, from) => {
+    const contact = await Contact.findOne({ userId: account.accountId, phone: from }).lean();
+    const conversations = await Conversation.find({ userId: account.accountId, contactId: contact._id }).select('_id').lean();
+    return Message.find({ conversationId: { $in: conversations.map(c => c._id) }, direction: 'inbound' }).sort({ _id: 1 }).lean();
+};
+
+test('con las respuestas encendidas, el entrante queda pendiente de bot', async () => {
+    const a = await accountWithBot('ARS');
+    const from = '593980000001';
+
+    assert.equal((await postWebhook(numberOf(a), textFrom(from, 'hola'))).status, 200);
+    const [first] = await inboundsOf(a, from);
+    assert.equal(first.bot.status, 'pending');
+    assert.equal(first.bot.active, true);
+    assert.equal(first.bot.previousInboundAt, null);
+
+    await postWebhook(numberOf(a), textFrom(from, 'precio?'));
+    const [, second] = await inboundsOf(a, from);
+    assert.equal(second.bot.status, 'pending');
+    assert.equal(second.bot.previousInboundAt.getTime(), first.timestamp.getTime());
+});
+
+test('apagadas o sin configurar, el entrante no lleva trabajo', async () => {
+    const never = await newAccount('ART');
+    const off = await accountWithBot('ARU', { enabled: false });
+    for (const account of [never, off]) {
+        await postWebhook(numberOf(account), textFrom('593980000002', 'hola'));
+        const [message] = await inboundsOf(account, '593980000002');
+        assert.equal(message.bot, undefined, account.label);
+    }
+});
+
+test('una reacción no deja trabajo', async () => {
+    const a = await accountWithBot('ARV');
+    await postWebhook(numberOf(a), inboundValue('593980000003', { type: 'reaction', reaction: { message_id: 'wamid.x', emoji: '👍' } }));
+    const [message] = await inboundsOf(a, '593980000003');
+    assert.equal(message.type, 'reaction');
+    assert.equal(message.bot, undefined);
+});
+
+test('Meta reintenta el webhook: un solo mensaje y un solo trabajo', async () => {
+    const a = await accountWithBot('ARW');
+    const value = textFrom('593980000004', 'hola');
+    await postWebhook(numberOf(a), value);
+    await postWebhook(numberOf(a), value);
+    const messages = await inboundsOf(a, '593980000004');
+    assert.equal(messages.length, 1);
+    assert.equal(messages[0].bot.status, 'pending');
+});
+
+test('quien ya escribió a otra línea de la cuenta no es un contacto nuevo', async () => {
+    const account = await seedAccount('ARX', { seq: seq++, maxLines: 2 });
+    await connectWhatsapp(account, { phoneNumberId: '8801' });
+    await connectWhatsapp(account, { phoneNumberId: '8802' });
+    assert.equal((await saveSettings(account, settingsBody())).status, 200);
+    const from = '593980000005';
+
+    await postWebhook('8801', textFrom(from, 'hola'));
+    await postWebhook('8802', textFrom(from, 'hola otra vez'));
+    const [first, second] = await inboundsOf(account, from);
+    assert.notEqual(String(first.conversationId), String(second.conversationId));
+    assert.equal(second.bot.previousInboundAt.getTime(), first.timestamp.getTime());
+});
+
+test('si preparar el trabajo falla, el entrante se guarda igual y el resto del lote también', async () => {
+    const a = await accountWithBot('ARY');
+    const from = '593980000006';
+    const value = textFrom(from, 'uno');
+    value.messages.push({ ...value.messages[0], id: waId(), text: { body: 'dos' } });
+
+    const original = AutoReplySettings.findOne;
+    AutoReplySettings.findOne = () => { throw new Error('Mongo no responde'); };
+    try {
+        assert.equal((await postWebhook(numberOf(a), value)).status, 200);
+    } finally {
+        AutoReplySettings.findOne = original;
+    }
+    const messages = await inboundsOf(a, from);
+    assert.deepEqual(messages.map(m => m.text), ['uno', 'dos']);
+    assert.ok(messages.every(m => m.bot === undefined));
 });
