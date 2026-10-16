@@ -72,6 +72,11 @@ export const autoReplySettingsSchema = z.object({
             const ids = rules.filter(rule => rule.id).map(rule => rule.id.toLowerCase());
             return new Set(ids).size === ids.length;
         }, 'Dos reglas no pueden tener el mismo id'),
+    // Opcional: una pestaña con la página de antes no lo manda.
+    fallback: z.object({
+        enabled: z.boolean(),
+        text: replyTextSchema,
+    }).refine(hasTextIfEnabled, textWhenEnabled).default({ enabled: false, text: '' }),
 });
 
 // POST /auto-replies/preview — qué respondería esta configuración, sin guardarla.

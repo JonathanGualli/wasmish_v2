@@ -47,6 +47,12 @@ const autoReplySettingsSchema = new mongoose.Schema({
         },
     },
     keywordRules: { type: [keywordRuleSchema], default: [] },
+    // «Si no entiende»: solo cuando no saldría nada más. Un documento guardado
+    // antes del 2026-10-15 no lo tiene, y se lee apagado.
+    fallback: {
+        enabled: { type: Boolean, default: false },
+        text: { type: String, default: '' },
+    },
 }, {
     timestamps: true,
 });

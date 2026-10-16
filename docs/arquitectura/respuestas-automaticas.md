@@ -28,10 +28,11 @@ Las respuestas que Wasmish manda solo: bienvenida, fuera de horario y palabras c
 
 - `enabled`: el interruptor general.
 - `timezone`: zona IANA, por defecto `America/Guayaquil`.
-- `handoffHours`: cuántas horas se calla el bot tras una respuesta manual (1, 4, 12 o 24; 12 por defecto).
+- `handoffHours`: cuántas horas se calla el bot tras una respuesta manual (1, 4, 12 o 24; 12 por defecto). **Es también la ventana para no repetirse:** cada palabra clave y el «no entiendo» salen como mucho una vez por conversación en ese tiempo (desde el 2026-10-15; antes, 24 h fijas para las palabras clave).
 - `welcome`: `{ enabled, text, returnAfterDays }`. `returnAfterDays` es 7, 30, 90 o `null` (nunca volver a saludar); 30 por defecto.
 - `outOfHours`: `{ enabled, text, schedule }`. `schedule` tiene los 7 días (`mon`…`sun`), cada uno `{ closed, ranges }` con hasta 2 tramos `{ start: 'HH:mm', end: 'HH:mm' }`.
 - `keywordRules`: hasta 30 reglas `{ _id, enabled, keywords, text, lineIds }`, con 1–20 frases de hasta 60 caracteres. `lineIds` vacío = todas las líneas: la página todavía no lo ofrece, pero está para pasar a «cada regla elige sus líneas» sin migrar.
+- `fallback`: `{ enabled, text }`, «Si no entiende» (2026-10-15). Un documento guardado antes no lo tiene: se lee apagado, y el `PUT` lo acepta sin él.
 
 Cada texto, hasta 800 caracteres (`AUTO_REPLY_TEXT_MAX`): bienvenida + 3 palabras clave + fuera de horario caben en los 4.096 de WhatsApp. Una respuesta encendida necesita texto; una apagada puede quedar vacía.
 
@@ -46,11 +47,13 @@ Cada texto, hasta 800 caracteres (`AUTO_REPLY_TEXT_MAX`): bienvenida + 3 palabra
 - **No responde** (`skip`) con el interruptor apagado (`disabled`), con una persona atendiendo (`human`: no pasaron `handoffHours` desde la última respuesta manual), con el freno (`burst`: el bot ya respondió 3 veces en 10 minutos en esa conversación), ante una reacción (`ignored_type`) o si no aplica nada (`no_match`).
 - **Las partes, en orden:**
   1. **Bienvenida**, si el contacto nunca había escrito a la cuenta o volvió tras `returnAfterDays`, y no se le saludó en ese plazo.
-  2. **Palabras clave**, como mucho 3 textos distintos, en el orden de la lista, saltando las reglas apagadas, las de otra línea y las que respondieron en esa conversación en las últimas 24 horas.
+  2. **Palabras clave**, como mucho 3 textos distintos, en el orden de la lista, saltando las reglas apagadas, las de otra línea y las que respondieron en esa conversación en las últimas `handoffHours`.
   3. **Fuera de horario**, si está cerrado y ese tramo cerrado no se avisó ya.
+  4. **«Si no entiende»** (`fallback`), solo si no saldría nada de lo anterior, el contacto escribió algo (texto o `caption`: una foto o un audio sin texto, no) y no salió ya en esa conversación en las últimas `handoffHours` (`Conversation.bot.fallbackRepliedAt`). Así, el primer mensaje de un contacto nuevo recibe la bienvenida, nunca el «no entiendo». El freno, la pausa y una reacción le ganan, como a todo lo demás.
 - **Se unen con una línea en blanco**, en un solo mensaje: Meta cobra cada mensaje, también dentro de la ventana de 24 horas.
 - **Las palabras clave** se buscan en lo que escribió el contacto (el texto, o el `caption` de un archivo; nunca la etiqueta «Imagen»), sin mayúsculas ni tildes y **por palabras completas** (`normalizeForMatch`, `matchesKeyword`): «precio» no encuentra «preciosa».
-- **`claims`** es lo que se marca solo si Meta acepta el envío: si se saludó, la clave del tramo y las reglas que respondieron. `botStateUpdate` arma el `$set` de la conversación; la bienvenida se marca en el contacto.
+- **`claims`** es lo que se marca solo si Meta acepta el envío: si se saludó, la clave del tramo, las reglas que respondieron y si salió el «no entiendo». `botStateUpdate` arma el `$set` de la conversación; la bienvenida se marca en el contacto.
+- **`explain`** dice qué salió y qué se calló por repetido (la bienvenida, cada regla con la frase que coincidió, las reglas calladas, el fuera de horario y el «no entiendo»), también en un `no_match`. Lo usa la prueba de la página.
 
 ### El horario (`utils/business.hours.js`)
 

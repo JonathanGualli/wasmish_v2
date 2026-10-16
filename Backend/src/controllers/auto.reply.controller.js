@@ -40,6 +40,11 @@ const serializeSettings = (settings, configured) => ({
         text: rule.text,
         lineIds: rule.lineIds.map(String),
     })),
+    // Sin el campo (guardada antes de que existiera): apagado.
+    fallback: {
+        enabled: settings.fallback?.enabled ?? false,
+        text: settings.fallback?.text ?? '',
+    },
 });
 
 const findSettings = (accountId) => AutoReplySettings.findOne({ userId: accountId }).lean();
@@ -107,11 +112,12 @@ export const previewAutoReply = (req, res) => {
         now: new Date(),
     });
 
-    if (result.skip) return res.json({ reply: null, parts: [], matchedRuleIndexes: [], outOfHours: false });
+    if (result.skip) return res.json({ reply: null, parts: [], matchedRuleIndexes: [], outOfHours: false, fallback: false });
     return res.json({
         reply: result.text,
         parts: result.parts,
         matchedRuleIndexes: result.claims.keywordRuleIds.map(Number),
         outOfHours: result.claims.outOfHoursKey !== null,
+        fallback: result.claims.fallback,
     });
 };

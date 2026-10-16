@@ -157,7 +157,7 @@ test('probar responde con la configuración sin guardar', async () => {
     const nothing = await request(a, 'POST', '/auto-replies/preview', {
         settings: settingsBody({ welcome: { enabled: false, text: '', returnAfterDays: 30 } }), text: 'gracias',
     });
-    assert.deepEqual(nothing.body, { reply: null, parts: [], matchedRuleIndexes: [], outOfHours: false });
+    assert.deepEqual(nothing.body, { reply: null, parts: [], matchedRuleIndexes: [], outOfHours: false, fallback: false });
 });
 
 // --- La pausa por respuesta manual -----------------------------------------
@@ -664,4 +664,86 @@ test('un corte de red al enviar deja el trabajo incierto, no fallido', async () 
     assert.equal(inbound.bot.skipReason, 'meta_no_response');
     const contact = await Contact.findOne({ userId: a.accountId, phone: '593970000016' }).lean();
     assert.equal(contact.autoReply?.welcomedAt ?? null, null);
+});
+
+// --- «Si no entiende» (2026-10-15, spec § 10) -------------------------------
+
+const FALLBACK = 'No te entendí: pregúntame por precios';
+const fallbackOn = { enabled: true, text: FALLBACK };
+// Sin bienvenida, el primer mensaje que el bot no entiende ya recibe el «no entiendo».
+const withFallback = () => ({ welcome: { enabled: false, text: '', returnAfterDays: 30 }, fallback: fallbackOn });
+
+test('guardar y leer el no entiendo; sin él en el cuerpo, apagado', async () => {
+    const a = await newAccount('FBA');
+    const saved = await saveSettings(a, settingsBody({ fallback: fallbackOn }));
+    assert.equal(saved.status, 200, saved.text);
+    assert.deepEqual((await getSettings(a)).body.fallback, fallbackOn);
+
+    // Una pestaña con la página de antes no manda `fallback`.
+    const legacy = await saveSettings(a, settingsBody());
+    assert.equal(legacy.status, 200, legacy.text);
+    assert.deepEqual(legacy.body.fallback, { enabled: false, text: '' });
+
+    const empty = await saveSettings(a, settingsBody({ fallback: { enabled: true, text: '  ' } }));
+    assert.equal(empty.status, 400);
+});
+
+test('una configuración guardada antes del no entiendo se lee con él apagado', async () => {
+    const a = await newAccount('FBB');
+    await AutoReplySettings.collection.insertOne({ userId: a.accountId, ...settingsBody() });
+
+    assert.deepEqual((await getSettings(a)).body.fallback, { enabled: false, text: '' });
+});
+
+test('el worker manda el no entiendo una sola vez', async () => {
+    await clearQueue();
+    const a = await accountWithBot('FBC', withFallback());
+    metaForBot();
+    try {
+        await postWebhook(numberOf(a), textFrom('593970000101', 'me gusta el café con pan'));
+        await drain();
+        await postWebhook(numberOf(a), textFrom('593970000101', 'me gusta el café con pan'));
+        await drain();
+    } finally {
+        onMeta(null);
+    }
+    const [inbound] = await inboundsOf(a, '593970000101');
+    assert.deepEqual((await botMessagesOf(inbound.conversationId)).map(m => m.text), [FALLBACK]);
+    const conversation = await Conversation.findById(inbound.conversationId).lean();
+    assert.ok(conversation.bot.fallbackRepliedAt instanceof Date);
+});
+
+test('dos workers a la vez: un solo no entiendo', async () => {
+    await clearQueue();
+    const a = await accountWithBot('FBD', withFallback());
+    metaForBot();
+    try {
+        await postWebhook(numberOf(a), textFrom('593970000102', 'café'));
+        await postWebhook(numberOf(a), textFrom('593970000102', 'pan'));
+        await drain(2);
+    } finally {
+        onMeta(null);
+    }
+    const [inbound] = await inboundsOf(a, '593970000102');
+    assert.deepEqual((await botMessagesOf(inbound.conversationId)).map(m => m.text), [FALLBACK]);
+});
+
+test('un rechazo o un envío incierto no marcan el no entiendo', async () => {
+    for (const [label, phone, error] of [
+        ['FBE', '593970000103', Object.assign(new Error('WhatsApp API Error (400): rechazado'), { waErrorCode: 131026, waErrorDetail: 'rechazado' })],
+        ['FBF', '593970000104', new Error('timeout of 10000ms exceeded')],
+    ]) {
+        await clearQueue();
+        const a = await accountWithBot(label, withFallback());
+        metaForBot(() => { throw error; });
+        try {
+            await postWebhook(numberOf(a), textFrom(phone, 'café'));
+            await drain();
+        } finally {
+            onMeta(null);
+        }
+        const [inbound] = await inboundsOf(a, phone);
+        const conversation = await Conversation.findById(inbound.conversationId).lean();
+        assert.equal(conversation.bot?.fallbackRepliedAt ?? null, null, label);
+    }
 });

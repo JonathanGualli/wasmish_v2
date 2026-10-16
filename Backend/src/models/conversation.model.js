@@ -71,6 +71,8 @@ const conversationSchema = new mongoose.Schema({
             outOfHoursNotified: { type: String, default: null },
             // Id de regla → cuándo respondió aquí.
             keywordRepliedAt: { type: Map, of: Date, default: undefined },
+            // El último «no entiendo»: sale una vez cada `handoffHours`.
+            fallbackRepliedAt: { type: Date, default: null },
             // Las últimas respuestas del bot, para el freno.
             recentReplies: { type: [Date], default: undefined },
         }, { _id: false }),
