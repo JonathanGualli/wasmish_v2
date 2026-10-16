@@ -65,7 +65,8 @@ export const ConfirmDialog = ({
                     </div>
                     {children}
                     <div className="mt-1.5 flex flex-col-reverse sm:flex-row sm:flex-wrap sm:justify-end gap-2">
-                        <div className="h-10"><CustomButton variant="outline" onClick={onSecondary ?? handleClose} disabled={isLoading}>{cancelLabel}</CustomButton></div>
+                        {/* El botón cierra aunque se vea el aviso: lo de arriba es solo para el «clic fuera». */}
+                        <div className="h-10"><CustomButton variant="outline" onClick={onSecondary ?? onCancel} disabled={isLoading}>{cancelLabel}</CustomButton></div>
                         <div className="h-10">
                             <CustomButton variant={tone === 'danger' ? 'danger' : 'secondary'} onClick={onConfirm} isLoading={isLoading} disabled={confirmDisabled}>
                                 {confirmLabel}
