@@ -53,7 +53,7 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 ## En curso
 
 - **Respuestas automáticas (chatbot v1)** — rama `respuestas-automaticas-motor`, empezado el 2026-10-15 por Claude. Spec `docs/superpowers/specs/2026-10-15-respuestas-automaticas-design.md`, plan `docs/superpowers/plans/2026-10-15-respuestas-automaticas.md` y brief de la UI `docs/superpowers/specs/2026-10-15-respuestas-automaticas-brief-ui.md`.
-  El plan, revisado por Codex, entró con el PR #67. PR 1 (esta rama): las Tareas 1 a 4: decidir la respuesta, el horario y la configuración (`/api/auto-replies`), sin envío todavía. · Falta: la revisión de Codex del código del PR 1; el PR 2 (`respuestas-automaticas-envio`: el webhook, el worker y la marca «Bot») y el PR 3 (la página, cuando Claude Design entregue el diseño del brief). · Sin probar: en el navegador (no hay UI todavía); la API, con tests de aislamiento.
+  El plan, revisado por Codex, entró con el PR #67, y la decisión, el horario y la configuración (`/api/auto-replies`, Tareas 1 a 4) con el #68. PR 2 (#69, `respuestas-automaticas-envio`): las Tareas 5 a 8, la pausa por respuesta manual, el trabajo en el entrante, el worker y la marca «Bot». · Falta: el PR 3 (la página, cuando Claude Design entregue el diseño del brief); probar con Meta de verdad en la cuenta de prueba; el PR de versión. · Sin probar: con Meta de verdad (los envíos del bot, con el Meta falso de los tests de aislamiento); la marca «Bot», probada en Chrome con datos sembrados, en escritorio y teléfono.
 
 <!-- Formato de una entrada:
 - **<qué>** — rama `<rama>`, PR #<n>, empezado el <fecha> por <Claude|Codex|Jonathan>.
@@ -78,6 +78,10 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## Cabos sueltos conocidos
 
+- **Tres fallos del webhook que ya existen** (los encontró Codex al revisar las respuestas automáticas, 2026-10-15; no son del bot):
+  - si Mongo falla en mitad de `procesarEntrante`, el entrante se pierde aunque Meta reciba 200 (el `catch` por mensaje no distingue un mensaje roto de un fallo de la BD);
+  - dos entrantes a la vez de una conversación pueden pisarse `unreadCount` (leer, sumar uno y `save()`);
+  - un acuse de Meta que llega antes de que se guarde el saliente se descarta (`procesarEstado` no encuentra el `waMessageId`).
 - **Avisos push en Brave:** Brave trae apagado «Usar los servicios de Google para la mensajería push» (`brave://settings/privacy`), y sin eso la suscripción falla en el navegador antes de llegar al backend. Desde el PR `fix-push-error-navegador`, Wasmish lo dice y explica el ajuste (antes culpaba a la conexión). Sin comprobar: que activándolo funcione, y que Brave en Android tenga ese ajuste.
 
 - **Archivos de cabecera y líneas (Fase 3):** `GET /templates/media/:id` solo comprueba la cuenta, no la línea: alguien de la cuenta que conozca el id de una cabecera de una plantilla de otro WABA puede descargarla. Los archivos (`TemplateMedia`) no son de ninguna línea ni WABA (una campaña puede usar cualquiera, y se suben antes de elegir) y su contenido es lo que la cuenta manda a sus clientes. Atarlos a un WABA es un cambio de modelo aparte, si Jonathan lo quiere (revisión de Codex del PR #34).

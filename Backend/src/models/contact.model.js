@@ -12,6 +12,15 @@ const referralSchema = new mongoose.Schema({
     ctwaClid: String,
 }, { _id: false });
 
+// Las respuestas automáticas por contacto: la bienvenida es de la cuenta (no
+// de cada línea), y el candado hace que se evalúe un mensaje del contacto a la
+// vez aunque llegue por dos números.
+const contactAutoReplySchema = new mongoose.Schema({
+    welcomedAt: { type: Date, default: null },
+    lockUntil: { type: Date, default: null },
+    lockToken: { type: String, default: null },
+}, { _id: false });
+
 const contactSchema = new mongoose.Schema({
     userId: {
         type: mongoose.Schema.Types.ObjectId,
@@ -90,6 +99,10 @@ const contactSchema = new mongoose.Schema({
     marketingPreferenceAt: {
         type: Date,
         default: null,
+    },
+    autoReply: {
+        type: contactAutoReplySchema,
+        default: undefined,
     },
 }, {
     timestamps: true,

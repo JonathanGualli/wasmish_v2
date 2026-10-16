@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { useInView } from "react-intersection-observer";
 import { Transition } from "@headlessui/react";
-import { CircleAlert, Code2, Send } from "lucide-react";
+import { Bot, CircleAlert, Code2, Send } from "lucide-react";
 import { useConversationMessages } from "../../hooks/useConversationMessages";
 import { useConversations } from "../../hooks/useConversations.ts";
 import { useTemplates } from "../../hooks/useTemplates.ts";
@@ -94,11 +94,20 @@ const FailedBadge = ({ msg }: { msg: Message }) => (
 /**
  * Quién envió un mensaje nuestro (Fase 3; diseño «Wasmish Equipo», marco 5a):
  * el nombre de la persona, o el origen en gris con icono si no lo escribió nadie
- * (una campaña, la API). En la línea de la hora, no dentro de la burbuja.
+ * (una campaña, la API, las respuestas automáticas). En la línea de la hora, no
+ * dentro de la burbuja.
  */
 const MessageAuthor = ({ msg }: { msg: Message }) => {
     if (msg.sentBy?.name) {
         return <><span className="font-semibold text-brand-strong">{msg.sentBy.name}</span><span>·</span></>;
+    }
+    if (msg.origin?.kind === 'bot') {
+        return (
+            <>
+                <span className="inline-flex items-center gap-1 text-brand-muted"><Bot size={11} />Bot</span>
+                <span>·</span>
+            </>
+        );
     }
     if (msg.origin?.kind === 'campaign' || msg.origin?.kind === 'api') {
         const isCampaign = msg.origin.kind === 'campaign';
@@ -222,7 +231,8 @@ export const ChatThread = ({
 
                     <div className={`flex items-center gap-[5px] text-[11px] mt-1 text-brand-subtle
                         ${mine ? "justify-end" : ""}`}>
-                        {mine && showAuthor && <MessageAuthor msg={msg} />}
+                        {/* «Bot» siempre: sin equipo también hay que saber qué contestó la máquina. */}
+                        {mine && (showAuthor || msg.origin?.kind === 'bot') && <MessageAuthor msg={msg} />}
                         <span className="font-mono">{formatTime(msg.timestamp)}</span>
                         {mine && (
                             showsUploadStatus(msg)

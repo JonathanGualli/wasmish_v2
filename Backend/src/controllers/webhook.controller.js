@@ -17,6 +17,8 @@ import { decrypt } from '../utils/crypto.js';
 import { MEDIA_DIR, MEDIA_MAX_BYTES } from '../config.js';
 import { findInboundLine, rememberDisplayPhoneNumber } from '../services/line.service.js';
 import { notifyInbound } from '../services/push.service.js';
+import { buildAutoReplyJob } from '../services/auto.reply.service.js';
+import { wakeAutoReplyWorker } from '../workers/auto.reply.worker.js';
 
 // Baja el adjunto y lo deja en disco. Devuelve SIEMPRE un objeto: si algo falla
 // —token caducado, archivo enorme, Meta caída— sale con mediaFile en null y el
@@ -126,6 +128,11 @@ const procesarEntrante = async (inbound, messageData, contacts) => {
     // cambio no hace falta ni cola ni un segundo evento avisando de que ya está.
     const adjunto = await descargarAdjunto(inbound, entrante);
 
+    // El trabajo de las respuestas automáticas nace con el mensaje: si el
+    // mensaje existe, existe su trabajo. Antes de guardar la conversación, que
+    // es de donde sale cuándo había escrito antes el contacto. Nunca lanza.
+    const botJob = await buildAutoReplyJob({ accountId: inbound.accountId, contactId: contact._id, type: entrante.type });
+
     // Create message inbound
     let messageCreated;
     try {
@@ -145,6 +152,7 @@ const procesarEntrante = async (inbound, messageData, contacts) => {
             timestamp,
             status: 'delivered',
             deliveredAt: timestamp,
+            ...(botJob && { bot: botJob }),
         });
     } catch (error) {
         // 11000 = clave duplicada. El `exists` de arriba no basta por sí solo:
@@ -182,6 +190,17 @@ const procesarEntrante = async (inbound, messageData, contacts) => {
         // Solo a quien ve esa línea (Fase 3).
         { lineId: conversation.lineId ?? null },
     );
+
+    // Ya se ve en el chat: el bot puede responder. Si esto falla, el barrido
+    // del worker lo recoge a los 30 s; el webhook sigue.
+    if (botJob) {
+        try {
+            await Message.updateOne({ _id: messageCreated._id, 'bot.status': 'waiting' }, { $set: { 'bot.status': 'pending' } });
+            wakeAutoReplyWorker();
+        } catch (error) {
+            console.error('No se pudo marcar el entrante para el bot:', { messageId: String(messageCreated._id), error: error.message });
+        }
+    }
 
     // El aviso push a los dispositivos de quien ve esa línea (app móvil). Sin
     // esperar: un servicio de push lento o caído no puede frenar ni tumbar el webhook.

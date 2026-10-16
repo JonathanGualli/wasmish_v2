@@ -49,6 +49,7 @@ Más scripts (webhook simulado, contactos de prueba, backfills, duplicados, vers
 - `Message`: `{ conversationId: 1, timestamp: 1 }`
 - `PushSubscription`: `push_endpoint_unique` `{ endpoint }` único (un navegador, una persona: activar los avisos lo reasigna; sincronizar choca aquí y da 409) y `{ accountId }`, para buscar los dispositivos de la cuenta en cada entrante
 - `AutoReplySettings`: `auto_reply_settings_account_unique` `{ userId }` único — una configuración de respuestas automáticas por cuenta
+- `Message`: `auto_reply_queue` `{ 'bot.status': 1, 'bot.runAfter': 1 }` **parcial** con `{ 'bot.active': true }` — la cola de las respuestas automáticas: solo los trabajos que no terminaron
 - `Message`: `campaignId_status` `{ campaignId: 1, status: 1 }`, normal (ni parcial ni sparse, ver el comentario en el modelo) — las estadísticas de una campaña
 - `CampaignRecipient`: `{ campaignId, contactId }` único y `{ campaignId, status, _id }` (la cola y los conteos). `Campaign`: `{ userId, createdAt: -1 }` y `{ status, createdAt }` (el worker)
 - `Message`: **dos** índices sobre `waMessageId`, y hacen falta los dos. `waMessageId_unico` es único **parcial** (`$type: 'string'`, no `sparse`: los fallidos se guardan con `null` explícito y dos `null` chocarían) — frena el duplicado cuando Meta reintenta un webhook; `procesarEntrante` trata el E11000 como «ya guardado» y sale sin emitir SSE. `waMessageId_busqueda` es el normal: Mongo no usa el parcial para `{ waMessageId: 'wamid.x' }` y cada acuse de recibo haría un escaneo completo.

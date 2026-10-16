@@ -18,6 +18,7 @@ import { MEDIA_DIR } from "../config.js";
 import { findConversationLine, findStartLine } from "../services/line.service.js";
 import { conversationScope } from "../utils/permissions.js";
 import { messageOrigin, messageSender } from "../utils/message.origin.js";
+import { markHumanReply } from "../services/auto.reply.service.js";
 import Campaign from "../models/campaign.model.js";
 
 /**
@@ -99,7 +100,9 @@ export const processMessageSending = async ({
     contactName,
     attachment = null,
     // `{ userId, name }` de quien lo envía desde el chat (Fase 3).
-    sender = null }) => {
+    sender = null,
+    // De dónde sale: el chat o el bot de respuestas automáticas.
+    origin = 'chat' }) => {
 
     const token = decrypt(line.tokenWhatsapp);
     const { phoneNumberId } = line;
@@ -139,7 +142,7 @@ export const processMessageSending = async ({
         sender: 'me',
         sentBy: sender?.userId ?? null,
         sentByName: sender?.name ?? null,
-        origin: 'chat',
+        origin,
         waMessageId,
         text: messageText,
         ...(attachment && attachmentFields(attachment)),
@@ -254,6 +257,10 @@ export const sendMessageController = async (req, res) => {
         // Con conversación, su línea: 409 si es de un número que ya no está conectado.
         line ??= await findConversationLine(conversation);
 
+        // Una persona responde: el bot se calla en esa conversación. Sin id,
+        // la que ya exista de ese número en esa línea (`target`).
+        await markHumanReply(target?._id);
+
         // Llamamos al servicio (que ahora persiste incluso si el envío falla)
         const { msg } = await processMessageSending({
             line,
@@ -264,6 +271,8 @@ export const sendMessageController = async (req, res) => {
             contactName,
             sender: senderOf(req.auth),
         });
+        // Y la que se creó con el envío, si no había.
+        if (!target) await markHumanReply(msg.conversationId);
 
         // Responder desde el chat es haberlo leído, aunque Meta lo rechace: se
         // leyó y se intentó contestar.
@@ -320,6 +329,7 @@ export const sendMediaMessageController = async (req, res) => {
         }
 
         const file = await saveByContentHash(MEDIA_DIR, 'outbound', buffer, mimeType);
+        await markHumanReply(conversation._id);
         const { msg } = await processMessageSending({
             line,
             conversation,
@@ -464,6 +474,7 @@ export const sendConversationTemplateController = async (req, res) => {
         // La línea de la conversación: 409 si es de un número que ya no está conectado.
         const line = await findConversationLine(conversation);
 
+        await markHumanReply(conversation._id);
         const resultado = await processTemplateSending({
             line,
             conversation,
@@ -493,6 +504,11 @@ export const startConversationTemplateController = async (req, res) => {
         // La del cuerpo o la que toca según sus líneas; 404 si no es suya.
         const line = await findStartLine(req.auth, req.body.lineId);
 
+        // «Nueva» puede ser una que ya existe para ese número en esa línea: el
+        // bot se calla en ella antes de enviar, y en la que quede después.
+        const existing = await findConversationByNumber(req.auth.accountId, req.body.destinationNumber, line);
+        await markHumanReply(existing?._id);
+
         const resultado = await processTemplateSending({
             line,
             sender: senderOf(req.auth),
@@ -505,6 +521,7 @@ export const startConversationTemplateController = async (req, res) => {
             parameters: req.body.parameters ?? [],
             buttons: req.body.buttons ?? [],
         });
+        if (!existing) await markHumanReply(resultado.conversation?._id);
 
         return responderEnvioPlantilla(res, resultado);
     } catch (error) {
