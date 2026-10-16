@@ -25,6 +25,8 @@ export const PERMISSIONS = {
     // Conectar (los dos caminos), renombrar, hacer por defecto, desconectar y ver el PIN.
     'lines.manage': ['owner', 'admin'],
     'team.manage': ['owner', 'admin'],
+    // Las respuestas automáticas: son de toda la cuenta, no de unas líneas.
+    'autoReplies.manage': ['owner', 'admin'],
 };
 
 const ALL_LINES_ROLES = new Set(['owner', 'admin', 'api']);

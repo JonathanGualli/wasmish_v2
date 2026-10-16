@@ -119,6 +119,7 @@ Cada archivo de `docs/arquitectura/` empieza con su índice. Las secciones son t
 | Campañas | [campanas.md](docs/arquitectura/campanas.md) | destinatarios congelados, variables con reserva, worker y ritmo, pausas automáticas, reinicios (`interrupted`), estadísticas, `CAMPAIGN_DRY_RUN`; asistente, borrador en `localStorage`, detalle |
 | Chat y tiempo real | [chat.md](docs/arquitectura/chat.md) | SSE y sus eventos, avisos push (`notifyInbound`, VAPID, `PushSubscription`), `unreadCount`, `useConversationMessages`, `useConversations`, ventana en la UI, conversación nueva, ficha del contacto, `SendTemplateDialog`, composer y archivos, `temporalId` |
 | Frontend transversal | [frontend.md](docs/arquitectura/frontend.md) | `AuthProvider`, errores de WhatsApp en palabras (`whatsappErrors.ts`), la lista de hooks |
+| Respuestas automáticas | [respuestas-automaticas.md](docs/arquitectura/respuestas-automaticas.md) | configuración por cuenta (`AutoReplySettings`, `autoReplies.manage`), `decideAutoReply`, palabras completas (`matchesKeyword`), horario y tramo cerrado (`closedPeriodKey`), probar sin guardar |
 | Probar y mantener | [pruebas-y-scripts.md](docs/arquitectura/pruebas-y-scripts.md) | `webhook:simulate`, `seed:contacts`, backfills, `check:duplicates`, `version:bump`, tests de aislamiento |
 | Reglas del backend | [Backend/AGENTS.md](Backend/AGENTS.md) | estructura, configuración, tests, índices de MongoDB |
 | Reglas del frontend | [Frontend/AGENTS.md](Frontend/AGENTS.md) | providers, rutas, flujo de datos, caché de React Query, componentes compartidos |

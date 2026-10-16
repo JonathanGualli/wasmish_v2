@@ -329,7 +329,7 @@ test('/verify: el rol, los permisos, las líneas y la cuenta (sin correos ajenos
     assert.equal(own.body.role, 'owner');
     assert.deepEqual(own.body.permissions, [
         'contacts.import', 'contacts.delete', 'tags.manage', 'templates.manage',
-        'campaigns.manage', 'apiKeys.manage', 'lines.manage', 'team.manage',
+        'campaigns.manage', 'apiKeys.manage', 'lines.manage', 'team.manage', 'autoReplies.manage',
     ]);
     assert.equal(own.body.lineIds, null);
     assert.equal(own.body.account.memberCount, 1);

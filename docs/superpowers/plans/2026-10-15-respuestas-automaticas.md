@@ -166,7 +166,7 @@ Expected: PASS.
   - Rutas (con `authRequired` y `requirePermission('autoReplies.manage')`):
     - `GET /api/auto-replies` → `200` la configuración con cada regla como `{ id, enabled, keywords, text, lineIds }` (sin documento, `defaultAutoReplySettings()` con `keywordRules: []`).
     - `PUT /api/auto-replies` → `autoReplySettingsSchema.parse(req.body)` (el validador no reemplaza el body) y `findOneAndUpdate({ userId: accountId }, …, { upsert: true, new: true })`; conserva el `_id` de las reglas que traen `id` y estrena los demás → `200` con la misma forma que el GET. `lineIds` que no son líneas de la cuenta → `400`.
-    - `POST /api/auto-replies/preview` → `decideAutoReply` con `{ ...settings, enabled: true }`, `state: {}`, `previousInboundAt: null`, `message: { type: 'text', text }`, `lineId: null`, ahora → `200 { reply: string | null, parts: string[], matchedRuleIds: string[], outOfHours: boolean }`.
+    - `POST /api/auto-replies/preview` → `decideAutoReply` con `{ ...settings, enabled: true }`, `state: {}`, `previousInboundAt: null`, `message: { type: 'text', text }`, `lineId: null`, ahora → `200 { reply: string | null, parts: string[], matchedRuleIndexes: number[], outOfHours: boolean }` (posiciones en la lista enviada: una regla nueva no tiene id; cambiado al implementar).
 
 - [ ] **Step 1: Escribir los tests que fallan** en `Backend/tests/isolation/auto-replies.test.js` (con `seedAccount`, `seedMember`, `request`):
   - `A guarda su configuración y B no la ve`: A hace `PUT` con una regla; el `GET` de A la devuelve con su `id`; el `GET` de B da la de por defecto (apagada, sin reglas).

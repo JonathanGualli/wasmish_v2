@@ -9,14 +9,14 @@ const ALL = Object.keys(PERMISSIONS);
 const auth = (role, lineIds = []) => ({ userId: 'u', accountId: 'a', role, lineIds, isSuperadmin: false });
 const API = { userId: null, accountId: 'a', role: 'api', lineIds: null, isSuperadmin: false };
 
-test('PERMISSIONS: las ocho acciones de la matriz de la spec (§ 3.3)', () => {
+test('PERMISSIONS: las acciones de la matriz de la spec (§ 3.3), más las respuestas automáticas', () => {
     assert.deepEqual(ALL, [
         'contacts.import', 'contacts.delete', 'tags.manage', 'templates.manage',
-        'campaigns.manage', 'apiKeys.manage', 'lines.manage', 'team.manage',
+        'campaigns.manage', 'apiKeys.manage', 'lines.manage', 'team.manage', 'autoReplies.manage',
     ]);
 });
 
-test('can: owner y admin, todo; supervisor, sin API keys, líneas ni equipo; agente, nada', () => {
+test('can: owner y admin, todo; supervisor, sin API keys, líneas, equipo ni respuestas automáticas; agente, nada', () => {
     for (const action of ALL) {
         assert.equal(can(auth('owner'), action), true, action);
         assert.equal(can(auth('admin'), action), true, action);
@@ -26,7 +26,7 @@ test('can: owner y admin, todo; supervisor, sin API keys, líneas ni equipo; age
     for (const action of ['contacts.import', 'contacts.delete', 'tags.manage', 'templates.manage', 'campaigns.manage']) {
         assert.equal(can(supervisor, action), true, action);
     }
-    for (const action of ['apiKeys.manage', 'lines.manage', 'team.manage']) {
+    for (const action of ['apiKeys.manage', 'lines.manage', 'team.manage', 'autoReplies.manage']) {
         assert.equal(can(supervisor, action), false, action);
     }
 });
