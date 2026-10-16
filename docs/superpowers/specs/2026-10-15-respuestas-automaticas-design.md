@@ -165,3 +165,36 @@ Codex encontró además tres problemas que **ya existen** y no son del bot. Van 
 - **¿Arquitectura?** La cola en el entrante con worker (§ 8), «bien como para ser la versión 1».
 - **Datos y motor:** aprobados tal como se presentaron, con dos cambios que hizo el agente al escribir el plan y que Jonathan revisa ahí: el freno pasó de «una respuesta cada 2 minutos» a «3 en 10 minutos» (con 2 minutos, el «cuánto está?» que llega 20 s después del «hola» se quedaba sin respuesta), y sin reintentos en la v1 (§ 8).
 - **Revisión de Codex del plan** (una ronda): candado y bienvenida por contacto en vez de por conversación; autorización atómica del envío contra la pausa; la pausa sobre la conversación que ya exista en las rutas sin id; la ventana con la hora del propio entrante; la tabla de resultados; la marca «Bot» también sin equipo. Sus nueve puntos y las respuestas, en el PR.
+
+## 10. Ampliación: «Si no entiende» y probar como conversación (2026-10-15)
+
+Jonathan lo pidió probando la página ya unida (PR #70). Decisiones suyas, en el chat:
+
+**«Si no entiende»: una respuesta nueva, `fallback: { enabled, text }`** en la configuración, apagada por defecto. Es para cuando el bot no sabría qué decir. El texto lo escribe el cliente (las reglas no tienen nombre, así que el bot no puede listar sus temas solo). El ejemplo: «Perdona, no te entendí. Puedo ayudarte con precios, ubicación y envíos: pregúntame por eso. Si es otra cosa, en un momento te responde alguien del equipo.».
+- **Solo si no saldría nada más:** ni bienvenida, ni palabra clave, ni fuera de horario. El primer mensaje de un contacto nuevo recibe la bienvenida, nunca el «no entiendo».
+- **Solo con algo escrito** (el texto o el `caption`): una foto o un audio sin texto no lo reciben.
+- **Una vez por conversación** en la ventana de abajo (`Conversation.bot.fallbackRepliedAt`).
+
+El ejemplo de Jonathan, con la bienvenida encendida:
+
+| # | Escribe | Responde |
+|---|---|---|
+| 1 | «me gusta el café con pan» | la bienvenida |
+| 2 | «me gusta el café con pan» | «no entiendo» |
+| 3 | «me gusta el café con pan» | nada |
+| 4 | «cuál es el precio» | el precio |
+| 5 | «cuál es el precio» | nada |
+
+**Una sola ventana para no repetirse: las horas de «Cuándo se calla»** (`handoffHours`). Cada palabra clave y el «no entiendo» salen como mucho una vez por conversación cada `handoffHours`. Antes, las palabras clave usaban 24 h fijas (`KEYWORD_COOLDOWN_MS`, que desaparece). Con 12 h, quien pregunta el precio a las 9:00 y otra vez a las 22:00 recibe la respuesta las dos veces.
+
+**«Probar» es una conversación.** Cada mensaje se suma a los anteriores, y «Reiniciar conversación» empieza de cero. `POST /api/auto-replies/preview` pasa a recibir `{ settings, messages: [..] }` (de 1 a 20 mensajes, cada uno de hasta 1.000 caracteres) y simula la conversación de un contacto nuevo, mensaje a mensaje, con la misma lógica del bot (`decideAutoReply` y lo que marcaría tras cada envío aceptado). Así no hay una segunda versión de las reglas.
+- **Lo que se simula:** la bienvenida una vez; cada palabra clave y el «no entiendo», una vez; el fuera de horario, una vez por cierre. Todos los mensajes van a la misma hora: la de ahora.
+- **Lo que no:** el freno de ráfagas (probando se escriben muchos mensajes seguidos, y desde el cuarto parecería roto) y la pausa por respuesta manual (en la prueba no responde ninguna persona).
+- **Al cambiar la configuración, la conversación se vuelve a simular entera** con lo nuevo: los mensajes del cliente se quedan y las respuestas se recalculan.
+- **Cada respuesta dice por qué:** qué partes salieron y qué regla coincidió y con qué frase; si no respondió, el motivo («ya respondió esto en la conversación», «ninguna regla coincidió»).
+- **Revisión de Codex del plan** (una ronda):
+  - la prueba fuerza el interruptor general encendido, como ya hacía, para poder probar en el asistente;
+  - el motor dice qué salió y qué se calló (`explain`), y el frontend solo lo traduce a palabras;
+  - el `preview` acepta la forma de antes mientras dura el despliegue;
+  - lleva un límite de frecuencia por cuenta;
+  - más tests: concurrencia, rechazos de Meta, límites de la ventana, y los mensajes sin respuesta como entrantes.

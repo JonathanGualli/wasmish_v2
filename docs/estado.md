@@ -52,8 +52,16 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En curso
 
-- **Respuestas automáticas (chatbot v1)** — rama `respuestas-automaticas-ui` (PR 3), empezado el 2026-10-15 por Claude. Spec `docs/superpowers/specs/2026-10-15-respuestas-automaticas-design.md`, plan `docs/superpowers/plans/2026-10-15-respuestas-automaticas.md` y brief de la UI `docs/superpowers/specs/2026-10-15-respuestas-automaticas-brief-ui.md`.
-  El plan, revisado por Codex, entró con el PR #67, y la decisión, el horario y la configuración (`/api/auto-replies`, Tareas 1 a 4) con el #68; el envío (las Tareas 5 a 8: la pausa por respuesta manual, el trabajo en el entrante, el worker y la marca «Bot») con el #69. PR 3 (`respuestas-automaticas-ui`): la página, con el diseño v2 de Claude Design (Tarea 9), y `configured` en el `GET`. · Falta: unir el PR 3; probar con Meta de verdad en la cuenta de prueba; el PR de versión. · Sin probar: con Meta de verdad (los envíos del bot, con el Meta falso de los tests de aislamiento); la página y la marca «Bot», probadas en Chrome con datos sembrados (escritorio a 1440, 1280, 1024 y 900 px, y teléfono emulado), no en un teléfono de verdad.
+- **Respuestas automáticas (chatbot v1)** — empezado el 2026-10-15 por Claude. Spec `docs/superpowers/specs/2026-10-15-respuestas-automaticas-design.md`, planes `docs/superpowers/plans/2026-10-15-respuestas-automaticas.md` y `2026-10-15-no-entiende-y-conversacion.md`.
+  Hecho y en `master`: el motor y la configuración (#67, #68), el envío (#69) y la página (#70).
+  - **En PR, listos para unir** (CI en verde y revisión de Codex respondida): los arreglos de la página (#71, `respuestas-automaticas-arreglos`) y el plan de «Si no entiende» y probar como conversación (#72, esta rama; spec § 10).
+  - **Código terminado, en ramas sin PR todavía** (2026-10-16):
+    - PR 4, «Si no entiende»: `respuestas-automaticas-no-entiende-codigo`, Tareas 1 a 3;
+    - PR 5, probar como conversación: `respuestas-automaticas-conversacion`, Tareas 4 y 5, encima del PR 4.
+    Las dos llevan un merge de `respuestas-automaticas-arreglos` (#71).
+  - **Codex ya revisó el código de los dos**, con 1 y 2 puntos, aceptados y corregidos (`962d897` y `03d46e3`). Sus revisiones y las respuestas están en la memoria privada de Claude, para publicarlas en cada PR.
+  - **Falta:** unir #71 y #72; rebasar las dos ramas sobre `master` (`git rebase --onto origin/master`, quitando el merge y los commits del plan), abrir los PRs 4 y 5, publicar las revisiones y las respuestas, y esperar el CI; probar con Meta de verdad en la cuenta de prueba; el PR de versión.
+  - **Sin probar:** con Meta de verdad (los envíos del bot, con el Meta falso de los tests de aislamiento); la página, en Chrome con datos sembrados (escritorio y teléfono emulado), no en un teléfono de verdad.
 
 <!-- Formato de una entrada:
 - **<qué>** — rama `<rama>`, PR #<n>, empezado el <fecha> por <Claude|Codex|Jonathan>.
