@@ -52,34 +52,43 @@ Revisado el 2026-10-16 en la documentación de Meta para desarrolladores: la [gu
 - El frontend abre el mismo `FB.login` con la misma configuración. Lo único que cambia en `extras` es `featureType`: `"whatsapp_business_app_onboarding"` si el número está en la app, y `""` como hoy si no. `setup` y `sessionInfoVersion` se quedan como están (funcionan; quitarlos no aporta nada y no está probado).
 - El listener de `useConnectWhatsapp` acepta `FINISH` y `FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING`. Qué evento cuenta lo decide `embeddedSignupFinish`, en `Frontend/src/utils/embeddedSignup.ts`.
 - El backend usa **el mismo endpoint** (`POST /api/whatsapp/connect`) y los mismos pasos: canjear el código, comprobar que el número es del WABA, reclamar el WABA, suscribir la app y aplicar la conexión.
-- **Si el número vive en la app lo dice Meta, no el navegador:** se consulta `is_on_biz_app` del número. Hoy `getWabaPhoneNumbers` pide `id,display_phone_number,verified_name,platform_type` a la lista del WABA; se añade `is_on_biz_app` a esos campos, y si la lista no lo devuelve, se pide al número (`GET /{phone-number-id}?fields=is_on_biz_app,platform_type`, que es como lo muestra la guía). `describeWabaPhoneNumber` lo devuelve como `onBusinessApp`. El plan lo deja fijado tras probarlo. **Con `onBusinessApp: true` nunca se llama a `/register`**, diga lo que diga `platform_type` (`needsRegistration` lo comprueba primero, con su test). Si el frontend dijo «está en la app» y Meta dice que no, se conecta como un número normal y queda un aviso en el log.
-- La línea guarda `businessApp` con lo que dijo Meta. Se recalcula en cada conexión (renovar el token incluido), y al reconectar se borra `disconnectionReason`.
+- **Si el número vive en la app lo dice Meta, no el navegador.** La comprobación de que el número es del WABA (`getWabaPhoneNumbers`, con sus campos de hoy) **no cambia**. Después, una consulta aparte al número, como la muestra la guía: `GET /{phone-number-id}?fields=is_on_biz_app,platform_type` (`getPhoneNumberPlatform` en `libs/whatsapp.js`). Su resultado, `onBusinessApp`, tiene tres valores:
+  - `true`: **nunca se llama a `/register`**, diga lo que diga `platform_type`, y la línea queda `businessApp: true`.
+  - `false`: como hoy (`needsRegistration` con `platform_type`).
+  - **desconocido** (la consulta falla o no trae el campo): la conexión **no se cae** por eso. Se registra solo si `platform_type` es `NOT_APPLICABLE` **y** el frontend no dijo que el número está en la app; si lo dijo, no se registra (registrar un número de la app con un PIN distinto podría romperlo) y queda un aviso en el log. La línea queda `businessApp: false`.
+  - `needsRegistration` recibe `onBusinessApp` y lo que dijo el frontend, y tiene su test con los tres casos.
+- **Los dos caminos de conectar** (el Embedded Signup y el formulario manual, `updateUserTokenWhatsapp`) usan las mismas funciones: la consulta, la decisión de registrar y `businessApp` se aplican a los dos. **La coexistencia solo se ofrece por el Embedded Signup** (es lo que documenta Meta, y el formulario manual no suscribe la app al WABA): si alguien conecta a mano un número que Meta dice que está en la app, no se registra y queda `businessApp: true`, pero no se le promete recibir los ecos.
+- **`Waba.authorizedAt`:** la fecha de la última conexión confirmada de ese WABA (alta **o renovación**), que escribe `applyConnection`. La usa la desconexión (abajo). Al reconectar o renovar se borra `disconnectionReason`.
 
 ### Lo que se responde desde la app
 
 - `handleWebhook` gana un bloque `value.message_echoes`, después de `messages`, con un `try/catch` por eco (regla 7). La línea sale de `metadata.phone_number_id` con `findInboundLine`, como los entrantes.
-- **Una línea desconectada no recibe ecos:** `findInboundLine` solo encuentra líneas activas, así que un eco tardío de una línea ya desconectada se descarta. Es a propósito: esa línea ya no es de la cuenta a efectos de escribir.
-- `procesarEco(inbound, echoData)`, hermana de `procesarEntrante`:
+- **Ecos que no son de esta conexión:** `findInboundLine` solo encuentra líneas activas, así que un eco de una línea ya desconectada se descarta. Y un eco **anterior a la conexión de la línea** (`timestamp` < `Line.connectedAt`) también: es el caso de un número que pasó de una cuenta a otra y cuyo eco viejo llega tarde.
+- `procesarEco(inbound, echoData)`, hermana de `procesarEntrante`, en este orden:
   1. **Filtro:** sin `id` o sin `to`, se descarta con un aviso. `edit` y `revoke` se ignoran en esta versión (solo un aviso en el log). Un tipo que `describeInboundMessage` no reconoce se guarda con su etiqueta de «no soportado», como los entrantes.
-  2. **Idempotencia** por `waMessageId`: el `exists` previo ahorra la descarga; la garantía es el índice único, y un E11000 al guardar se trata como «ya guardado» y **sale sin efectos** (ni pausa, ni no leídos, ni SSE), como `procesarEntrante`.
-  3. **El contacto** por el teléfono `to` (`resolveContact` con `{ phone }`); si no existe, se crea. **Limitación:** un contacto que en Wasmish solo tiene BSUID (sin teléfono) no se puede vincular con un eco, que solo trae el teléfono: se crearía otro. Es raro (personas con nombre de usuario que no escribieron en 30 días) y queda documentado.
-  4. **La conversación** de ese contacto en esa línea; si no existe, se crea.
-  5. **La pausa del bot va aquí, antes de descargar nada:** `markHumanReply(conversation)`. Un envío del bot ya autorizado (`authorizeBotSend`) no se puede cancelar, y un eco que Meta entrega tarde llega tarde: el bot se calla desde que se procesa el eco, no desde que se escribió en la app.
-  6. **El contenido** con `describeInboundMessage` y el archivo con `descargarAdjunto`. Ningún mensaje se guarda con `text` vacío (regla 7). Si la descarga falla, el mensaje se guarda con su etiqueta y sin archivo, como un entrante.
-  7. **El mensaje:** `direction: 'outbound'`, `sender: 'me'`, `origin: 'businessApp'`, `status: 'sent'`, sin `sentBy` (Meta no dice qué persona lo envió) y con `timestamp` = el de Meta (la hora del webhook, la mejor aproximación que da Meta).
-  8. **La conversación, de forma monótona:** la última actividad solo avanza si el eco es más nuevo que la actual. `unreadCount` se pone en cero **solo si no llegó un entrante después** del eco (se compara con `lastInboundAt`): un eco atrasado no borra mensajes que nadie ha visto.
-  9. **SSE**, a quien puede ver esa línea (`meta = { lineId }`): `message_created` con el mensaje y `conversation_updated` con el `unreadCount` resultante, porque la bandeja no baja el contador con un mensaje propio (`useConversations` lo conserva con `sender: 'me'`). **Sin aviso push:** lo escribió el propio negocio.
+  2. **El contacto** por el teléfono `to` (`resolveContact` con `{ phone }`); si no existe, se crea. **Limitación:** un contacto que en Wasmish solo tiene BSUID (sin teléfono) no se puede vincular con un eco, que solo trae el teléfono: se crearía otro. Es raro (personas con nombre de usuario que no escribieron en 30 días) y queda documentado.
+  3. **La conversación** de ese contacto en esa línea; si no existe, se crea.
+  4. **Reclamar el eco guardando el mensaje primero, sin el archivo:** `Message.create` con `direction: 'outbound'`, `sender: 'me'`, `origin: 'businessApp'`, `status: 'sent'`, sin `sentBy` (Meta no dice qué persona lo envió), `timestamp` = el de Meta (la hora del webhook, la mejor aproximación que da Meta) y el texto o la etiqueta de `describeInboundMessage` (nunca vacío, regla 7). **El índice único de `waMessageId` es la reclamación atómica:** quien recibe E11000 sale **sin ningún efecto** (ni pausa, ni descarga, ni no leídos, ni SSE). Así, dos entregas simultáneas del mismo eco producen un solo mensaje y una sola pausa.
+  5. **La pausa del bot:** `markHumanReply(conversation)`, en cuanto el eco es nuestro y antes de descargar nada. Un envío del bot ya autorizado (`authorizeBotSend`) no se puede cancelar, y un eco que Meta entrega tarde llega tarde: el bot se calla desde que se procesa el eco, no desde que se escribió en la app.
+  6. **El archivo**, si lo hay, con `descargarAdjunto`, y se completa el mensaje (`mediaFile`, `mimeType`…). Si la descarga falla, el mensaje se queda con su etiqueta y sin archivo, como un entrante.
+  7. **La conversación, con actualizaciones atómicas y monótonas:**
+     - la última actividad (`lastMessageAt` y la vista previa) solo avanza si el eco es más nuevo: `updateOne` con la condición `lastMessageAt < timestamp`;
+     - `unreadCount` se pone en cero solo si no hay un entrante más nuevo que el eco: `updateOne` con la condición `lastInboundAt <= timestamp` (o sin entrantes). Si llegó un entrante después, **se conserva todo el contador** (no se intenta contar solo los posteriores).
+     - **Lo que no se resuelve en esta versión:** si Meta entrega **después** del eco un entrante **anterior** a él, ese entrante suma un no leído (como hoy). Falla del lado seguro: alguien mira una conversación que ya estaba respondida, nunca se esconde un mensaje sin leer.
+  8. **SSE**, a quien puede ver esa línea (`meta = { lineId }`): `message_created` con el mensaje ya completo, y `conversation_updated` con su contrato de hoy, `{ id, unreadCount }`, porque la bandeja no baja el contador con un mensaje propio (`useConversations` lo conserva con `sender: 'me'`). **Sin aviso push:** lo escribió el propio negocio.
+- **Un fallo a mitad** (después de guardar el mensaje y antes del SSE) deja el mensaje guardado sin el resto, y un reintento de Meta no lo completa (lo ve como ya guardado). Es el mismo límite que tienen hoy los entrantes (`docs/estado.md`, «Cabos sueltos»); no se arregla aquí.
 - **La ventana de 24 h no cambia:** sigue dependiendo solo de los entrantes, que es lo que dice Meta. Responder desde la app no habilita texto libre desde Wasmish fuera de la ventana.
 - **Acuses:** si Meta los manda para esos mensajes, `procesarEstado` ya los aplica por `waMessageId`; si no, quedan como «enviado».
-- `messageOrigin` reconoce `'businessApp'`; el chat lo enseña como «Desde la app de WhatsApp» (el eco puede venir del celular o de un dispositivo vinculado, como WhatsApp Web). En el hilo, un mensaje que llega por SSE se coloca según su `timestamp`, no siempre al final (PR del frontend).
+- **En el frontend** (PR del frontend): `messageOrigin` reconoce `'businessApp'` y el chat lo enseña como «Desde la app de WhatsApp» (el eco puede venir del celular o de un dispositivo vinculado, como WhatsApp Web). En el hilo, un mensaje que llega por SSE se coloca según su `timestamp`. En la bandeja, `useConversations` solo cambia `lastMessage` y `updatedAt` con un `message_created` **más nuevo** que lo que tiene; si no, solo inserta el mensaje en el hilo.
 
 ### Si Meta retira el acceso
 
 - `account_update` se trata **antes** del `if (!phoneNumberId) continue` actual, en su propio `try/catch`.
-- `parsePartnerRemoved(change)` (pura, con test) devuelve `{ waBusinessId: value.waba_info.waba_id, reason, initiatedBy, at }` (con `at` = `entry.time`) o null si no es `PARTNER_REMOVED` o falta `waba_info.waba_id`. No usa `entry.id`.
-- **Alcance: el WABA entero.** El servicio desconecta **todas las líneas activas** de ese `Waba` (en coexistencia, el WABA tiene el número de la app). Sin `disconnection_info`, el motivo queda `null` («Meta retiró el acceso»).
-- **Dentro del candado de líneas, y revalidando dentro:** se vuelve a leer el `Waba` y sus líneas activas; una línea conectada **después** de `at` no se toca (una desconexión atrasada tras una reconexión). Un evento repetido no encuentra líneas activas y no hace nada. La desconexión usa la misma lógica que `disconnectLine` (la línea por defecto y la copia en `User`) y guarda `disconnectionReason`.
-- **Si el candado está ocupado** (alguien conecta o desconecta en ese momento): se reintenta durante unos segundos; si sigue ocupado, el webhook responde **500** para que Meta reintente el lote. Reprocesar el lote es seguro: los mensajes son idempotentes por `waMessageId` y los acuses, monótonos. El plan fija los tiempos.
+- `parsePartnerRemoved(entry, change)` (pura, con test) devuelve `{ waBusinessId: value.waba_info.waba_id, reason, initiatedBy, at }`, con `at` = `entry.time` (segundos Unix en el ejemplo de Meta), o null si no es `PARTNER_REMOVED` o falta `waba_info.waba_id`. No usa `entry.id`.
+- **Alcance: el WABA entero.** Se desconectan **todas las líneas activas** de ese `Waba`. Vale también para los clientes de hoy, sin coexistencia: un `PARTNER_REMOVED` dice que el cliente retiró a Wasmish el acceso a su WABA, y con eso ningún envío de esas líneas funcionaría. Sin `disconnection_info`, el motivo queda `null` («Meta retiró el acceso a Wasmish»).
+- **Un aviso viejo no desconecta una conexión nueva:** si `at` es **anterior o igual** a `Waba.authorizedAt` (la última conexión o renovación confirmada, en segundos), el evento se ignora con un aviso en el log. Un `Waba` de antes de este cambio no tiene `authorizedAt`: el evento se aplica, porque no hubo reconexión que proteger. Ante la duda (el mismo segundo), se ignora: si la retirada era real, el siguiente envío fallará con el error de Meta y la línea se reconecta; desconectar por error una conexión nueva sería peor.
+- **Dentro del candado de líneas, revalidando dentro:** se vuelve a leer el `Waba` (su cuenta y `authorizedAt`) y sus líneas activas. Un evento repetido no encuentra líneas activas y no hace nada. La desconexión usa la misma lógica que `disconnectLine` (la línea por defecto y la copia en `User`) y guarda `disconnectionReason`.
+- **Si el candado está ocupado** (alguien conecta o desconecta en ese momento): se reintenta unos segundos. Si sigue ocupado, **el resto del lote se procesa igual** y, al terminar, el webhook responde **500** en lugar de 200 para que Meta lo vuelva a entregar. Cuando Meta lo reentrega, ya terminó la entrega anterior: los mensajes que ya se procesaron se saltan (por `waMessageId`, antes de cualquier efecto, como hoy) y los acuses no cambian nada (son monótonos). No se duplica ningún aviso push, trabajo del bot ni descarga. El plan fija los tiempos.
 - Si no hay un `Waba` con ese id en ninguna cuenta, solo un aviso en el log.
 - Las conversaciones de esas líneas quedan como las de cualquier línea desconectada: se leen, y escribir da 409 como hoy.
 - **La pantalla se entera al pedir las líneas:** `serializeLine` devuelve `businessApp` y `disconnectionReason`. Sin evento SSE nuevo en esta versión: Ajustes → Líneas las vuelve a pedir al abrirse, y escribir en una conversación de esa línea da 409 con el mensaje de siempre.
@@ -93,8 +102,9 @@ Revisado el 2026-10-16 en la documentación de Meta para desarrolladores: la [gu
 ## 5. Datos
 
 - `Line.businessApp: Boolean` (por defecto `false`).
-- `Line.disconnectionReason: String | null`: el motivo de Meta tal cual (`PRIMARY_INACTIVITY`…); el frontend lo traduce a palabras.
+- `Line.disconnectionReason: String | null`: el motivo de Meta tal cual (`PRIMARY_INACTIVITY`…); el frontend lo traduce a palabras. Se borra al reconectar o renovar.
 - `Message.origin` admite `'businessApp'`.
+- `Waba.authorizedAt: Date | null`: la última conexión o renovación confirmada de ese WABA.
 - Sin migración: los documentos anteriores leen los valores por defecto.
 
 ## 6. Aislamiento y seguridad
@@ -105,8 +115,13 @@ Revisado el 2026-10-16 en la documentación de Meta para desarrolladores: la [gu
 
 ## 7. Pruebas
 
-- **Backend, funciones puras con su test:** `describeWabaPhoneNumber` con `is_on_biz_app`; `needsRegistration` que nunca registra con `onBusinessApp`; leer un eco (texto, foto con pie, video, documento, `edit` y `revoke` ignorados, sin `id`, sin `to`); `parsePartnerRemoved` (con y sin `disconnection_info`, sin `waba_info`, otro evento); la decisión monótona de última actividad y no leídos.
-- **Backend, con Mongo en memoria:** el eco idempotente (dos entregas a la vez: un solo mensaje, una sola pausa, un solo SSE); un eco atrasado tras un entrante; `PARTNER_REMOVED` repetido, atrasado tras una reconexión y con el candado ocupado; los casos de aislamiento de § 6.
+- **Backend, funciones puras con su test:** leer `is_on_biz_app` (true, false, ausente); `needsRegistration` con `onBusinessApp` en sus tres valores y lo que dijo el frontend; leer un eco (texto, foto con pie, video, documento, `edit` y `revoke` ignorados, sin `id`, sin `to`, anterior a la conexión); `parsePartnerRemoved` (con y sin `disconnection_info`, sin `waba_info`, otro evento) y la comparación con `authorizedAt` (anterior, igual, posterior, sin `authorizedAt`).
+- **Backend, con Mongo en memoria y Meta falso:**
+  - el eco idempotente: dos entregas a la vez dan un solo mensaje, una sola pausa y un solo SSE;
+  - los no leídos y la última actividad en los dos órdenes (eco y luego un entrante más nuevo; entrante y luego un eco más viejo);
+  - `PARTNER_REMOVED` repetido, atrasado tras una **renovación** (no desconecta), con varias líneas normales en el WABA (desconecta todas), sobre un `Waba` sin `authorizedAt`, y con el candado ocupado: el resto del lote se procesa y la respuesta es 500; al reentregarlo, ningún efecto se repite;
+  - conectar por el Embedded Signup y por el formulario manual, con un número normal, uno de la app (no registra) y una renovación, con `is_on_biz_app` que falla (la conexión sigue);
+  - los casos de aislamiento de § 6, más un número que pasó de una cuenta a otra (el eco viejo no entra en la nueva).
 - **Frontend, sin test** (no tiene): `embeddedSignupFinish` y la traducción de los motivos. Se comprueban en la prueba real.
 - **Local sin Meta:** `npm run webhook:simulate` con `--echo` (un mensaje enviado desde la app) y `--partner-removed`.
 - **Real, en producción,** con un número de Ecuador que esté en la app de WhatsApp Business (Jonathan tiene uno elegido; el número no va en este repo):
@@ -157,3 +172,18 @@ Codex revisó la primera versión antes del plan. Lo que se cambió por su revis
 - **El brief promete lo que hay:** chats individuales y los tipos que Meta manda; «Desde la app de WhatsApp» en vez de «Desde el celular»; la ventana de 24 h no cambia (media).
 - **Lo público:** el número de prueba y el identificador de la configuración de Meta salen de este documento (baja).
 - **`extras`:** no se quitan `setup` ni `sessionInfoVersion`; solo cambia `featureType`.
+
+### Segunda revisión de Codex
+
+A pedido de Jonathan, Codex volvió a revisar las correcciones: dio por resueltos 8 de los 14 puntos, 5 a medias y 1 sin resolver, y encontró 6 problemas nuevos. Lo que cambió:
+
+- **Idempotencia del eco (sin resolver):** la pausa iba antes de guardar el mensaje, así que dos entregas simultáneas pausaban dos veces. Ahora **guardar el mensaje (sin el archivo) es la reclamación atómica**: quien pierde con E11000 sale sin ningún efecto; después vienen la pausa, la descarga y el resto.
+- **`is_on_biz_app` (alta):** pedirlo en la lista del WABA podía hacer fallar todas las conexiones. La verificación del WABA no cambia; `is_on_biz_app` se pide aparte, al número, con tres valores (sí, no, desconocido) y sin tumbar la conexión si falla.
+- **Una renovación no protegía contra un aviso viejo (alta):** renovar no cambia `connectedAt`. Ahora se compara con `Waba.authorizedAt`, que escribe cada conexión o renovación confirmada; un `Waba` anterior al cambio sin esa fecha aplica el evento.
+- **Responder 500 (alta):** se precisa que el resto del lote se procesa igual y que la reentrega llega con la anterior terminada, así que no repite push, bot ni descargas. El fallo a mitad de un mensaje es un límite que ya existe y no se arregla aquí.
+- **No leídos (media):** actualizaciones atómicas con condición; si llega después un entrante más viejo que el eco, suma un no leído (del lado seguro). Se conserva todo el contador si hubo un entrante después.
+- **La bandeja (media):** `useConversations` solo cambia la vista previa con un mensaje más nuevo.
+- **El formulario manual (media):** comparte la detección y la decisión de registrar; la coexistencia solo se ofrece por el Embedded Signup.
+- **Un número que pasó a otra cuenta:** un eco anterior a `Line.connectedAt` se descarta.
+
+Las tres páginas de Meta devolvieron 429 a Codex también esta vez: el plan empieza volviendo a abrirlas.
