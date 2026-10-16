@@ -19,18 +19,19 @@ export interface AutoReplyForm extends Omit<AutoReplySettings, 'keywordRules'> {
     keywordRules: EditableRule[];
 }
 
-export type StepKey = 'welcome' | 'outOfHours' | 'keywords' | 'silence' | 'review';
+export type StepKey = 'welcome' | 'outOfHours' | 'keywords' | 'fallback' | 'silence' | 'review';
 
 export const STEP_TITLES: Record<StepKey, string> = {
     welcome: 'Bienvenida',
     outOfHours: 'Fuera de horario',
     keywords: 'Palabras clave',
+    fallback: 'Si no entiende',
     silence: 'Cuándo se calla',
     review: 'Revisar y encender',
 };
 
 /** Los pasos de la página; el asistente añade «Revisar y encender». */
-export const EDIT_STEPS: StepKey[] = ['welcome', 'outOfHours', 'keywords', 'silence'];
+export const EDIT_STEPS: StepKey[] = ['welcome', 'outOfHours', 'keywords', 'fallback', 'silence'];
 export const WIZARD_STEPS: StepKey[] = [...EDIT_STEPS, 'review'];
 
 let nextKey = 0;
@@ -45,6 +46,7 @@ export const toForm = (settings: AutoReplySettings): AutoReplyForm => ({
     welcome: { ...settings.welcome },
     outOfHours: { ...settings.outOfHours, schedule: cloneSchedule(settings.outOfHours.schedule) },
     keywordRules: settings.keywordRules.map(rule => ({ ...rule, keywords: [...rule.keywords], lineIds: [...rule.lineIds], key: rule.id ?? newKey() })),
+    fallback: { ...(settings.fallback ?? { enabled: false, text: '' }) },
 });
 
 /** Lo que se manda al `PUT` y al «probar»: sin las claves de pantalla. */
@@ -57,6 +59,7 @@ export const toPayload = (form: AutoReplyForm): AutoReplySettings => ({
     keywordRules: form.keywordRules.map(({ id, enabled, keywords, text, lineIds }) => ({
         ...(id && { id }), enabled, keywords, text, lineIds,
     })),
+    fallback: { ...form.fallback },
 });
 
 /** Si hay algo distinto de lo guardado. */
@@ -82,6 +85,9 @@ const closed = (): DaySchedule => ({ closed: true, ranges: [] });
  * escritos, todo apagado hasta el último paso. «Desde cero» deja los textos
  * vacíos, pero las respuestas encendidas: el asistente pide escribirlas o apagarlas.
  */
+/** El ejemplo de «Si no entiende» (spec § 10): sirve también para quien solo saluda. */
+export const FALLBACK_EXAMPLE = 'Perdona, no te entendí. Puedo ayudarte con precios, ubicación y envíos: pregúntame por eso. Si es otra cosa, en un momento te responde alguien del equipo.';
+
 export const wizardStart = (form: AutoReplyForm, { example }: { example: boolean }): AutoReplyForm => {
     // Sin nombre: la cuenta nace con el de su dueño, no con el del negocio, y
     // un ejemplo que nadie edita tiene que seguir sirviendo.
@@ -100,6 +106,7 @@ export const wizardStart = (form: AutoReplyForm, { example }: { example: boolean
                 ? { mon: workday(), tue: workday(), wed: workday(), thu: workday(), fri: workday(), sat: closed(), sun: closed() }
                 : cloneSchedule(form.outOfHours.schedule),
         },
+        fallback: { enabled: true, text: example ? FALLBACK_EXAMPLE : '' },
     };
 };
 
@@ -121,6 +128,7 @@ export const draftOf = (form: AutoReplyForm): AutoReplyForm => ({
     keywordRules: form.keywordRules
         .filter(rule => rule.keywords.length > 0)
         .map(rule => ({ ...rule, enabled: rule.enabled && rule.text.trim().length > 0 })),
+    fallback: { ...form.fallback, enabled: form.fallback.enabled && form.fallback.text.trim().length > 0 },
 });
 
 // ---------------------------------------------------------------------------
@@ -136,6 +144,7 @@ export interface DayIssue {
 
 export interface FormIssues {
     welcomeText?: string;
+    fallbackText?: string;
     outOfHoursText?: string;
     /** Fuera de horario encendido sin ningún día abierto. */
     schedule?: string;
@@ -181,6 +190,7 @@ export const formIssues = (form: AutoReplyForm): FormIssues => {
     const issues: FormIssues = { days: {}, rules: {} };
 
     issues.welcomeText = textIssue(form.welcome.text, form.welcome.enabled, 'Escribe la bienvenida, o apágala.');
+    issues.fallbackText = textIssue(form.fallback.text, form.fallback.enabled, 'Escribe el mensaje, o apágalo.');
     issues.outOfHoursText = textIssue(form.outOfHours.text, form.outOfHours.enabled, 'Escribe el mensaje, o apaga «Fuera de horario».');
 
     // El backend valida el horario aunque «Fuera de horario» esté apagado.
@@ -204,7 +214,7 @@ export const formIssues = (form: AutoReplyForm): FormIssues => {
 export const issueCounts = (issues: FormIssues): Record<StepKey, number> => {
     const outOfHours = [issues.outOfHoursText, issues.schedule].filter(Boolean).length + Object.keys(issues.days).length;
     const keywords = Object.values(issues.rules).reduce((n, rule) => n + Number(Boolean(rule.keywords)) + Number(Boolean(rule.text)), 0);
-    return { welcome: Number(Boolean(issues.welcomeText)), outOfHours, keywords, silence: 0, review: 0 };
+    return { welcome: Number(Boolean(issues.welcomeText)), outOfHours, keywords, fallback: Number(Boolean(issues.fallbackText)), silence: 0, review: 0 };
 };
 
 export const totalIssues = (counts: Record<StepKey, number>) => Object.values(counts).reduce((a, b) => a + b, 0);
@@ -220,15 +230,6 @@ export const normalizeForMatch = (text: string) => text
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim();
-
-/** La primera frase de la regla que aparece en `text` como palabras completas. */
-export const matchedKeyword = (rule: KeywordRule, text: string) => {
-    const normalized = ` ${normalizeForMatch(text)} `;
-    return rule.keywords.find(keyword => {
-        const key = normalizeForMatch(keyword);
-        return key.length > 0 && normalized.includes(` ${key} `);
-    });
-};
 
 /** La fila de la lista: las tres primeras frases y cuántas más hay. */
 export const ruleTitle = (rule: KeywordRule) => {
@@ -296,6 +297,8 @@ export const keywordsSummary = (rules: KeywordRule[]) => {
 };
 
 export const silenceSummary = (hours: number) => `${hours} h tras una respuesta manual`;
+
+export const fallbackSummary = (hours: number) => `Una vez cada ${hours} h por conversación`;
 
 // ---------------------------------------------------------------------------
 // Zona horaria y hora

@@ -46,7 +46,7 @@ export const SilenceStep = ({ editor }: { editor: AutoReplyEditor }) => (
                 No se configuran: es lo que hace el bot para no repetirse ni contestar sin parar.
             </p>
             <ul className="grid gap-2 text-[13.5px] leading-[1.5] text-brand-gray-600">
-                <SilenceRule title="Palabras clave">Cada regla, una vez cada 24 horas por conversación.</SilenceRule>
+                <SilenceRule title="Palabras clave y «no entiendo»">{`Cada uno, una sola vez por conversación en esas ${editor.form.handoffHours} horas.`}</SilenceRule>
                 <SilenceRule title="Fuera de horario">Una vez por cierre, no a cada mensaje.</SilenceRule>
                 <SilenceRule title="Ráfagas">Como mucho 3 respuestas en 10 minutos por conversación, para no contestarle a otro bot sin parar.</SilenceRule>
             </ul>

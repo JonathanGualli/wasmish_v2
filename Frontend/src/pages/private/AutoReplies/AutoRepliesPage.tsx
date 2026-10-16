@@ -22,6 +22,7 @@ import { OutOfHoursStep } from "./OutOfHoursStep";
 import { KeywordsStep } from "./KeywordsStep";
 import { SilenceStep } from "./SilenceStep";
 import { ReviewStep } from "./ReviewStep";
+import { FallbackStep } from "./FallbackStep";
 import { TestPanel } from "./TestPanel";
 import { Switch } from "./Switch";
 
@@ -35,6 +36,7 @@ const STEP_DESCRIPTIONS: Record<StepKey, string> = {
     welcome: 'A quien escribe por primera vez, o vuelve después de un tiempo sin escribir.',
     outOfHours: 'A quien escribe con el negocio cerrado.',
     keywords: `Si el mensaje dice una de las frases, responde ese texto. Hasta ${KEYWORD_RULES_MAX} reglas.`,
+    fallback: 'Cuando el bot no sabría qué decir: a «me gusta el café con pan», por ejemplo.',
     silence: 'Para que no conteste encima de una persona ni repita lo mismo.',
     review: 'Así queda. Puedes cambiar cualquier cosa después, desde esta misma página.',
 };
@@ -274,12 +276,16 @@ const StepHeader = ({ editor }: { editor: AutoReplyEditor }) => {
     );
 };
 
-/** Encender o apagar la bienvenida o el fuera de horario. */
+/** Encender o apagar la bienvenida, el fuera de horario o el «no entiendo». */
 const SectionToggle = ({ editor }: { editor: AutoReplyEditor }) => {
     const { step, form } = editor;
-    if (step !== 'welcome' && step !== 'outOfHours') return null;
-    const on = step === 'welcome' ? form.welcome.enabled : form.outOfHours.enabled;
-    const set = (enabled: boolean) => (step === 'welcome' ? editor.setWelcome({ enabled }) : editor.setOutOfHours({ enabled }));
+    const toggles = {
+        welcome: { on: form.welcome.enabled, set: (enabled: boolean) => editor.setWelcome({ enabled }) },
+        outOfHours: { on: form.outOfHours.enabled, set: (enabled: boolean) => editor.setOutOfHours({ enabled }) },
+        fallback: { on: form.fallback.enabled, set: (enabled: boolean) => editor.setFallback({ enabled }) },
+    };
+    if (!(step in toggles)) return null;
+    const { on, set } = toggles[step as keyof typeof toggles];
     return (
         <span className="flex-none flex items-center gap-2.5 text-[13.5px] font-semibold text-brand-strong">
             {on ? 'Encendida' : 'Apagada'}
@@ -298,6 +304,7 @@ const StepFields = ({ editor, phone }: { editor: AutoReplyEditor; phone: boolean
         case 'welcome': return <WelcomeStep editor={editor} exampleBadge={editor.mode === 'wizard' && editor.form.welcome.text.length > 0} />;
         case 'outOfHours': return <OutOfHoursStep editor={editor} />;
         case 'keywords': return <KeywordsStep editor={editor} phone={phone} />;
+        case 'fallback': return <FallbackStep editor={editor} exampleBadge={editor.mode === 'wizard' && editor.form.fallback.text.length > 0} />;
         case 'silence': return <SilenceStep editor={editor} />;
         case 'review': return <ReviewStep editor={editor} />;
     }

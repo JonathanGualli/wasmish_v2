@@ -1,4 +1,5 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { AxiosError } from "axios";
 import { getAutoRepliesService, previewAutoReplyService, saveAutoRepliesService } from "../services/api.service";
 import type { AutoReplySettings } from "../models/autoReply.model";
 
@@ -17,14 +18,17 @@ export const useSaveAutoReplies = () => {
 };
 
 /**
- * Qué respondería `settings` (lo que hay en pantalla, sin guardar) a `text`.
- * Es una consulta: al cambiar algo se vuelve a preguntar sola, y mientras
- * llega se sigue viendo la respuesta anterior. `enabled: false` con errores.
+ * Cómo respondería `settings` (lo que hay en pantalla, sin guardar) a la
+ * conversación de prueba `messages`. Es una consulta: al cambiar la
+ * configuración (tras 1 s sin cambios) o añadir un mensaje se vuelve a simular entera, y mientras
+ * llega se sigue viendo lo anterior. `enabled: false` con errores en pantalla.
  */
-export const usePreviewAutoReply = (settings: AutoReplySettings, text: string, enabled: boolean) => useQuery({
-    queryKey: ['auto-reply-preview', settings, text],
-    queryFn: () => previewAutoReplyService(settings, text),
-    enabled: enabled && text.trim().length > 0,
+export const usePreviewAutoReply = (settings: AutoReplySettings, messages: string[], enabled: boolean) => useQuery({
+    queryKey: ['auto-reply-preview', settings, messages],
+    queryFn: () => previewAutoReplyService(settings, messages),
+    enabled: enabled && messages.length > 0,
     placeholderData: keepPreviousData,
     gcTime: 60_000,
+    // Un 429 (o un 400) no se arregla repitiendo: se avisa y se reintenta a mano.
+    retry: (count, error) => count < 1 && ![400, 429].includes((error as AxiosError).response?.status ?? 0),
 });

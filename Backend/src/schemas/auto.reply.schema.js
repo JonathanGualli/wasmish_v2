@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { objectIdSchema } from "./contact.schema.js";
 import {
-    AUTO_REPLY_TEXT_MAX, HANDOFF_HOURS, KEYWORD_MAX, KEYWORD_RULES_MAX, KEYWORDS_PER_RULE_MAX, RETURN_AFTER_DAYS,
+    AUTO_REPLY_TEXT_MAX, HANDOFF_HOURS, KEYWORD_MAX, KEYWORD_RULES_MAX, KEYWORDS_PER_RULE_MAX, PREVIEW_MESSAGES_MAX, RETURN_AFTER_DAYS,
     normalizeForMatch,
 } from "../utils/auto.reply.js";
 import { WEEK_DAYS, isValidTimeZone, scheduleIssue } from "../utils/business.hours.js";
@@ -72,10 +72,28 @@ export const autoReplySettingsSchema = z.object({
             const ids = rules.filter(rule => rule.id).map(rule => rule.id.toLowerCase());
             return new Set(ids).size === ids.length;
         }, 'Dos reglas no pueden tener el mismo id'),
+    // Opcional: una pestaña con la página de antes no lo manda.
+    fallback: z.object({
+        enabled: z.boolean(),
+        text: replyTextSchema,
+    }).refine(hasTextIfEnabled, textWhenEnabled).default({ enabled: false, text: '' }),
 });
 
-// POST /auto-replies/preview — qué respondería esta configuración, sin guardarla.
+const previewMessageSchema = z.string().trim()
+    .min(1, 'Escribe un mensaje de prueba')
+    .max(PREVIEW_TEXT_MAX, `Máximo ${PREVIEW_TEXT_MAX} caracteres`);
+
+// POST /auto-replies/preview — qué respondería esta configuración, sin guardarla,
+// a una conversación (`messages`). `text`, un solo mensaje, es la forma de antes:
+// la manda una pestaña abierta con la página anterior mientras dura un
+// despliegue, y se quita en el PR siguiente a la versión 1.0.23.
 export const autoReplyPreviewSchema = z.object({
     settings: autoReplySettingsSchema,
-    text: z.string().trim().min(1, 'Escribe un mensaje de prueba').max(PREVIEW_TEXT_MAX, `Máximo ${PREVIEW_TEXT_MAX} caracteres`),
+    text: previewMessageSchema.optional(),
+    messages: z.array(previewMessageSchema)
+        .min(1, 'Escribe un mensaje de prueba')
+        .max(PREVIEW_MESSAGES_MAX, `Como mucho ${PREVIEW_MESSAGES_MAX} mensajes: reinicia la conversación`)
+        .optional(),
+}).refine(body => (body.text === undefined) !== (body.messages === undefined), {
+    message: 'Manda la conversación (`messages`) o, de antes, un mensaje (`text`), no los dos',
 });

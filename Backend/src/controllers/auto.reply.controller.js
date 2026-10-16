@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import AutoReplySettings from "../models/auto.reply.settings.model.js";
 import Line from "../models/line.model.js";
 import { autoReplyPreviewSchema, autoReplySettingsSchema } from "../schemas/auto.reply.schema.js";
-import { decideAutoReply, defaultAutoReplySettings } from "../utils/auto.reply.js";
+import { decideAutoReply, defaultAutoReplySettings, simulateConversation } from "../utils/auto.reply.js";
 import { WEEK_DAYS } from "../utils/business.hours.js";
 
 // ---------------------------------------------------------------------------
@@ -40,6 +40,11 @@ const serializeSettings = (settings, configured) => ({
         text: rule.text,
         lineIds: rule.lineIds.map(String),
     })),
+    // Sin el campo (guardada antes de que existiera): apagado.
+    fallback: {
+        enabled: settings.fallback?.enabled ?? false,
+        text: settings.fallback?.text ?? '',
+    },
 });
 
 const findSettings = (accountId) => AutoReplySettings.findOne({ userId: accountId }).lean();
@@ -89,13 +94,18 @@ export const saveAutoReplies = async (req, res) => {
 };
 
 /**
- * POST /auto-replies/preview — qué respondería ahora `settings` (sin guardar) a
- * un contacto nuevo que escribe `text`: sin estado previo, así la bienvenida
- * sale si está encendida. `matchedRuleIndexes` son posiciones en la lista
- * enviada, porque una regla nueva todavía no tiene id. No envía nada.
+ * POST /auto-replies/preview — qué respondería ahora `settings` (sin guardar)
+ * a un contacto nuevo que escribe `messages`, mensaje a mensaje
+ * (`simulateConversation`): `{ turns }`. No envía ni guarda nada.
+ *
+ * Con `text` (la forma de antes, de una pestaña abierta durante un despliegue):
+ * un solo mensaje, sin estado previo, y la respuesta de antes.
+ * `matchedRuleIndexes` son posiciones en la lista enviada.
  */
 export const previewAutoReply = (req, res) => {
-    const { settings, text } = autoReplyPreviewSchema.parse(req.body);
+    const { settings, text, messages } = autoReplyPreviewSchema.parse(req.body);
+    if (messages) return res.json({ turns: simulateConversation({ settings, messages }) });
+
     const result = decideAutoReply({
         // `_id` = la posición: así `claims.keywordRuleIds` dice cuáles coincidieron.
         settings: { ...settings, enabled: true, keywordRules: settings.keywordRules.map((rule, index) => ({ ...rule, _id: index })) },
@@ -107,11 +117,12 @@ export const previewAutoReply = (req, res) => {
         now: new Date(),
     });
 
-    if (result.skip) return res.json({ reply: null, parts: [], matchedRuleIndexes: [], outOfHours: false });
+    if (result.skip) return res.json({ reply: null, parts: [], matchedRuleIndexes: [], outOfHours: false, fallback: false });
     return res.json({
         reply: result.text,
         parts: result.parts,
         matchedRuleIndexes: result.claims.keywordRuleIds.map(Number),
         outOfHours: result.claims.outOfHoursKey !== null,
+        fallback: result.claims.fallback,
     });
 };

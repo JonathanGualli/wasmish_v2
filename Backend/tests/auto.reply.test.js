@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+    simulateConversation, applyBotStateUpdate,
     autoReplyOutcome, botStateUpdate, decideAutoReply, defaultAutoReplySettings, inboundMatchText, matchesKeyword, normalizeForMatch,
 } from '../src/utils/auto.reply.js';
 
@@ -100,6 +101,7 @@ test('un contacto nuevo fuera de horario que pregunta dos cosas recibe todo en u
         welcomed: true,
         outOfHoursKey: '2026-10-17T13:00',
         keywordRuleIds: ['r-precio', 'r-ubicacion'],
+        fallback: false,
     });
 });
 
@@ -107,22 +109,22 @@ test('la bienvenida vuelve después de returnAfterDays sin escribir', () => {
     const at = (days) => decide({ previousInboundAt: hoursBefore(OPEN, days * 24) });
 
     assert.equal(at(31).claims.welcomed, true);
-    assert.deepEqual(at(29), { skip: 'no_match' });
+    assert.equal(at(29).skip, 'no_match');
 });
 
 test('con returnAfterDays null solo saluda a quien nunca escribió', () => {
     const settings = { ...SETTINGS, welcome: { ...SETTINGS.welcome, returnAfterDays: null } };
 
-    assert.deepEqual(decide({ settings, previousInboundAt: hoursBefore(OPEN, 24 * 365) }), { skip: 'no_match' });
+    assert.equal(decide({ settings, previousInboundAt: hoursBefore(OPEN, 24 * 365) }).skip, 'no_match');
     assert.equal(decide({ settings }).claims.welcomed, true);
-    assert.deepEqual(decide({ settings, welcomedAt: hoursBefore(OPEN, 24 * 365) }), { skip: 'no_match' });
+    assert.equal(decide({ settings, welcomedAt: hoursBefore(OPEN, 24 * 365) }).skip, 'no_match');
 });
 
 // La ráfaga del primer contacto: el segundo mensaje todavía ve
 // `previousInboundAt: null`, pero ya se le saludó. Sin mirar `welcomedAt`
 // salían dos bienvenidas.
 test('no saluda dos veces en la misma ráfaga', () => {
-    assert.deepEqual(decide({ welcomedAt: hoursBefore(OPEN, 1) }), { skip: 'no_match' });
+    assert.equal(decide({ welcomedAt: hoursBefore(OPEN, 1) }).skip, 'no_match');
 });
 
 test('una persona atendiendo calla al bot durante handoffHours', () => {
@@ -145,7 +147,7 @@ test('una reacción no dispara nada', () => {
 test('fuera de horario se avisa una vez por tramo cerrado', () => {
     const state = { outOfHoursNotified: '2026-10-17T13:00' };
 
-    assert.deepEqual(decide({ state, now: CLOSED, previousInboundAt: KNOWN }), { skip: 'no_match' });
+    assert.equal(decide({ state, now: CLOSED, previousInboundAt: KNOWN }).skip, 'no_match');
     assert.deepEqual(
         decide({ state: { outOfHoursNotified: '2026-10-16T18:00' }, now: CLOSED, previousInboundAt: KNOWN }).parts,
         ['Estamos cerrados'],
@@ -167,18 +169,27 @@ test('como mucho 3 palabras clave, en el orden de la lista', () => {
 
 test('una regla apagada no responde', () => {
     const settings = { ...SETTINGS, keywordRules: [rule('r', ['precio'], 'Cuesta $10', { enabled: false })] };
-    assert.deepEqual(decide({ settings, message: text('precio'), previousInboundAt: KNOWN }), { skip: 'no_match' });
+    assert.equal(decide({ settings, message: text('precio'), previousInboundAt: KNOWN }).skip, 'no_match');
 });
 
-test('la misma regla no se repite en 24 h en la conversación', () => {
-    const at = (hours) => decide({
-        state: { keywordRepliedAt: new Map([['r-precio', hoursBefore(OPEN, hours)]]) },
+// Regresión: la ventana eran 24 h fijas (KEYWORD_COOLDOWN_MS); desde el
+// 2026-10-15 son las horas de «Cuándo se calla», también para el «no entiendo».
+test('la misma regla no se repite en la conversación durante handoffHours', () => {
+    const at = (handoffHours, minutesAgo, state = (date) => new Map([['r-precio', date]])) => decide({
+        settings: { ...SETTINGS, handoffHours },
+        state: { keywordRepliedAt: state(minutesBefore(OPEN, minutesAgo)) },
         message: text('precio'),
         previousInboundAt: KNOWN,
     });
 
-    assert.deepEqual(at(2), { skip: 'no_match' });
-    assert.deepEqual(at(25).parts, ['Cuesta $10']);
+    assert.equal(at(1, 30).skip, 'no_match');
+    assert.deepEqual(at(1, 120).parts, ['Cuesta $10']);
+    // En el límite exacto todavía no; un minuto después, sí. Con Map (documento) y con objeto (`.lean()`).
+    assert.equal(at(24, 24 * 60).skip, 'no_match');
+    assert.deepEqual(at(24, 24 * 60 + 1).parts, ['Cuesta $10']);
+    const plain = (date) => ({ 'r-precio': date });
+    assert.equal(at(24, 24 * 60, plain).skip, 'no_match');
+    assert.deepEqual(at(24, 24 * 60 + 1, plain).parts, ['Cuesta $10']);
 });
 
 test('que una regla haya respondido no calla a las demás', () => {
@@ -203,21 +214,201 @@ test('dos reglas con el mismo texto salen una vez', () => {
 test('una regla con líneas solo responde en ellas', () => {
     const settings = { ...SETTINGS, keywordRules: [rule('r', ['precio'], 'Cuesta $10', { lineIds: ['l2'] })] };
 
-    assert.deepEqual(decide({ settings, message: text('precio'), previousInboundAt: KNOWN, lineId: 'l1' }), { skip: 'no_match' });
+    assert.equal(decide({ settings, message: text('precio'), previousInboundAt: KNOWN, lineId: 'l1' }).skip, 'no_match');
     assert.deepEqual(decide({ settings, message: text('precio'), previousInboundAt: KNOWN, lineId: 'l2' }).parts, ['Cuesta $10']);
 });
 
 test('un sticker de un contacto nuevo recibe la bienvenida; una imagen sin texto no dispara palabras clave', () => {
     assert.deepEqual(decide({ message: { type: 'sticker', text: 'Sticker', caption: null } }).parts, ['¡Hola!']);
     const settings = { ...SETTINGS, keywordRules: [rule('r', ['imagen'], 'No')] };
-    assert.deepEqual(
-        decide({ settings, message: { type: 'image', text: 'Imagen', caption: null }, previousInboundAt: KNOWN }),
-        { skip: 'no_match' },
+    assert.equal(
+        decide({ settings, message: { type: 'image', text: 'Imagen', caption: null }, previousInboundAt: KNOWN }).skip,
+        'no_match',
     );
 });
 
 test('sin nada que responder dice por qué', () => {
-    assert.deepEqual(decide({ message: text('gracias'), previousInboundAt: KNOWN }), { skip: 'no_match' });
+    assert.equal(decide({ message: text('gracias'), previousInboundAt: KNOWN }).skip, 'no_match');
+});
+
+// --- «Si no entiende» ---------------------------------------------------------
+
+const WITH_FALLBACK = { ...SETTINGS, fallback: { enabled: true, text: 'No te entendí' } };
+
+/**
+ * Una conversación real, mensaje a mensaje, separados `gapMinutes`: lo que
+ * marcaría el worker tras cada respuesta, y `previousInboundAt` con CADA entrante.
+ */
+const converse = (settings, bodies, { start = OPEN, gapMinutes = 11 } = {}) => {
+    let state = {};
+    let welcomedAt = null;
+    let previousInboundAt = null;
+    return bodies.map((body, index) => {
+        const now = new Date(start.getTime() + index * gapMinutes * 60 * 1000);
+        const result = decideAutoReply({ settings, state, welcomedAt, message: text(body), previousInboundAt, lineId: 'l1', now });
+        if (!result.skip) {
+            if (result.claims.welcomed) welcomedAt = now;
+            state = applyBotStateUpdate(state, botStateUpdate(state, result.claims, now));
+        }
+        previousInboundAt = now;
+        return result;
+    });
+};
+
+// El ejemplo de Jonathan (spec § 10). Con 11 minutos entre mensajes, el freno
+// de ráfagas (10 minutos) no entra: lo que calla al bot es haber respondido ya.
+test('la tabla de Jonathan: bienvenida, no entiendo, nada, precio, nada', () => {
+    const turns = converse(WITH_FALLBACK, [
+        'me gusta el café con pan', 'me gusta el café con pan', 'me gusta el café con pan', 'cuál es el precio', 'cuál es el precio',
+    ]);
+
+    assert.deepEqual(turns.map(turn => turn.skip ?? turn.parts), [
+        ['¡Hola!'], ['No te entendí'], 'no_match', ['Cuesta $10'], 'no_match',
+    ]);
+    assert.equal(turns[1].claims.fallback, true);
+    assert.equal(turns[2].explain.fallbackRepeated, true);
+    assert.deepEqual(turns[4].explain.repeatedKeywords, [{ id: 'r-precio', keyword: 'precio' }]);
+});
+
+test('el freno, la pausa y una reacción ganan al no entiendo', () => {
+    const recent = [minutesBefore(OPEN, 1), minutesBefore(OPEN, 2), minutesBefore(OPEN, 3)];
+    const base = { settings: WITH_FALLBACK, message: text('café'), previousInboundAt: KNOWN, welcomedAt: KNOWN };
+
+    assert.deepEqual(decide({ ...base, state: { humanRepliedAt: hoursBefore(OPEN, 1) } }), { skip: 'human' });
+    assert.deepEqual(decide({ ...base, state: { recentReplies: recent } }), { skip: 'burst' });
+    assert.deepEqual(decide({ ...base, message: { type: 'reaction', text: '👍', caption: null } }), { skip: 'ignored_type' });
+});
+
+test('el no entiendo no se suma a otra respuesta', () => {
+    const welcome = decide({ settings: WITH_FALLBACK, message: text('café') });
+    const keyword = decide({ settings: WITH_FALLBACK, message: text('precio'), previousInboundAt: KNOWN });
+    const closed = decide({ settings: WITH_FALLBACK, message: text('café'), previousInboundAt: KNOWN, now: CLOSED });
+
+    assert.deepEqual([welcome.parts, keyword.parts, closed.parts], [['¡Hola!'], ['Cuesta $10'], ['Estamos cerrados']]);
+    for (const result of [welcome, keyword, closed]) assert.equal(result.claims.fallback, false);
+});
+
+test('de noche: fuera de horario y después no entiendo', () => {
+    const settings = { ...WITH_FALLBACK, welcome: { ...WITH_FALLBACK.welcome, enabled: false } };
+    const turns = converse(settings, ['café', 'café con pan', 'café'], { start: CLOSED });
+
+    assert.deepEqual(turns.map(turn => turn.skip ?? turn.parts), [['Estamos cerrados'], ['No te entendí'], 'no_match']);
+});
+
+test('sin algo escrito no hay no entiendo', () => {
+    const known = { settings: WITH_FALLBACK, previousInboundAt: KNOWN, welcomedAt: KNOWN };
+
+    assert.equal(decide({ ...known, message: { type: 'image', text: 'Imagen', caption: null } }).skip, 'no_match');
+    assert.equal(decide({ ...known, message: { type: 'audio', text: 'Nota de voz', caption: null } }).skip, 'no_match');
+    // Lo escrito junto a la foto sí cuenta; la etiqueta automática («Imagen»), nunca.
+    assert.deepEqual(decide({ ...known, message: { type: 'image', text: 'me gusta el café', caption: 'me gusta el café' } }).parts, ['No te entendí']);
+});
+
+test('una configuración sin fallback no responde no entiendo', () => {
+    // Guardada antes del 2026-10-15 y leída con `.lean()`: sin la clave.
+    assert.equal(decide({ message: text('café'), previousInboundAt: KNOWN }).skip, 'no_match');
+});
+
+test('el no entiendo vuelve tras handoffHours', () => {
+    const at = (minutesAgo) => decide({
+        settings: { ...WITH_FALLBACK, handoffHours: 24 },
+        state: { fallbackRepliedAt: minutesBefore(OPEN, minutesAgo) },
+        message: text('café'),
+        previousInboundAt: KNOWN,
+        welcomedAt: KNOWN,
+    });
+
+    assert.equal(at(60).skip, 'no_match');
+    assert.equal(at(24 * 60).skip, 'no_match');
+    assert.deepEqual(at(24 * 60 + 1).parts, ['No te entendí']);
+});
+
+test('explain dice qué salió y qué se calló', () => {
+    const settings = {
+        ...WITH_FALLBACK,
+        keywordRules: [
+            rule('a', ['precio'], 'Cuesta $10'),
+            rule('b', ['valor'], 'Cuesta $10'),
+            rule('off', ['precio'], 'Apagada', { enabled: false }),
+            rule('c', ['envio'], 'Envíos'),
+            rule('d', ['pago'], 'Pagos'),
+            rule('e', ['horario'], 'Horario'),
+            rule('f', ['color'], 'Colores'),
+        ],
+    };
+    const result = decide({
+        settings,
+        state: { keywordRepliedAt: { f: minutesBefore(OPEN, 5) } },
+        message: text('precio, valor, envío, pago, horario y color'),
+        previousInboundAt: KNOWN,
+    });
+
+    // Textos repetidos salen una vez; la apagada no aparece; de las que quedan, tres textos.
+    assert.deepEqual(result.parts, ['Cuesta $10', 'Envíos', 'Pagos']);
+    assert.deepEqual(result.explain.keywords, [
+        { id: 'a', keyword: 'precio' }, { id: 'b', keyword: 'valor' }, { id: 'c', keyword: 'envio' }, { id: 'd', keyword: 'pago' },
+    ]);
+    // Regresión (revisión de Codex del PR 4): al llenarse los tres textos se dejaba
+    // de mirar, y la «f», callada por repetida, no aparecía.
+    assert.deepEqual(result.explain.repeatedKeywords, [{ id: 'f', keyword: 'color' }]);
+    assert.equal(result.explain.welcome, false);
+    assert.equal(result.explain.fallback, false);
+});
+
+test('botStateUpdate marca el no entiendo', () => {
+    const update = botStateUpdate({}, { welcomed: false, outOfHoursKey: null, keywordRuleIds: [], fallback: true }, OPEN);
+    assert.equal(update['bot.fallbackRepliedAt'], OPEN);
+});
+
+// --- Probar como conversación (spec § 10) ------------------------------------
+
+// En la prueba, cada regla es su posición: 'Cuesta $10' es la 0.
+const simulate = (settings, messages, now = OPEN) => simulateConversation({ settings, messages, now });
+const kinds = (turn) => turn.skip ?? turn.parts.map(part => part.kind);
+
+test('simulateConversation reproduce la tabla de Jonathan, sin freno de ráfagas', () => {
+    // Todos en el mismo minuto: con el freno, el quinto sería `burst`.
+    const turns = simulate(WITH_FALLBACK, [
+        'me gusta el café con pan', 'me gusta el café con pan', 'me gusta el café con pan', 'cuál es el precio', 'cuál es el precio',
+    ]);
+
+    assert.deepEqual(turns.map(kinds), [['welcome'], ['fallback'], 'no_match', ['keyword'], 'no_match']);
+    assert.equal(turns[0].reply, '¡Hola!');
+    assert.equal(turns[2].fallbackRepeated, true);
+    assert.deepEqual(turns[3].parts, [{ kind: 'keyword', text: 'Cuesta $10', ruleIndex: 0, keyword: 'precio' }]);
+    assert.deepEqual(turns[4].repeated, [{ ruleIndex: 0, keyword: 'precio' }]);
+    assert.equal(turns[4].reply, null);
+});
+
+test('simulateConversation no frena las ráfagas', () => {
+    const settings = {
+        ...SETTINGS,
+        welcome: { ...SETTINGS.welcome, enabled: false },
+        keywordRules: ['a', 'b', 'c', 'd', 'e'].map(word => rule(word, [word], `Sobre ${word}`)),
+    };
+    const turns = simulate(settings, ['a', 'b', 'c', 'd', 'e']);
+
+    assert.deepEqual(turns.map(turn => turn.reply), ['Sobre a', 'Sobre b', 'Sobre c', 'Sobre d', 'Sobre e']);
+});
+
+test('simulateConversation responde con el interruptor general apagado', () => {
+    const [turn] = simulate({ ...WITH_FALLBACK, enabled: false }, ['hola']);
+    assert.deepEqual(kinds(turn), ['welcome']);
+});
+
+test('simulateConversation de noche: el fuera de horario una vez por cierre', () => {
+    const turns = simulate(SETTINGS, ['hola', 'precio?', 'hola'], CLOSED);
+    assert.deepEqual(turns.map(kinds), [['welcome', 'outOfHours'], ['keyword'], 'no_match']);
+});
+
+test('applyBotStateUpdate deja el estado como lo deja el worker', () => {
+    const state = { keywordRepliedAt: new Map([['a', hoursBefore(OPEN, 5)]]) };
+    const next = applyBotStateUpdate(state, botStateUpdate(state, { welcomed: false, outOfHoursKey: 'k', keywordRuleIds: ['b'], fallback: true }, OPEN));
+
+    assert.deepEqual(next.keywordRepliedAt, { a: hoursBefore(OPEN, 5), b: OPEN });
+    assert.equal(next.outOfHoursNotified, 'k');
+    assert.equal(next.fallbackRepliedAt, OPEN);
+    assert.deepEqual(next.recentReplies, [OPEN]);
 });
 
 test('defaultAutoReplySettings: apagado y con un horario de ejemplo válido', () => {

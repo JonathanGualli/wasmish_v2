@@ -147,6 +147,7 @@ export const useAutoReplyEditor = (
         setHandoffHours: (handoffHours: AutoReplyForm['handoffHours']) => update(f => ({ ...f, handoffHours })),
         setTimezone: (timezone: string) => update(f => ({ ...f, timezone })),
         setWelcome: (change: Partial<AutoReplyForm['welcome']>) => update(f => ({ ...f, welcome: { ...f.welcome, ...change } })),
+        setFallback: (change: Partial<AutoReplyForm['fallback']>) => update(f => ({ ...f, fallback: { ...f.fallback, ...change } })),
         setOutOfHours: (change: Partial<Omit<AutoReplyForm['outOfHours'], 'schedule'>>) =>
             update(f => ({ ...f, outOfHours: { ...f.outOfHours, ...change } })),
         setDay: (day: WeekDay, schedule: DaySchedule) =>

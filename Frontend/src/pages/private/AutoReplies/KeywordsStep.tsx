@@ -155,7 +155,7 @@ const RuleEditor = ({ editor, rule, onRemove }: { editor: AutoReplyEditor; rule:
             />
 
             <div className="flex flex-wrap items-center gap-3">
-                <span className="text-[12.5px] text-brand-muted">Ya respondida, no se repite en esa conversación durante 24 horas.</span>
+                <span className="text-[12.5px] text-brand-muted">Ya respondida, no se repite en esa conversación durante {editor.form.handoffHours} horas.</span>
                 <button type="button" onClick={() => onRemove(rule)}
                     className="ml-auto text-[13.5px] font-semibold text-brand-danger hover:underline cursor-pointer">
                     Borrar regla
