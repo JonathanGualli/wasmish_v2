@@ -32,6 +32,11 @@ export const describeEcho = (echoData, { connectedAt = null } = {}) => {
     return { waMessageId: echoData.id, toPhone, timestamp, entrante };
 };
 
+// El motivo que se guarda cuando Meta retira el acceso sin decir por qué (sin
+// `disconnection_info`): así `Line.disconnectionReason` null queda solo para lo
+// que se desconectó desde Wasmish, y la UI distingue las dos cosas.
+export const UNKNOWN_DISCONNECTION_REASON = 'UNKNOWN';
+
 /**
  * Meta retiró el acceso a un WABA (`account_update` con `PARTNER_REMOVED`):
  * `{ waBusinessId, reason, initiatedBy, at }`, o null si es otra cosa. El WABA

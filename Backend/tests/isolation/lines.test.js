@@ -512,13 +512,14 @@ test('PARTNER_REMOVED del WABA de A: su línea queda desconectada con el motivo,
     assert.equal(lines.body.lines.find(line => line.id === a.first).disconnectionReason, 'PRIMARY_INACTIVITY');
 });
 
-test('PARTNER_REMOVED de un cliente normal con dos líneas, sin motivo: las dos desconectadas, motivo null, sin línea por defecto', async () => {
+test('PARTNER_REMOVED de un cliente normal con dos líneas, sin motivo: las dos desconectadas, motivo UNKNOWN, sin línea por defecto', async () => {
     const a = await twoLines('PRC', '783');
     assert.equal((await postWebhookBody({ entry: [partnerRemoved('waba-PRC', { reason: null })] })).status, 200);
     for (const id of [a.first, a.second]) {
         const line = await lineFor(id);
         assert.equal(line.status, 'disconnected');
-        assert.equal(line.disconnectionReason ?? null, null);
+        // UNKNOWN y no null: null es una desconexión desde Wasmish, y la UI las distingue.
+        assert.equal(line.disconnectionReason, 'UNKNOWN');
     }
     assert.equal((await Account.findById(a.accountId).lean()).defaultLineId, null);
     assert.equal((await User.findById(a.userId).lean()).phoneNumberId, null);

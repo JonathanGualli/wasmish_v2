@@ -6,7 +6,7 @@ import { findAccountOwner } from './account.service.js';
 import { withAccountLock } from './account.lock.service.js';
 import { legacyUserFields, nextDefaultLine, ownerConnection, pickSendingLineId, planConnection, sendingLineFor } from '../utils/line.js';
 import { inLineScope, lineScope } from '../utils/permissions.js';
-import { isStalePartnerRemoval } from '../utils/business.app.js';
+import { UNKNOWN_DISCONNECTION_REASON, isStalePartnerRemoval } from '../utils/business.app.js';
 import {
     CHOOSE_LINE_MESSAGE, DEFAULT_LINE_INACTIVE_MESSAGE, LINE_BUSY_MESSAGE, LINE_ERROR_CODES, LINE_DISCONNECTED_MESSAGE, LINE_NOT_FOUND_MESSAGE, WHATSAPP_NOT_CONNECTED_MESSAGE,
     lineLimitMessage,
@@ -431,7 +431,7 @@ export const disconnectRemovedWaba = async ({ waBusinessId, reason = null, at })
 
                 await finishPendingReplace(waba.accountId);
                 const lines = await Line.find({ accountId: waba.accountId, wabaId: waba._id, status: 'active' }).lean();
-                for (const line of lines) await disconnectLocked(waba.accountId, line, { disconnectionReason: reason });
+                for (const line of lines) await disconnectLocked(waba.accountId, line, { disconnectionReason: reason ?? UNKNOWN_DISCONNECTION_REASON });
                 if (lines.length) await writeLegacyUser(waba.accountId);
                 return { status: 'done', lineIds: lines.map(line => line._id) };
             });
