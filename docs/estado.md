@@ -6,7 +6,17 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En producción
 
-**Versión 1.0.22**, desplegada el 2026-10-15 (etiqueta `v1.0.22`; comprobar con `curl https://wasmish.solventyc.com/api/version`). Lleva:
+**Versión 1.0.23**, desplegada el 2026-10-16 (etiqueta `v1.0.23`; comprobar con `curl https://wasmish.solventyc.com/api/version`). Lleva:
+
+- **Respuestas automáticas (chatbot v1)** (PRs #67 a #73, cada uno con su revisión de Codex; spec `docs/superpowers/specs/2026-10-15-respuestas-automaticas-design.md`, planes `docs/superpowers/plans/2026-10-15-respuestas-automaticas.md` y `2026-10-15-no-entiende-y-conversacion.md`). Detalle en [respuestas-automaticas.md](arquitectura/respuestas-automaticas.md).
+  - **Qué responde:** bienvenida, fuera de horario, palabras clave y «Si no entiende», unidas en un solo mensaje. Se calla tras una respuesta manual (`handoffHours`) y con el freno de 3 respuestas en 10 minutos.
+  - **Cómo sale:** la cola es el propio entrante (`Message.bot`) y la vacía un worker propio, con el mismo envío que el chat (`processMessageSending`). En el chat, esos mensajes llevan la marca «Bot».
+  - **La página** «Respuestas automáticas», con «Probar» como conversación. Toda cuenta empieza con todo apagado: nadie recibe respuestas solas sin que alguien lo encienda.
+  - **Sin probar con Meta de verdad** antes de desplegar (los envíos del bot, con el Meta falso de los tests de aislamiento); la página, en Chrome con datos sembrados (escritorio y teléfono emulado).
+  - **Al desplegar:** se reconstruyen `wasmish-api` y `wasmish-web`. Sin migración ni variables nuevas: la colección `autoreplysettings` y los índices (`auto_reply_queue`, parcial sobre `messages`) se crean al arrancar. En los logs, que el worker arrancó y ningún `uncertain`.
+- **El texto de los botones, centrado** aunque su contenedor mida menos de 42 px (PR #74): antes caía hasta 5 px en el popover de límites del superadmin, el nombre de la línea y los diálogos.
+
+La 1.0.22 (desplegada el 2026-10-15) llevó:
 
 - **Pantallas de carga sin espera y app abierta al momento** (PR #65, con su revisión de Codex; solo frontend). Jonathan vio en producción que con internet rápido se veía un cuadro en blanco y después el skeleton, y al abrir la app siempre la misma página genérica.
   - **Sin la espera de 300 ms ni el mínimo de 400:** el skeleton sale desde el primer momento y se va al llegar los datos.
@@ -52,12 +62,7 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En curso
 
-- **Respuestas automáticas (chatbot v1)** — empezado el 2026-10-15 por Claude. Spec `docs/superpowers/specs/2026-10-15-respuestas-automaticas-design.md`, planes `docs/superpowers/plans/2026-10-15-respuestas-automaticas.md` y `2026-10-15-no-entiende-y-conversacion.md`.
-  Hecho y en `master`: el motor y la configuración (#67, #68), el envío (#69) y la página (#70).
-  - Unidos también los arreglos de la página (#71) y el plan de «Si no entiende» y probar como conversación (#72, spec § 10).
-  - **En PR:** los PRs 4 y 5 del plan juntos («Si no entiende» y probar como conversación, rama `respuestas-automaticas-no-entiende-y-conversacion`). Van en un solo PR porque, unidos con *squash* por separado, el segundo chocaba con el primero en cinco archivos. Codex los revisó antes de abrirlo (1 y 2 puntos), y están aceptados y corregidos.
-  - **Falta:** unir ese PR; probar con Meta de verdad en la cuenta de prueba; el PR de versión (`version-1.0.23`).
-  - **Sin probar:** con Meta de verdad (los envíos del bot, con el Meta falso de los tests de aislamiento); la página, en Chrome con datos sembrados (escritorio y teléfono emulado), no en un teléfono de verdad.
+Nada en curso.
 
 <!-- Formato de una entrada:
 - **<qué>** — rama `<rama>`, PR #<n>, empezado el <fecha> por <Claude|Codex|Jonathan>.
@@ -74,7 +79,7 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
     3. `maxLines: 2` en una cuenta de prueba desde el panel.
   - La **Fase 3** (equipo, roles y acceso por línea) está en producción desde la 1.0.18. **Para encender equipos en una cuenta real** (subir su `maxUsers`): antes, el ensayo de la vuelta atrás con dos usuarios (plan de la Fase 3, «Al terminar»), porque con una imagen anterior a la Fase 3 el agente vería y haría todo; y se enciende primero en la cuenta de prueba de Jonathan. Volver atrás a las imágenes `:1.0.16` solo es seguro mientras ninguna cuenta tenga más de un usuario.
   - Sigue la **Fase 4**: asignar conversaciones («Mías / Sin asignar / Todas») y transferirlas.
-- **Respuestas automáticas (chatbot v1):** en curso (arriba). Después vendrán las mejoras del spec, § 2: «un mensaje por regla», fotos en las respuestas, agrupar ráfagas, reglas por línea, feriados; y más adelante menús con botones o IA.
+- **Respuestas automáticas:** probarlas con Meta de verdad en producción, con la cuenta de prueba de Jonathan. Después, quitar la forma vieja de `POST /api/auto-replies/preview` (`{ settings, text }`), que solo seguía para las pestañas abiertas durante el despliegue de la 1.0.23. Y más adelante, las mejoras del spec, § 2: «un mensaje por regla», fotos en las respuestas, agrupar ráfagas, reglas por línea, feriados; y luego menús con botones o IA.
 - El campo de archivo de cabecera al enviar una plantilla a **un solo contacto** (`SendTemplateDialog` y `NewConversationPanel`); hoy solo existe en las campañas.
 - En la API pública: el campo `header`, la cabecera de texto con variable y las plantillas de carrusel. Toca al cliente de la API: con cuidado.
 - Más adelante: programar campañas para una hora.
