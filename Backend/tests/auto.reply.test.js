@@ -358,6 +358,9 @@ test('explain dice qué salió y qué se calló', () => {
     assert.deepEqual(result.explain.keywords, [
         { id: 'a', keyword: 'precio' }, { id: 'b', keyword: 'valor' }, { id: 'c', keyword: 'envio' }, { id: 'd', keyword: 'pago' },
     ]);
+    // Regresión (revisión de Codex del PR 4): al llenarse los tres textos se dejaba
+    // de mirar, y la «f», callada por repetida, no aparecía.
+    assert.deepEqual(result.explain.repeatedKeywords, [{ id: 'f', keyword: 'color' }]);
     assert.equal(result.explain.welcome, false);
     assert.equal(result.explain.fallback, false);
 });

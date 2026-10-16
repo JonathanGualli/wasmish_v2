@@ -125,6 +125,8 @@ const matchingKeywordRules = (settings, state, message, lineId, now, windowMs) =
     const normalized = normalizeForMatch(matchText);
 
     const { texts, ruleIds, matched, repeated } = empty;
+    // Lleno (tres textos), se sigue mirando solo para contar las calladas por repetidas.
+    let full = false;
     for (const rule of settings.keywordRules ?? []) {
         if (!rule.enabled || !hasText(rule.text)) continue;
         const lineIds = (rule.lineIds ?? []).map(String);
@@ -137,9 +139,13 @@ const matchingKeywordRules = (settings, state, message, lineId, now, windowMs) =
             repeated.push({ id, keyword });
             continue;
         }
+        if (full) continue;
 
         if (!texts.includes(rule.text)) {
-            if (texts.length === KEYWORD_REPLIES_MAX) break;
+            if (texts.length === KEYWORD_REPLIES_MAX) {
+                full = true;
+                continue;
+            }
             texts.push(rule.text);
         }
         if (id) ruleIds.push(id);
