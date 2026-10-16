@@ -46,7 +46,9 @@ export const AutoRepliesPage = () => {
     const query = useAutoReplies();
 
     if (query.isLoading) return <AutoRepliesSkeleton />;
-    if (query.isError || !query.data) {
+    // Con datos ya en pantalla, una recarga fallida (p. ej. al reconectar el SSE)
+    // deja `isError` y conserva `data`: el editor sigue, con lo que se escribió.
+    if (!query.data) {
         return (
             <div className="mx-auto max-w-5xl px-5 sm:px-8 py-8 sm:py-10">
                 <BlankState
@@ -283,12 +285,17 @@ const SectionToggle = ({ editor }: { editor: AutoReplyEditor }) => {
     return (
         <span className="flex-none flex items-center gap-2.5 text-[13.5px] font-semibold text-brand-strong">
             {on ? 'Encendida' : 'Apagada'}
-            <Switch checked={on} label={`${STEP_TITLES[step]} encendida`} onChange={set} />
+            <Switch checked={on} disabled={editor.isSaving} label={`${STEP_TITLES[step]} encendida`} onChange={set} />
         </span>
     );
 };
 
-const StepContent = ({ editor, phone }: { editor: AutoReplyEditor; phone: boolean }) => {
+/** El paso abierto. Mientras se guarda no se edita: la respuesta reemplaza lo que hay en pantalla. */
+const StepContent = ({ editor, phone }: { editor: AutoReplyEditor; phone: boolean }) => (
+    <fieldset disabled={editor.isSaving} className="contents"><StepFields editor={editor} phone={phone} /></fieldset>
+);
+
+const StepFields = ({ editor, phone }: { editor: AutoReplyEditor; phone: boolean }) => {
     switch (editor.step) {
         case 'welcome': return <WelcomeStep editor={editor} exampleBadge={editor.mode === 'wizard' && editor.form.welcome.text.length > 0} />;
         case 'outOfHours': return <OutOfHoursStep editor={editor} />;

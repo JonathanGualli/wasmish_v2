@@ -7,6 +7,9 @@ import { clockIn, matchedKeyword, toPayload } from "../../../utils/autoReplyForm
 import { SkeletonBox } from "../../../components/Skeleton/Skeleton";
 import type { AutoReplyEditor } from "./useAutoReplyEditor";
 
+/** El mismo límite que `autoReplyPreviewSchema` en el backend. */
+const PREVIEW_TEXT_MAX = 1000;
+
 interface Reason {
     ok: boolean;
     title: string;
@@ -31,8 +34,12 @@ export const TestPanel = ({ editor }: { editor: AutoReplyEditor }) => {
     const preview = usePreviewAutoReply(settings, tested, !blocked);
     const clock = clockIn(form.timezone);
 
+    // Probar otra vez lo mismo vuelve a preguntar: la hora puede haber cambiado (abierto o cerrado).
     const send = () => {
-        if (message.trim()) setTested(message.trim());
+        const text = message.trim();
+        if (!text) return;
+        if (text === tested) preview.refetch();
+        else setTested(text);
     };
 
     const reasons = useMemo((): Reason[] => {
@@ -73,6 +80,7 @@ export const TestPanel = ({ editor }: { editor: AutoReplyEditor }) => {
                 <textarea
                     ref={inputRef}
                     rows={1}
+                    maxLength={PREVIEW_TEXT_MAX}
                     value={message}
                     onChange={(event) => setMessage(event.target.value)}
                     onKeyDown={(event) => {

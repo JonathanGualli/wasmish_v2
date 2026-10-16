@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useSaveAutoReplies } from "../../../hooks/useAutoReplies";
 import type { AutoRepliesResponse, DaySchedule, WeekDay } from "../../../models/autoReply.model";
 import {
-    EDIT_STEPS, WIZARD_STEPS, formIssues, isDirty, issueCounts, newRule, toForm, toPayload, totalIssues, wizardStart,
+    EDIT_STEPS, WIZARD_STEPS, draftOf, formIssues, isDirty, issueCounts, newRule, toForm, toPayload, totalIssues, wizardStart,
     type AutoReplyForm, type EditableRule, type StepKey,
 } from "../../../utils/autoReplyForm";
 
@@ -17,6 +17,16 @@ export type EditorMode = 'intro' | 'wizard' | 'tabs';
  *   luego» guarda lo hecho apagado y la próxima vez abre en pestañas.
  * - `tabs`: los mismos pasos como pestañas.
  */
+/**
+ * Lo guardado, con las claves de pantalla de lo enviado (misma posición): así
+ * la regla que estaba abierta sigue abierta aunque estrene id. Mientras se
+ * guarda no se puede editar (`isSaving`), así que no hay nada más que conservar.
+ */
+const savedForm = (sent: AutoReplyForm, response: AutoRepliesResponse): AutoReplyForm => {
+    const fresh = toForm(response);
+    return { ...fresh, keywordRules: fresh.keywordRules.map((rule, index) => ({ ...rule, key: sent.keywordRules[index]?.key ?? rule.key })) };
+};
+
 /** `switch`: el interruptor general, que se guarda solo; `all`: «Guardar» y el asistente. */
 export type SaveKind = 'all' | 'switch';
 
@@ -66,7 +76,7 @@ export const useAutoReplyEditor = (
         }
         mutation.mutate(toPayload(next), {
             onSuccess: (response) => {
-                setForm(toForm(response));
+                setForm(savedForm(next, response));
                 setShowIssues(false);
                 setSaveBlocked(false);
                 afterSave?.(response);
@@ -106,7 +116,7 @@ export const useAutoReplyEditor = (
         },
         previous: () => setStep(WIZARD_STEPS[Math.max(WIZARD_STEPS.indexOf(step) - 1, 0)]),
         /** «Terminar luego»: lo hecho, guardado y apagado. */
-        finishLater: () => save({ ...form, enabled: false }, toTabs),
+        finishLater: () => save(draftOf(form), toTabs),
         /** El último paso del asistente. */
         turnOnAndSave: () => save({ ...form, enabled: true }, toTabs),
         saveAll: () => save(form),

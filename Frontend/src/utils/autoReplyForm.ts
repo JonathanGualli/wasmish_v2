@@ -102,6 +102,26 @@ export const wizardStart = (form: AutoReplyForm, { example, businessName }: { ex
     };
 };
 
+/**
+ * «Terminar luego»: lo hecho, apagado y guardable. Lo que quedó a medias se
+ * apaga (una respuesta sin texto, el fuera de horario sin días abiertos) y una
+ * regla sin frases se quita, porque el backend no la admite. Lo que no se puede
+ * arreglar solo (un tramo mal escrito, un texto de más de 800) sigue marcándose.
+ */
+export const draftOf = (form: AutoReplyForm): AutoReplyForm => ({
+    ...form,
+    enabled: false,
+    welcome: { ...form.welcome, enabled: form.welcome.enabled && form.welcome.text.trim().length > 0 },
+    outOfHours: {
+        ...form.outOfHours,
+        enabled: form.outOfHours.enabled && form.outOfHours.text.trim().length > 0
+            && WEEK_DAYS.some(day => !form.outOfHours.schedule[day].closed),
+    },
+    keywordRules: form.keywordRules
+        .filter(rule => rule.keywords.length > 0)
+        .map(rule => ({ ...rule, enabled: rule.enabled && rule.text.trim().length > 0 })),
+});
+
 // ---------------------------------------------------------------------------
 // Errores, campo a campo
 // ---------------------------------------------------------------------------

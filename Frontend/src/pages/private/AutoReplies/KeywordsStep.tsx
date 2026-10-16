@@ -52,6 +52,8 @@ export const KeywordsStep = ({ editor, phone }: { editor: AutoReplyEditor; phone
                         aria-current={active || undefined}
                         onClick={() => { setSelectedKey(rule.key); setPhoneEditing(true); }}
                         onKeyDown={(event) => {
+                            // Solo la fila: Enter o Espacio en su interruptor lo encienden, no la eligen.
+                            if (event.target !== event.currentTarget) return;
                             if (event.key === 'Enter' || event.key === ' ') {
                                 event.preventDefault();
                                 setSelectedKey(rule.key);
