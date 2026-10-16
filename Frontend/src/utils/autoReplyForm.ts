@@ -78,13 +78,14 @@ const open = (...ranges: { start: string; end: string }[]): DaySchedule => ({ cl
 const closed = (): DaySchedule => ({ closed: true, ranges: [] });
 
 /**
- * «Empezar con un ejemplo»: una bienvenida y un horario de lunes a viernes ya
+ * «Empezar con un ejemplo»: una bienvenida (sin nombre) y un horario de lunes a viernes ya
  * escritos, todo apagado hasta el último paso. «Desde cero» deja los textos
  * vacíos, pero las respuestas encendidas: el asistente pide escribirlas o apagarlas.
  */
-export const wizardStart = (form: AutoReplyForm, { example, businessName }: { example: boolean; businessName?: string }): AutoReplyForm => {
-    const name = businessName?.trim();
-    const welcomeText = `Hola, gracias por escribir${name ? ` a ${name}` : ''}. En un momento te atiende alguien del equipo.`;
+export const wizardStart = (form: AutoReplyForm, { example }: { example: boolean }): AutoReplyForm => {
+    // Sin nombre: la cuenta nace con el de su dueño, no con el del negocio, y
+    // un ejemplo que nadie edita tiene que seguir sirviendo.
+    const welcomeText = 'Hola, gracias por escribirnos. En un momento te atiende alguien del equipo.';
     const workday = () => open(range('08:00', '13:00'), range('14:30', '18:00'));
     return {
         ...form,

@@ -98,7 +98,7 @@ export const useAutoReplyEditor = (
         saveBlocked: saveBlocked && issueTotal > 0,
         goTo,
 
-        startWizard: (options: { example: boolean; businessName?: string }) => {
+        startWizard: (options: { example: boolean }) => {
             setForm(current => wizardStart(current, options));
             setMode('wizard');
             setStep('welcome');
