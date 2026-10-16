@@ -53,5 +53,5 @@ export interface Message {
   /** Quién lo envió desde el chat (Fase 3); el nombre es el de ese momento. */
   sentBy?: { id: string; name: string | null } | null;
   /** De dónde salió un saliente: el chat, una campaña o la API. `null` en los antiguos. */
-  origin?: { kind: 'chat' | 'api' } | { kind: 'campaign'; campaignName: string | null } | null;
+  origin?: { kind: 'chat' | 'api' | 'bot' } | { kind: 'campaign'; campaignName: string | null } | null;
 }
