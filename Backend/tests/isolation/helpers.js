@@ -18,6 +18,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import mongoose from 'mongoose';
+import axios from 'axios';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 
 // La config se lee al importar: hay que fijarla antes del `import` de la app.
@@ -69,6 +70,19 @@ whatsappApi.defaults.adapter = async (config) => {
     }
     return { data: reply.data, status: reply.status ?? 200, statusText: 'OK', headers: {}, config, request: {} };
 };
+// La descarga de un archivo de Meta (`downloadMedia`) no va por `whatsappApi`
+// sino por `axios` directo (el host es lookaside.fbsbx.com). Aquí tampoco sale
+// a la red: una URL de `https://lookaside.test/` devuelve un PNG; cualquier
+// otra lanza y queda en `unexpectedMetaCalls`.
+export const FAKE_MEDIA_URL = 'https://lookaside.test/archivo';
+axios.defaults.adapter = async (config) => {
+    if (String(config.url).startsWith('https://lookaside.test/')) {
+        return { data: PNG, status: 200, statusText: 'OK', headers: {}, config, request: {} };
+    }
+    unexpectedMetaCalls.push({ method: config.method, url: config.url });
+    throw new Error(`Descarga no prevista en un test: ${config.url}`);
+};
+
 // Servicio de push falso, como Meta: ningún aviso sale a la red. Apunta cada
 // envío (`pushCalls`: endpoint, aviso y opciones) y responde lo que diga
 // `onPush(responder)`; sin respondedor, como un servicio de push que lo aceptó.
@@ -119,6 +133,18 @@ after(async () => {
 
 // La firma de un PNG y poco más: basta para pasar la comprobación de formato.
 export const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+
+/**
+ * Las escrituras de Mongo que hace `fn` (`{ collection, method, query, doc }`),
+ * con `mongoose.set('debug')`: para contar cuántas veces se hizo algo (la pausa
+ * del bot de un eco, por ejemplo), que mirar el estado final no distingue.
+ */
+export const recordQueries = async (fn) => {
+    const log = [];
+    mongoose.set('debug', (collection, method, query, doc) => { log.push({ collection, method, query, doc }); });
+    try { await fn(); } finally { mongoose.set('debug', false); }
+    return log;
+};
 
 const writeMedia = async (file) => {
     const fullPath = path.join(process.env.MEDIA_DIR, file);
@@ -268,16 +294,26 @@ export const ANONYMOUS = { token: '' };
  * (como `verifyWebhookSignature` espera). `value` es el de un solo cambio, sin
  * `metadata`: la pone `phoneNumberId`.
  */
-export const postWebhook = async (phoneNumberId, value) => {
-    const body = JSON.stringify({ entry: [{ changes: [{ value: { metadata: { phone_number_id: phoneNumberId }, ...value } }] }] });
-    const signature = 'sha256=' + crypto.createHmac('sha256', process.env.META_APP_SECRET).update(body).digest('hex');
+/** Firma y manda un cuerpo de webhook entero (varias `entry` y `changes` en una petición). */
+export const postWebhookBody = async (body) => {
+    const raw = JSON.stringify(body);
+    const signature = 'sha256=' + crypto.createHmac('sha256', process.env.META_APP_SECRET).update(raw).digest('hex');
     const response = await fetch(`${baseUrl}/webhook`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-hub-signature-256': signature },
-        body,
+        body: raw,
     });
     return { status: response.status };
 };
+
+export const postWebhook = (phoneNumberId, value) =>
+    postWebhookBody({ entry: [{ changes: [{ value: { metadata: { phone_number_id: phoneNumberId }, ...value } }] }] });
+
+/** Lo que el negocio respondió desde la app de WhatsApp Business (`smb_message_echoes`). */
+export const postEcho = (phoneNumberId, echoes) =>
+    postWebhookBody({ entry: [{ changes: [{ field: 'smb_message_echoes', value: {
+        messaging_product: 'whatsapp', metadata: { phone_number_id: phoneNumberId }, message_echoes: echoes,
+    } }] }] });
 
 /**
  * Una conexión SSE abierta con la sesión de `account`. `waitFor(text, ms)` se
@@ -300,6 +336,8 @@ export const openStream = async (account) => {
             }
         } catch { /* cerrada */ }
     })();
+    // Cuántas veces llegó `text` hasta ahora (un evento repetido se ve aquí).
+    const count = (text) => received.split(text).length - 1;
     const waitFor = async (text, ms) => {
         const deadline = Date.now() + ms;
         while (Date.now() < deadline) {
@@ -311,7 +349,7 @@ export const openStream = async (account) => {
     const close = async () => { controller.abort(); await pump; };
     // El servidor la registra al recibirla: se espera a su primer comentario.
     await waitFor(': connected', 2000);
-    return { waitFor, close };
+    return { waitFor, count, close };
 };
 
 /** Ni la marca ni ningún id de `owner` aparecen en la respuesta. */

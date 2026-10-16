@@ -21,3 +21,9 @@ test('messageSender: quién lo envió desde el chat, con el nombre copiado al en
     assert.deepEqual(messageSender({ sentBy: 'u1' }), { id: 'u1', name: null });
     assert.equal(messageSender({}), null);
 });
+
+test('lo respondido desde la app de WhatsApp Business es su propio origen, sin persona', () => {
+    const msg = { origin: 'businessApp' };
+    assert.deepEqual(messageOrigin(msg), { kind: 'businessApp' });
+    assert.equal(messageSender(msg), null);
+});

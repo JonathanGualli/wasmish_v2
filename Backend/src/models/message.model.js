@@ -156,7 +156,8 @@ const messageSchema = new mongoose.Schema({
     // entrantes y los anteriores al campo (ver `messageOrigin`).
     origin: {
         type: String,
-        enum: ['chat', 'campaign', 'api', 'bot', null],
+        // 'businessApp': respondido desde la app de WhatsApp Business (coexistencia).
+        enum: ['chat', 'campaign', 'api', 'bot', 'businessApp', null],
         default: null,
     },
     bot: {

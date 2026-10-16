@@ -4,8 +4,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    seedAccount, seedMember, connectWhatsapp, postWebhook, openStream, Contact, Conversation, Line, Message, User,
+    seedAccount, seedMember, connectWhatsapp, postWebhook, postWebhookBody, postEcho, openStream, recordQueries, onMeta,
+    FAKE_MEDIA_URL, Contact, Conversation, Line, Message, User,
 } from './helpers.js';
+
+const { disconnectLine } = await import('../../src/services/line.service.js');
 
 const a = await seedAccount('A', { seq: 1 });
 const b = await seedAccount('B', { seq: 2 });
@@ -268,4 +271,149 @@ test('un acuse que llega por el número de B no toca un mensaje de A ni se avisa
     } finally {
         await stream.close();
     }
+});
+
+
+// --- Coexistencia: lo que el negocio responde desde la app de WhatsApp Business ---
+
+const nowSeconds = () => Math.floor(Date.now() / 1000);
+let echoSeq = 0;
+const echoOf = ({ to, body = 'Respondido desde la app', ts = nowSeconds(), id = `wamid.eco.${Date.now()}.${++echoSeq}`, ...rest } = {}) =>
+    ({ from: '15550000001', to, id, timestamp: String(ts), type: 'text', text: { body }, ...rest });
+const inboundAt = (from, body, ts) => ({
+    contacts: [{ profile: { name: 'Cliente de prueba' }, wa_id: from }],
+    messages: [{ from, id: `wamid.in.${Date.now()}.${++echoSeq}`, timestamp: String(ts), type: 'text', text: { body } }],
+});
+const conversationOf = (account, phone) => Conversation.findOne({ userId: account.accountId, contactPhone: phone }).lean();
+const pauseWrites = (log) => log.filter(entry => entry.collection === 'conversations'
+    && entry.doc?.$set?.['bot.humanRepliedAt'] !== undefined).length;
+
+test('eco a un contacto nuevo: crea el contacto y la conversación, sin abrir la ventana', async () => {
+    const ts = nowSeconds();
+    const res = await postEcho(A_NUMBER, [echoOf({ to: '593990007001', body: 'Hola, te escribo desde la app', ts })]);
+    assert.equal(res.status, 200);
+    assert.ok(await Contact.exists({ userId: a.accountId, phone: '593990007001' }));
+    const conversation = await conversationOf(a, '593990007001');
+    assert.ok(conversation);
+    assert.equal(conversation.lastMessage, 'Hola, te escribo desde la app');
+    assert.equal(conversation.lastMessageAt.getTime(), ts * 1000);
+    assert.equal(conversation.lastInboundAt ?? null, null, 'responder desde la app no abre la ventana');
+    const message = await Message.findOne({ conversationId: conversation._id }).lean();
+    assert.equal(message.direction, 'outbound');
+    assert.equal(message.sender, 'me');
+    assert.equal(message.origin, 'businessApp');
+    assert.equal(message.sentBy ?? null, null);
+});
+
+test('eco con foto: se guarda con su archivo', async () => {
+    onMeta(async (config) => (config.url === '/7001001'
+        ? { data: { url: FAKE_MEDIA_URL, mime_type: 'image/png', file_size: 12 } } : undefined));
+    const res = await postEcho(A_NUMBER, [echoOf({ to: '593990007002', type: 'image', text: undefined, image: { id: '7001001', mime_type: 'image/png', caption: 'El horario' } })]);
+    onMeta(null);
+    assert.equal(res.status, 200);
+    const message = await Message.findOne({ conversationId: (await conversationOf(a, '593990007002'))._id }).lean();
+    assert.equal(message.text, 'El horario');
+    assert.ok(message.mediaFile, 'el eco con foto no guardó el archivo');
+});
+
+// Regresión que vigila: dos entregas a la vez del mismo eco pausaban al bot dos veces.
+test('dos entregas simultáneas del mismo eco: un mensaje, una pausa y un solo SSE de cada tipo', async () => {
+    const stream = await openStream(a);
+    try {
+        const echo = echoOf({ to: '593990007003' });
+        const log = await recordQueries(() => Promise.all([postEcho(A_NUMBER, [echo]), postEcho(A_NUMBER, [echo])]));
+        assert.equal(await Message.countDocuments({ waMessageId: echo.id }), 1);
+        assert.equal(pauseWrites(log), 1, 'el bot se pausó más de una vez');
+        assert.ok(await stream.waitFor('event: conversation_updated', 2000));
+        await new Promise(resolve => setTimeout(resolve, 200));
+        assert.equal(stream.count('event: message_created'), 1);
+        assert.equal(stream.count('event: conversation_updated'), 1);
+    } finally {
+        await stream.close();
+    }
+});
+
+test('un eco con el id de un mensaje ya enviado desde Wasmish no crea otro ni pausa', async () => {
+    await postEcho(A_NUMBER, [echoOf({ to: '593990007004' })]);
+    const conversation = await conversationOf(a, '593990007004');
+    await Message.create({ conversationId: conversation._id, direction: 'outbound', sender: 'me', waMessageId: 'wamid.ya.enviado', text: 'Desde Wasmish', origin: 'chat' });
+    const log = await recordQueries(() => postEcho(A_NUMBER, [echoOf({ to: '593990007004', id: 'wamid.ya.enviado' })]));
+    assert.equal(await Message.countDocuments({ waMessageId: 'wamid.ya.enviado' }), 1);
+    assert.equal(pauseWrites(log), 0);
+});
+
+test('no leídos: el eco los pone en cero salvo que haya un entrante más nuevo; la vista previa no retrocede', async () => {
+    const t = nowSeconds();
+    // Entrantes anteriores al eco → en cero.
+    await postWebhook(A_NUMBER, inboundAt('593990007005', 'uno', t - 120));
+    await postWebhook(A_NUMBER, inboundAt('593990007005', 'dos', t - 60));
+    await postEcho(A_NUMBER, [echoOf({ to: '593990007005', ts: t })]);
+    assert.equal((await conversationOf(a, '593990007005')).unreadCount, 0);
+
+    // Un entrante posterior al eco → se conserva el contador, y el eco viejo no cambia la vista previa.
+    await postWebhook(A_NUMBER, inboundAt('593990007006', 'uno', t - 60));
+    await postWebhook(A_NUMBER, inboundAt('593990007006', 'después', t + 60));
+    await postEcho(A_NUMBER, [echoOf({ to: '593990007006', body: 'respuesta vieja', ts: t })]);
+    const conversation = await conversationOf(a, '593990007006');
+    assert.equal(conversation.unreadCount, 2);
+    assert.equal(conversation.lastMessage, 'después');
+});
+
+test('ediciones y eliminaciones desde la app: nada guardado, 200', async () => {
+    const res = await postEcho(A_NUMBER, [
+        echoOf({ to: '593990007007', type: 'edit', text: undefined, edit: {} }),
+        echoOf({ to: '593990007007', type: 'revoke', text: undefined, revoke: {} }),
+    ]);
+    assert.equal(res.status, 200);
+    assert.equal(await Contact.exists({ userId: a.accountId, phone: '593990007007' }), null);
+});
+
+test('el eco llega por SSE a A, no a B, y en la cuenta EQ no al agente sin acceso a esa línea', async () => {
+    const streamA = await openStream(a);
+    const streamB = await openStream(b);
+    const ownerEq = await openStream(team);
+    const agentStream = await openStream(agentEq);
+    try {
+        const body = `eco-sse-${Date.now()}`;
+        await postEcho(A_NUMBER, [echoOf({ to: '593990007008', body })]);
+        assert.ok(await streamA.waitFor(body, 2000));
+        assert.ok(await streamA.waitFor('event: conversation_updated', 1000));
+        assert.equal(await streamB.waitFor(body, 300), false);
+
+        const bodyEq = `eco-eq-${Date.now()}`;
+        await postEcho('702', [echoOf({ to: '593990007009', body: bodyEq })]);
+        assert.ok(await ownerEq.waitFor(bodyEq, 2000));
+        assert.equal(await agentStream.waitFor(bodyEq, 300), false, 'el agente sin acceso a la línea 702 vio el eco');
+    } finally {
+        await Promise.all([streamA.close(), streamB.close(), ownerEq.close(), agentStream.close()]);
+    }
+});
+
+test('un eco anterior a la conexión de la línea: nada guardado', async () => {
+    const line = await Line.findOne({ accountId: a.accountId, phoneNumberId: A_NUMBER }).lean();
+    const ts = Math.floor(line.connectedAt.getTime() / 1000) - 3600;
+    await postEcho(A_NUMBER, [echoOf({ to: '593990007010', ts })]);
+    assert.equal(await Contact.exists({ userId: a.accountId, phone: '593990007010' }), null);
+});
+
+// Regresión que vigila: un número que pasó a otra cuenta recibía ahí un eco viejo de la anterior.
+test('un número que pasó de una cuenta a otra: un eco anterior a la conexión nueva no entra en ninguna', async () => {
+    const c = await seedAccount('EC', { seq: 61 });
+    const d = await seedAccount('ED', { seq: 62 });
+    const { lineId } = await connectWhatsapp(c, { phoneNumberId: '761' });
+    const before = nowSeconds() - 30;
+    await disconnectLine(c.accountId, lineId);
+    await connectWhatsapp(d, { phoneNumberId: '761' });
+    await postEcho('761', [echoOf({ to: '593990007011', ts: before })]);
+    assert.equal(await Contact.exists({ userId: { $in: [c.accountId, d.accountId] }, phone: '593990007011' }), null);
+});
+
+test('un eco roto en un lote con un entrante: el entrante se guarda y la respuesta es 200', async () => {
+    const res = await postWebhookBody({ entry: [{ changes: [{ value: {
+        metadata: { phone_number_id: A_NUMBER },
+        ...inboundAt('593990007012', 'el entrante del lote', nowSeconds()),
+        message_echoes: [null, { id: 'wamid.sin.destino' }],
+    } }] }] });
+    assert.equal(res.status, 200);
+    assert.ok(await Message.exists({ text: 'el entrante del lote' }));
 });

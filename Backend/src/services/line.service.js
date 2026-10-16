@@ -111,7 +111,8 @@ export const findInboundLine = async (phoneNumberId) => {
     const line = await Line.findOne({ phoneNumberId, status: 'active' }).lean();
     if (line) {
         const waba = line.wabaId ? await Waba.findById(line.wabaId).lean() : null;
-        return { accountId: line.accountId, lineId: line._id, phoneNumberId, tokenWhatsapp: waba?.tokenWhatsapp ?? null };
+        // `connectedAt`: un eco de la app anterior a esta conexión no es de ella (`describeEcho`).
+        return { accountId: line.accountId, lineId: line._id, phoneNumberId, tokenWhatsapp: waba?.tokenWhatsapp ?? null, connectedAt: line.connectedAt ?? null };
     }
     if (await Line.exists({ phoneNumberId })) return null;
 
@@ -120,7 +121,7 @@ export const findInboundLine = async (phoneNumberId) => {
     console.error('Webhook por la reserva de User: el número no tiene línea', {
         accountId: String(owner.accountId), phoneNumberId,
     });
-    return { accountId: owner.accountId, lineId: null, phoneNumberId, tokenWhatsapp: owner.tokenWhatsapp ?? null };
+    return { accountId: owner.accountId, lineId: null, phoneNumberId, tokenWhatsapp: owner.tokenWhatsapp ?? null, connectedAt: null };
 };
 
 /**

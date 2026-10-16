@@ -19,6 +19,9 @@ import { findInboundLine, rememberDisplayPhoneNumber } from '../services/line.se
 import { notifyInbound } from '../services/push.service.js';
 import { buildAutoReplyJob } from '../services/auto.reply.service.js';
 import { wakeAutoReplyWorker } from '../workers/auto.reply.worker.js';
+import { markHumanReply } from '../services/auto.reply.service.js';
+import { describeEcho } from '../utils/business.app.js';
+import { serializeMessage } from './chat.controller.js';
 
 // Baja el adjunto y lo deja en disco. Devuelve SIEMPRE un objeto: si algo falla
 // —token caducado, archivo enorme, Meta caída— sale con mediaFile en null y el
@@ -235,6 +238,88 @@ const procesarEntrante = async (inbound, messageData, contacts) => {
     });
 };
 
+// Procesa UN eco: lo que el negocio respondió desde la app de WhatsApp Business
+// (coexistencia, `smb_message_echoes`). Es un saliente más de la conversación,
+// marcado `origin: 'businessApp'`. El orden importa (spec de la coexistencia, § 4):
+// guardar el mensaje es la reclamación (el índice único de `waMessageId`); solo
+// quien la gana pausa al bot, baja el archivo, toca la conversación y avisa por
+// SSE. Sin aviso push: lo escribió el propio negocio.
+const procesarEco = async (inbound, echoData) => {
+    const eco = describeEcho(echoData, { connectedAt: inbound.connectedAt });
+    if (!eco) return;
+    const { waMessageId, toPhone, timestamp, entrante } = eco;
+
+    // El `exists` ahorra el trabajo de un reintento; la garantía es el índice único.
+    if (await Message.exists({ waMessageId })) return;
+
+    // Meta solo manda el teléfono del cliente, sin BSUID: un contacto que en
+    // Wasmish solo tiene BSUID no se puede reconocer y se crea otro (limitación
+    // documentada en el spec).
+    const contact = await resolveContact(inbound.accountId, { phone: toPhone }, { source: 'inbound' });
+    const conversation = await findOrCreateConversation({ userId: inbound.accountId, contact, line: inbound });
+
+    let message;
+    try {
+        message = await Message.create({
+            conversationId: conversation._id,
+            direction: 'outbound',
+            sender: 'me',
+            origin: 'businessApp',
+            waMessageId,
+            type: entrante.type,
+            text: entrante.text,
+            mediaId: entrante.mediaId,
+            mimeType: entrante.mimeType,
+            caption: entrante.caption,
+            timestamp,
+            status: 'sent',
+        });
+    } catch (error) {
+        // Otra entrega del mismo eco ya lo guardó: ella hace el resto.
+        if (error.code === 11000) return;
+        throw error;
+    }
+
+    // Una persona respondió: el bot se calla, y cuanto antes (antes de bajar nada).
+    await markHumanReply(conversation._id);
+
+    const adjunto = await descargarAdjunto(inbound, entrante);
+    if (adjunto.mediaFile) {
+        Object.assign(message, {
+            mediaFile: adjunto.mediaFile, mediaFilename: adjunto.mediaFilename,
+            mediaSize: adjunto.mediaSize, mimeType: adjunto.mimeType,
+        });
+        await Message.updateOne({ _id: message._id }, { $set: {
+            mediaFile: adjunto.mediaFile, mediaFilename: adjunto.mediaFilename,
+            mediaSize: adjunto.mediaSize, mimeType: adjunto.mimeType,
+        } });
+    }
+
+    // La conversación nunca retrocede: Meta no garantiza el orden. La vista
+    // previa avanza si el eco es más nuevo o si la conversación acaba de nacer
+    // (sin vista previa, con `lastMessageAt` = ahora). Los no leídos se ponen en
+    // cero solo si no llegó un entrante después del eco.
+    await Conversation.updateOne(
+        { _id: conversation._id, $or: [{ lastMessage: { $in: ['', null] } }, { lastMessageAt: { $lt: timestamp } }] },
+        { $set: { lastMessage: entrante.text, lastMessageAt: timestamp } },
+    );
+    await Conversation.updateOne(
+        { _id: conversation._id, $or: [{ lastInboundAt: null }, { lastInboundAt: { $lte: timestamp } }] },
+        { $set: { unreadCount: 0 } },
+    );
+    const { unreadCount = 0 } = await Conversation.findById(conversation._id).select('unreadCount').lean() ?? {};
+
+    const meta = { lineId: conversation.lineId ?? null };
+    sendToAccount(String(inbound.accountId), 'message_created', serializeMessage(message), meta);
+    sendToAccount(String(inbound.accountId), 'conversation_updated', { id: String(conversation._id), unreadCount }, meta);
+
+    // Sin el texto, como los entrantes.
+    console.log('Eco de la app de WhatsApp Business guardado:', {
+        id: String(message._id), conversationId: String(conversation._id), type: message.type,
+        longitud: message.text.length, waMessageId,
+    });
+};
+
 // Avisa a la UI de que un contacto se dio de baja o de alta de la publicidad.
 // La ficha y la lista de Contactos se refrescan con él.
 const avisarPreferencia = (inbound, contact) => {
@@ -421,6 +506,21 @@ export const handleWebhook = async (req, res) => {
                         console.error("Entrante descartado por error:", {
                             waMessageId: messageData?.id,
                             type: messageData?.type,
+                            error: error.message,
+                        });
+                    }
+                }
+
+                // Lo que el negocio respondió desde la app de WhatsApp Business
+                // (coexistencia). Mismo criterio: un eco roto no tumba el lote.
+                const echoes = value?.message_echoes ?? [];
+                for (const echoData of echoes) {
+                    try {
+                        await procesarEco(inbound, echoData);
+                    } catch (error) {
+                        console.error("Eco descartado por error:", {
+                            waMessageId: echoData?.id,
+                            type: echoData?.type,
                             error: error.message,
                         });
                     }

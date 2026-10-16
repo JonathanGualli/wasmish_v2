@@ -11,6 +11,7 @@ Lo que entra desde Meta: firma, estados de los mensajes, tipos de mensaje, adjun
 - [Servir los adjuntos (`GET /api/media/:id`)](#servir-los-adjuntos-get-apimediaid)
 - [`caption` vs `text`](#caption-vs-text)
 - [Webhook entrante (`webhook.controller.js`)](#webhook-entrante-webhookcontrollerjs)
+- [Lo que se responde desde la app de WhatsApp Business (`procesarEco`)](#lo-que-se-responde-desde-la-app-de-whatsapp-business-procesareco)
 
 ---
 
@@ -45,3 +46,16 @@ El webhook trae también una `url` ya resuelta, pero **caduca en horas** mientra
 - **Quién escribe sale de `value.contacts`**, no solo de `messages[].from`: `describeInboundContact` casa el perfil por teléfono o BSUID (con varios remitentes en un lote, coger el primero pondría el nombre de otra persona). Un entrante **sin teléfono ni BSUID** se descarta con un `warn`. Antes, uno sin teléfono reventaba al crear la conversación (`contactPhone` era `required`) y el mensaje se perdía.
 - La conversación nueva (`findOrCreateConversation`) se crea con **`unreadCount: 0`**, no 1: el `+1` de más abajo corre también para ella y el primer mensaje de un contacto nuevo salía con badge 2. Si Meta revela el teléfono de alguien que antes escribió solo con usuario, se copia a `contactPhone`. Es **una por contacto y línea** (Fase 2b): se busca y se crea dentro de la línea que recibe (`line`, el resultado de `findInboundLine`), y **nunca** se devuelve la de otra línea, porque su historial y su ventana son de ese número. Así, un contacto que tenía conversación en un número anterior estrena una en el actual. `lineId` es `null` solo por la reserva, y lo pone la siguiente `migrate:lines`. Una conversación existente no cambia de línea.
 - **El trabajo de las respuestas automáticas** (2026-10-15). Si la cuenta las tiene encendidas, el entrante se crea con `Message.bot` (`buildAutoReplyJob`, que nunca lanza) y, después del SSE, pasa a `pending` y despierta al worker, en su propio `try/catch`: si falla, el barrido lo recoge a los 30 s. El webhook no espera la respuesta → [respuestas-automaticas.md](respuestas-automaticas.md#la-cola-el-propio-entrante-messagebot).
+
+### Lo que se responde desde la app de WhatsApp Business (`procesarEco`)
+
+Con la **coexistencia** (2026-10-16; spec `docs/superpowers/specs/2026-10-16-coexistencia-design.md`), un número sigue en la app de WhatsApp Business y lo que el negocio responde desde ella llega como **eco**: el campo `smb_message_echoes` del webhook (`value.message_echoes`, con `metadata.phone_number_id`). Según Meta, `type` es `text`, `image`, `video`, `document`, `edit` o `revoke`; el cliente va en `to` (solo el teléfono, sin BSUID) y `timestamp` es la hora del webhook.
+
+- **Qué se guarda** (`describeEcho`, `utils/business.app.js`): se descartan los ecos sin `id` o sin `to`, las ediciones y eliminaciones (`edit`, `revoke`: no se aplican en esta versión) y los **anteriores a la conexión de la línea** (`findInboundLine` devuelve `connectedAt`): un número que pasó a otra cuenta no recibe ahí ecos viejos de la anterior. Una línea desconectada no recibe ecos (`findInboundLine` solo encuentra las activas).
+- **El orden de `procesarEco`:** el contacto por el teléfono (`resolveContact`; uno que solo tiene BSUID no se reconoce y se crea otro: limitación conocida) → su conversación en esa línea → **`Message.create` sin el archivo**, que es la reclamación: el índice único de `waMessageId` hace que, de dos entregas a la vez, una sola siga; la otra sale con E11000 **sin ningún efecto** → `markHumanReply` (el bot se calla, antes de bajar nada) → `descargarAdjunto` y el archivo en el mensaje → la conversación → SSE.
+- **El mensaje:** `direction: 'outbound'`, `sender: 'me'`, `origin: 'businessApp'`, `status: 'sent'`, sin `sentBy` (Meta no dice qué persona lo escribió).
+- **La conversación nunca retrocede:** la vista previa y `lastMessageAt` avanzan si el eco es más nuevo o si la conversación acaba de nacer (sin vista previa); `unreadCount` se pone en cero solo si `lastInboundAt` es nulo o no posterior al eco (con dos `updateOne` condicionales). Si después llega un entrante **más viejo** que el eco, suma un no leído como cualquiera: falla del lado seguro.
+- **La ventana de 24 h no cambia:** `lastInboundAt` sigue siendo solo de los entrantes.
+- **SSE:** `message_created` (el mensaje entero, como uno enviado) y `conversation_updated` con `{ id, unreadCount }`, los dos con `{ lineId }`. **Sin aviso push**: lo escribió el propio negocio.
+- **Un fallo a mitad** (después de `Message.create`) deja el mensaje sin el resto, y un reintento de Meta no lo completa: el mismo límite que los entrantes.
+- Como los demás bloques, cada eco va en su `try/catch`: uno roto no tumba el lote.
