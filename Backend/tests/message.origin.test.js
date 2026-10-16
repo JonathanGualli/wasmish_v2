@@ -5,6 +5,7 @@ import { messageOrigin, messageSender } from '../src/utils/message.origin.js';
 test('messageOrigin: el del mensaje; una campaña, con su nombre si se conoce', () => {
     assert.deepEqual(messageOrigin({ origin: 'chat' }), { kind: 'chat' });
     assert.deepEqual(messageOrigin({ origin: 'api' }), { kind: 'api' });
+    assert.deepEqual(messageOrigin({ origin: 'bot' }), { kind: 'bot' });
     const names = new Map([['c1', 'Promo octubre']]);
     assert.deepEqual(messageOrigin({ origin: 'campaign', campaignId: 'c1' }, names), { kind: 'campaign', campaignName: 'Promo octubre' });
     assert.deepEqual(messageOrigin({ origin: 'campaign', campaignId: 'c2' }, names), { kind: 'campaign', campaignName: null });

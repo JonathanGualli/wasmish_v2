@@ -1,5 +1,30 @@
 import mongoose from "mongoose";
 
+// El trabajo de las respuestas automáticas, dentro del propio entrante: si el
+// mensaje existe, existe su trabajo (y el índice único de `waMessageId` evita
+// duplicarlo cuando Meta reintenta). Solo lo llevan los entrantes de cuentas
+// con el bot encendido. Estados y flujo: docs/arquitectura/respuestas-automaticas.md.
+const autoReplyJobSchema = new mongoose.Schema({
+    status: {
+        type: String,
+        enum: ['waiting', 'pending', 'processing', 'done', 'skipped', 'failed', 'uncertain', 'expired'],
+        required: true,
+    },
+    // Mientras está en la cola. Se quita al terminar: así el índice de la cola
+    // solo guarda lo pendiente.
+    active: { type: Boolean, default: undefined },
+    // Cuándo había escrito antes el contacto en la cuenta (null = nunca),
+    // leído al recibir: decide la bienvenida.
+    previousInboundAt: { type: Date, default: null },
+    runAfter: { type: Date, default: null },
+    leaseUntil: { type: Date, default: null },
+    attempts: { type: Number, default: 0 },
+    // Desde aquí el envío pudo llegar a Meta: un corte deja el trabajo `uncertain`.
+    sendStartedAt: { type: Date, default: null },
+    replyMessageId: { type: mongoose.Schema.Types.ObjectId, ref: 'Message', default: null },
+    skipReason: { type: String, default: null },
+}, { _id: false });
+
 const messageSchema = new mongoose.Schema({
     conversationId: {
         type: mongoose.Schema.Types.ObjectId, 
@@ -124,18 +149,27 @@ const messageSchema = new mongoose.Schema({
         type: String,
         default: null,
     },
-    // De dónde salió un saliente: el chat, una campaña o la API. null en los
+    // De dónde salió un saliente: el chat, una campaña, la API o el bot. null en los
     // entrantes y los anteriores al campo (ver `messageOrigin`).
     origin: {
         type: String,
-        enum: ['chat', 'campaign', 'api', null],
+        enum: ['chat', 'campaign', 'api', 'bot', null],
         default: null,
+    },
+    bot: {
+        type: autoReplyJobSchema,
+        default: undefined,
     },
 }, { 
     timestamps: true,
 });
 
 messageSchema.index({ conversationId: 1, timestamp: 1 });
+// La cola de las respuestas automáticas: solo los trabajos activos.
+messageSchema.index(
+    { 'bot.status': 1, 'bot.runAfter': 1 },
+    { name: 'auto_reply_queue', partialFilterExpression: { 'bot.active': true } },
+);
 // Los conteos de una campaña por estado. Normal, ni parcial ni sparse: Mongo
 // no usa un parcial para `{ campaignId: id }` (ver waMessageId abajo), y un
 // sparse compuesto indexa igual todo documento que tenga `status`, o sea todos.

@@ -2,7 +2,13 @@
 // owner y admin, y el «probar» no guarda nada.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { seedAccount, seedMember, connectWhatsapp, request, ANONYMOUS } from './helpers.js';
+import {
+    seedAccount, seedMember, connectWhatsapp, request, onMeta, ANONYMOUS, PNG,
+    ApiKey, Campaign, Conversation,
+} from './helpers.js';
+
+const { processNext } = await import('../../src/workers/campaign.worker.js');
+const { hashApiKey } = await import('../../src/utils/crypto.js');
 
 let seq = 1;
 const newAccount = async (label) => {
@@ -145,4 +151,76 @@ test('probar responde con la configuración sin guardar', async () => {
         settings: settingsBody({ welcome: { enabled: false, text: '', returnAfterDays: 30 } }), text: 'gracias',
     });
     assert.deepEqual(nothing.body, { reply: null, parts: [], matchedRuleIndexes: [], outOfHours: false });
+});
+
+// --- La pausa por respuesta manual -----------------------------------------
+
+/** Una cuenta con su línea y la conversación del contacto en ella, con la ventana abierta. */
+const accountWithOpenChat = async (label) => {
+    const account = await newAccount(label);
+    await Conversation.updateOne({ _id: account.conversationId }, { lineId: account.lineId, lastInboundAt: new Date() });
+    return account;
+};
+
+/** Meta acepta cualquier envío y la subida de archivos. */
+const metaAcceptsAll = () => onMeta(async (config) => {
+    if (config.method !== 'post') return undefined;
+    if (config.url.endsWith('/media')) return { data: { id: `media.${Math.random()}` } };
+    if (config.url.endsWith('/messages')) return { data: { messages: [{ id: `wamid.${Math.random()}` }] } };
+    return undefined;
+});
+
+const humanRepliedAt = async (account) =>
+    (await Conversation.findById(account.conversationId).lean()).bot?.humanRepliedAt ?? null;
+
+test('responder a mano desde el chat pausa el bot, por las cinco rutas', async () => {
+    const routes = {
+        texto: (a) => request(a, 'POST', `/chats/${a.conversationId}/messages`, { text: 'hola', temporalId: 't1' }),
+        archivo: (a) => request(a, 'POST', `/chats/${a.conversationId}/media`, PNG, { 'Content-Type': 'image/png', 'X-Filename': 'foto.png' }),
+        plantilla: (a) => request(a, 'POST', `/chats/${a.conversationId}/template`, { templateName: a.templateName, language: 'es' }),
+        // Sin id, a un número que ya tiene conversación en esa línea: se pausa esa.
+        textoSinId: (a) => request(a, 'POST', '/chats/messages', { text: 'hola', temporalId: 't2', destinationNumber: a.phone, lineId: a.lineId }),
+        plantillaNueva: (a) => request(a, 'POST', '/chats/template', {
+            destinationNumber: a.phone, lineId: a.lineId, templateName: a.templateName, language: 'es',
+        }),
+    };
+    metaAcceptsAll();
+    try {
+        for (const [name, send] of Object.entries(routes)) {
+            const a = await accountWithOpenChat(`ARP${name.toUpperCase()}`);
+            assert.equal(await humanRepliedAt(a), null, name);
+            const response = await send(a);
+            assert.ok(response.status < 300, `${name}: ${response.status} ${response.text}`);
+            assert.ok(await humanRepliedAt(a), `${name} no pausó el bot`);
+        }
+    } finally {
+        onMeta(null);
+    }
+});
+
+test('una campaña y la API pública no pausan el bot', async () => {
+    const a = await accountWithOpenChat('ARQ');
+    const key = 'wm_arq_bot';
+    await ApiKey.create({ userId: a.accountId, keyHash: hashApiKey(key), keyPreview: 'wm_', name: 'v1' });
+    metaAcceptsAll();
+    try {
+        const campaign = await Campaign.findById(a.campaignId).lean();
+        while (await processNext(campaign) !== 'idle') { /* hasta vaciar la campaña */ }
+
+        const viaApi = await request(ANONYMOUS, 'POST', '/v1/templates/send',
+            { destinationNumber: a.phone, templateName: a.templateName }, { Authorization: `Bearer ${key}` });
+        assert.equal(viaApi.status, 200, viaApi.text);
+        assert.equal(await humanRepliedAt(a), null);
+    } finally {
+        onMeta(null);
+    }
+});
+
+test('un agente sin acceso a la línea recibe 404 y no pausa nada', async () => {
+    const a = await accountWithOpenChat('ARR');
+    const agent = await seedMember(a, { role: 'agent', lineIds: [], label: 'ARRG' });
+
+    const response = await request(agent, 'POST', `/chats/${a.conversationId}/messages`, { text: 'hola', temporalId: 't3' });
+    assert.equal(response.status, 404);
+    assert.equal(await humanRepliedAt(a), null);
 });

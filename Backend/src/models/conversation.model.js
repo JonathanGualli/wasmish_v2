@@ -57,7 +57,25 @@ const conversationSchema = new mongoose.Schema({
     lastInboundAt: {
         type: Date,
         default: null,
-    }
+    },
+    // El estado de las respuestas automáticas en esta conversación (ver
+    // docs/arquitectura/respuestas-automaticas.md). Solo existe si alguna vez
+    // respondió una persona o el bot.
+    bot: {
+        type: new mongoose.Schema({
+            // La última respuesta manual desde el chat: el bot se calla `handoffHours`.
+            humanRepliedAt: { type: Date, default: null },
+            // Cuándo autorizó el bot su último envío (`authorizeBotSend`).
+            authorizedAt: { type: Date, default: null },
+            // La clave del último tramo cerrado avisado (`closedPeriodKey`).
+            outOfHoursNotified: { type: String, default: null },
+            // Id de regla → cuándo respondió aquí.
+            keywordRepliedAt: { type: Map, of: Date, default: undefined },
+            // Las últimas respuestas del bot, para el freno.
+            recentReplies: { type: [Date], default: undefined },
+        }, { _id: false }),
+        default: undefined,
+    },
 }, { 
     timestamps: true,
 });
