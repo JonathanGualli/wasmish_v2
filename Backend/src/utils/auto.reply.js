@@ -198,14 +198,16 @@ export const botStateUpdate = (state, claims, now) => {
 
 /**
  * Cómo termina un trabajo según lo que pasó al enviar (la tabla del spec,
- * § 4.2). `result` es lo que devuelve `processMessageSending` (un rechazo de
- * Meta NO lanza: vuelve con `status: 'failed'`); `error`, si lanzó; y
- * `sendStarted`, si ya se había empezado a enviar. Los `claims` solo se marcan
- * con un envío aceptado; un error después de empezar es `uncertain`, porque
- * Meta pudo recibirlo: no se reintenta.
+ * § 4.2). `result` es lo que devuelve `processMessageSending`, que NO lanza ni
+ * con un rechazo de Meta ni con un corte de red: vuelve con `status: 'failed'`,
+ * y solo el rechazo trae `errorCode`. `error`, si lanzó; `sendStarted`, si ya
+ * se había empezado a enviar. Los `claims` solo se marcan con un envío
+ * aceptado. Lo que Meta pudo recibir (un error después de empezar, o un fallo
+ * sin código: un timeout) es `uncertain`: no se reintenta.
  */
 export const autoReplyOutcome = ({ result, error, sendStarted }) => {
     if (error) return { status: sendStarted ? 'uncertain' : 'failed', applyClaims: false };
     if (result?.status === 'sent') return { status: 'done', applyClaims: true };
+    if (!result?.errorCode) return { status: 'uncertain', applyClaims: false };
     return { status: 'failed', applyClaims: false };
 };

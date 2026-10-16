@@ -55,14 +55,19 @@ export const wakeAutoReplyWorker = () => {
     wakeIdle = null;
 };
 
+// El filtro de lo que solo puede hacer quien tiene el trabajo: si el barrido
+// lo devolvió a la cola (su lease venció) y otro lo tomó, ya no casa.
+const ownJob = (job) => ({ _id: job._id, 'bot.status': 'processing', 'bot.claimToken': job.bot.claimToken });
+
 // Termina el trabajo: fuera de la cola (`active`) y con su estado final.
-const finishJob = (job, status, { reason = null, replyMessageId = null } = {}) => Message.updateOne(
-    { _id: job._id },
-    {
+// Devuelve si lo cerró (false = ya no era suyo).
+const finishJob = async (job, status, { reason = null, replyMessageId = null } = {}) => {
+    const result = await Message.updateOne(ownJob(job), {
         $set: { 'bot.status': status, 'bot.skipReason': reason, 'bot.replyMessageId': replyMessageId, 'bot.leaseUntil': null },
         $unset: { 'bot.active': '' },
-    },
-);
+    });
+    return result.matchedCount > 0;
+};
 
 // Sin textos: son conversaciones privadas de los clientes de nuestros clientes.
 const logJob = (job, status, reason) => console.log('Respuesta automática:', {
@@ -72,6 +77,27 @@ const logJob = (job, status, reason) => console.log('Respuesta automática:', {
     reason,
     ageMs: Date.now() - new Date(job.timestamp).getTime(),
 });
+
+// Cierra el trabajo y dice cómo terminó: 'lost' si ya no era suyo.
+const endJob = async (job, status, options = {}) => {
+    if (!await finishJob(job, status, options)) {
+        logJob(job, 'lost', status);
+        return 'lost';
+    }
+    logJob(job, status, options.reason ?? null);
+    return status;
+};
+
+/**
+ * El punto sin vuelta atrás: marca que empieza a enviar, solo si el trabajo
+ * sigue siendo de esta toma. Si el barrido ya lo devolvió a la cola, no pasa
+ * y no se envía: así un trabajo recuperado nunca sale dos veces (revisión de
+ * Codex del PR #69). Exportada para los tests.
+ */
+export const markSendStarted = async (job) => {
+    const result = await Message.updateOne(ownJob(job), { $set: { 'bot.sendStartedAt': new Date() } });
+    return result.matchedCount > 0;
+};
 
 /**
  * El bot puede enviar: un `updateOne` condicional que solo pasa si nadie
@@ -87,10 +113,14 @@ export const authorizeBotSend = async ({ conversationId, handoffHours, now = new
     return result.matchedCount > 0;
 };
 
-// Toma el trabajo pendiente más antiguo, de forma atómica.
-const claimNextJob = (now = new Date()) => Message.findOneAndUpdate(
+// Toma el trabajo pendiente más antiguo, de forma atómica, con un token propio.
+// Exportada para los tests.
+export const claimNextAutoReplyJob = (now = new Date()) => Message.findOneAndUpdate(
     { 'bot.active': true, 'bot.status': 'pending', 'bot.runAfter': { $lte: now } },
-    { $set: { 'bot.status': 'processing', 'bot.leaseUntil': new Date(now.getTime() + LEASE_MS) }, $inc: { 'bot.attempts': 1 } },
+    {
+        $set: { 'bot.status': 'processing', 'bot.leaseUntil': new Date(now.getTime() + LEASE_MS), 'bot.claimToken': crypto.randomUUID() },
+        $inc: { 'bot.attempts': 1 },
+    },
     { sort: { 'bot.runAfter': 1 }, new: true },
 ).lean();
 
@@ -108,30 +138,25 @@ const unlockContact = (contactId, token) => Contact.updateOne(
     { $set: { 'autoReply.lockUntil': null, 'autoReply.lockToken': null } },
 );
 
-/** Resuelve un trabajo ya tomado. Devuelve cómo terminó (o 'busy'). */
-const resolveJob = async (job) => {
+/**
+ * Resuelve un trabajo ya tomado. Devuelve cómo terminó, 'busy' (el contacto
+ * estaba ocupado: vuelve a la cola) o 'lost' (ya no era suyo). Exportada para
+ * los tests.
+ */
+export const resolveAutoReplyJob = async (job) => {
     const now = new Date();
-    if (now.getTime() - new Date(job.timestamp).getTime() > AUTO_REPLY_EXPIRY_MS) {
-        await finishJob(job, 'expired');
-        logJob(job, 'expired', null);
-        return 'expired';
-    }
+    if (now.getTime() - new Date(job.timestamp).getTime() > AUTO_REPLY_EXPIRY_MS) return endJob(job, 'expired');
 
     const conversationRef = await Conversation.findById(job.conversationId).select('userId contactId').lean();
-    if (!conversationRef?.contactId) {
-        await finishJob(job, 'failed', { reason: 'no_conversation' });
-        logJob(job, 'failed', 'no_conversation');
-        return 'failed';
-    }
+    if (!conversationRef?.contactId) return endJob(job, 'failed', { reason: 'no_conversation' });
     const { userId: accountId, contactId } = conversationRef;
 
     const token = crypto.randomUUID();
     const contact = await lockContact(accountId, contactId, token, now);
     if (!contact) {
-        await Message.updateOne(
-            { _id: job._id, 'bot.status': 'processing' },
-            { $set: { 'bot.status': 'pending', 'bot.runAfter': new Date(now.getTime() + BUSY_RETRY_MS), 'bot.leaseUntil': null } },
-        );
+        await Message.updateOne(ownJob(job), {
+            $set: { 'bot.status': 'pending', 'bot.runAfter': new Date(now.getTime() + BUSY_RETRY_MS), 'bot.leaseUntil': null, 'bot.claimToken': null },
+        });
         return 'busy';
     }
 
@@ -148,11 +173,7 @@ const resolveJob = async (job) => {
         // conversación no llegara a guardarse con él (un corte en el webhook).
         const lastInbound = [conversation.lastInboundAt, job.timestamp].filter(Boolean)
             .reduce((latest, date) => (new Date(date) > new Date(latest) ? date : latest));
-        if (freeTextBlockReason(lastInbound, now)) {
-            await finishJob(job, 'skipped', { reason: 'window_closed' });
-            logJob(job, 'skipped', 'window_closed');
-            return 'skipped';
-        }
+        if (freeTextBlockReason(lastInbound, now)) return endJob(job, 'skipped', { reason: 'window_closed' });
 
         const state = conversation.bot?.toObject?.() ?? {};
         const decision = decideAutoReply({
@@ -164,28 +185,22 @@ const resolveJob = async (job) => {
             lineId: conversation.lineId ? String(conversation.lineId) : null,
             now,
         });
-        if (decision.skip) {
-            await finishJob(job, 'skipped', { reason: decision.skip });
-            logJob(job, 'skipped', decision.skip);
-            return 'skipped';
-        }
+        if (decision.skip) return endJob(job, 'skipped', { reason: decision.skip });
 
         let line;
         try {
             line = await findConversationLine(conversation);
-        } catch (error) {
-            await finishJob(job, 'failed', { reason: 'line_unavailable' });
-            logJob(job, 'failed', 'line_unavailable');
-            return 'failed';
+        } catch {
+            return endJob(job, 'failed', { reason: 'line_unavailable' });
         }
 
         if (!await authorizeBotSend({ conversationId: conversation._id, handoffHours: settings.handoffHours, now })) {
-            await finishJob(job, 'skipped', { reason: 'human' });
-            logJob(job, 'skipped', 'human');
-            return 'skipped';
+            return endJob(job, 'skipped', { reason: 'human' });
         }
-
-        await Message.updateOne({ _id: job._id }, { $set: { 'bot.sendStartedAt': new Date() } });
+        if (!await markSendStarted(job)) {
+            logJob(job, 'lost', 'before_send');
+            return 'lost';
+        }
         sendStarted = true;
         const result = await processMessageSending({ line, conversation, text: decision.text, origin: 'bot' });
 
@@ -194,15 +209,12 @@ const resolveJob = async (job) => {
             await Conversation.updateOne({ _id: conversation._id }, { $set: botStateUpdate(state, decision.claims, now) });
             if (decision.claims.welcomed) await Contact.updateOne({ _id: contactId }, { $set: { 'autoReply.welcomedAt': now } });
         }
-        const reason = outcome.status === 'failed' ? `meta_${result.errorCode ?? 'error'}` : null;
-        await finishJob(job, outcome.status, { reason, replyMessageId: result.msg._id });
-        logJob(job, outcome.status, reason);
-        return outcome.status;
+        const reason = outcome.status === 'done' ? null : `meta_${result.errorCode ?? 'no_response'}`;
+        return endJob(job, outcome.status, { reason, replyMessageId: result.msg._id });
     } catch (error) {
         const outcome = autoReplyOutcome({ result: null, error, sendStarted });
         console.error('Respuesta automática con error:', { messageId: String(job._id), sendStarted, error: error.message });
-        await finishJob(job, outcome.status, { reason: 'error' });
-        return outcome.status;
+        return endJob(job, outcome.status, { reason: 'error' });
     } finally {
         await unlockContact(contactId, token);
     }
@@ -210,12 +222,12 @@ const resolveJob = async (job) => {
 
 /**
  * Toma UN trabajo pendiente y lo resuelve. 'idle' si no había ninguno listo;
- * 'busy' si su contacto estaba ocupado (vuelve a la cola). Exportada para los tests.
+ * si no, lo que devuelve `resolveAutoReplyJob`. Exportada para los tests.
  */
 export const processNextAutoReply = async () => {
-    const job = await claimNextJob();
+    const job = await claimNextAutoReplyJob();
     if (!job) return 'idle';
-    return resolveJob(job);
+    return resolveAutoReplyJob(job);
 };
 
 /**
@@ -243,7 +255,7 @@ export const recoverAutoReplyJobs = async ({ startup = false } = {}) => {
     );
     const requeued = await Message.updateMany(
         { ...dead, 'bot.sendStartedAt': null },
-        { $set: { 'bot.status': 'pending', 'bot.runAfter': now, 'bot.leaseUntil': null } },
+        { $set: { 'bot.status': 'pending', 'bot.runAfter': now, 'bot.leaseUntil': null, 'bot.claimToken': null } },
     );
 
     const summary = { requeued: stale.length + requeued.modifiedCount, uncertain: uncertain.modifiedCount };
@@ -260,9 +272,9 @@ const loop = async () => {
                 await recoverAutoReplyJobs();
             }
             while (running && inFlight.size < CONCURRENCY) {
-                const job = await claimNextJob();
+                const job = await claimNextAutoReplyJob();
                 if (!job) break;
-                const task = resolveJob(job)
+                const task = resolveAutoReplyJob(job)
                     .catch(error => console.error('Worker de respuestas automáticas:', error.message))
                     .finally(() => {
                         inFlight.delete(task);
@@ -291,12 +303,16 @@ export const startAutoReplyWorker = async () => {
     loopPromise = loop();
 };
 
-// Deja de tomar trabajos y espera los envíos en curso, como mucho
-// STOP_TIMEOUT_MS: lo que no termine queda `processing` y el próximo arranque
-// lo resuelve (`uncertain` si ya había empezado a enviar).
+// Deja de tomar trabajos y espera la vuelta del bucle y los envíos en curso,
+// con un único plazo de STOP_TIMEOUT_MS desde que empieza la parada (Docker
+// da 10 s): lo que no termine queda `processing` y el próximo arranque lo
+// resuelve (`uncertain` si ya había empezado a enviar).
 export const stopAutoReplyWorker = async () => {
     running = false;
     wakeAutoReplyWorker();
-    await loopPromise;
-    await Promise.race([Promise.allSettled([...inFlight]), sleep(STOP_TIMEOUT_MS)]);
+    const drained = (async () => {
+        await loopPromise;
+        await Promise.allSettled([...inFlight]);
+    })();
+    await Promise.race([drained, sleep(STOP_TIMEOUT_MS)]);
 };

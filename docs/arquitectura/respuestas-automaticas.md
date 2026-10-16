@@ -61,25 +61,25 @@ Sin colección nueva ni Redis: **el trabajo vive en el `Message` entrante**. Si 
 
 Después de actualizar la conversación y emitir el SSE, pasa a `pending` y despierta al worker: así el bot nunca contesta antes de que el entrante se vea en el chat.
 
-**Estados:** `waiting` → `pending` → `processing` → `done` (con `replyMessageId`) | `skipped` | `failed` | `uncertain` | `expired`. El motivo va en `skipReason`: el de `decideAutoReply`, `window_closed`, `line_unavailable`, `meta_<código>`, `interrupted` o `error`. Al terminar se quita `active`, así el índice de la cola (`auto_reply_queue`, `{ 'bot.status', 'bot.runAfter' }` parcial con `{ 'bot.active': true }`) solo guarda lo pendiente.
+**Estados:** `waiting` → `pending` → `processing` → `done` (con `replyMessageId`) | `skipped` | `failed` | `uncertain` | `expired`. El motivo va en `skipReason`: el de `decideAutoReply`, `window_closed`, `line_unavailable`, `meta_<código>` (o `meta_no_response`, sin código), `interrupted` o `error`. Al terminar se quita `active`, así el índice de la cola (`auto_reply_queue`, `{ 'bot.status', 'bot.runAfter' }` parcial con `{ 'bot.active': true }`) solo guarda lo pendiente.
 
 ### El worker (`workers/auto.reply.worker.js`)
 
-Corre dentro del proceso de la API, como el de campañas, y supone **una sola instancia**. Toma trabajos `pending` de forma atómica (`findOneAndUpdate` → `processing`, con un `leaseUntil` de 60 s), **hasta 5 a la vez**. Para cada uno:
+Corre dentro del proceso de la API, como el de campañas, y supone **una sola instancia**. Toma trabajos `pending` de forma atómica (`findOneAndUpdate` → `processing`, con un `leaseUntil` de 60 s y un `claimToken` nuevo), **hasta 5 a la vez**. Lo que solo puede hacer quien tiene el trabajo (empezar a enviar, cerrarlo, devolverlo a la cola) se escribe con su `claimToken` en el filtro: si el barrido se lo quitó porque tardó más del lease, ya no casa y la ejecución termina `lost`, sin enviar ni pisar el estado (revisión de Codex del PR #69). Para cada uno:
 
 1. **Caduca** (`expired`) si el entrante tiene más de 10 minutos: tras una caída, o un webhook que Meta entregó tarde, no salen bienvenidas viejas en masa.
 2. **El candado del contacto** (`Contact.autoReply.lockUntil` + `lockToken`, condicional): un mensaje del contacto a la vez, aunque escriba por dos líneas. Si está ocupado, el trabajo vuelve a `pending` 2 s después (`busy`). Se suelta en un `finally`, solo si el token sigue siendo el suyo.
 3. Con el candado puesto, **relee** la configuración, el contacto y la conversación. La ventana de 24 h se mira con el más reciente entre `lastInboundAt` y la hora del propio entrante: el entrante guardado ya prueba que está abierta.
 4. `decideAutoReply` (con `welcomedAt` del contacto: la bienvenida es de la cuenta) y la línea (`findConversationLine`; desconectada → `failed`, sin llamar a Meta).
 5. **Autoriza el envío de forma atómica** (`authorizeBotSend`): un `updateOne` condicional que solo pasa si nadie respondió a mano en las últimas `handoffHours`. Desde ahí el envío está en curso: solo pueden coincidir el bot y una persona durante lo que tarda Meta en responder.
-6. Marca `sendStartedAt` y envía con `processMessageSending(..., origin: 'bot')`, el mismo camino que el chat: el mensaje se guarda y sale por SSE como cualquier otro. **No marca leída la conversación.**
-7. **El resultado** (`autoReplyOutcome`, pura): enviado → `done` y se marcan los `claims` (`botStateUpdate` en la conversación y `welcomedAt` en el contacto); Meta lo rechazó → `failed`, el mensaje del bot queda fallido en el chat como uno manual, sin `claims`; un error **después** de `sendStartedAt` → `uncertain`. **Sin reintentos** en la v1: mejor una respuesta que falta que una repetida y cobrada dos veces.
+6. Marca `sendStartedAt` (`markSendStarted`, solo con su `claimToken`: el punto sin vuelta atrás) y envía con `processMessageSending(..., origin: 'bot')`, el mismo camino que el chat: el mensaje se guarda y sale por SSE como cualquier otro. **No marca leída la conversación.**
+7. **El resultado** (`autoReplyOutcome`, pura): enviado → `done` y se marcan los `claims` (`botStateUpdate` en la conversación y `welcomedAt` en el contacto); Meta lo rechazó (con código) → `failed`, el mensaje del bot queda fallido en el chat como uno manual, sin `claims`; un fallo **sin código** de Meta (un timeout o un corte: `processMessageSending` también lo devuelve como `failed`) o un error **después** de `sendStartedAt` → `uncertain`, porque Meta pudo recibirlo. **Sin reintentos** en la v1: mejor una respuesta que falta que una repetida y cobrada dos veces.
 
 **El barrido** (`recoverAutoReplyJobs`, al arrancar y cada 30 s):
 - un `waiting` de más de 30 s (el webhook se cortó antes de marcarlo listo) repara con `$max` el `lastInboundAt` de la conversación y vuelve a `pending`;
 - un `processing` vencido (al arrancar, todos) vuelve a `pending` si no llegó a enviar, o queda `uncertain` si ya había empezado.
 
-**Al desplegar** (SIGTERM), `index.js` para los dos workers a la vez: este deja de tomar trabajos y espera los envíos en curso, como mucho 8 s (Docker da 10).
+**Al desplegar** (SIGTERM), `index.js` para los dos workers a la vez: este deja de tomar trabajos y espera la vuelta del bucle y los envíos en curso, con un único plazo de 8 s desde que empieza la parada (Docker da 10).
 
 Cada trabajo terminado deja un log `Respuesta automática: { messageId, conversationId, status, reason, ageMs }`, **sin textos**. Si `ageMs` empieza a pasar de 10 s de forma sostenida, o aparecen `uncertain` fuera de los despliegues, es la señal para el siguiente nivel (spec, § 8).
 

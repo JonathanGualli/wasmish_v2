@@ -73,7 +73,8 @@ Sin colección nueva ni Redis: el trabajo vive en el `Message` entrante (`Messag
      | Lo que pasó | Estado | ¿Marca los `claims`? |
      |---|---|---|
      | `processMessageSending` devuelve `status: 'sent'` | `done`, con `replyMessageId` | Sí |
-     | Devuelve `status: 'failed'` (Meta lo rechazó; el mensaje queda fallido en el chat, como uno manual) | `failed` | No |
+     | Devuelve `status: 'failed'` con `errorCode` (Meta lo rechazó; el mensaje queda fallido en el chat, como uno manual) | `failed` | No |
+     | Devuelve `status: 'failed'` **sin** `errorCode` (un timeout o un corte: Meta pudo recibirlo; revisión de Codex del PR #69) | `uncertain` | No |
      | Lanza **antes** de `sendStartedAt` (la línea, la configuración) | `failed` | No |
      | Lanza **después** de `sendStartedAt` (p. ej., Meta lo aceptó y falló guardar) | `uncertain` | No |
 

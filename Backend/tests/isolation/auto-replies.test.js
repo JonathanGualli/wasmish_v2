@@ -9,7 +9,9 @@ import {
 
 const { processNext } = await import('../../src/workers/campaign.worker.js');
 const { hashApiKey } = await import('../../src/utils/crypto.js');
-const { processNextAutoReply, recoverAutoReplyJobs, authorizeBotSend } = await import('../../src/workers/auto.reply.worker.js');
+const {
+    processNextAutoReply, recoverAutoReplyJobs, authorizeBotSend, claimNextAutoReplyJob, resolveAutoReplyJob, markSendStarted,
+} = await import('../../src/workers/auto.reply.worker.js');
 const { markHumanReply } = await import('../../src/services/auto.reply.service.js');
 
 let seq = 1;
@@ -605,4 +607,58 @@ test('un corte antes de guardar la conversación: el barrido la repara y la bien
     const conversation = await Conversation.findById(a.conversationId).lean();
     assert.equal(conversation.lastInboundAt.getTime(), timestamp.getTime());
     assert.deepEqual((await botMessagesOf(a.conversationId)).map(m => m.text), [WELCOME]);
+});
+
+// --- Revisión de Codex del PR #69 ------------------------------------------
+
+// Una ejecución lenta (más de 60 s antes de enviar) perdía el trabajo en el
+// barrido, otra lo enviaba, y la primera volvía y lo enviaba otra vez.
+test('un trabajo que el barrido devolvió a la cola ya no lo envía ni lo cierra quien lo tenía', async () => {
+    await clearQueue();
+    const a = await accountWithBot('BWP');
+    metaForBot();
+    try {
+        await postWebhook(numberOf(a), textFrom('593970000014', 'hola'));
+        const slow = await claimNextAutoReplyJob();
+        await Message.updateOne({ _id: slow._id }, { $set: { 'bot.leaseUntil': new Date(Date.now() - 1000) } });
+        assert.deepEqual(await recoverAutoReplyJobs(), { requeued: 1, uncertain: 0 });
+        assert.deepEqual(await drain(), ['done']);
+
+        assert.equal(await resolveAutoReplyJob(slow), 'lost');
+        assert.equal(metaSendsTo(a), 1);
+        const job = (await Message.findById(slow._id).lean()).bot;
+        assert.equal(job.status, 'done');
+        assert.ok(job.replyMessageId);
+    } finally {
+        onMeta(null);
+    }
+});
+
+test('empezar a enviar solo lo puede quien tiene el trabajo', async () => {
+    await clearQueue();
+    const a = await accountWithBot('BWQ');
+    await postWebhook(numberOf(a), textFrom('593970000015', 'hola'));
+    const first = await claimNextAutoReplyJob();
+    await Message.updateOne({ _id: first._id }, { $set: { 'bot.leaseUntil': new Date(Date.now() - 1000) } });
+    await recoverAutoReplyJobs();
+    const second = await claimNextAutoReplyJob();
+
+    assert.equal(await markSendStarted(first), false);
+    assert.equal(await markSendStarted(second), true);
+});
+
+test('un corte de red al enviar deja el trabajo incierto, no fallido', async () => {
+    await clearQueue();
+    const a = await accountWithBot('BWR');
+    metaForBot(() => { throw new Error('timeout of 10000ms exceeded'); });
+    try {
+        await postWebhook(numberOf(a), textFrom('593970000016', 'hola'));
+        assert.deepEqual(await drain(), ['uncertain']);
+    } finally {
+        onMeta(null);
+    }
+    const [inbound] = await inboundsOf(a, '593970000016');
+    assert.equal(inbound.bot.skipReason, 'meta_no_response');
+    const contact = await Contact.findOne({ userId: a.accountId, phone: '593970000016' }).lean();
+    assert.equal(contact.autoReply?.welcomedAt ?? null, null);
 });

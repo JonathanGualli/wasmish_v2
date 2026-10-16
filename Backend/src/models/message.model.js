@@ -18,6 +18,9 @@ const autoReplyJobSchema = new mongoose.Schema({
     previousInboundAt: { type: Date, default: null },
     runAfter: { type: Date, default: null },
     leaseUntil: { type: Date, default: null },
+    // Quién tiene el trabajo: cada toma estrena uno. Una ejecución que lo
+    // perdió (el barrido lo devolvió a la cola) ya no puede enviar ni cerrarlo.
+    claimToken: { type: String, default: null },
     attempts: { type: Number, default: 0 },
     // Desde aquí el envío pudo llegar a Meta: un corte deja el trabajo `uncertain`.
     sendStartedAt: { type: Date, default: null },
