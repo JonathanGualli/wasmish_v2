@@ -71,7 +71,7 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
 ## En curso
 
 - **Coexistencia con la app de WhatsApp Business** — rama `coexistencia`, empezado el 2026-10-16 por Claude. Spec `docs/superpowers/specs/2026-10-16-coexistencia-design.md` y brief de la interfaz `2026-10-16-coexistencia-brief-ui.md` (para Claude Design).
-  Hecho: el spec y el brief. · Falta: la revisión de Codex del spec, el plan, el backend, el frontend y la prueba real con el chip 0984152777. · Sin probar: nada todavía.
+  Hecho: el spec y el brief. · Falta: la revisión de Codex del spec, el plan, el backend, el frontend y la prueba real con un número en la app de WhatsApp Business. · Sin probar: nada todavía.
 
 ## Lo siguiente
 

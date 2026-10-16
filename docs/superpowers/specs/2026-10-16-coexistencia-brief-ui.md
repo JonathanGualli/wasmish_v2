@@ -10,10 +10,10 @@
 
 Hoy, para conectar un número a Wasmish, el negocio tiene que **sacarlo de la app de WhatsApp Business**: lo borra de la app y pierde ahí sus chats. Casi todos los negocios a los que Wasmish quiere vender (centros de capacitación, imprentas) atienden desde esa app en un celular, y eso los frena.
 
-Meta permite conectar el número **sin sacarlo de la app**. El negocio sigue respondiendo desde el celular como siempre, y además su equipo atiende desde Wasmish; lo nuevo se ve en los dos lados. Lo que pide Jonathan:
+Meta permite conectar el número **sin sacarlo de la app**. El negocio sigue respondiendo desde el celular como siempre, y además su equipo atiende desde Wasmish. Desde que se conecta, lo que escriben los clientes llega a los dos lados, y lo que se responde desde la app (textos, fotos, videos y documentos de los chats individuales) también se ve en Wasmish. Lo que pide Jonathan:
 
 1. Que al conectar, Wasmish **pregunte** si el número está en la app, y explique qué cambia antes de abrir Facebook.
-2. Que en el chat se distinga **lo que se respondió desde el celular**.
+2. Que en el chat se distinga **lo que se respondió desde la app de WhatsApp**.
 3. Que si Meta desconecta el número, Ajustes → Líneas **diga por qué** y cómo volver a conectarlo.
 
 Quien lo usa: el dueño o el administrador de un negocio pequeño, que no es técnico, muchas veces desde el celular. No sabe qué es la «Cloud API» ni la «coexistencia»: esas palabras no aparecen en la interfaz.
@@ -28,10 +28,11 @@ Al pulsar «Conectar WhatsApp» (y «Reintentar» después de un error), antes d
 
 **Si responde que sí:** antes de seguir, ve en pocas líneas qué va a pasar, para que no haya sorpresas:
 
-- **Sigue usando la app** con el mismo número, y su equipo atiende además desde Wasmish. Lo que llegue y lo que se responda desde ahora se ve en los dos lados.
+- **Sigue usando la app** con el mismo número, y su equipo atiende además desde Wasmish. Desde ahora, lo que escriben los clientes llega a los dos lados, y lo que responda desde la app (textos, fotos, videos y documentos) se ve también en Wasmish. Los grupos no pasan a Wasmish.
+- **Desde Wasmish, las reglas de WhatsApp siguen igual:** pasadas 24 horas desde el último mensaje del cliente, para escribirle hace falta una plantilla, aunque desde la app se le haya respondido.
 - **Los chats anteriores se quedan en la app**: no pasan a Wasmish.
 - **En la app se apagan** las listas de difusión (las que tenía quedan solo para leer; desde Wasmish puede enviar campañas), los mensajes temporales, «ver una vez» y la ubicación en tiempo real.
-- **WhatsApp para Windows deja de funcionar** con ese número (WhatsApp Web y los demás dispositivos sí; al conectar se desvinculan todos y se vuelven a vincular).
+- **WhatsApp para Windows y para relojes (WearOS) dejan de funcionar** con ese número. WhatsApp Web y los demás dispositivos vinculados sí: al conectar se desvinculan todos y se vuelven a vincular.
 - **Necesita la app actualizada** y el celular a mano: en la ventana de Facebook va a escanear un código desde la app.
 - **Tiene que abrir la app de vez en cuando**: si el celular pasa unas dos semanas sin usarla, Meta desconecta el número de Wasmish (se vuelve a conectar desde aquí).
 
@@ -61,8 +62,10 @@ Mientras la ventana de Facebook está abierta y mientras Meta confirma, se ve el
 
 ## 4. En el chat
 
-- Los mensajes que alguien respondió **desde la app del celular** se ven como los demás mensajes enviados (con su foto, documento o audio), con una marca **«Desde el celular»**, igual que hoy se marcan los del bot con «Bot». No llevan el nombre de una persona: Meta no dice quién del equipo los escribió.
-- En la bandeja, una conversación que se respondió desde el celular deja de contar como no leída, igual que cuando se responde desde Wasmish.
+- Los mensajes que alguien respondió **desde la app de WhatsApp** (en el celular o en un dispositivo vinculado, como WhatsApp Web) se ven como los demás mensajes enviados, con su foto, video o documento, y con una marca **«Desde la app de WhatsApp»**, igual que hoy se marcan los del bot con «Bot». No llevan el nombre de una persona: Meta no dice quién del equipo los escribió.
+- Si el archivo no se pudo traer, el mensaje se ve con su etiqueta, como pasa hoy con los que llegan.
+- Las ediciones y eliminaciones hechas desde la app no se reflejan en Wasmish en esta versión.
+- En la bandeja, una conversación que se respondió desde la app deja de contar como no leída, igual que cuando se responde desde Wasmish (salvo que el cliente haya vuelto a escribir después).
 - Nada más cambia en el chat.
 
 ---
@@ -83,4 +86,4 @@ Las pantallas y estados de:
 1. La pregunta antes de conectar, con sus dos respuestas, y la explicación del «sí» (computadora y celular).
 2. El «Conectando…» de este camino.
 3. La línea conectada junto con la app, y la línea desconectada por Meta con su motivo y la acción de reconectar.
-4. Un mensaje «Desde el celular» en el hilo del chat (texto y con una foto), junto a uno normal y uno del bot para comparar.
+4. Un mensaje «Desde la app de WhatsApp» en el hilo del chat (texto y con una foto), junto a uno normal y uno del bot para comparar.
