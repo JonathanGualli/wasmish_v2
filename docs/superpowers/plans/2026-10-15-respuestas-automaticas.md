@@ -17,7 +17,7 @@
 - **Un solo camino por envío:** el bot envía con `processMessageSending` (`origin: 'bot'`, `sender: null`). No llama a Meta por su cuenta.
 - **El bot no marca leída la conversación** (no llama a `markConversationRead`).
 - **Valores:** textos 1–800 caracteres (`AUTO_REPLY_TEXT_MAX = 800`); hasta 30 reglas (`KEYWORD_RULES_MAX`), 1–20 frases por regla (`KEYWORDS_PER_RULE_MAX`), cada frase 1–60 (`KEYWORD_MAX`); hasta 3 palabras clave por respuesta (`KEYWORD_REPLIES_MAX`); la misma regla no se repite en 24 h en una conversación (`KEYWORD_COOLDOWN_MS`); freno: 3 respuestas del bot en 10 minutos por conversación (`BURST_MAX`, `BURST_WINDOW_MS`); `handoffHours` ∈ {1, 4, 12, 24} (12); `returnAfterDays` ∈ {7, 30, 90, null} (30); zona por defecto `'America/Guayaquil'`; partes unidas con `'\n\n'`; un trabajo caduca a los 10 minutos del entrante (`AUTO_REPLY_EXPIRY_MS`).
-- **Worker:** hasta 5 trabajos a la vez; `leaseUntil` y candado de conversación de 60 s; candado ocupado → `pending` con `runAfter` +2 s; barrido cada 30 s y al arrancar; un `waiting` de más de 30 s vuelve a `pending`; al parar, espera los envíos en curso hasta 8 s.
+- **Worker:** hasta 5 trabajos a la vez; `leaseUntil` y candado **del contacto** de 60 s; candado ocupado → `pending` con `runAfter` +2 s; barrido cada 30 s y al arrancar; un `waiting` de más de 30 s vuelve a `pending`; al parar, espera los envíos en curso hasta 8 s.
 - **Ni el texto del mensaje ni el de la respuesta van a los logs**: ids, estado, motivo y antigüedad.
 - **Permiso nuevo `autoReplies.manage`: owner y admin.** La API key no lo tiene.
 - Identificadores nuevos en inglés; textos al usuario, comentarios, commits y documentación, en español. Errores como `[{ message, code }]`. Commits sin coautor ni atribución.
@@ -27,7 +27,7 @@
 ## Review Focus
 
 - **Ráfaga del mismo contacto** («hola» y «cuánto está?» con un segundo de diferencia, en dos webhooks): sale la bienvenida y después el precio; nunca dos bienvenidas → test en la Tarea 7.
-- **Una persona responde mientras el trabajo espera** (entre el webhook y el worker): el bot se calla (`human`) → test en la Tarea 7.
+- **Una persona responde mientras el trabajo espera o mientras el bot decide** (entre el webhook y la llamada a Meta): el bot se calla (`human`) → tests en la Tarea 7.
 - **Apagan las respuestas o borran la regla entre recibir y responder:** el worker relee la configuración y no envía (`disabled` o `no_match`) → test en la Tarea 7.
 - **Meta reintenta el webhook** con el mismo `waMessageId`: un solo trabajo y una sola respuesta → test en la Tarea 6.
 - **Un tramo cerrado que cruza la medianoche y el fin de semana**, en otra zona horaria: sábado 15:00 y lunes 7:59 dan la misma clave; lunes 8:00 está abierto → test en la Tarea 2.
@@ -118,13 +118,13 @@ Expected: PASS.
 - Consumes: Tarea 1; `closedPeriodKey` (Tarea 2).
 - Produces (en `utils/auto.reply.js`):
   - `defaultAutoReplySettings() → Settings`: `{ enabled: false, timezone: DEFAULT_TIMEZONE, handoffHours: 12, welcome: { enabled: false, text: '', returnAfterDays: 30 }, outOfHours: { enabled: false, text: '', schedule: <lunes a viernes 08:00–18:00, sábado y domingo cerrados> }, keywordRules: [] }`.
-  - `decideAutoReply({ settings, state, message, previousInboundAt, lineId, now }) → { parts: string[], text: string, claims: { welcomed: boolean, outOfHoursKey: string | null, keywordRuleIds: string[] } } | { skip: 'disabled' | 'human' | 'burst' | 'ignored_type' | 'no_match' }`. `state` = `Conversation.bot` (o `{}`); `message` = `{ type, text, caption }`; `lineId` string o `null`. Orden de los `skip` y de las partes: el del spec, § 4.1.
-  - `botStateUpdate(state, claims, now) → Record<string, unknown>`: el `$set` de `Conversation` tras un envío aceptado: `bot.welcomedAt` (si `claims.welcomed`), `bot.outOfHoursNotified` (si hay clave), `bot.keywordRepliedAt.<id>` por regla y `bot.recentReplies` = las fechas de `state.recentReplies` dentro de `BURST_WINDOW_MS` más `now`, las últimas `BURST_MAX`.
+  - `decideAutoReply({ settings, state, welcomedAt, message, previousInboundAt, lineId, now }) → { parts: string[], text: string, claims: { welcomed: boolean, outOfHoursKey: string | null, keywordRuleIds: string[] } } | { skip: 'disabled' | 'human' | 'burst' | 'ignored_type' | 'no_match' }`. `state` = `Conversation.bot` (o `{}`); `welcomedAt` = `Contact.autoReply.welcomedAt` (o `null`); `message` = `{ type, text, caption }`; `lineId` string o `null`. Orden de los `skip` y de las partes: el del spec, § 4.1.
+  - `botStateUpdate(state, claims, now) → Record<string, unknown>`: el `$set` de `Conversation` tras un envío aceptado: `bot.outOfHoursNotified` (si hay clave), `bot.keywordRepliedAt.<id>` por regla y `bot.recentReplies` = las fechas de `state.recentReplies` dentro de `BURST_WINDOW_MS` más `now`, las últimas `BURST_MAX`.
 
 - [ ] **Step 1: Escribir los tests que fallan** (añadir a `tests/auto.reply.test.js`), con una configuración encendida de bienvenida «¡Hola!», fuera de horario «Estamos cerrados» (el horario de la Tarea 2) y reglas `precio` → «Cuesta $10» y `ubicacion`/`donde quedan` → «Estamos en el centro»:
   - `apagado no responde`: `enabled: false` → `{ skip: 'disabled' }`.
   - `contacto nuevo fuera de horario preguntando dos cosas`: `previousInboundAt: null`, sábado 22:00, `'hola, precio y dónde quedan?'` → `parts` = `['¡Hola!', 'Cuesta $10', 'Estamos en el centro', 'Estamos cerrados']` y `text` las une con `'\n\n'`; `claims.welcomed`, la clave del sábado 13:00 y los dos ids.
-  - `la bienvenida vuelve a los 31 días y no a los 29` (`returnAfterDays: 30`); con `returnAfterDays: null`, solo si `previousInboundAt` es null; con `state.welcomedAt` de hace 1 hora y `previousInboundAt: null` → sin bienvenida (comentario: la ráfaga del primer contacto daba dos bienvenidas).
+  - `la bienvenida vuelve a los 31 días y no a los 29` (`returnAfterDays: 30`); con `returnAfterDays: null`, solo si `previousInboundAt` es null; con `welcomedAt` de hace 1 hora y `previousInboundAt: null` → sin bienvenida (comentario: la ráfaga del primer contacto daba dos bienvenidas).
   - `una persona atendiendo calla al bot`: `state.humanRepliedAt` hace 11 h con `handoffHours: 12` → `{ skip: 'human' }`; hace 13 h → responde.
   - `el freno`: `state.recentReplies` con 3 fechas en los últimos 10 minutos → `{ skip: 'burst' }`; con 2 → responde.
   - `una reacción no dispara nada`: `type: 'reaction'` → `{ skip: 'ignored_type' }`.
@@ -132,7 +132,7 @@ Expected: PASS.
   - `palabras clave`: como mucho 3 (con 4 reglas que coinciden, salen las 3 primeras de la lista); una regla apagada no sale; una con `keywordRepliedAt` de hace 2 h no sale y de hace 25 h sí; dos reglas con el mismo texto salen una vez; una regla con `lineIds: ['l2']` no responde en `lineId: 'l1'` y con `lineIds: []` sí.
   - `un sticker de un contacto nuevo recibe la bienvenida` y `una imagen sin caption no dispara palabras clave`.
   - `nada que responder`: dentro de horario, contacto conocido, texto sin coincidencias → `{ skip: 'no_match' }`.
-  - `botStateUpdate` guarda las tres marcas y deja como mucho 3 fechas en `recentReplies`, descartando las de hace más de 10 minutos.
+  - `botStateUpdate` guarda la clave del tramo y las reglas, y deja como mucho 3 fechas en `recentReplies`, descartando las de hace más de 10 minutos (la bienvenida no va aquí: se marca en el contacto).
 
 - [ ] **Step 2: Correrlos y ver que fallan**
 
@@ -201,20 +201,26 @@ Antes de abrir el PR 1: `docs/estado.md` «En curso» con el PR 1 y el resto del
 
 **Files:**
 - Create: `Backend/src/services/auto.reply.service.js`
-- Modify: `Backend/src/models/message.model.js`, `Backend/src/models/conversation.model.js`, `Backend/src/controllers/chat.controller.js`, `Backend/tests/message.origin.test.js`
+- Modify: `Backend/src/models/message.model.js`, `Backend/src/models/conversation.model.js`, `Backend/src/models/contact.model.js`, `Backend/src/controllers/chat.controller.js`, `Backend/tests/message.origin.test.js`
 - Test: `Backend/tests/isolation/auto-replies.test.js`
 
 **Interfaces:**
 - Produces:
   - `Message.origin` admite `'bot'`; `Message.bot` (spec § 5; todo con `default` nulo salvo `attempts: 0`, sin `default` en el subdocumento: los mensajes sin bot no lo llevan); índice `auto_reply_queue` `{ 'bot.status': 1, 'bot.runAfter': 1 }` parcial con `{ 'bot.active': true }`.
   - `Conversation.bot` (spec § 5), con `keywordRepliedAt` como `Map` de fechas y `recentReplies: [Date]`.
+  - `Contact.autoReply`: `{ welcomedAt: Date | null, lockUntil: Date | null, lockToken: String | null }`.
   - `processMessageSending({ …, origin = 'chat' })`: guarda ese `origin`.
   - `markHumanReply(conversationId) → Promise<void>` en `services/auto.reply.service.js`: `updateOne({ _id }, { $set: { 'bot.humanRepliedAt': new Date() } })`; nunca lanza (log del error con el id).
-  - En `chat.controller.js`: `markHumanReply` **antes** de enviar en `sendMessageController` (con conversación), `sendMediaMessageController` y `sendConversationTemplateController`; **después**, con `msg.conversationId`, en `sendMessageController` sin conversación y en `startConversationTemplateController` (con `resultado`).
+  - En `chat.controller.js`, siempre **después** de comprobar la propiedad y la línea (lo ajeno sigue dando 404 sin tocar nada) y **antes** de enviar:
+    - `sendMessageController` con id, `sendMediaMessageController` y `sendConversationTemplateController`: sobre la conversación;
+    - `sendMessageController` sin id y `startConversationTemplateController`: sobre la que ya exista de ese número en esa línea (`findConversationByNumber`, que ya está en el archivo), y otra vez **después** sobre `msg.conversationId` / `resultado.conversation._id`, por si el envío la creó.
 
 - [ ] **Step 1: Escribir los tests que fallan:**
   - `tests/message.origin.test.js`: `messageOrigin({ origin: 'bot' })` → `{ kind: 'bot' }`.
-  - En `tests/isolation/auto-replies.test.js`: `responder a mano desde el chat pausa el bot` (texto en una conversación con entrante → `bot.humanRepliedAt` puesto) y `una plantilla de una campaña no lo pausa` (`processNext` de una campaña a ese contacto → `humanRepliedAt` sigue `null`).
+  - En `tests/isolation/auto-replies.test.js`:
+    - `responder a mano pausa el bot`, por las cinco rutas: texto con id, archivo, plantilla en la conversación, texto **sin id** a un número que ya tiene conversación y conversación nueva con plantilla a ese número → `bot.humanRepliedAt` puesto en la conversación existente;
+    - `una campaña y la API pública no lo pausan` (`processNext` de una campaña y `POST /api/v1/templates/send` a ese contacto → `humanRepliedAt` sigue `null`);
+    - `un agente sin acceso a la línea recibe 404 y no pausa nada`.
 
 - [ ] **Step 2: Correrlos y ver que fallan**
 
@@ -251,6 +257,7 @@ Expected: PASS, incluidos los de chats, campañas y la API pública (no cambian)
   - `una reacción no deja trabajo`.
   - `Meta reintenta el webhook: un solo mensaje y un solo trabajo` (el mismo `waMessageId` dos veces).
   - `el contacto que ya escribió a otra línea de la cuenta no es nuevo` (dos líneas, `maxLines: 2`).
+  - `si preparar el trabajo falla, el entrante se guarda igual y el siguiente del lote también` (con `AutoReplySettings.findOne` cambiado en el test para que lance, y restaurado después): dos mensajes en un `postWebhook`, los dos guardados sin `bot`, respuesta 200.
 
 - [ ] **Step 2: Correrlos y ver que fallan**
 
@@ -272,36 +279,44 @@ Expected: PASS, también `webhook.test.js` y `push.test.js` sin cambios.
 
 **Files:**
 - Create: `Backend/src/workers/auto.reply.worker.js`
-- Modify: `Backend/src/index.js`
-- Test: `Backend/tests/isolation/auto-replies.test.js`
+- Modify: `Backend/src/index.js`, `Backend/src/utils/auto.reply.js` (`autoReplyOutcome`)
+- Test: `Backend/tests/isolation/auto-replies.test.js`, `Backend/tests/auto.reply.test.js`
 
 **Interfaces:**
 - Consumes: Tareas 3, 5 y 6; `processMessageSending`, `findConversationLine`, `freeTextBlockReason`.
 - Produces (en `workers/auto.reply.worker.js`):
   - `startAutoReplyWorker()`, `stopAutoReplyWorker() → Promise<void>` (deja de tomar trabajos y espera los activos, como mucho 8 s), `wakeAutoReplyWorker()`.
-  - `processNextAutoReply() → Promise<'idle' | 'busy' | 'done' | 'skipped' | 'failed' | 'expired'>`: toma **un** trabajo (`pending` con `runAfter <= now` → `processing`, `leaseUntil` +60 s, `$inc attempts`, el más antiguo por `runAfter`) y lo resuelve como en el spec, § 4.2, paso 3. Exportada para los tests.
-  - `recoverAutoReplyJobs({ startup = false }) → Promise<{ requeued: number, uncertain: number }>`: el paso 4 del spec. Con `startup`, todo `processing` cuenta como vencido.
+  - `processNextAutoReply() → Promise<'idle' | 'busy' | 'done' | 'skipped' | 'failed' | 'uncertain' | 'expired'>`: toma **un** trabajo (`pending` con `runAfter <= now` → `processing`, `leaseUntil` +60 s, `$inc attempts`, el más antiguo por `runAfter`) y lo resuelve como en el spec, § 4.2, paso 3. Exportada para los tests.
+  - `authorizeBotSend({ conversationId, handoffHours, now }) → Promise<boolean>`: `updateOne({ _id, $or: [{ 'bot.humanRepliedAt': null }, { 'bot.humanRepliedAt': { $lte: now − handoffHours } }] }, { $set: { 'bot.authorizedAt': now } })`; `true` si modificó. Exportada para los tests.
+  - En `utils/auto.reply.js`: `autoReplyOutcome({ result, error, sendStarted }) → { status: 'done' | 'failed' | 'uncertain', applyClaims: boolean }`, la tabla del spec, § 4.2.
+  - `recoverAutoReplyJobs({ startup = false }) → Promise<{ requeued: number, uncertain: number }>`: el paso 4 del spec, con el `$max` de `lastInboundAt` antes de devolver un `waiting` a `pending`. Con `startup`, todo `processing` cuenta como vencido.
+  - La ventana se comprueba con `freeTextBlockReason(max(conversation.lastInboundAt, message.timestamp))`.
   - `index.js`: `startAutoReplyWorker()` junto al de campañas, y el apagado espera los dos con `Promise.all`.
   - Log por trabajo terminado: `{ messageId, conversationId, status, skipReason, ageMs }`. Sin textos.
 
-- [ ] **Step 1: Escribir los tests que fallan** (Meta falso con `onMeta`, que responde a `POST …/messages` con `{ messages: [{ id: 'wamid.bot-N' }] }`; tras cada `postWebhook`, `processNextAutoReply()` hasta `'idle'`):
-  - `un contacto nuevo recibe la bienvenida`: un envío a Meta; un `Message` saliente con `origin: 'bot'` y el texto; el trabajo `done` con `replyMessageId`; `Conversation.bot.welcomedAt` puesto; `unreadCount` sigue en 1 (el bot no marca leído).
+- [ ] **Step 1: Escribir los tests que fallan** (Meta falso con `onMeta`, que responde a `POST …/messages` con `{ data: { messages: [{ id: 'wamid.bot-N' }] } }`, la forma que espera el adaptador de `helpers.js`; tras cada `postWebhook`, `processNextAutoReply()` hasta `'idle'`):
+  - En `tests/auto.reply.test.js`, `autoReplyOutcome` con las cuatro filas de la tabla del spec (comentario en la última: Meta aceptó y falló guardar; reintentar lo mandaría dos veces).
+  - `un contacto nuevo recibe la bienvenida`: un envío a Meta; un `Message` saliente con `origin: 'bot'`, el texto y `waMessageId: 'wamid.bot-1'`; el trabajo `done` con `replyMessageId` = ese mensaje; `Contact.autoReply.welcomedAt` puesto; `unreadCount` sigue en 1 (el bot no marca leído).
   - `cada cuenta responde con sus reglas`: A y B encendidas con textos distintos; el entrante a B recibe el texto de B y nunca el de A.
   - `ráfaga: dos entrantes seguidos dan una bienvenida y después el precio` (Review Focus).
-  - `dos trabajos de la misma conversación a la vez no salen juntos`: con el candado de la conversación puesto, `processNextAutoReply()` → `'busy'` y el trabajo vuelve a `pending` con `runAfter` en el futuro.
+  - `dos trabajos del mismo contacto a la vez no salen juntos`: con el candado del contacto puesto, `processNextAutoReply()` → `'busy'` y el trabajo vuelve a `pending` con `runAfter` en el futuro.
+  - `dos workers a la vez`: dos entrantes de un contacto nuevo y `Promise.all([processNextAutoReply(), processNextAutoReply()])` (repetido hasta `'idle'`) → una sola bienvenida.
+  - `un contacto nuevo que escribe a la vez a dos líneas de la cuenta recibe una sola bienvenida` (`maxLines: 2`).
+  - `una persona responde mientras el bot decide`: `markHumanReply` sobre la conversación y después `authorizeBotSend(...)` → `false`; sin ella → `true`.
   - `una persona responde antes de que el worker lo tome`: entrante, mensaje manual por el chat y después `processNextAutoReply()` → `skipped` con `human`, sin envío del bot (Review Focus).
-  - `apagan las respuestas antes de que el worker lo tome` → `skipped` con `disabled` (Review Focus).
+  - `apagan las respuestas antes de que el worker lo tome` → `skipped` con `disabled`; `borran la regla que coincidía` → `skipped` con `no_match` (Review Focus).
   - `un entrante de hace 11 minutos caduca`: `expired`, sin llamada a Meta.
   - `Meta rechaza el envío`: el trabajo `failed`, el mensaje del bot `failed` en el chat, `welcomedAt` sigue `null`.
   - `la línea ya no está conectada` → `failed`, sin llamada a Meta.
   - `al arrancar`: un `processing` con `sendStartedAt` → `uncertain`; uno sin él → `pending`; un `waiting` de hace 40 s → `pending`; uno de hace 5 s sigue `waiting`.
+  - `un waiting de un corte antes de guardar la conversación se responde igual`: entrante creado a mano con `bot.status: 'waiting'` y la conversación con `lastInboundAt: null`; `recoverAutoReplyJobs()` y `processNextAutoReply()` → `lastInboundAt` = la hora del entrante y la bienvenida sale.
 
 - [ ] **Step 2: Correrlos y ver que fallan**
 
 Run: `cd Backend && node --test tests/isolation/auto-replies.test.js`
 Expected: FAIL en los nuevos.
 
-- [ ] **Step 3: Implementar** el worker. El bucle toma trabajos mientras haya menos de 5 en curso; sin trabajo, espera 3 s o hasta `wakeAutoReplyWorker()`; cada 30 s, `recoverAutoReplyJobs()`. Candado de la conversación: `findOneAndUpdate({ _id, $or: [{ 'bot.lockUntil': null }, { 'bot.lockUntil': { $lt: now } }] }, { $set: { 'bot.lockUntil': now + 60 s } }, { new: true })`, y se suelta en un `finally`. Tras un envío aceptado, `$set` de `botStateUpdate` (Tarea 3).
+- [ ] **Step 3: Implementar** el worker y `autoReplyOutcome`. El bucle toma trabajos mientras haya menos de 5 en curso; sin trabajo, espera 3 s o hasta `wakeAutoReplyWorker()`; cada 30 s, `recoverAutoReplyJobs()`. Candado del contacto: `findOneAndUpdate({ _id, userId, $or: [{ 'autoReply.lockUntil': null }, { 'autoReply.lockUntil': { $lt: now } }] }, { $set: { 'autoReply.lockUntil': now + 60 s, 'autoReply.lockToken': <uuid> } }, { new: true })`; se suelta en un `finally` solo si el token sigue siendo el suyo. Orden: candado → releer configuración, contacto y conversación → ventana y línea → `decideAutoReply` → `authorizeBotSend` → `sendStartedAt` → `processMessageSending` → `autoReplyOutcome`. Con `applyClaims`: `$set` de `botStateUpdate` en la conversación y, si `claims.welcomed`, `autoReply.welcomedAt` en el contacto.
 
 - [ ] **Step 4: Correr todo**
 
@@ -322,12 +337,12 @@ Expected: PASS.
 **Interfaces:**
 - Consumes: `origin: { kind: 'bot' }` (Tarea 5).
 
-- [ ] **Step 1: El chat:** `origin` admite `{ kind: 'bot' }`; `MessageAuthor` lo pinta como los de campaña y API, gris con el icono `Bot` de `lucide-react` y el texto «Bot». Consultar antes la skill de marca.
+- [ ] **Step 1: El chat:** `origin` admite `{ kind: 'bot' }`; `MessageAuthor` lo pinta como los de campaña y API, gris con el icono `Bot` de `lucide-react` y el texto «Bot». Hoy todo `MessageAuthor` depende de `hasTeam(user)` (`ChatThread.tsx:141`): la marca «Bot» se muestra **también sin equipo**; el resto sigue igual. Consultar antes la skill de marca.
 
 - [ ] **Step 2: Comprobar**
 
 Run: `cd Frontend && npm run lint && npm run build`
-Expected: sin errores. En el navegador, con el backend local de la Tarea 7: la respuesta del bot aparece al momento por SSE con «Bot · hora».
+Expected: sin errores. En el navegador, con el backend local de la Tarea 7 y **una cuenta sin equipo**: la respuesta del bot aparece al momento por SSE con «Bot · hora».
 
 - [ ] **Step 3: Documentar:**
   - `respuestas-automaticas.md`: la cola en el entrante, los estados, el worker, el barrido, el apagado y la pausa.
@@ -371,3 +386,4 @@ Expected: sin errores. En el navegador, con el backend local de la Tarea 7: la r
 - **El «probar» responde como a un contacto nuevo, ahora y sin estado:** enseña todo lo que podría salir, también la bienvenida y el fuera de horario.
 - **Quien responde a una campaña sin haber escrito nunca recibe la bienvenida** (para Wasmish es su primer mensaje). Si molesta, se puede saltar la bienvenida cuando la conversación ya tiene salientes.
 - **El mensaje del bot pasa a ser el último de la bandeja** (`lastMessage`), como cualquier saliente.
+- **Revisión de Codex del plan (2026-10-15):** el candado y la bienvenida pasan al **contacto** (una bienvenida por cuenta también si escribe a dos líneas a la vez); el envío se **autoriza de forma atómica** contra la pausa; en las rutas sin id se pausa la conversación que ya exista; la ventana se mira con la hora del propio entrante; la tabla de resultados (`autoReplyOutcome`); «Bot» también sin equipo; y los tests que faltaban.
