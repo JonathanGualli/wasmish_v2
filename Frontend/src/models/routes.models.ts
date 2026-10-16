@@ -12,6 +12,7 @@ export const AppRoutes = {
         contacts: 'contacts',
         campaigns: 'campaigns',
         templates: 'templates',
+        autoReplies: 'auto-replies',
         docs: 'docs',
         admin: 'admin',
     }
@@ -44,3 +45,4 @@ export const ContactImportPath = privatePath(`${AppRoutes.private.contacts}/impo
 export const ChatsPath = privatePath(AppRoutes.private.chats);
 export const SettingsPath = privatePath(AppRoutes.private.settings);
 export const TemplatesPath = privatePath(AppRoutes.private.templates);
+export const AutoRepliesPath = privatePath(AppRoutes.private.autoReplies);

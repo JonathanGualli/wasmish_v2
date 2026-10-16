@@ -50,6 +50,7 @@ test('A guarda su configuración y B no la ve', async () => {
     const saved = await saveSettings(a, settingsBody());
     assert.equal(saved.status, 200);
     assert.equal(saved.body.enabled, true);
+    assert.equal(saved.body.configured, true);
     assert.equal(saved.body.keywordRules.length, 1);
     assert.match(saved.body.keywordRules[0].id, /^[a-f\d]{24}$/);
 
@@ -59,6 +60,8 @@ test('A guarda su configuración y B no la ve', async () => {
     const other = await getSettings(b);
     assert.equal(other.status, 200);
     assert.equal(other.body.enabled, false);
+    // La página abre el asistente solo a quien nunca guardó.
+    assert.equal(other.body.configured, false);
     assert.deepEqual(other.body.keywordRules, []);
 });
 
