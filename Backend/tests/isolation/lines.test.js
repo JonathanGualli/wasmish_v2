@@ -596,3 +596,17 @@ test('la API pública tras PARTNER_REMOVED: la línea retirada no envía, y otra
     assert.equal(none.status, 409, none.text);
     assert.equal(metaCalls.length, calls);
 });
+
+
+// Regresión que vigila (revisión de Codex del PR #79): un fallo de la BD al aplicar el aviso respondía 200
+// y Meta no lo reentregaba: las líneas quedaban activas.
+test('PARTNER_REMOVED con un fallo de la BD: 500, y al reentregarlo se aplica', async (t) => {
+    const a = await twoLines('PRH', '788');
+    const body = { entry: [partnerRemoved('waba-PRH')] };
+    const fail = t.mock.method(Waba, 'findOne', () => { throw new Error('Mongo no responde'); });
+    assert.equal((await postWebhookBody(body)).status, 500);
+    fail.mock.restore();
+    assert.equal((await lineFor(a.first)).status, 'active');
+    assert.equal((await postWebhookBody(body)).status, 200);
+    assert.equal((await lineFor(a.first)).status, 'disconnected');
+});

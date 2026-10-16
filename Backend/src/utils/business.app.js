@@ -22,7 +22,10 @@ export const describeEcho = (echoData, { connectedAt = null } = {}) => {
 
     const seconds = Number.parseInt(echoData.timestamp, 10);
     const timestamp = Number.isFinite(seconds) ? new Date(seconds * 1000) : new Date();
-    if (connectedAt && timestamp < connectedAt) return null;
+    // En segundos, que es lo que da Meta: `connectedAt` tiene milisegundos, y un
+    // eco del mismo segundo de la conexión se conserva (ese segundo es ambiguo,
+    // y un número no pasa de una cuenta a otra en un segundo).
+    if (connectedAt && Math.floor(timestamp.getTime() / 1000) < Math.floor(new Date(connectedAt).getTime() / 1000)) return null;
 
     const entrante = describeInboundMessage(echoData);
     if (!entrante) return null;

@@ -55,6 +55,13 @@ test('un eco anterior a la conexión de la línea se descarta', () => {
     assert.ok(describeEcho(echo(), { connectedAt: null }), 'sin fecha de conexión (la reserva de User) no filtra');
 });
 
+// Regresión que vigila (revisión de Codex del PR #79): conectar a las 12:00:00.100 y responder a las
+// 12:00:00.900 da un eco de las 12:00:00 (Meta manda segundos) que se descartaba.
+test('un eco del mismo segundo de la conexión se conserva', () => {
+    assert.ok(describeEcho(echo({ timestamp: '1760630400' }), { connectedAt: new Date(1760630400 * 1000 + 100) }));
+    assert.equal(describeEcho(echo({ timestamp: '1760630399' }), { connectedAt: new Date(1760630400 * 1000 + 100) }), null);
+});
+
 test('un tipo desconocido no se descarta y nunca queda con el texto vacío', () => {
     const result = describeEcho(echo({ type: 'algo_nuevo', text: undefined }));
     assert.ok(result);

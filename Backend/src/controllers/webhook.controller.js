@@ -496,7 +496,10 @@ export const handleWebhook = async (req, res) => {
                             });
                         }
                     } catch (error) {
-                        console.error('Aviso de cuenta descartado por error:', { error: error.message });
+                        // Un fallo de la BD no puede perder el aviso: 500 al
+                        // final para que Meta lo reentregue (revisión de Codex).
+                        retryBatch = true;
+                        console.error('Aviso de cuenta no aplicado, se pide a Meta que lo reentregue:', { error: error.message });
                     }
                     continue;
                 }
