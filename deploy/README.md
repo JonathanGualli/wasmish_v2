@@ -1,6 +1,6 @@
 # Deploy — Wasmish (producción)
 
-Guía para desplegar **Wasmish** en el servidor de producción (`wasmish.solventyc.com`).
+Guía para desplegar **Wasmish** en el servidor de producción (`app.wasmish.com`; ver «Dominios» abajo).
 
 ---
 
@@ -28,6 +28,23 @@ Internet ──▶ Traefik ──▶ wasmish-web (nginx)  ──┐
 | `prod-traefik-proxy-net` | externa (ya existe) | Traefik ↔ web |
 | `prod-mongo-main-internal-net` | externa (ya existe) | api ↔ Mongo compartido |
 
+### Dominios
+
+Los sirve todos el mismo contenedor `wasmish-web`, con un router de Traefik por dominio (cada uno con su certificado: si uno falla, los demás siguen). Las redirecciones las hace Traefik, no el nginx. Desde el 2026-10-16:
+
+| Dominio | Qué hace |
+|---|---|
+| `app.wasmish.com` | la app y su `/api` |
+| `wasmish.solventyc.com/api/*` | **igual que siempre, sin fecha de fin**: ahí apuntan el webhook de Meta y la API pública del cliente real, y un POST redirigido no llega (muchos clientes no siguen la redirección o la convierten en GET) |
+| `wasmish.solventyc.com` (el resto) | 301 a la misma ruta en `app.wasmish.com` |
+| `wasmish.com` | la página pública; mientras no exista, **302** (temporal) a `app.wasmish.com`: un 301 se queda guardado en el navegador |
+| `www.wasmish.com` | 301 a `wasmish.com` |
+| `http://` de cualquiera | 301 a `https://` |
+
+- La app instalada (PWA), sus avisos push y la cookie de sesión van atados al dominio exacto: quien la tenía instalada desde `wasmish.solventyc.com` la vuelve a instalar desde `app.wasmish.com` y vuelve a activar los avisos.
+- La app de Meta tiene **los dos** dominios en *Dominios de la app*, en las URI de OAuth y en los dominios del SDK de JavaScript (el Embedded Signup se abre desde `app.wasmish.com`). El webhook sigue en `wasmish.solventyc.com`.
+- Los DNS de `wasmish.com` (registros A de `@`, `www` y `app`) están en Namecheap; tienen que apuntar al servidor **antes** de desplegar un dominio nuevo, o Let's Encrypt no emite su certificado.
+
 ---
 
 ## 2. Layout en el servidor
@@ -51,7 +68,7 @@ Internet ──▶ Traefik ──▶ wasmish-web (nginx)  ──┐
 
 ## 3. Requisitos previos (ya cumplidos)
 
-- DNS `wasmish.solventyc.com` → IP del server.
+- DNS `app.wasmish.com`, `wasmish.com`, `www.wasmish.com` y `wasmish.solventyc.com` → IP del server.
 - Traefik corriendo con el resolver `letsencrypt` y la red `prod-traefik-proxy-net`.
 - Mongo compartido activo con el usuario/BD de Wasmish creados:
   `mongodb://wasmish_app:<pass>@prod-mongo-main-db-ct:27017/wasmish?authSource=wasmish`
@@ -97,7 +114,7 @@ docker compose up -d --build
 ```bash
 docker compose ps
 docker compose logs -f wasmish-api    # esperar: "Server on port 3001" + ">>> DB is connected"
-curl -sI https://wasmish.solventyc.com   # HTTP/2 200
+curl -sI https://app.wasmish.com   # HTTP/2 200
 ```
 
 ---
@@ -183,8 +200,8 @@ docker compose up -d --build
 ### 5.4 Verificar tras cualquier deploy
 ```bash
 docker compose ps                          # contenedores "Up"
-curl -sI https://wasmish.solventyc.com     # HTTP/2 200
-curl https://wasmish.solventyc.com/api/version   # debe devolver la versión recién subida
+curl -sI https://app.wasmish.com          # HTTP/2 200
+curl https://app.wasmish.com/api/version   # debe devolver la versión recién subida
 docker compose logs --tail=50 wasmish-api  # ">>> DB is connected" y "Server on port 3001"
 ```
 En los logs de la api **no** tiene que salir «Campañas en MODO DE PRUEBA» (lo apaga `NODE_ENV=production` en `config/api.env`; `CAMPAIGN_DRY_RUN` nunca se pone ahí) ni ningún `E11000` (un índice único que no se pudo crear).
