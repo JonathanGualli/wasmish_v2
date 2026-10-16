@@ -1,7 +1,9 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# prod-wasmish-main  →  wasmish.solventyc.com   (CRM WhatsApp — Node + React)
+# prod-wasmish-main  →  app.wasmish.com   (CRM WhatsApp — Node + React)
+#   · wasmish.solventyc.com: solo /api (webhook de Meta y API pública); el resto
+#     redirige a app.wasmish.com · wasmish.com y www: ver las etiquetas de la web
 # Patrón copiado de prod-dashboard-solventyc:
-#   · web (nginx) sirve el SPA Y hace de reverse-proxy de /api → api  (1 solo router Traefik)
+#   · web (nginx) sirve el SPA Y hace de reverse-proxy de /api → api
 #   · api (Node) NO se expone a Traefik; solo lo ve la web por la red interna
 #   · Mongo NO se despliega aquí: se usa el compartido prod-mongo-main-db-ct
 #     (la api se une a prod-mongo-main-internal-net para alcanzarlo por nombre)
@@ -74,14 +76,62 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=prod-traefik-proxy-net"
-      # http → redirige a https
+      - "traefik.http.services.prod-wasmish-main.loadbalancer.server.port=80"
+      # http → redirige a https, en los cuatro dominios
       - "traefik.http.routers.prod-wasmish-main-http.entrypoints=web"
-      - "traefik.http.routers.prod-wasmish-main-http.rule=Host(`wasmish.solventyc.com`)"
+      - "traefik.http.routers.prod-wasmish-main-http.rule=Host(`app.wasmish.com`) || Host(`wasmish.com`) || Host(`www.wasmish.com`) || Host(`wasmish.solventyc.com`)"
       - "traefik.http.routers.prod-wasmish-main-http.middlewares=prod-wasmish-main-redir"
+      - "traefik.http.routers.prod-wasmish-main-http.service=noop@internal"
       - "traefik.http.middlewares.prod-wasmish-main-redir.redirectscheme.scheme=https"
-      # https + cert Let's Encrypt (httpChallenge, resolver "letsencrypt")
+      - "traefik.http.middlewares.prod-wasmish-main-redir.redirectscheme.permanent=true"
+      # https + cert Let's Encrypt (httpChallenge, resolver "letsencrypt"). Un
+      # router por dominio: cada uno pide su propio certificado, y si uno falla
+      # (el DNS aún no apunta aquí) los demás siguen sirviendo.
+      # La app: app.wasmish.com
+      - "traefik.http.routers.prod-wasmish-main-app.entrypoints=websecure"
+      - "traefik.http.routers.prod-wasmish-main-app.rule=Host(`app.wasmish.com`)"
+      - "traefik.http.routers.prod-wasmish-main-app.tls=true"
+      - "traefik.http.routers.prod-wasmish-main-app.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.prod-wasmish-main-app.service=prod-wasmish-main"
+      # El dominio anterior sigue sirviendo /api sin fecha de fin: ahí apuntan el
+      # webhook de Meta y la API pública del cliente real, y un POST redirigido no
+      # llega (muchos clientes no lo siguen o lo convierten en GET). Lo demás va a
+      # la misma ruta en app.wasmish.com. La prioridad decide entre los dos.
       - "traefik.http.routers.prod-wasmish-main-secure.entrypoints=websecure"
-      - "traefik.http.routers.prod-wasmish-main-secure.rule=Host(`wasmish.solventyc.com`)"
+      - "traefik.http.routers.prod-wasmish-main-secure.rule=Host(`wasmish.solventyc.com`) && PathPrefix(`/api/`)"
+      - "traefik.http.routers.prod-wasmish-main-secure.priority=20"
       - "traefik.http.routers.prod-wasmish-main-secure.tls=true"
       - "traefik.http.routers.prod-wasmish-main-secure.tls.certresolver=letsencrypt"
-      - "traefik.http.services.prod-wasmish-main.loadbalancer.server.port=80"
+      - "traefik.http.routers.prod-wasmish-main-secure.service=prod-wasmish-main"
+      - "traefik.http.routers.prod-wasmish-main-legacy.entrypoints=websecure"
+      - "traefik.http.routers.prod-wasmish-main-legacy.rule=Host(`wasmish.solventyc.com`)"
+      - "traefik.http.routers.prod-wasmish-main-legacy.priority=10"
+      - "traefik.http.routers.prod-wasmish-main-legacy.tls=true"
+      - "traefik.http.routers.prod-wasmish-main-legacy.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.prod-wasmish-main-legacy.middlewares=prod-wasmish-main-to-app"
+      - "traefik.http.routers.prod-wasmish-main-legacy.service=noop@internal"
+      - "traefik.http.middlewares.prod-wasmish-main-to-app.redirectregex.regex=^https?://wasmish\\.solventyc\\.com(:[0-9]+)?/(.*)"
+      - "traefik.http.middlewares.prod-wasmish-main-to-app.redirectregex.replacement=https://app.wasmish.com/$${2}"
+      - "traefik.http.middlewares.prod-wasmish-main-to-app.redirectregex.permanent=true"
+      # wasmish.com: la página pública. Mientras no exista, lleva a la app con un
+      # 302: un 301 se queda guardado en el navegador y, con la página ya hecha,
+      # quien hubiera entrado antes seguiría yendo a la app.
+      - "traefik.http.routers.prod-wasmish-main-site.entrypoints=websecure"
+      - "traefik.http.routers.prod-wasmish-main-site.rule=Host(`wasmish.com`)"
+      - "traefik.http.routers.prod-wasmish-main-site.tls=true"
+      - "traefik.http.routers.prod-wasmish-main-site.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.prod-wasmish-main-site.middlewares=prod-wasmish-main-site-to-app"
+      - "traefik.http.routers.prod-wasmish-main-site.service=noop@internal"
+      - "traefik.http.middlewares.prod-wasmish-main-site-to-app.redirectregex.regex=^https?://wasmish\\.com(:[0-9]+)?/(.*)"
+      - "traefik.http.middlewares.prod-wasmish-main-site-to-app.redirectregex.replacement=https://app.wasmish.com/$${2}"
+      - "traefik.http.middlewares.prod-wasmish-main-site-to-app.redirectregex.permanent=false"
+      # www.wasmish.com → wasmish.com, para siempre (una sola dirección de la página)
+      - "traefik.http.routers.prod-wasmish-main-www.entrypoints=websecure"
+      - "traefik.http.routers.prod-wasmish-main-www.rule=Host(`www.wasmish.com`)"
+      - "traefik.http.routers.prod-wasmish-main-www.tls=true"
+      - "traefik.http.routers.prod-wasmish-main-www.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.prod-wasmish-main-www.middlewares=prod-wasmish-main-www-to-site"
+      - "traefik.http.routers.prod-wasmish-main-www.service=noop@internal"
+      - "traefik.http.middlewares.prod-wasmish-main-www-to-site.redirectregex.regex=^https?://www\\.wasmish\\.com(:[0-9]+)?/(.*)"
+      - "traefik.http.middlewares.prod-wasmish-main-www-to-site.redirectregex.replacement=https://wasmish.com/$${2}"
+      - "traefik.http.middlewares.prod-wasmish-main-www-to-site.redirectregex.permanent=true"
