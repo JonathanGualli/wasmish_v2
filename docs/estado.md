@@ -62,7 +62,10 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
 
 ## En curso
 
-Nada en curso.
+- **La app a `app.wasmish.com`** — rama `dominio-wasmish`, empezado el 2026-10-16 por Claude. Solo despliegue y documentación: los routers de Traefik y las redirecciones ([deploy/README.md § Dominios](../deploy/README.md#dominios)). Probado con Traefik v3.7.1 en local (cada dominio y ruta, `POST` incluidos); los certificados de Let's Encrypt solo se prueban en producción.
+  **Antes de desplegar (Jonathan):** los DNS de `wasmish.com` en Namecheap (A de `@`, `www` y `app` al servidor) resolviendo; en la app de Meta, **añadir** `app.wasmish.com` (dominios de la app, URI de OAuth y dominios del SDK de JavaScript), sin quitar el viejo ni tocar el webhook.
+  **Al desplegar:** subir `deploy/compose.yml` aparte, `FRONTEND_ORIGIN=https://app.wasmish.com` en `config/api.env` y reconstruir las dos imágenes. En el paso 3 de la skill, `PROD` se lee esta vez de `wasmish.solventyc.com` (`app.wasmish.com` aún no existe). Verificar: `app.wasmish.com/api/version`; `wasmish.solventyc.com/api/version` con 200, sin redirección; `wasmish.solventyc.com/` con 301; `wasmish.com` con 302 y `www.wasmish.com` con 301; los certificados de los cuatro, y en los logs, entrantes del webhook y `POST /api/v1/templates/send` con 200.
+  **Después:** reinstalar la app en los teléfonos de prueba desde `app.wasmish.com`, volver a activar los avisos y probar el Embedded Signup desde el dominio nuevo.
 
 <!-- Formato de una entrada:
 - **<qué>** — rama `<rama>`, PR #<n>, empezado el <fecha> por <Claude|Codex|Jonathan>.
@@ -71,7 +74,7 @@ Nada en curso.
 
 ## Lo siguiente
 
-- **Avisar al cliente real** de que ya puede usar Wasmish en el celular, con los avisos.
+- **Avisar al cliente real** de que ya puede usar Wasmish en el celular, con los avisos, **cuando la app ya esté en `app.wasmish.com`** (si la instala antes, tendrá que instalarla dos veces). Cuando le convenga, que cambie la URL de su integración a `app.wasmish.com`; la vieja sigue funcionando.
 - **Multi-línea y multi-agente, fases 1 a 4** (diseño aprobado, sin preguntas abiertas: `docs/superpowers/specs/2026-10-11-multi-linea-multi-agente-design.md`). Fases 1, 2a y 2b en producción (la 2b, enrutar por línea, desde la 1.0.14). La **Fase 2c** está en producción desde la 1.0.15.
   - **Para encender varias líneas** (plan de la 2c, «Después de desplegar»):
     1. La prueba del token: ¿un token nuevo del Embedded Signup cubre todos los números del WABA? (spec § 2.2). Se puede hacer en producción con la cuenta de prueba de Jonathan (`maxLines: 2`), pero necesita **dos números en el mismo WABA**: hoy tiene uno conectado. Una cuenta con dos líneas de WABA distintos ya se probó el 2026-10-14.

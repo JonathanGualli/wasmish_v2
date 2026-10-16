@@ -33,7 +33,7 @@ Si alguna falla, **se para** y se explica qué falta. No se «arregla» sobre la
 3. **Versión nueva:**
    ```bash
    NEW=$(node -p "require('./Backend/package.json').version")
-   PROD=$(curl -s https://wasmish.solventyc.com/api/version | node -p "JSON.parse(require('fs').readFileSync(0)).version")
+   PROD=$(curl -s https://app.wasmish.com/api/version | node -p "JSON.parse(require('fs').readFileSync(0)).version")
    LAST=$(git describe --tags --abbrev=0 --match 'v*')
    echo "local $NEW · producción $PROD · último desplegado $LAST"
    ```
@@ -114,7 +114,7 @@ Los comandos con tuberías llevan `set -o pipefail`: sin eso, una subida a media
 
 ```bash
 ssh $SERVER "cd $REMOTE && docker compose ps"
-curl -s https://wasmish.solventyc.com/api/version          # tiene que ser $NEW
+curl -s https://app.wasmish.com/api/version          # tiene que ser $NEW
 ssh $SERVER "cd $REMOTE && docker compose logs --tail=80 wasmish-api"
 ```
 

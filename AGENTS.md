@@ -1,6 +1,6 @@
 # Wasmish
 
-SaaS multi-cliente de WhatsApp Business (Solventyc): cada cliente conecta su número de WhatsApp con «login con Facebook» (Embedded Signup) y desde Wasmish chatea con sus contactos, los organiza con etiquetas, los importa, les envía plantillas y campañas, y usa una API pública con API key. Producción: `https://wasmish.solventyc.com` (`GET /api/version` dice qué versión corre).
+SaaS multi-cliente de WhatsApp Business (Solventyc): cada cliente conecta su número de WhatsApp con «login con Facebook» (Embedded Signup) y desde Wasmish chatea con sus contactos, los organiza con etiquetas, los importa, les envía plantillas y campañas, y usa una API pública con API key. Producción: `https://app.wasmish.com` (`GET /api/version` dice qué versión corre); `wasmish.solventyc.com` sigue sirviendo `/api` para el webhook de Meta y la API pública, y `wasmish.com` es para la página pública → [deploy/README.md § Dominios](deploy/README.md#dominios).
 
 Este archivo es para **cualquier agente**: Claude Code lo importa desde `CLAUDE.md` y Codex lo lee directo. Es corto a propósito: las reglas que valen siempre y el **mapa** para consultar cada tema a fondo. Se escribe en español; los identificadores nuevos, en inglés.
 
