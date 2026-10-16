@@ -45,15 +45,16 @@ export const SidebarItem = ({ icon, text, collapsed, onTap, isSelected, badge, t
     <span className={`flex-shrink-0 ${isSelected ? 'text-brand-accent' : ''}`}>{icon}</span>
 
     {/* Un nombre largo («Respuestas automáticas») pasa a dos líneas; en una sola no
-        cabía y el menú salía con scroll horizontal. El mínimo evita que, mientras la
-        barra se abre (300 ms), el texto se parta en muchas líneas: ahí se recorta. */}
-    {!collapsed && <span className="min-w-[124px] text-left leading-[1.25]">{text}</span>}
+        cabía y el menú salía con scroll horizontal. Se encoge (`min-w-0`) y nunca pasa
+        de dos líneas: mientras la barra se abre (300 ms) no se sale ni empuja al
+        contador, que no se encoge (revisión de Codex del PR #71). */}
+    {!collapsed && <span className="min-w-0 flex-1 line-clamp-2 text-left leading-[1.25]">{text}</span>}
 
     {badge !== undefined && badge > 0 && (
       collapsed ? (
         <span className="absolute top-1.5 right-3.5 w-2 h-2 rounded-full bg-brand-accent" />
       ) : (
-        <span className="ml-auto inline-flex items-center justify-center min-w-5 h-5 px-1.5
+        <span className="ml-auto shrink-0 inline-flex items-center justify-center min-w-5 h-5 px-1.5
           rounded-full bg-brand-accent text-brand-ink text-[11px] font-bold tabular-nums">
           {badge}
         </span>

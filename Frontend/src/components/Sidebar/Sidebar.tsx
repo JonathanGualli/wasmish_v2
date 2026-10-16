@@ -124,7 +124,7 @@ export const Sidebar = ({ collapsed, toggle, isMobile }: Props) => {
           Trabajo
         </div>
       )}
-      <nav className={`grid gap-[3px] min-h-0 ${collapsed ? 'mt-7' : 'overflow-y-auto overflow-x-hidden'}`}>
+      <nav className={`grid grid-cols-[minmax(0,1fr)] gap-[3px] min-h-0 ${collapsed ? 'mt-7' : 'overflow-y-auto overflow-x-hidden'}`}>
         {navItems.map(({ icon, text, value, path, badge }) => (
           <SidebarItem
             key={value}
