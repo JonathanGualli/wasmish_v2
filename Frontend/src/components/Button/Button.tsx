@@ -53,6 +53,7 @@ export const CustomButton: React.FC<ButtonProps> = ({
   <div className="flex flex-col w-full h-full">
     <button
       className={`
+        flex items-center justify-center
         font-semibold transition-colors cursor-pointer
         ${sizeClasses[size]}
         disabled:bg-brand-raised disabled:text-brand-subtle
