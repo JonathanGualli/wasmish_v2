@@ -195,3 +195,17 @@ export const botStateUpdate = (state, claims, now) => {
     update['bot.recentReplies'] = [...recentRepliesOf(state ?? {}, now), now].slice(-BURST_MAX);
     return update;
 };
+
+/**
+ * Cómo termina un trabajo según lo que pasó al enviar (la tabla del spec,
+ * § 4.2). `result` es lo que devuelve `processMessageSending` (un rechazo de
+ * Meta NO lanza: vuelve con `status: 'failed'`); `error`, si lanzó; y
+ * `sendStarted`, si ya se había empezado a enviar. Los `claims` solo se marcan
+ * con un envío aceptado; un error después de empezar es `uncertain`, porque
+ * Meta pudo recibirlo: no se reintenta.
+ */
+export const autoReplyOutcome = ({ result, error, sendStarted }) => {
+    if (error) return { status: sendStarted ? 'uncertain' : 'failed', applyClaims: false };
+    if (result?.status === 'sent') return { status: 'done', applyClaims: true };
+    return { status: 'failed', applyClaims: false };
+};

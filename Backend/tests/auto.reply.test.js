@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-    botStateUpdate, decideAutoReply, defaultAutoReplySettings, inboundMatchText, matchesKeyword, normalizeForMatch,
+    autoReplyOutcome, botStateUpdate, decideAutoReply, defaultAutoReplySettings, inboundMatchText, matchesKeyword, normalizeForMatch,
 } from '../src/utils/auto.reply.js';
 
 test('normalizeForMatch quita tildes, mayúsculas y puntuación', () => {
@@ -241,4 +241,16 @@ test('botStateUpdate guarda el tramo, las reglas y el freno', () => {
         'bot.keywordRepliedAt.a': OPEN,
         'bot.recentReplies': [minutesBefore(OPEN, 5), minutesBefore(OPEN, 2), OPEN],
     });
+});
+
+test('autoReplyOutcome: aceptado, rechazado o incierto', () => {
+    assert.deepEqual(autoReplyOutcome({ result: { status: 'sent' }, error: null, sendStarted: true }), { status: 'done', applyClaims: true });
+    assert.deepEqual(autoReplyOutcome({ result: { status: 'failed' }, error: null, sendStarted: true }), { status: 'failed', applyClaims: false });
+    assert.deepEqual(autoReplyOutcome({ result: null, error: new Error('línea'), sendStarted: false }), { status: 'failed', applyClaims: false });
+});
+
+// Meta pudo aceptarlo y fallar después (al guardar): no se sabe si salió.
+// Reintentarlo lo mandaría y lo cobraría dos veces.
+test('autoReplyOutcome: un error después de empezar a enviar es incierto', () => {
+    assert.deepEqual(autoReplyOutcome({ result: null, error: new Error('Mongo'), sendStarted: true }), { status: 'uncertain', applyClaims: false });
 });

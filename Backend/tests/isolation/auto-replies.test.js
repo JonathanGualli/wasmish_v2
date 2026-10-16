@@ -4,11 +4,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
     seedAccount, seedMember, connectWhatsapp, request, onMeta, ANONYMOUS, PNG,
-    postWebhook, ApiKey, AutoReplySettings, Campaign, Contact, Conversation, Message,
+    postWebhook, metaCalls, ApiKey, AutoReplySettings, Campaign, Contact, Conversation, Line, Message,
 } from './helpers.js';
 
 const { processNext } = await import('../../src/workers/campaign.worker.js');
 const { hashApiKey } = await import('../../src/utils/crypto.js');
+const { processNextAutoReply, recoverAutoReplyJobs, authorizeBotSend } = await import('../../src/workers/auto.reply.worker.js');
+const { markHumanReply } = await import('../../src/services/auto.reply.service.js');
 
 let seq = 1;
 const newAccount = async (label) => {
@@ -323,4 +325,284 @@ test('si preparar el trabajo falla, el entrante se guarda igual y el resto del l
     const messages = await inboundsOf(a, from);
     assert.deepEqual(messages.map(m => m.text), ['uno', 'dos']);
     assert.ok(messages.every(m => m.bot === undefined));
+});
+
+// --- El worker que responde ------------------------------------------------
+
+const WELCOME = '¡Hola! Gracias por escribir';
+
+// Lo que dejaron en la cola los tests anteriores no se procesa aquí.
+const clearQueue = () => Message.updateMany({ 'bot.active': true }, { $set: { 'bot.status': 'skipped' }, $unset: { 'bot.active': '' } });
+
+let wamidSeq = 0;
+/** Meta acepta los envíos con un `wamid.bot-N` predecible. `reject(config)` puede lanzar para simular un rechazo. */
+const metaForBot = (reject = null) => onMeta(async (config) => {
+    if (config.method !== 'post' || !config.url.endsWith('/messages')) return undefined;
+    reject?.(config);
+    return { data: { messages: [{ id: `wamid.bot-${++wamidSeq}` }] } };
+});
+
+/** Procesa la cola hasta vaciarla; los trabajos devueltos por candado se adelantan. */
+const drain = async (workers = 1) => {
+    const results = [];
+    for (let round = 0; round < 50; round++) {
+        const batch = await Promise.all(Array.from({ length: workers }, () => processNextAutoReply()));
+        results.push(...batch.filter(result => result !== 'idle'));
+        if (batch.every(result => result === 'idle')) {
+            const waiting = await Message.updateMany(
+                { 'bot.active': true, 'bot.status': 'pending' }, { $set: { 'bot.runAfter': new Date() } },
+            );
+            if (waiting.matchedCount === 0) return results;
+        }
+    }
+    throw new Error('la cola no se vació');
+};
+
+const botMessagesOf = (conversationId) => Message.find({ conversationId, origin: 'bot' }).sort({ _id: 1 }).lean();
+const metaSendsTo = (account) => metaCalls.filter(call => call.url === `/${numberOf(account)}/messages`).length;
+
+test('un contacto nuevo recibe la bienvenida, sin marcar leída la conversación', async () => {
+    await clearQueue();
+    const a = await accountWithBot('BWA');
+    metaForBot();
+    try {
+        await postWebhook(numberOf(a), textFrom('593970000001', 'hola'));
+        assert.deepEqual(await drain(), ['done']);
+    } finally {
+        onMeta(null);
+    }
+    const [inbound] = await inboundsOf(a, '593970000001');
+    const [reply] = await botMessagesOf(inbound.conversationId);
+    assert.equal(reply.text, WELCOME);
+    assert.equal(reply.direction, 'outbound');
+    assert.match(reply.waMessageId, /^wamid\.bot-\d+$/);
+
+    const job = (await Message.findById(inbound._id).lean()).bot;
+    assert.equal(job.status, 'done');
+    assert.equal(job.active, undefined);
+    assert.equal(String(job.replyMessageId), String(reply._id));
+
+    const contact = await Contact.findOne({ userId: a.accountId, phone: '593970000001' }).lean();
+    assert.ok(contact.autoReply.welcomedAt);
+    const conversation = await Conversation.findById(inbound.conversationId).lean();
+    assert.equal(conversation.unreadCount, 1, 'el bot no marca leído');
+    assert.equal(conversation.bot.recentReplies.length, 1);
+});
+
+test('cada cuenta responde con sus reglas', async () => {
+    await clearQueue();
+    const a = await accountWithBot('BWB');
+    const b = await accountWithBot('BWC', { welcome: { enabled: true, text: 'Bienvenido a B', returnAfterDays: 30 } });
+    metaForBot();
+    try {
+        await postWebhook(numberOf(b), textFrom('593970000002', 'hola'));
+        await drain();
+    } finally {
+        onMeta(null);
+    }
+    const [inbound] = await inboundsOf(b, '593970000002');
+    assert.deepEqual((await botMessagesOf(inbound.conversationId)).map(m => m.text), ['Bienvenido a B']);
+    assert.equal(metaSendsTo(a), 0);
+});
+
+test('ráfaga: «hola» y «precio?» dan la bienvenida y después el precio, nunca dos bienvenidas', async () => {
+    await clearQueue();
+    const a = await accountWithBot('BWD');
+    metaForBot();
+    try {
+        await postWebhook(numberOf(a), textFrom('593970000003', 'hola'));
+        await postWebhook(numberOf(a), textFrom('593970000003', 'precio?'));
+        await drain();
+    } finally {
+        onMeta(null);
+    }
+    const [inbound] = await inboundsOf(a, '593970000003');
+    assert.deepEqual((await botMessagesOf(inbound.conversationId)).map(m => m.text), [WELCOME, 'Cuesta $10']);
+});
+
+test('con el contacto ocupado, el trabajo vuelve a la cola para después', async () => {
+    await clearQueue();
+    const a = await accountWithBot('BWE');
+    await postWebhook(numberOf(a), textFrom('593970000004', 'hola'));
+    await Contact.updateOne({ userId: a.accountId, phone: '593970000004' },
+        { $set: { 'autoReply.lockUntil': new Date(Date.now() + 60_000), 'autoReply.lockToken': 'otro' } });
+
+    assert.equal(await processNextAutoReply(), 'busy');
+    const [inbound] = await inboundsOf(a, '593970000004');
+    assert.equal(inbound.bot.status, 'pending');
+    assert.ok(inbound.bot.runAfter > new Date());
+});
+
+test('dos workers a la vez: una sola bienvenida', async () => {
+    await clearQueue();
+    const a = await accountWithBot('BWF');
+    metaForBot();
+    try {
+        await postWebhook(numberOf(a), textFrom('593970000005', 'hola'));
+        await postWebhook(numberOf(a), textFrom('593970000005', 'buenas'));
+        // Los dos como de un contacto nuevo, como si los dos webhooks hubieran
+        // leído la conversación a la vez: solo el candado evita dos bienvenidas.
+        const contact = await Contact.findOne({ userId: a.accountId, phone: '593970000005' }).lean();
+        const conversations = await Conversation.find({ contactId: contact._id }).select('_id').lean();
+        await Message.updateMany({ conversationId: { $in: conversations.map(c => c._id) }, 'bot.active': true },
+            { $set: { 'bot.previousInboundAt': null } });
+        await drain(2);
+    } finally {
+        onMeta(null);
+    }
+    const [inbound] = await inboundsOf(a, '593970000005');
+    assert.deepEqual((await botMessagesOf(inbound.conversationId)).map(m => m.text), [WELCOME]);
+});
+
+test('un contacto nuevo que escribe a la vez a dos líneas recibe una sola bienvenida', async () => {
+    await clearQueue();
+    const account = await seedAccount('BWG', { seq: seq++, maxLines: 2 });
+    await connectWhatsapp(account, { phoneNumberId: '8811' });
+    await connectWhatsapp(account, { phoneNumberId: '8812' });
+    assert.equal((await saveSettings(account, settingsBody())).status, 200);
+    metaForBot();
+    try {
+        await Promise.all([postWebhook('8811', textFrom('593970000006', 'hola')), postWebhook('8812', textFrom('593970000006', 'hola'))]);
+        await drain(2);
+    } finally {
+        onMeta(null);
+    }
+    const inbounds = await inboundsOf(account, '593970000006');
+    const replies = (await Promise.all(inbounds.map(m => botMessagesOf(m.conversationId)))).flat();
+    assert.deepEqual(replies.map(m => m.text), [WELCOME]);
+});
+
+test('una persona responde antes de que el worker lo tome: el bot se calla', async () => {
+    await clearQueue();
+    const a = await accountWithBot('BWH');
+    metaForBot();
+    try {
+        await postWebhook(numberOf(a), textFrom('593970000007', 'hola'));
+        const [inbound] = await inboundsOf(a, '593970000007');
+        const manual = await request(a, 'POST', `/chats/${inbound.conversationId}/messages`, { text: 'hola, te atiendo yo', temporalId: 'h1' });
+        assert.equal(manual.status, 201, manual.text);
+        await drain();
+        const job = (await Message.findById(inbound._id).lean()).bot;
+        assert.equal(job.status, 'skipped');
+        assert.equal(job.skipReason, 'human');
+        assert.deepEqual(await botMessagesOf(inbound.conversationId), []);
+    } finally {
+        onMeta(null);
+    }
+});
+
+test('una persona responde mientras el bot decide: la autorización no pasa', async () => {
+    const a = await accountWithBot('BWI');
+    const now = new Date();
+    assert.equal(await authorizeBotSend({ conversationId: a.conversationId, handoffHours: 12, now }), true);
+    await markHumanReply(a.conversationId);
+    assert.equal(await authorizeBotSend({ conversationId: a.conversationId, handoffHours: 12, now: new Date() }), false);
+});
+
+test('apagan las respuestas o borran la regla antes de responder: no sale nada', async () => {
+    await clearQueue();
+    const noWelcome = { welcome: { enabled: false, text: '', returnAfterDays: 30 } };
+    const a = await accountWithBot('BWJ', noWelcome);
+
+    await postWebhook(numberOf(a), textFrom('593970000008', 'precio?'));
+    await saveSettings(a, settingsBody({ ...noWelcome, keywordRules: [] }));
+    assert.deepEqual(await drain(), ['skipped']);
+    assert.equal((await inboundsOf(a, '593970000008'))[0].bot.skipReason, 'no_match');
+
+    await postWebhook(numberOf(a), textFrom('593970000009', 'hola'));
+    await saveSettings(a, settingsBody({ enabled: false }));
+    assert.deepEqual(await drain(), ['skipped']);
+    assert.equal((await inboundsOf(a, '593970000009'))[0].bot.skipReason, 'disabled');
+
+    await postWebhook(numberOf(a), textFrom('593970000010', 'hola'));
+    assert.equal((await inboundsOf(a, '593970000010'))[0].bot, undefined, 'con el bot apagado, ni trabajo');
+    assert.equal(metaSendsTo(a), 0);
+});
+
+test('un entrante de hace 11 minutos caduca sin llamar a Meta', async () => {
+    await clearQueue();
+    const a = await accountWithBot('BWK');
+    await postWebhook(numberOf(a), textFrom('593970000011', 'hola'));
+    const [inbound] = await inboundsOf(a, '593970000011');
+    await Message.updateOne({ _id: inbound._id }, { $set: { timestamp: new Date(Date.now() - 11 * 60 * 1000) } });
+
+    assert.deepEqual(await drain(), ['expired']);
+    assert.equal(metaSendsTo(a), 0);
+});
+
+test('Meta rechaza el envío: el mensaje del bot queda fallido y la bienvenida no se marca', async () => {
+    await clearQueue();
+    const a = await accountWithBot('BWL');
+    metaForBot(() => {
+        throw Object.assign(new Error('WhatsApp API Error (400): rechazado'), { waErrorCode: 131026, waErrorDetail: 'rechazado' });
+    });
+    try {
+        await postWebhook(numberOf(a), textFrom('593970000012', 'hola'));
+        assert.deepEqual(await drain(), ['failed']);
+    } finally {
+        onMeta(null);
+    }
+    const [inbound] = await inboundsOf(a, '593970000012');
+    const [reply] = await botMessagesOf(inbound.conversationId);
+    assert.equal(reply.status, 'failed');
+    assert.equal(inbound.bot.status, 'failed');
+    assert.equal(inbound.bot.skipReason, 'meta_131026');
+    const contact = await Contact.findOne({ userId: a.accountId, phone: '593970000012' }).lean();
+    assert.equal(contact.autoReply?.welcomedAt ?? null, null);
+});
+
+test('la línea ya no está conectada: falla sin llamar a Meta', async () => {
+    await clearQueue();
+    const a = await accountWithBot('BWM');
+    await postWebhook(numberOf(a), textFrom('593970000013', 'hola'));
+    await Line.updateOne({ _id: a.lineId }, { $set: { status: 'disconnected' } });
+
+    assert.deepEqual(await drain(), ['failed']);
+    const [inbound] = await inboundsOf(a, '593970000013');
+    assert.equal((await Message.findById(inbound._id).lean()).bot.skipReason, 'line_unavailable');
+    assert.equal(metaSendsTo(a), 0);
+});
+
+test('al arrancar se recoge lo que quedó a medias', async () => {
+    await clearQueue();
+    const a = await accountWithBot('BWN');
+    const job = (status, extra = {}) => Message.create({
+        conversationId: a.conversationId, direction: 'inbound', sender: 'them', text: 'x',
+        bot: { status, active: true, runAfter: new Date(), ...extra },
+    });
+    const sending = await job('processing', { sendStartedAt: new Date() });
+    const notSent = await job('processing');
+    const oldWaiting = await job('waiting');
+    const freshWaiting = await job('waiting');
+    await Message.collection.updateOne({ _id: oldWaiting._id }, { $set: { createdAt: new Date(Date.now() - 40_000) } });
+
+    assert.deepEqual(await recoverAutoReplyJobs({ startup: true }), { requeued: 2, uncertain: 1 });
+    const statusOf = async (message) => (await Message.findById(message._id).lean()).bot.status;
+    assert.equal(await statusOf(sending), 'uncertain');
+    assert.equal(await statusOf(notSent), 'pending');
+    assert.equal(await statusOf(oldWaiting), 'pending');
+    assert.equal(await statusOf(freshWaiting), 'waiting');
+});
+
+test('un corte antes de guardar la conversación: el barrido la repara y la bienvenida sale', async () => {
+    await clearQueue();
+    const a = await accountWithBot('BWO');
+    await Conversation.updateOne({ _id: a.conversationId }, { $set: { lineId: a.lineId, lastInboundAt: null } });
+    const timestamp = new Date(Date.now() - 60_000);
+    const inbound = await Message.create({
+        conversationId: a.conversationId, direction: 'inbound', sender: 'them', type: 'text', text: 'hola', timestamp,
+        bot: { status: 'waiting', active: true, previousInboundAt: null, runAfter: timestamp },
+    });
+    await Message.collection.updateOne({ _id: inbound._id }, { $set: { createdAt: timestamp } });
+
+    metaForBot();
+    try {
+        await recoverAutoReplyJobs();
+        assert.deepEqual(await drain(), ['done']);
+    } finally {
+        onMeta(null);
+    }
+    const conversation = await Conversation.findById(a.conversationId).lean();
+    assert.equal(conversation.lastInboundAt.getTime(), timestamp.getTime());
+    assert.deepEqual((await botMessagesOf(a.conversationId)).map(m => m.text), [WELCOME]);
 });
