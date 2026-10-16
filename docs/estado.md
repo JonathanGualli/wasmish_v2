@@ -72,7 +72,8 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
 
 - **Coexistencia con la app de WhatsApp Business** — rama `coexistencia`, empezado el 2026-10-16 por Claude. Spec `docs/superpowers/specs/2026-10-16-coexistencia-design.md` y brief de la interfaz `2026-10-16-coexistencia-brief-ui.md` (para Claude Design).
   Plan `docs/superpowers/plans/2026-10-16-coexistencia.md` (PR #78, spec y plan, revisados por Codex). Backend en la rama `coexistencia-backend` (tareas 1 a 6: conectar por los dos caminos, ecos, `PARTNER_REMOVED`, simulador), con sus tests.
-  Hecho: el backend, probado con los tests y con `webhook:simulate` (`eco`, `retiro-acceso`) contra un backend local. · Falta: la revisión de Codex del backend, el frontend (con el diseño `Design/Wasmish Líneas - Junto con la app.html`), suscribir los campos en el panel de Meta, desplegar y la prueba real con un número en la app de WhatsApp Business. · Sin probar: nada con Meta de verdad.
+  Frontend en la rama `coexistencia-frontend` (tareas 7 a 9: la pregunta antes de conectar, las líneas junto con la app o desconectadas por Meta, la marca en el chat), con el diseño `Design/Wasmish Líneas - Junto con la app.html` y los textos del spec.
+  Hecho: el backend (revisado por Codex, PR #79) y el frontend, probados con los tests, con `webhook:simulate` (`eco`, `retiro-acceso`) y en Chrome (computadora y teléfono emulado) contra un backend local con datos sembrados. · Falta: la revisión de Codex del frontend, suscribir los campos en el panel de Meta, la versión, desplegar y la prueba real con un número en la app de WhatsApp Business. · Sin probar: nada con Meta de verdad; un eco con foto (la descarga necesita a Meta), ni el popup de Facebook con el camino de la app.
 
 ## Lo siguiente
 

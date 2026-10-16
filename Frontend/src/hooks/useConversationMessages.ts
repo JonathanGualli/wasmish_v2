@@ -113,6 +113,20 @@ import { getConversationsMessagesService } from "../services/api.service.ts";
 import { useEffect } from "react";
 import { useSSE } from "../context/sse.context.ts";
 
+/**
+ * La primera página con `message` en su sitio por la hora (lo más nuevo,
+ * primero), o `null` si es más viejo que toda la página y hay páginas más
+ * antiguas: su sitio está en otra página, y si se metiera en esta, al cargar la
+ * siguiente (por su cursor) saldría dos veces. Ahí se vuelve a pedir el hilo
+ * (revisión de Codex del PR #80).
+ */
+const insertByTime = (items: Message[], message: Message, hasOlderPages: boolean): Message[] | null => {
+  const at = new Date(message.timestamp).getTime();
+  const index = items.findIndex(item => new Date(item.timestamp).getTime() <= at);
+  if (index === -1) return hasOlderPages ? null : [...items, message];
+  return [...items.slice(0, index), message, ...items.slice(index)];
+};
+
 export const useConversationMessages = (conversationId: string) => {
   const queryClient = useQueryClient();
   const { subscribe } = useSSE();
@@ -132,6 +146,7 @@ export const useConversationMessages = (conversationId: string) => {
     // Mensaje nuevo en ESTA conversación
     const unsubCreated = subscribe("message_created", (newMessage) => {
       if (newMessage.conversationId !== conversationId) return;
+      let refetch = false;
 
       queryClient.setQueryData<InfiniteData<{ items: Message[], nextCursor: string | undefined }>>(
         ["conversation", conversationId],
@@ -146,10 +161,20 @@ export const useConversationMessages = (conversationId: string) => {
             if (exists) return oldData;
           }
 
+          // En su sitio por la hora (lo más nuevo, primero): Meta no garantiza el
+          // orden, y lo respondido desde la app de WhatsApp Business puede llegar
+          // después de un mensaje más nuevo.
+          const hasOlderPages = oldData.pages.length > 1 || Boolean(oldData.pages[0].nextCursor);
+          const items = insertByTime(oldData.pages[0].items, newMessage, hasOlderPages);
+          if (!items) {
+            refetch = true;
+            return oldData;
+          }
           const newPages = [...oldData.pages];
-          newPages[0] = { ...newPages[0], items: [newMessage, ...newPages[0].items] };
+          newPages[0] = { ...newPages[0], items };
           return { ...oldData, pages: newPages };
         });
+      if (refetch) void queryClient.invalidateQueries({ queryKey: ["conversation", conversationId] });
     });
 
     // Cambio de estado (sent → delivered → read → failed) de ESTA conversación

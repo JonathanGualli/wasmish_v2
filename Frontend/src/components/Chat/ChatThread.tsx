@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { useInView } from "react-intersection-observer";
 import { Transition } from "@headlessui/react";
-import { Bot, CircleAlert, Code2, Send } from "lucide-react";
+import { Bot, CircleAlert, Code2, Send, Smartphone } from "lucide-react";
 import { useConversationMessages } from "../../hooks/useConversationMessages";
 import { useConversations } from "../../hooks/useConversations.ts";
 import { useTemplates } from "../../hooks/useTemplates.ts";
@@ -105,6 +105,16 @@ const MessageAuthor = ({ msg }: { msg: Message }) => {
         return (
             <>
                 <span className="inline-flex items-center gap-1 text-brand-muted"><Bot size={11} />Bot</span>
+                <span>·</span>
+            </>
+        );
+    }
+    // Respondido desde la app de WhatsApp Business (coexistencia): en el celular o
+    // en un dispositivo vinculado. Sin persona: Meta no dice quién lo escribió.
+    if (msg.origin?.kind === 'businessApp') {
+        return (
+            <>
+                <span className="inline-flex items-center gap-1 text-brand-muted"><Smartphone size={11} />Desde la app de WhatsApp</span>
                 <span>·</span>
             </>
         );
@@ -231,8 +241,9 @@ export const ChatThread = ({
 
                     <div className={`flex items-center gap-[5px] text-[11px] mt-1 text-brand-subtle
                         ${mine ? "justify-end" : ""}`}>
-                        {/* «Bot» siempre: sin equipo también hay que saber qué contestó la máquina. */}
-                        {mine && (showAuthor || msg.origin?.kind === 'bot') && <MessageAuthor msg={msg} />}
+                        {/* «Bot» y «Desde la app de WhatsApp» siempre: sin equipo también hay que saber
+                            qué contestó la máquina y qué se respondió desde el celular. */}
+                        {mine && (showAuthor || msg.origin?.kind === 'bot' || msg.origin?.kind === 'businessApp') && <MessageAuthor msg={msg} />}
                         <span className="font-mono">{formatTime(msg.timestamp)}</span>
                         {mine && (
                             showsUploadStatus(msg)

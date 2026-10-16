@@ -248,8 +248,13 @@ export const revokeApiKeyService = async (id: string) => {
 }
 
 // Servicio para conectar WhatsApp vía Embedded Signup
-export const connectWhatsappService = async (code: string, phoneNumberId: string, waBusinessId: string) => {
-    const { data } = await axios.post(`${API_URL}/whatsapp/connect`, { code, phoneNumberId, waBusinessId }, { withCredentials: true });
+// `businessApp`: el número sigue en la app de WhatsApp Business (coexistencia).
+// Ahí Meta no da el número y el backend lo deduce del WABA: `phoneNumberId` es null.
+export const connectWhatsappService = async ({ code, waBusinessId, phoneNumberId, businessApp }: {
+    code: string; waBusinessId: string; phoneNumberId: string | null; businessApp: boolean;
+}) => {
+    const body = { code, waBusinessId, ...(phoneNumberId && { phoneNumberId }), ...(businessApp && { businessApp: true }) };
+    const { data } = await axios.post(`${API_URL}/whatsapp/connect`, body, { withCredentials: true });
     return data;
 };
 

@@ -12,6 +12,7 @@ import { LineNameEditor } from "./LineNameEditor";
 import { LineActionsMenu } from "./LineActionsMenu";
 import { LineDetails } from "./LineDetails";
 import { isBusy } from "./lineActionError";
+import { BusinessAppMark } from "./RemovedLineRow";
 
 interface Props {
     line: Line;
@@ -95,6 +96,7 @@ export const LineRow = ({ line, colorClass, showDefault, onDisconnect }: Props) 
                             <span>En WhatsApp: <span className="text-brand-strong">{line.verifiedName}</span></span>
                         )}
                     </div>
+                    {line.businessApp && <div className="mt-1"><BusinessAppMark /></div>}
                 </div>
                 <span className="max-sm:hidden flex-none inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-brand-accent-strong">
                     <span className="w-1.5 h-1.5 rounded-full bg-brand-success" />Conectada

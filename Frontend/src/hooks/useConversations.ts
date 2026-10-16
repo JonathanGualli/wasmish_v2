@@ -29,12 +29,15 @@ export const useConversations = () => {
           refreshList();
           return old;
         }
+        // La vista previa y el orden solo avanzan con un mensaje más nuevo: uno
+        // que llega tarde (un eco de la app de WhatsApp Business, un webhook
+        // atrasado) se ve en el hilo, pero no retrocede la bandeja.
+        const isNewer = (c: Conversation) => !c.updatedAt || new Date(payload.timestamp) >= new Date(c.updatedAt);
         const updated = old.map((c) =>
           c.id === payload.conversationId 
             ? {
               ...c,
-              lastMessage: payload.text,
-              updatedAt: payload.timestamp,
+              ...(isNewer(c) && { lastMessage: payload.text, updatedAt: payload.timestamp }),
               unreadCount:
                 payload.sender === "them"
                   ? payload.unreadCount ?? (c.unreadCount ?? 0) + 1

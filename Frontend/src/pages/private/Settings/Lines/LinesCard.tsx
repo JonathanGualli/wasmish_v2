@@ -10,6 +10,8 @@ import { apiErrorOf } from "../../../../utils/apiError";
 import { maskWabaId } from "../../../../utils/lineDisplay";
 import { SettingsCard } from "../SettingsCard";
 import { LineRow } from "./LineRow";
+import { RemovedLineRow } from "./RemovedLineRow";
+import { ConnectQuestion } from "./ConnectQuestion";
 import { PreviousLines } from "./PreviousLines";
 import { DisconnectLineDialog } from "./DisconnectLineDialog";
 import { ManualCredentialsForm } from "./ManualCredentialsForm";
@@ -30,10 +32,16 @@ const groupByWaba = (lines: Line[]) => {
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
 
 /** Qué dice el botón de conectar y la nota de al lado, según las líneas y el plan. */
-const connectState = ({ activeCount, maxLines, isMultiLine, isConnecting }: {
+const connectState = ({ activeCount, maxLines, isMultiLine, isConnecting, hasRemoved }: {
     activeCount: number; maxLines: number; isMultiLine: boolean; isConnecting: boolean;
+    /** Hay una línea que desconectó Meta: lo natural es volver a conectarla (2c). */
+    hasRemoved: boolean;
 }) => {
     if (isConnecting) return { label: 'Conectando…', variant: 'primary' as const, disabled: true, note: 'No cierres esta pestaña.', strong: false };
+    if (activeCount === 0 && hasRemoved) {
+        return { label: 'Volver a conectar', variant: 'outline' as const, disabled: false, strong: false,
+            note: 'Vuelve a conectar este mismo número para recuperar sus conversaciones.' };
+    }
     if (activeCount === 0) return { label: 'Conectar WhatsApp', variant: 'primary' as const, disabled: false, note: '', strong: false };
     if (!isMultiLine) {
         return {
@@ -70,17 +78,25 @@ const connectState = ({ activeCount, maxLines, isMultiLine, isConnecting }: {
  * «Conectar otro número».
  */
 export const LinesCard = () => {
-    const { isLoading, isError, refresh, activeLines, previousLines, maxLines, isMultiLine, colorOf } = useLines();
+    const { isLoading, isError, refresh, lines, activeLines, previousLines, removedLines, maxLines, isMultiLine, colorOf } = useLines();
     const connectWhatsapp = useConnectWhatsapp();
     const [toDisconnect, setToDisconnect] = useState<Line | null>(null);
+    // La pregunta antes de abrir Facebook (coexistencia). «Volver a conectar» una
+    // línea que estaba junto con la app la abre ya en «Sí». `key` la reinicia.
+    const [question, setQuestion] = useState<{ key: number; initialAnswer: 'yes' | null } | null>(null);
+    const askBeforeConnecting = (initialAnswer: 'yes' | null = null) => setQuestion({ key: Date.now(), initialAnswer });
+    // «Números anteriores»: las desconectadas desde Wasmish. Las que desconectó
+    // Meta se quedan en la lista, con su aviso.
+    const formerLines = previousLines.filter(line => !line.disconnectionReason);
 
     const connectError = connectWhatsapp.isError ? apiErrorOf(connectWhatsapp.error, 'No se pudo conectar WhatsApp. Intenta de nuevo.') : null;
     // Se reintenta lo que puede salir bien al repetirlo: otro cambio en curso, o WhatsApp que no activó el número.
     const canRetryConnect = Boolean(connectError)
         && (isBusy(connectError) || connectError?.code === LINE_ERROR.registrationFailed);
-    const groups = groupByWaba(activeLines);
+    const groups = groupByWaba(lines.filter(line => line.status === 'active' || line.disconnectionReason));
     const button = connectState({
         activeCount: activeLines.length, maxLines, isMultiLine, isConnecting: connectWhatsapp.isConnecting,
+        hasRemoved: removedLines.length > 0,
     });
 
     return (
@@ -105,9 +121,9 @@ export const LinesCard = () => {
                             {activeLines.length} de {plural(maxLines, 'línea', 'líneas')}
                         </span>
                     ) : (
-                        <Pill tone={activeLines.length > 0 ? 'positive' : 'neutral'}
-                            icon={<span className={`w-1.5 h-1.5 rounded-full ${activeLines.length > 0 ? 'bg-brand-success' : 'bg-brand-subtle'}`} />}>
-                            {activeLines.length > 0 ? 'Conectado' : 'Sin conectar'}
+                        <Pill tone={activeLines.length > 0 ? 'positive' : removedLines.length > 0 ? 'warning' : 'neutral'}
+                            icon={<span className={`w-1.5 h-1.5 rounded-full ${activeLines.length > 0 ? 'bg-brand-success' : removedLines.length > 0 ? 'bg-brand-warning' : 'bg-brand-subtle'}`} />}>
+                            {activeLines.length > 0 ? 'Conectado' : removedLines.length > 0 ? 'Desconectado' : 'Sin conectar'}
                         </Pill>
                     )}
                 </div>
@@ -120,7 +136,7 @@ export const LinesCard = () => {
                         action={
                             <div className="flex items-center gap-3">
                                 {canRetryConnect && (
-                                    <button type="button" onClick={() => connectWhatsapp.connect()}
+                                    <button type="button" onClick={() => askBeforeConnecting()}
                                         className="text-[13px] font-semibold text-brand-accent-strong cursor-pointer">Reintentar</button>
                                 )}
                                 <button type="button" onClick={() => connectWhatsapp.reset()} aria-label="Cerrar el aviso"
@@ -143,7 +159,7 @@ export const LinesCard = () => {
                     </p>
                 )}
 
-                {!isLoading && !isError && activeLines.length === 0 && (
+                {!isLoading && !isError && activeLines.length === 0 && removedLines.length === 0 && (
                     <div className="grid gap-1.5 rounded-[10px] border border-dashed border-brand-border-strong p-7 max-sm:p-5">
                         <p className="text-[15px] font-semibold text-brand-text">Aún no hay ningún número conectado</p>
                         <p className="max-w-[520px] text-sm leading-[1.55] text-brand-gray-600">
@@ -164,9 +180,11 @@ export const LinesCard = () => {
                                 <span className="ml-auto">{plural(group.lines.length, 'línea', 'líneas')}</span>
                             </div>
                         )}
-                        {group.lines.map(line => (
-                            <LineRow key={line.id} line={line} colorClass={colorOf(line.id)} showDefault={isMultiLine}
+                        {group.lines.map(line => (line.status === 'active'
+                            ? <LineRow key={line.id} line={line} colorClass={colorOf(line.id)} showDefault={isMultiLine}
                                 onDisconnect={setToDisconnect} />
+                            : <RemovedLineRow key={line.id} line={line} showDefault={isMultiLine}
+                                onReconnect={removed => askBeforeConnecting(removed.businessApp ? 'yes' : null)} />
                         ))}
                     </div>
                 ))}
@@ -175,9 +193,14 @@ export const LinesCard = () => {
                     <div className="flex items-center gap-3.5 rounded-[10px] border border-dashed border-brand-green-200 bg-brand-green-50 px-[18px] py-4">
                         <Loader2 size={18} className="flex-none animate-spin text-brand-accent-strong" />
                         <div className="min-w-0">
-                            <p className="text-sm font-semibold text-brand-text">Conectando un número nuevo…</p>
+                            {/* Con la app de WhatsApp Business, el paso es escanear el código (1d, m3). */}
+                            <p className="text-sm font-semibold text-brand-text">
+                                {connectWhatsapp.businessApp ? 'Conectando tu número…' : 'Conectando un número nuevo…'}
+                            </p>
                             <p className="mt-0.5 text-[13px] text-brand-gray-600">
-                                Termina el inicio de sesión en la ventana de Facebook. Después Meta confirma el número: tarda unos segundos.
+                                {connectWhatsapp.businessApp
+                                    ? 'En la ventana de Facebook, escanea el código desde la app de WhatsApp Business. Después Meta confirma el número: tarda unos segundos.'
+                                    : 'Termina el inicio de sesión en la ventana de Facebook. Después Meta confirma el número: tarda unos segundos.'}
                             </p>
                         </div>
                     </div>
@@ -188,7 +211,8 @@ export const LinesCard = () => {
                 ) : (
                     <div className="flex flex-wrap items-center gap-4">
                         <div className="h-10 w-full sm:w-auto max-sm:h-12">
-                            <CustomButton variant={button.variant} disabled={button.disabled} onClick={() => connectWhatsapp.connect()}>
+                            <CustomButton variant={button.variant} disabled={button.disabled}
+                                onClick={() => askBeforeConnecting(activeLines.length === 0 && removedLines.some(line => line.businessApp) ? 'yes' : null)}>
                                 <Plug size={16} />{button.label}
                             </CustomButton>
                         </div>
@@ -200,11 +224,16 @@ export const LinesCard = () => {
                     </div>
                 )}
 
-                <PreviousLines lines={previousLines} />
+                <PreviousLines lines={formerLines} />
                 <ManualCredentialsForm hasToken={activeLines.length > 0} />
             </div>
 
             <DisconnectLineDialog line={toDisconnect} onClose={() => setToDisconnect(null)} />
+            {question && (
+                <ConnectQuestion key={question.key} open initialAnswer={question.initialAnswer}
+                    onCancel={() => setQuestion(null)}
+                    onConnect={businessApp => { setQuestion(null); void connectWhatsapp.connect({ businessApp }); }} />
+            )}
         </SettingsCard>
     );
 };

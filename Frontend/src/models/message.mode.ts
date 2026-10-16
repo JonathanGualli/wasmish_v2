@@ -52,6 +52,9 @@ export interface Message {
   pending?: PendingUpload;
   /** Quién lo envió desde el chat (Fase 3); el nombre es el de ese momento. */
   sentBy?: { id: string; name: string | null } | null;
-  /** De dónde salió un saliente: el chat, una campaña o la API. `null` en los antiguos. */
-  origin?: { kind: 'chat' | 'api' | 'bot' } | { kind: 'campaign'; campaignName: string | null } | null;
+  /**
+   * De dónde salió un saliente: el chat, una campaña, la API, el bot o la app de
+   * WhatsApp Business (`businessApp`, coexistencia). `null` en los antiguos.
+   */
+  origin?: { kind: 'chat' | 'api' | 'bot' | 'businessApp' } | { kind: 'campaign'; campaignName: string | null } | null;
 }

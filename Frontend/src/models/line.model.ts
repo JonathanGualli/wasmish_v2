@@ -19,7 +19,16 @@ export interface Line {
     disconnectedAt: string | null;
     /** Si Wasmish guardó el PIN de dos pasos del número (el PIN se pide aparte, `GET /lines/:id/pin`). */
     hasTwoStepPin: boolean;
+    /** El número sigue en la app de WhatsApp Business (coexistencia), según Meta. */
+    businessApp: boolean;
+    /** Por qué la desconectó Meta, tal cual; `null` si no lo dijo o se desconectó desde Wasmish. */
+    disconnectionReason: DisconnectionReason | null;
 }
+
+/** Los motivos de Meta al retirar el acceso (`PARTNER_REMOVED`); puede llegar otro. */
+export type DisconnectionReason =
+    | 'PRIMARY_INACTIVITY' | 'COMPANION_INACTIVITY' | 'ACCOUNT_DISCONNECTED'
+    | 'CHANGE_NUMBER' | 'USER_RE_REGISTERED' | 'BUSINESS_DOWNGRADE' | (string & {});
 
 export interface LinesResponse {
     lines: Line[];
