@@ -113,6 +113,13 @@ import { getConversationsMessagesService } from "../services/api.service.ts";
 import { useEffect } from "react";
 import { useSSE } from "../context/sse.context.ts";
 
+/** La primera página con `message` en su sitio por la hora (lo más nuevo, primero). */
+const insertByTime = (items: Message[], message: Message) => {
+  const at = new Date(message.timestamp).getTime();
+  const index = items.findIndex(item => new Date(item.timestamp).getTime() <= at);
+  return index === -1 ? [...items, message] : [...items.slice(0, index), message, ...items.slice(index)];
+};
+
 export const useConversationMessages = (conversationId: string) => {
   const queryClient = useQueryClient();
   const { subscribe } = useSSE();
@@ -146,8 +153,12 @@ export const useConversationMessages = (conversationId: string) => {
             if (exists) return oldData;
           }
 
+          // En su sitio por la hora (lo más nuevo, primero): Meta no garantiza el
+          // orden, y lo respondido desde la app de WhatsApp Business puede llegar
+          // después de un mensaje más nuevo.
+          const items = insertByTime(oldData.pages[0].items, newMessage);
           const newPages = [...oldData.pages];
-          newPages[0] = { ...newPages[0], items: [newMessage, ...newPages[0].items] };
+          newPages[0] = { ...newPages[0], items };
           return { ...oldData, pages: newPages };
         });
     });
