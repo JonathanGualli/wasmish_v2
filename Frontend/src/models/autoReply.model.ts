@@ -48,16 +48,28 @@ export interface AutoRepliesResponse extends AutoReplySettings {
     configured: boolean;
 }
 
-/** `POST /api/auto-replies/preview`: qué respondería ahora a un contacto nuevo. */
-export interface AutoReplyPreview {
-    reply: string | null;
-    parts: string[];
-    /** Posiciones en `keywordRules` de las reglas que coincidieron. */
-    matchedRuleIndexes: number[];
-    outOfHours: boolean;
-    /** Respondió con el «no entiendo». */
-    fallback: boolean;
+/** Una parte de una respuesta de prueba, con su origen. */
+export interface AutoReplyPreviewPart {
+    kind: 'welcome' | 'keyword' | 'outOfHours' | 'fallback';
+    text: string;
+    /** En `keyword`: la posición de la regla y la frase que coincidió. */
+    ruleIndex?: number;
+    keyword?: string;
 }
+
+/** Un mensaje de la conversación de prueba: qué respondería el bot, o por qué no. */
+export interface AutoReplyPreviewTurn {
+    reply: string | null;
+    parts: AutoReplyPreviewPart[];
+    /** Reglas que coincidían pero ya habían respondido en la conversación. */
+    repeated: { ruleIndex: number; keyword: string }[];
+    /** El «no entiendo» habría salido, pero ya salió. */
+    fallbackRepeated: boolean;
+    skip: string | null;
+}
+
+/** Cuántos mensajes admite la conversación de prueba (`PREVIEW_MESSAGES_MAX` del backend). */
+export const PREVIEW_MESSAGES_MAX = 20;
 
 export const AUTO_REPLY_TEXT_MAX = 800;
 export const KEYWORD_RULES_MAX = 30;

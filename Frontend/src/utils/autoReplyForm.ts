@@ -231,15 +231,6 @@ export const normalizeForMatch = (text: string) => text
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim();
 
-/** La primera frase de la regla que aparece en `text` como palabras completas. */
-export const matchedKeyword = (rule: KeywordRule, text: string) => {
-    const normalized = ` ${normalizeForMatch(text)} `;
-    return rule.keywords.find(keyword => {
-        const key = normalizeForMatch(keyword);
-        return key.length > 0 && normalized.includes(` ${key} `);
-    });
-};
-
 /** La fila de la lista: las tres primeras frases y cuántas más hay. */
 export const ruleTitle = (rule: KeywordRule) => {
     if (rule.keywords.length === 0) return 'Sin frases';
