@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import { Check } from "lucide-react";
 import { STEP_TITLES, type StepKey } from "../../../utils/autoReplyForm";
 import { stepIsOn, stepSummary } from "./stepState";
@@ -10,20 +9,26 @@ const DOT = {
     error: { text: 'text-brand-danger', dot: 'bg-brand-danger' },
 };
 
-/** «● Encendida»: el estado de un paso, con su punto de color. */
-export const StatusDot = ({ tone, children }: { tone: keyof typeof DOT; children: ReactNode }) => (
-    <span className={`inline-flex items-center gap-1.5 text-xs font-semibold whitespace-nowrap ${DOT[tone].text}`}>
-        <span className={`w-1.5 h-1.5 rounded-full ${DOT[tone].dot}`} />{children}
+/**
+ * «● Encendida»: el estado de un paso, con su punto de color. `compact`, solo
+ * el punto (el texto, al lector de pantalla y al pasar el ratón): en la barra
+ * de pasos no cabe junto al título.
+ */
+export const StatusDot = ({ tone, children, compact = false }: { tone: keyof typeof DOT; children: string; compact?: boolean }) => (
+    <span title={compact ? children : undefined}
+        className={`inline-flex items-center gap-1.5 text-xs font-semibold whitespace-nowrap ${DOT[tone].text}`}>
+        <span className={`w-1.5 h-1.5 rounded-full ${DOT[tone].dot}`} />
+        <span className={compact ? 'sr-only' : ''}>{children}</span>
     </span>
 );
 
 /** El estado que se ve en la barra (y en la lista del teléfono): errores, encendida o apagada. */
-export const StepStatus = ({ editor, step }: { editor: AutoReplyEditor; step: StepKey }) => {
+export const StepStatus = ({ editor, step, compact = false }: { editor: AutoReplyEditor; step: StepKey; compact?: boolean }) => {
     const errors = editor.showIssues ? editor.counts[step] : 0;
-    if (errors > 0) return <StatusDot tone="error">{errors} {errors === 1 ? 'error' : 'errores'}</StatusDot>;
+    if (errors > 0) return <StatusDot tone="error">{`${errors} ${errors === 1 ? 'error' : 'errores'}`}</StatusDot>;
     const on = stepIsOn(editor, step);
     if (on === null) return null;
-    return <StatusDot tone={on ? 'on' : 'off'}>{on ? 'Encendida' : 'Apagada'}</StatusDot>;
+    return <StatusDot tone={on ? 'on' : 'off'} compact={compact}>{on ? 'Encendida' : 'Apagada'}</StatusDot>;
 };
 
 /**
@@ -69,12 +74,9 @@ export const StepBar = ({ editor }: { editor: AutoReplyEditor }) => {
                             {done ? <Check size={12} strokeWidth={3.4} /> : index + 1}
                         </span>
                         <span className={`text-[14.5px] text-brand-text truncate ${active ? 'font-bold' : 'font-semibold'}`}>{STEP_TITLES[step]}</span>
-                        {/* En pantallas medianas no cabe «Encendida»; los errores se ven siempre. */}
-                        <span className={errors > 0 ? '' : 'hidden xl:inline'}>
-                            {wizard
-                                ? done && <StatusDot tone="on">Listo</StatusDot>
-                                : <StepStatus editor={editor} step={step} />}
-                        </span>
+                        {/* Junto al título solo cabe el punto; los errores se ven siempre con su texto.
+                            En el asistente, lo hecho ya lo dice el ✓. */}
+                        <span>{!wizard && <StepStatus editor={editor} step={step} compact />}</span>
                         <span className="col-start-2 col-span-2 text-[12.5px] text-brand-muted truncate">{summary}</span>
                     </button>
                 );

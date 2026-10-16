@@ -56,6 +56,7 @@ export const TestPanel = ({ editor }: { editor: AutoReplyEditor }) => {
             const phrase = rule && matchedKeyword(rule, tested);
             list.push({ ok: true, title: `Regla ${index + 1}`, detail: phrase ? `coincidió «${phrase}».` : 'coincidió.' });
         }
+        if (result.fallback) list.push({ ok: true, title: 'Si no entiende', detail: 'no saldría nada más.' });
         list.push(!form.outOfHours.enabled
             ? { ok: false, title: 'Fuera de horario', detail: 'apagado.' }
             : result.outOfHours

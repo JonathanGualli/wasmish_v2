@@ -39,6 +39,8 @@ export interface AutoReplySettings {
     welcome: { enabled: boolean; text: string; returnAfterDays: ReturnAfterDays };
     outOfHours: { enabled: boolean; text: string; schedule: WeekSchedule };
     keywordRules: KeywordRule[];
+    /** «Si no entiende»: solo cuando no saldría nada más. */
+    fallback: { enabled: boolean; text: string };
 }
 
 export interface AutoRepliesResponse extends AutoReplySettings {
@@ -53,6 +55,8 @@ export interface AutoReplyPreview {
     /** Posiciones en `keywordRules` de las reglas que coincidieron. */
     matchedRuleIndexes: number[];
     outOfHours: boolean;
+    /** Respondió con el «no entiendo». */
+    fallback: boolean;
 }
 
 export const AUTO_REPLY_TEXT_MAX = 800;

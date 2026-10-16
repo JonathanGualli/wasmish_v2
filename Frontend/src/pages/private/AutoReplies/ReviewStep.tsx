@@ -43,8 +43,15 @@ export const ReviewStep = ({ editor }: { editor: AutoReplyEditor }) => {
                 : 'Puedes añadirlas después, desde esta misma página.',
         },
         {
+            step: 'fallback', title: 'Si no entiende', on: form.fallback.enabled,
+            status: form.fallback.enabled ? 'Encendida' : 'Apagada',
+            summary: form.fallback.enabled
+                ? `Cuando no saldría nada más, una vez cada ${form.handoffHours} h por conversación.`
+                : 'Si el bot no sabe qué decir, no responde.',
+        },
+        {
             step: 'silence', title: 'Cuándo se calla', on: false, status: `${form.handoffHours} horas`,
-            summary: 'Tras una respuesta manual del equipo. Cada regla, una vez cada 24 h.',
+            summary: `Tras una respuesta manual del equipo. Cada regla y el «no entiendo», una vez cada ${form.handoffHours} h.`,
         },
     ];
 
