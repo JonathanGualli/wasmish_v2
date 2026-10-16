@@ -44,7 +44,10 @@ export const SidebarItem = ({ icon, text, collapsed, onTap, isSelected, badge, t
 
     <span className={`flex-shrink-0 ${isSelected ? 'text-brand-accent' : ''}`}>{icon}</span>
 
-    {!collapsed && <span className="whitespace-nowrap truncate">{text}</span>}
+    {/* Un nombre largo («Respuestas automáticas») pasa a dos líneas; en una sola no
+        cabía y el menú salía con scroll horizontal. El mínimo evita que, mientras la
+        barra se abre (300 ms), el texto se parta en muchas líneas: ahí se recorta. */}
+    {!collapsed && <span className="min-w-[124px] text-left leading-[1.25]">{text}</span>}
 
     {badge !== undefined && badge > 0 && (
       collapsed ? (

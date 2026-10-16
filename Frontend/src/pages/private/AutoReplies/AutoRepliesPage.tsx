@@ -1,6 +1,5 @@
 import { useState, type ReactNode } from "react";
 import { AlertCircle, ArrowLeft, ArrowRight, ChevronRight, Reply, Send, X } from "lucide-react";
-import { useAuthContext } from "../../../context/auth.context";
 import { useAutoReplies } from "../../../hooks/useAutoReplies";
 import { PHONE_QUERY, useMediaQuery } from "../../../hooks/useMediaQuery";
 import { useLeaveGuard } from "../../../components/Layout/NavigationGuardContext";
@@ -66,7 +65,6 @@ export const AutoRepliesPage = () => {
 };
 
 const AutoRepliesEditorView = ({ data }: { data: AutoRepliesResponse }) => {
-    const { user } = useAuthContext();
     const { setState, setContent } = useNoticeContext();
     const phone = useMediaQuery(PHONE_QUERY);
     const wide = useMediaQuery('(min-width: 1024px)');
@@ -126,7 +124,7 @@ const AutoRepliesEditorView = ({ data }: { data: AutoRepliesResponse }) => {
         </>
     );
 
-    const startWizard = (example: boolean) => editor.startWizard({ example, businessName: user?.account?.name ?? undefined });
+    const startWizard = (example: boolean) => editor.startWizard({ example });
 
     if (editor.mode === 'intro') {
         return (
