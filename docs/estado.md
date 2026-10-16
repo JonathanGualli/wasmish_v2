@@ -52,7 +52,8 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En curso
 
-Nada en curso.
+- **Respuestas automáticas (chatbot v1)** — rama `respuestas-automaticas-motor`, empezado el 2026-10-15 por Claude. Spec `docs/superpowers/specs/2026-10-15-respuestas-automaticas-design.md`, plan `docs/superpowers/plans/2026-10-15-respuestas-automaticas.md` y brief de la UI `docs/superpowers/specs/2026-10-15-respuestas-automaticas-brief-ui.md`.
+  Hecho: spec, plan y brief. · Falta: que Jonathan revise el plan y la revisión de Codex; pasarle el brief a Claude Design; los tres PRs del plan. · Sin probar: nada, todavía no hay código.
 
 <!-- Formato de una entrada:
 - **<qué>** — rama `<rama>`, PR #<n>, empezado el <fecha> por <Claude|Codex|Jonathan>.
@@ -69,7 +70,7 @@ Nada en curso.
     3. `maxLines: 2` en una cuenta de prueba desde el panel.
   - La **Fase 3** (equipo, roles y acceso por línea) está en producción desde la 1.0.18. **Para encender equipos en una cuenta real** (subir su `maxUsers`): antes, el ensayo de la vuelta atrás con dos usuarios (plan de la Fase 3, «Al terminar»), porque con una imagen anterior a la Fase 3 el agente vería y haría todo; y se enciende primero en la cuenta de prueba de Jonathan. Volver atrás a las imágenes `:1.0.16` solo es seguro mientras ninguna cuenta tenga más de un usuario.
   - Sigue la **Fase 4**: asignar conversaciones («Mías / Sin asignar / Todas») y transferirlas.
-- **Próximo módulo: un chatbot.** Jonathan aún no decidió de qué tipo. La propuesta sobre la mesa: empezar por respuestas automáticas (bienvenida, fuera de horario, palabras clave) como un motor de «respuestas» en el webhook, con traspaso a una persona (el bot se calla si alguien responde a mano) y la marca «Bot» en el chat; después, flujos con botones (requiere enviar mensajes interactivos) o IA. Antes de empezar: preguntar el tipo y qué problema concreto del cliente resuelve.
+- **Respuestas automáticas (chatbot v1):** en curso (arriba). Después vendrán las mejoras del spec, § 2: «un mensaje por regla», fotos en las respuestas, agrupar ráfagas, reglas por línea, feriados; y más adelante menús con botones o IA.
 - El campo de archivo de cabecera al enviar una plantilla a **un solo contacto** (`SendTemplateDialog` y `NewConversationPanel`); hoy solo existe en las campañas.
 - En la API pública: el campo `header`, la cabecera de texto con variable y las plantillas de carrusel. Toca al cliente de la API: con cuidado.
 - Más adelante: programar campañas para una hora.
