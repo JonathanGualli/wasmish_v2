@@ -148,7 +148,7 @@ Sin contador de cupos ni urgencias.
 - **¿Tengo que dejar la app de WhatsApp Business?** No: sigue con su app y su número, y atiende además desde Wasmish. Lo que se apaga en la app y que las conversaciones anteriores se quedan en ella: § 3.4, punto 1.
 - **¿Puedo escribirle a un cliente cuando quiera?** La regla de las 24 horas y qué es una plantilla (§ 3.4, punto 2).
 - **¿Cuánto me cobra Meta?** Remite al precio (§ 3.6).
-- **¿Qué pasa si cancelo?** Cuándo termina el cobro, qué pasa con el acceso, y que el número sigue siendo del negocio. **Borrador** en 2026-10-17-borradores-faq-y-legales.md, por confirmar. No prometer que se pueden exportar las conversaciones: la app no tiene cómo.
+- **¿Qué pasa si cancelo?** **Decidido por Jonathan el 2026-10-17:** sin permanencia ni multa y sin reembolso; el mes pagado funciona hasta que termina, y ese día se desconecta el número. Los datos se guardan 30 días desde entonces: en ese plazo el negocio puede pedir sus contactos y sus conversaciones, y **Jonathan se los entrega en Excel, a mano** (la app no tiene botón de exportar). Después se borran. El fundador que cancela pierde su precio.
 - **¿De quién son mis datos?** Del negocio. **Borrador** en el mismo archivo, por confirmar junto con la política de privacidad.
 - **¿Me pueden bloquear el número?** Wasmish usa la plataforma oficial, pero hay que seguir las reglas de WhatsApp, por ejemplo no escribirle a quien no lo pidió. **No prometer** que nunca habrá bloqueos.
 - **¿Qué necesito para empezar?** La lista está en el borrador (sale de la prueba de alta del 2026-10-14 al 17): su número, una cuenta de Facebook, una tarjeta en Meta para las plantillas y, si usa la app, el celular a mano para escanear un código.
@@ -261,7 +261,7 @@ Junto a ella, las cuatro formas (bienvenida, fuera de horario, palabras clave y 
 El diseño puede avanzar con estos huecos marcados. La página **no se publica** hasta llenarlos:
 - [ ] El número de WhatsApp del botón y el correo.
 - [ ] Si el precio lleva IVA y cómo se muestra.
-- [ ] Las condiciones para cancelar y qué pasa con los datos (hay borrador).
+- [x] Las condiciones para cancelar y qué pasa con los datos (decididas el 2026-10-17).
 - [ ] El texto de privacidad y términos (hay borrador), y quién factura (nombre y RUC).
 - [ ] Las cifras de Meta, confirmadas en la información oficial.
 - [x] Qué hace falta para empezar (2026-10-17, en el borrador).

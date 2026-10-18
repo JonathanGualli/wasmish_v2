@@ -95,7 +95,7 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
 
 ## En curso
 
-Nada en curso.
+- **Página pública `wasmish.com`** (rama `pagina-publica`, PR #92: solo el spec, el brief y el plan, con su revisión de Codex). Cloudflare Pages, React + Vite pre-renderizado en una carpeta nueva `Site/`. Spec: `docs/superpowers/specs/2026-10-17-pagina-publica-design.md`; plan: `docs/superpowers/plans/2026-10-17-pagina-publica.md`. **Antes del esqueleto (PR 2), Jonathan:** cuenta de Cloudflare, el DNS de `wasmish.com` a Cloudflare y el correo `hola@wasmish.com` (spec, § 6). Todavía no hay código.
 
 ## Lo siguiente
 

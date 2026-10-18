@@ -134,7 +134,7 @@ Cada PR, con la revisión cruzada de Codex. Si uno pasa de unas 500 líneas, se 
 4. **Las páginas de nicho** y las imágenes de vista previa.
 5. **El lanzamiento:**
    - el chequeo de huecos pasa (§ 8);
-   - Jonathan conecta `wasmish.com` al proyecto de Pages, y `www` redirige a `wasmish.com` con una regla de Cloudflare;
+   - Jonathan conecta `wasmish.com` al proyecto de Pages; `www` pasa a «con proxy» (nube naranja: sin proxy, la regla no actúa) y redirige a `wasmish.com` con una regla de Cloudflare (301, con la ruta y los parámetros). `app` sigue en «solo DNS». La redirección se comprueba antes de quitar los routers del servidor;
    - el PR del § 6 («En el servidor»);
    - la documentación: `docs/arquitectura/pagina-publica.md` en el mapa de `AGENTS.md`, y `docs/estado.md`.
 

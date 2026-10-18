@@ -106,10 +106,13 @@ assert.match(head, /<link rel="canonical" href="https:\/\/wasmish\.com\/imprenta
 assert.match(head, /<meta property="og:image" content="https:\/\/wasmish\.com\/og-imprentas-1\.png">/)
 assert.match(head, /<meta property="og:locale" content="es_EC">/)
 assert.match(renderHead({ path: '/404', title: 'x', description: 'y', ogImage: '/og-inicio-1.png', noindex: true }), /<meta name="robots" content="noindex">/)
+const ld = renderHead({ path: '/', title: 'x', description: 'y', ogImage: '/og-inicio-1.png', jsonLd: [{ name: 'a</script><b>' }] })
+assert.equal(ld.match(/<\/script>/g).length, 1)                      // el bloque no se cierra antes de tiempo
+assert.equal(JSON.parse(ld.match(/<script type="application\/ld\+json">(.*?)<\/script>/s)[1]).name, 'a</script><b>')
 ```
 
 
-- [ ] **Paso 3: Comprobar que fallan.** `cd Site && npm ci && node --experimental-strip-types --test tests/unit/*.test.ts` debe dar FAIL, porque los módulos no existen.
+- [ ] **Paso 3: Comprobar que fallan.** `cd Site && npm install` (crea `Site/package-lock.json`, que va en el commit; desde aquí, y en el CI, `npm ci`) y `node --experimental-strip-types --test tests/unit/*.test.ts`, que debe dar FAIL porque los módulos no existen.
 
 - [ ] **Paso 4: Implementar** `normalizePath`, `demoMessage`, `buildDemoHref`, `demoHref`, `escapeHtml` y `renderHead`.
   - **`renderHead`** escribe:
@@ -118,16 +121,16 @@ assert.match(renderHead({ path: '/404', title: 'x', description: 'y', ogImage: '
     - `og:title`, `og:description`, `og:image` (dirección completa), `og:url`, `og:type` (`website`), `og:locale` (`es_EC`) y `og:site_name` (`Wasmish`);
     - `twitter:card` (`summary_large_image`);
     - `robots` (`noindex`) si `noindex` está activado;
-    - un `<script type="application/ld+json">` por cada objeto de `jsonLd`, con `<` escapado como `<`.
+    - un `<script type="application/ld+json">` por cada objeto de `jsonLd`, escrito con `JSON.stringify(obj).replace(/</g, '\\u003c')`, para que un `</script>` dentro de un texto no cierre el bloque.
 
 - [ ] **Paso 5: Comprobar que pasan.** El mismo comando debe dar PASS, y `npm run lint` debe salir limpio.
 
-- [ ] **Paso 6: Commit.** `Página: proyecto Site/ y funciones de rutas, enlaces y head`.
+- [ ] **Paso 6: Commit** (con `Site/package-lock.json`). `Página: proyecto Site/ y funciones de rutas, enlaces y head`.
 
 ### Tarea 2: Pre-renderizado, páginas base y archivos de Cloudflare
 
 **Archivos:**
-- Crear: `Site/src/routes.tsx`, `Site/src/entry-server.tsx`, `Site/src/entry-client.tsx` y `Site/scripts/prerender.mjs`.
+- Crear: `Site/src/routes.ts`, `Site/src/salesPages.tsx`, `Site/src/entry-server.tsx`, `Site/src/entry-client.tsx` y `Site/scripts/prerender.mjs`.
 - Crear: `Site/src/content/types.ts`, `Site/src/content/price.ts` y `Site/src/content/niches/inicio.ts`.
 - Crear: `Site/src/pages/VentaPage.tsx` (por ahora solo el titular y el botón), `Site/src/pages/LegalPage.tsx` y `Site/src/pages/NotFoundPage.tsx`.
 - Crear: `Site/src/components/Pending.tsx` y `Site/public/_headers`.
@@ -138,8 +141,9 @@ assert.match(renderHead({ path: '/404', title: 'x', description: 'y', ogImage: '
 - Produce:
   - `content/types.ts`: `type Niche = { slug: 'inicio' | 'capacitacion' | 'imprentas'; path: string; demoLabel: string; meta: Omit<PageMeta, 'path'>; hero: Hero; beforeAfter: { before: string; after: string }[]; features: Feature[]; bot: Bot }`. `Hero`, `Feature` y `Bot` se definen aquí con lo que pida la tarea 6.
   - `content/price.ts`: `PRICE = { currency: 'USD', regular: 30, founder: 20, founderMonths: 12, founderSlots: 10, extraUser: 5 } as const`.
-  - `routes.tsx`: `type Route = { path: string; file: string; hydrate: boolean; meta: PageMeta; render: () => ReactElement }`, `ROUTES: Route[]`, `NOT_FOUND: Route` y `findRoute(pathname: string): Route | undefined`, que usa `normalizePath`.
-  - `entry-server.tsx`: `render(path: string): { html: string; head: string }`, y `listRoutes(): Route[]`, que devuelve `[...ROUTES, NOT_FOUND]`.
+  - `routes.ts` (solo datos, sin componentes): `type Route = { path: string; file: string; hydrate: boolean; meta: PageMeta }`, `ROUTES: Route[]`, `NOT_FOUND: Route` y `findRoute(pathname: string): Route | undefined`, que usa `normalizePath`.
+  - `salesPages.tsx`: `renderSalesPage(path: string): ReactElement`, solo para las páginas que hidratan (`VentaPage` con su nicho). **Es lo único que importa `entry-client.tsx`**, junto con `routes.ts`: así `marked` y las páginas legales nunca llegan al JavaScript del navegador.
+  - `entry-server.tsx`: `render(path: string): { html: string; head: string }` (las páginas de venta con `renderSalesPage`, y las legales y la 404 con sus componentes), y `listRoutes(): Route[]`, que devuelve `[...ROUTES, NOT_FOUND]`.
   - `<Pending>{children}</Pending>`: el valor de ejemplo más la etiqueta «pendiente», con `data-pending` en el elemento.
 
 - [ ] **Paso 1: El test del HTML generado**, que lee `Site/dist/`.
@@ -171,7 +175,7 @@ assert.match(read('_headers'), /https:\/\/:project\.pages\.dev\/\*\n\s+X-Robots-
     - para cada ruta de `listRoutes()`, reemplaza `<!--head-->` y `<!--app-->`; si la ruta no hidrata, quita la etiqueta `<script type="module" …></script>`;
     - escribe `dist/<file>`;
     - después escribe `sitemap.xml` (las rutas de `ROUTES`, sin la 404) y `robots.txt` (`User-agent: *`, `Allow: /` y la línea del sitemap), y borra `dist-ssr/`.
-  - **`entry-client.tsx`:** `findRoute(location.pathname)`; si la ruta hidrata, `hydrateRoot(document.getElementById('app')!, route.render())`.
+  - **`entry-client.tsx`:** `findRoute(location.pathname)`; si la ruta hidrata, `hydrateRoot(document.getElementById('app')!, renderSalesPage(route.path))`.
   - **`LegalPage`** recibe el HTML ya convertido (tarea 3). Por ahora, un texto de prueba.
 - [ ] **Paso 4: `_headers`**, con estos valores:
 
@@ -187,35 +191,43 @@ https://:project.pages.dev/*
 ```
 
   El HTML no lleva caché larga: Cloudflare Pages ya lo sirve validándolo, con su ETag. Se comprueba con `curl -I` en la vista previa de la tarea 4.
-- [ ] **Paso 5: Comprobar que pasa:** `npm run build && npm test` da PASS. Y `npx vite preview`, abriendo `/imprentas/` y `/imprentas.html`, hidrata sin errores en la consola. Mientras no exista `imprentas`, se prueba con `/privacidad/`, que debe dar la página legal.
+- [ ] **Paso 5: Comprobar que pasa:** `npm run build && npm test` da PASS. En `npx vite preview`, `/privacidad` y `/privacidad.html` dan la página legal. **La barra final (`/privacidad/`) no se prueba en local:** `vite preview` busca `privacidad/index.html` y responde con el inicio. Eso se comprueba en la vista previa de Pages (tarea 4), donde también se miran las redirecciones y la 404. `findRoute` ya cubre la barra en su test.
 - [ ] **Paso 6: Commit.** `Página: pre-renderizado, rutas, sitemap y cabeceras de Cloudflare`.
 
 ### Tarea 3: Privacidad, Términos y el chequeo de huecos
 
 **Archivos:**
 - Crear: `Site/src/legal/privacidad.md` y `Site/src/legal/terminos.md`.
-- Modificar: `Site/scripts/prerender.mjs` (Markdown → HTML y `[pendiente: …]` → `<span data-pending>`), `Site/src/routes.tsx` y `Site/src/pages/LegalPage.tsx`.
-- Test: `Site/tests/dist/pending.test.mjs`.
+- Crear: `Site/src/lib/markdown.ts`.
+- Modificar: `Site/src/entry-server.tsx`, `Site/src/routes.ts` y `Site/src/pages/LegalPage.tsx`.
+- Test: `Site/tests/unit/markdown.test.ts` y `Site/tests/dist/pending.test.mjs`.
 
 **Interfaces:**
 - Consume: `LAUNCHED` (tarea 1) y `Pending` (tarea 2).
-- Produce: `markdownToHtml(md: string): string`, en `scripts/prerender.mjs`, con `marked` y el reemplazo de los huecos.
+- Produce: `markdownToHtml(md: string): string`, en `lib/markdown.ts`, con `marked` y el reemplazo de `[pendiente: …]` por `<span data-pending>…</span>`. Lo usa solo `entry-server.tsx`.
 
 - [ ] **Paso 1: El test.**
 
+```ts
+// markdown.test.ts — con una entrada de prueba, no con el contenido real
+const html = markdownToHtml('Lo guardamos [pendiente: 30] días.\n\n## Título')
+assert.match(html, /<span data-pending[^>]*>30<\/span>/)
+assert.doesNotMatch(html, /\[pendiente:/)
+assert.match(html, /<h2[^>]*>Título<\/h2>/)
+```
+
 ```js
-// pending.test.mjs
+// pending.test.mjs — sobre lo publicado
 const pending = allHtmlFiles().filter(f => read(f).includes('data-pending'))
 if (LAUNCHED) assert.deepEqual(pending, [], `Páginas con huecos: ${pending.join(', ')}`)
 else if (pending.length) console.warn(`Aviso: ${pending.length} páginas con huecos (no bloquea hasta el lanzamiento)`)
-assert.match(read('privacidad.html'), /<span data-pending[^>]*>/)   // los huecos del Markdown se convierten
-assert.doesNotMatch(read('privacidad.html'), /\[pendiente:/)
+for (const f of allHtmlFiles()) assert.doesNotMatch(read(f), /\[pendiente:/)   // ningún hueco sin convertir
 ```
 
   `LAUNCHED` se lee de `src/site.ts`, con la eliminación de tipos de Node.
 
 - [ ] **Paso 2: Comprobar que falla:** `npm run build && npm test`.
-- [ ] **Paso 3: El contenido.** Copiar a `privacidad.md` y `terminos.md` **solo el texto citado** (`> …`) de los borradores de la carpeta comercial de Jonathan (`2026-10-17-borradores-faq-y-legales.md`, § 2 y § 3), sin las notas para él, y cambiando cada `[…]` por `[pendiente: …]`. Las decisiones de cancelar ya están tomadas: 30 días desde el fin del mes pagado, contactos y conversaciones en Excel, y desconexión ese día. Implementar `markdownToHtml` y usarlo en `LegalPage`, con la misma cabecera y el mismo pie que la página de venta (tarea 5).
+- [ ] **Paso 3: El contenido.** Copiar a `privacidad.md` y `terminos.md` **solo el texto citado** (`> …`) de los borradores de la carpeta comercial de Jonathan (`2026-10-17-borradores-faq-y-legales.md`, § 2 y § 3), sin las notas para él, y cambiando cada `[…]` por `[pendiente: …]`. Las decisiones de cancelar ya están tomadas: 30 días desde el fin del mes pagado, contactos y conversaciones en Excel, y desconexión ese día. Implementar `markdownToHtml` y usarlo en `entry-server.tsx` para `LegalPage`, con la misma cabecera y el mismo pie que la página de venta (tarea 5).
 - [ ] **Paso 4: Comprobar que pasa:** `npm run build && npm test` da PASS, con el aviso de huecos.
 - [ ] **Paso 5: Commit.** `Página: Privacidad y Términos, y el chequeo de huecos`.
 
@@ -239,6 +251,7 @@ assert.doesNotMatch(read('privacidad.html'), /\[pendiente:/)
 - [ ] **Paso 3: Jonathan conecta Cloudflare Pages** con los ajustes del spec, § 6, y suma `Site · lint, build y tests` a la regla de `master`. **Comprobar en la vista previa del PR:**
   - `/` responde;
   - `/no-existe` da 404 con la página 404;
+  - `/privacidad/` y `/privacidad.html` llevan a `/privacidad` (o la sirven) sin dar el inicio;
   - `curl -I` de la dirección `*.pages.dev` trae `X-Robots-Tag: noindex`.
 
   Y Jonathan **activa Web Analytics** en el proyecto de Pages: sin código y sin cookies.
@@ -318,7 +331,7 @@ Cada tarea dibuja una parte de la v3 con el texto del brief. Los valores visuale
 **Archivos:**
 - Crear, en `Site/src/sections/`: `Setup.tsx`, `Pricing.tsx`, `WhatChanges.tsx`, `Faq.tsx` y `ClosingCta.tsx`.
 - Crear: `Site/src/content/faq.ts`.
-- Modificar: `Site/src/routes.tsx`, para el JSON-LD del inicio.
+- Modificar: `Site/src/routes.ts`, para el JSON-LD del inicio en su `meta`.
 - Test: `Site/tests/dist/content.test.mjs`.
 
 - [ ] **Paso 1: El test.**
@@ -360,7 +373,7 @@ assert.match(home, /¿Tengo que dejar la app de WhatsApp Business\?/)
 
 **Archivos:**
 - Crear: `Site/src/content/niches/capacitacion.ts` y `Site/src/content/niches/imprentas.ts`.
-- Modificar: `Site/src/routes.tsx`.
+- Modificar: `Site/src/routes.ts` y `Site/src/salesPages.tsx`.
 - Modificar: `Site/tests/dist/pages.test.mjs`, para sumar las dos páginas.
 - Crear: `Site/tests/dist/niches.test.mjs`.
 
@@ -425,7 +438,8 @@ Cuando Jonathan tenga el contenido del spec, § 9: el número, el RUC y el IVA, 
 
 - [ ] **Paso 1: Jonathan,** después de unir el PR de la tarea 12:
   - en Cloudflare Pages, conecta `wasmish.com` como dominio propio, que reemplaza el registro A de `@`;
-  - con una regla de Cloudflare, `www.wasmish.com` → `https://wasmish.com` (301);
+  - **`www` pasa a «con proxy» (nube naranja)**, para que Cloudflare pueda redirigir: sin el proxy, las visitas siguen llegando al servidor y la regla no actúa. `app` sigue en «solo DNS». Después, una regla de Cloudflare `www.wasmish.com/*` → `https://wasmish.com/${1}` (301, conservando la ruta y los parámetros), como en la [guía de Cloudflare](https://developers.cloudflare.com/pages/how-to/www-redirect/);
+  - **antes de quitar los routers del servidor**, comprobar con `curl -I` que `https://www.wasmish.com/imprentas?x=1` da 301 a `https://wasmish.com/imprentas?x=1` con un certificado válido;
   - comprueba `wasmish.com`, `www` y las tres páginas, y que `app.wasmish.com/api/version`, los entrantes del webhook y `POST /api/v1/templates/send` siguen respondiendo;
   - conecta **Google Search Console** (registro TXT en Cloudflare) y le da `https://wasmish.com/sitemap.xml`.
 - [ ] **Paso 2:** el cambio del `compose.yml` y la documentación, en un PR que sale con el siguiente despliegue de la app.
