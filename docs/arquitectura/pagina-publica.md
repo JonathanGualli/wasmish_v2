@@ -53,7 +53,11 @@ Cada página de venta es un archivo de textos en `src/content/niches/` (tipo `Ni
 
 1. Crear `src/content/niches/<nicho>.ts`, con su `path`, su `demoLabel` (va en el texto del botón), su `meta` (título, descripción e imagen de vista previa) y lo propio de su página: el hero con su conversación, las parejas de «Lo que pasa hoy», las funciones con sus pantallas y el bot con sus ejemplos de «Probar».
 2. Sumarlo a `NICHES`, en `src/routes.ts`.
-3. Generar su imagen de vista previa.
+3. Generar su imagen de vista previa: `npm run og` (ver «Vista previa en WhatsApp y SEO»).
+
+Hoy hay tres: el inicio (`/`), `/capacitacion` e `/imprentas`. Las escenas de los nichos son las del diseño v3 (Daniela y el curso de contabilidad; Gabriela y los 1.000 volantes), y cada uno tiene sus palabras clave del bot, su «Probar», la palabra del cierre («su centro», «su imprenta») y, si hace falta, textos propios en la franja de las funciones (`stripText`: en imprentas, el límite de 16 MB y que los AI y PSD van por correo).
+
+**Si la palabra resaltada del titular es larga** y puede no caber en un renglón («qué se le cotizó»), el titular lleva `wraps: true`: la píldora va en línea, partida por renglones (`box-decoration-break: clone`), en lugar de un bloque enorme.
 
 El precio no va en el nicho: sale de `src/content/price.ts`, el mismo dato que usa el JSON-LD.
 
@@ -68,6 +72,8 @@ Los datos fijos (`SITE_URL`, `APP_LOGIN_URL`, `CONTACT_EMAIL`, `WHATSAPP_NUMBER`
 ### Vista previa en WhatsApp y SEO
 
 `renderHead` escribe en cada página `<title>`, la descripción, `canonical` y las etiquetas `og:` y `twitter:`, **todas con direcciones completas** (`https://wasmish.com/...`), porque WhatsApp no entiende las relativas. La 404 lleva `noindex`. El JSON-LD se escribe con `<` escapado como `<`, para que un texto no pueda cerrar el `<script>`.
+
+**Las imágenes de vista previa** (`public/og-*.png`, 1200 × 630, del diseño «og2») se generan con `npm run og`. Compila con `VITE_OG=1`, que agrega las tarjetas de `src/og/OgCard.tsx` como páginas sueltas; `scripts/og.mjs` las sirve en local y las fotografía con el Chrome del sistema (`playwright-core`, que no descarga navegadores); y vuelve a compilar sin ellas. Los PNG van en el repo, y un test comprueba que cada `og:image` existe, pesa menos de 300 KB y mide 1200 × 630.
 
 **WhatsApp guarda la vista previa de un enlace un tiempo.** Si cambia una imagen de vista previa, cambia también su nombre (`og-inicio-1.png` → `og-inicio-2.png`).
 
@@ -101,6 +107,7 @@ En `Site/`:
 | `npm run preview` | Sirve `dist/` en local |
 | `npm test` | Los tests de `tests/unit/` (funciones puras, con la eliminación de tipos de Node) y de `tests/output/` (el HTML generado: hay que compilar antes) |
 | `npm run lint` | ESLint |
+| `npm run og` | Genera las imágenes de vista previa (necesita Chrome instalado) |
 
 **`vite preview` no se porta como Cloudflare:** responde el inicio a una ruta con barra final (`/privacidad/`) o desconocida. La barra final, las redirecciones y la 404 se comprueban en la vista previa de Pages.
 

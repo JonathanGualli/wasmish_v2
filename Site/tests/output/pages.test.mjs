@@ -1,10 +1,15 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { read } from './helpers.mjs'
+import { allHtmlFiles, read, size } from './helpers.mjs'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { DIST } from './helpers.mjs'
 
 // Cada página publicada: su archivo, con el <head> escrito para WhatsApp y Google.
 const PAGES = [
   ['index.html', '/'],
+  ['capacitacion.html', '/capacitacion'],
+  ['imprentas.html', '/imprentas'],
   ['privacidad.html', '/privacidad'],
   ['terminos.html', '/terminos'],
 ]
@@ -46,4 +51,21 @@ test('sitemap.xml y robots.txt', () => {
 
 test('_headers: las direcciones de Pages no se indexan', () => {
   assert.match(read('_headers'), /https:\/\/:project\.pages\.dev\/\*\n\s+X-Robots-Tag: noindex/)
+})
+
+// Las imágenes de vista previa: WhatsApp descarta las pesadas y no entiende las relativas.
+test('cada og:image existe, pesa menos de 300 KB y mide 1200 × 630', () => {
+  const images = new Set(PAGES.map(([file]) => read(file).match(/<meta property="og:image" content="https:\/\/wasmish\.com(\/[^"]+)">/)[1]))
+  assert.equal(images.size, 3)
+  for (const image of images) {
+    assert.ok(size(image.slice(1)) < 300 * 1024, `${image} pesa demasiado`)
+    const png = readFileSync(join(DIST, image))
+    assert.equal(png.readUInt32BE(16), 1200, `${image}: ancho`)
+    assert.equal(png.readUInt32BE(20), 630, `${image}: alto`)
+  }
+})
+
+// Las tarjetas que se fotografían solo existen al compilar con VITE_OG=1.
+test('las tarjetas de las imágenes no se publican', () => {
+  assert.deepEqual(allHtmlFiles().filter((f) => f.startsWith('og-')), [])
 })
