@@ -121,9 +121,9 @@ export function HeroDemo({ scene }: { scene: HeroScene }) {
   const step = still ? 0 : current.step
 
   return (
-    <div ref={rootRef} className="hero-demo grid w-full gap-3.5" data-hero={mode}>
+    <div ref={rootRef} className="hero-demo grid w-full gap-3.5" data-story={mode}>
       <div className="hero-grid">
-        <div className="hero-chat flex min-w-0 flex-col overflow-hidden rounded-2xl border border-brand-border bg-white">
+        <div className="story-chat flex min-w-0 flex-col overflow-hidden rounded-2xl border border-brand-border bg-white">
           <ChatHeader contact={scene.contact} pressed={pressed} />
           <div className="flex min-h-0 flex-1 flex-col justify-end gap-[9px] overflow-hidden bg-brand-bg p-3.5">
             {scene.items.filter((i) => shown.has(i.id)).map((item) => (
