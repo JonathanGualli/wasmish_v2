@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
-import { seedAccount, seedMember, request, openStream, assertNoLeak, assertHasOwn, Contact, Conversation, Message, Tag } from './helpers.js';
+import { seedAccount, seedMember, request, openStream, assertNoLeak, assertHasOwn, Contact, ContactNote, Conversation, Message, Tag } from './helpers.js';
 
 const a = await seedAccount('A', { seq: 1 });
 const b = await seedAccount('B', { seq: 2 });
@@ -30,7 +30,7 @@ test('PATCH /contacts/:id: B no edita un contacto de A', async () => {
     assert.equal(asB.status, 404);
     assert.equal((await contactOf(a.contactId)).name, `${a.marker} contacto`);
 
-    const asA = await request(a, 'PATCH', `/contacts/${a.contactId}`, { notes: 'nota de A' });
+    const asA = await request(a, 'PATCH', `/contacts/${a.contactId}`, { company: 'empresa de A' });
     assert.equal(asA.status, 200, asA.text);
 });
 
@@ -203,7 +203,7 @@ const streamsOfAandB = async () => {
 test('editar un contacto de A avisa (contact_updated) al equipo de A y no a B', async () => {
     const { streamA, streamB } = await streamsOfAandB();
     try {
-        const edited = await request(a, 'PATCH', `/contacts/${a.contactId}`, { notes: 'nota del owner' });
+        const edited = await request(a, 'PATCH', `/contacts/${a.contactId}`, { company: 'empresa del owner' });
         assert.equal(edited.status, 200, edited.text);
         assert.ok(await streamA.waitFor(`"id":"${a.contactId}"`, 2000), 'el agente de A no se enteró');
         assert.ok(await streamA.waitFor('event: contact_updated', 0));
@@ -244,4 +244,56 @@ test('crear, renombrar y borrar una etiqueta de A avisa (tags_updated) a A y no 
         await streamA.close();
         await streamB.close();
     }
+});
+
+// Notas al importar (2026-10-17): la nota del archivo es una nota nueva, a
+// nombre de quien importa, y reimportar no la repite.
+const importWithNote = (account, phone, note) => request(account, 'POST', '/contacts/import', {
+    rows: [{ row: 2, phone, name: 'Importado', notes: note }], country: 'EC', consent: true,
+});
+
+test('importar crea la nota a nombre de quien importa, una sola vez', async () => {
+    const first = await importWithNote(a, '0990007771', 'Viene de la feria');
+    assert.equal(first.status, 200, first.text);
+    const [contactId] = first.body.contactIds;
+    const notes = await ContactNote.find({ contactId }).lean();
+    assert.equal(notes.length, 1);
+    assert.deepEqual([notes[0].source, notes[0].authorName, notes[0].text], ['import', `${a.marker}`, 'Viene de la feria']);
+    assert.equal(String(notes[0].userId), a.accountId);
+
+    const again = await importWithNote(a, '0990007771', ' viene de la FERIA ');
+    assert.equal(again.body.summary.unchanged, 1, again.text);
+    assert.equal(await ContactNote.countDocuments({ contactId }), 1);
+});
+
+// Regresión que vigila (revisión de Codex del plan): dos importaciones a la vez
+// leían las mismas notas y las dos la creaban.
+test('varias importaciones a la vez del mismo archivo crean cada nota una sola vez', async () => {
+    const rows = Array.from({ length: 30 }, (_, i) => ({ row: i + 2, phone: `09900078${String(i).padStart(2, '0')}`, notes: 'A la vez' }));
+    const responses = await Promise.all(Array.from({ length: 5 }, () =>
+        request(a, 'POST', '/contacts/import', { rows, country: 'EC', consent: true })));
+    for (const response of responses) assert.equal(response.status, 200, response.text);
+    const contacts = await Contact.find({ userId: a.accountId, phone: { $in: rows.map(row => `5939900078${row.phone.slice(-2)}`) } }).select('_id').lean();
+    assert.equal(contacts.length, 30);
+    assert.equal(await ContactNote.countDocuments({ contactId: { $in: contacts.map(contact => contact._id) } }), 30);
+    // La carrera no se reproduce siempre aquí: lo que la impide es el índice único.
+    await ContactNote.init();
+    const index = (await ContactNote.collection.indexes()).find(i => i.name === 'contact_note_import_unique');
+    assert.equal(index?.unique, true, 'falta el índice único de las notas importadas');
+});
+
+// Regresión que vigila (revisión de Codex del PR #88): una nota importada y
+// editada seguía reservando su texto de antes (`importKey`), y al reimportarlo
+// la vista previa prometía la nota pero no se creaba.
+test('importar, editar esa nota y volver a importar el texto de antes la crea otra vez', async () => {
+    const first = await importWithNote(a, '0990007773', 'Paga a 30 días');
+    const [contactId] = first.body.contactIds;
+    const imported = await ContactNote.findOne({ contactId }).lean();
+    const edited = await request(a, 'PATCH', `/contacts/${contactId}/notes/${imported._id}`, { text: 'Paga al contado' });
+    assert.equal(edited.status, 200, edited.text);
+
+    const again = await importWithNote(a, '0990007773', 'Paga a 30 días');
+    assert.equal(again.body.summary.updated, 1, again.text);
+    const texts = (await ContactNote.find({ contactId }).lean()).map(note => note.text).sort();
+    assert.deepEqual(texts, ['Paga a 30 días', 'Paga al contado']);
 });

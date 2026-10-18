@@ -177,3 +177,51 @@ test('los sin cambios no salen en la muestra', () => {
     const plan = planImportRows([{ row: 2, phone: '0991234567', name: 'Juan' }], { country: 'EC', existingByPhone });
     assert.deepEqual(pickImportSample(plan, existingByPhone, 3), []);
 });
+
+// Notas (2026-10-17): la del archivo es una nota nueva del contacto, no un campo
+// que solo se rellena si está vacío.
+test('la nota de la fila va aparte de los campos, recortada', () => {
+    const row = cleanImportRow({ row: 2, phone: '0991234567', name: 'Ana', notes: ' Paga a 30 ' }, 'EC');
+    assert.deepEqual(row.fields, { name: 'Ana' });
+    assert.equal(row.note, 'Paga a 30');
+
+    const long = cleanImportRow({ row: 2, phone: '0991234567', notes: 'x'.repeat(1200) }, 'EC');
+    assert.equal(long.note.length, 1000);
+    assert.equal(long.warnings[0].field, 'notes');
+});
+
+test('dos filas del mismo teléfono con notas distintas: gana la primera', () => {
+    const plan = planImportRows([
+        { row: 2, phone: '0991234567', notes: 'A' },
+        { row: 3, phone: '+593 99 123 4567', notes: 'B' },
+    ], { country: 'EC' });
+    assert.equal(plan.entries.length, 1);
+    assert.equal(plan.entries[0].note, 'A');
+});
+
+test('a un existente se le añade la nota solo si es nueva', () => {
+    const repeated = planImportRows(
+        [{ row: 2, phone: '0991234567', notes: 'A ' }],
+        { country: 'EC', existingByPhone: existing({ noteTexts: ['a'], noteCount: 1 }) },
+    );
+    assert.equal(repeated.entries[0].note, null);
+    assert.equal(repeated.entries[0].action, 'unchanged');
+
+    const fresh = planImportRows(
+        [{ row: 2, phone: '0991234567', notes: 'A' }],
+        { country: 'EC', existingByPhone: existing({ noteTexts: [], noteCount: 0 }) },
+    );
+    assert.equal(fresh.entries[0].note, 'A');
+    assert.equal(fresh.entries[0].action, 'update');
+});
+
+test('un existente con 500 notas no recibe la del archivo, y se avisa', () => {
+    const plan = planImportRows(
+        [{ row: 2, phone: '0991234567', notes: 'nueva' }],
+        { country: 'EC', existingByPhone: existing({ noteTexts: [], noteCount: 500 }) },
+    );
+    assert.equal(plan.entries[0].note, null);
+    assert.equal(plan.entries[0].action, 'unchanged');
+    assert.deepEqual(plan.issues.map(i => [i.row, i.type, i.field, i.message]),
+        [[2, 'warning', 'notes', 'Ya tiene 500 notas: la del archivo no se añade.']]);
+});

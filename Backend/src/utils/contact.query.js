@@ -5,7 +5,8 @@ import { getWindowExpiry } from './whatsapp.window.js';
 
 // Lo único que se edita a mano. Nombre de WhatsApp, usuario, BSUID, origen y
 // baja de publicidad los pone WhatsApp: aunque lleguen en el body, se ignoran.
-const EDITABLE_FIELDS = ['phone', 'name', 'email', 'company', 'notes'];
+// Las notas no: son una lista aparte (`ContactNote`, /contacts/:id/notes).
+const EDITABLE_FIELDS = ['phone', 'name', 'email', 'company'];
 
 /**
  * Los campos editables del body, limpios: recortados y con el texto vacío

@@ -86,7 +86,7 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
 
 ## En curso
 
-- **Notas del contacto con autor** — rama `notas-con-autor`, empezado el 2026-10-17 por Claude. Las notas pasan de un solo texto a una lista con autor y fecha (colección `ContactNote`); el autor edita y borra las suyas, owner y admin, cualquiera. Spec `docs/superpowers/specs/2026-10-17-notas-contacto-design.md`, brief para Claude Design `2026-10-17-notas-contacto-brief-ui.md` y plan `docs/superpowers/plans/2026-10-17-notas-contacto.md`. Hecho: spec, brief y plan. · Falta: la revisión de Codex del plan, el diseño de Claude Design, el backend (PR 1) y el frontend (PR 2). **Entre el PR 1 y el PR 2, `master` no se despliega**; la 1.0.26 sale antes.
+- **Notas del contacto con autor** — rama `notas-con-autor`, empezado el 2026-10-17 por Claude. Las notas pasan de un solo texto a una lista con autor y fecha (colección `ContactNote`); el autor edita y borra las suyas, owner y admin, cualquiera. Spec `docs/superpowers/specs/2026-10-17-notas-contacto-design.md`, brief para Claude Design `2026-10-17-notas-contacto-brief-ui.md` y plan `docs/superpowers/plans/2026-10-17-notas-contacto.md`. Hecho: spec, brief y plan (PR #87, revisado por Codex), el diseño de Claude Design (`Design/Wasmish Notas del contacto.html`) y el backend en la rama `notas-con-autor-backend` (modelo `ContactNote`, rutas `/contacts/:id/notes` con permisos, `noteList` en la ficha, importar crea notas y `migrate:notes`, con sus tests). · Falta: la revisión de Codex del backend y el frontend (PR 2). **En cuanto se una el backend, `master` no se despliega hasta unir el frontend** (con el frontend de hoy no se podrían guardar notas); la 1.0.26 sale antes.
 
 **Unido, sin desplegar** (sale con la 1.0.26):
 

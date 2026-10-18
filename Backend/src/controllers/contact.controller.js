@@ -9,6 +9,9 @@ import { MAX_TAGS_PER_CONTACT } from "../utils/contact.tags.js";
 import { resolveOwnedTagIds } from "../services/tag.service.js";
 import { inLineScope, lineScope } from "../utils/permissions.js";
 import { sendToAccount } from "./stream.controller.js";
+import ContactNote from "../models/contact.note.model.js";
+import { cleanNoteText } from "../utils/contact.notes.js";
+import { createContactNote, listContactNotes } from "../services/contact.note.service.js";
 
 // ---------------------------------------------------------------------------
 // Contactos y su conversación. Lo usan los sitios por donde entra un número o
@@ -259,7 +262,7 @@ const PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 50;
 
 // Un id mal formado es un contacto que no existe: 404, no un CastError (500).
-const findOwnedContact = (userId, id) =>
+export const findOwnedContact = (userId, id) =>
     mongoose.isValidObjectId(id) ? Contact.findOne({ _id: id, userId }) : null;
 
 // Lo que la ficha y la lista necesitan de cada conversación del contacto (una
@@ -307,6 +310,9 @@ const serializeContact = (contact, conversations = []) => {
         username: contact.username ?? null,
         email: contact.email ?? null,
         company: contact.company ?? null,
+        // El texto de antes (`Contact.notes`), para las pestañas abiertas con el
+        // frontend anterior durante el despliegue; las notas van en `noteList`
+        // (solo la ficha). Se quita junto con `Contact.notes`.
         notes: contact.notes ?? null,
         source: contact.source ?? null,
         referral: contact.referral ?? null,
@@ -466,6 +472,7 @@ export const getContact = async (req, res) => {
 
         return res.json({
             ...serializeContact(contact, conversations),
+            noteList: await listContactNotes(contact, req.auth),
             activity: {
                 firstMessageAt: toIso(stats?.firstMessageAt),
                 sent: stats?.sent ?? 0,
@@ -487,6 +494,14 @@ export const createContact = async (req, res) => {
         if (!tags) return sendUnknownTags(res);
 
         const contact = await Contact.create({ userId, ...fields, tags, source: 'manual' });
+        // «Notas» del formulario de crear: la primera nota, a nombre de quien lo crea.
+        const firstNote = cleanNoteText(req.body.notes);
+        if (firstNote) {
+            await createContactNote({
+                accountId: userId, contactId: contact._id, text: firstNote,
+                author: { id: req.auth.userId, name: req.auth.name },
+            });
+        }
         notifyContactChanged(userId, contact._id);
         return res.status(201).json(serializeContact(contact));
     } catch (error) {
@@ -506,6 +521,13 @@ export const updateContact = async (req, res) => {
     try {
         const contact = await findOwnedContact(userId, req.params.id);
         if (!contact) return sendContactError(res, 404, 'Contacto no encontrado');
+
+        // Las notas ya no se cambian aquí (son una lista: /contacts/:id/notes).
+        // Una pestaña con el frontend anterior las sigue mandando: si no las
+        // tocó, se ignoran y se guarda lo demás; si las cambió, que recargue.
+        if (req.body.notes !== undefined && cleanNoteText(req.body.notes) !== cleanNoteText(contact.notes)) {
+            return sendContactError(res, 400, 'Las notas cambiaron: recarga la página.', { code: 'notes_moved' });
+        }
 
         // Con conversación en cualquier línea, el número ya no cambia.
         const conversations = await findContactConversations(userId, contact._id);
@@ -543,6 +565,7 @@ export const deleteContact = async (req, res) => {
         }
 
         await Contact.deleteOne({ _id: contact._id, userId });
+        await ContactNote.deleteMany({ userId, contactId: contact._id });
         notifyContactChanged(userId, contact._id);
         return res.sendStatus(204);
     } catch (error) {

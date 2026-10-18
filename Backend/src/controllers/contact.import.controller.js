@@ -5,6 +5,8 @@ import { normalizeImportPhone, pickImportSample, planImportRows } from "../utils
 import { TAG_NAME_MAX, cleanTagName, tagKey } from "../utils/contact.tags.js";
 import { findOrCreateTags } from "../services/tag.service.js";
 import { notifyContactsChanged } from "./contact.controller.js";
+import ContactNote from "../models/contact.note.model.js";
+import { importKeyFor } from "../utils/contact.notes.js";
 
 // ---------------------------------------------------------------------------
 // Importar contactos. El navegador lee el archivo y empareja las columnas; aquí
@@ -23,7 +25,8 @@ const cleanExtraTags = (names = []) =>
 /**
  * Los contactos de la cuenta con esos teléfonos, por teléfono, cada uno con
  * sus etiquetas: las claves (el plan compara por clave, no por id) y los
- * nombres (la muestra los enseña).
+ * nombres (la muestra los enseña). Y sus notas: los textos (con la de antes,
+ * `Contact.notes`), para no repetir la del archivo, y cuántas tiene.
  */
 const loadExistingByPhone = async (userId, phones) => {
     const [contacts, tags] = await Promise.all([
@@ -31,15 +34,51 @@ const loadExistingByPhone = async (userId, phones) => {
             .select('phone name email company notes tags marketingOptOut').lean(),
         Tag.find({ userId }).select('key name').lean(),
     ]);
+    const notes = contacts.length === 0 ? [] : await ContactNote.aggregate([
+        { $match: { userId, contactId: { $in: contacts.map(contact => contact._id) } } },
+        { $group: { _id: '$contactId', texts: { $push: '$text' }, count: { $sum: 1 } } },
+    ]);
+    const notesByContact = new Map(notes.map(group => [String(group._id), group]));
     const tagById = new Map(tags.map(tag => [String(tag._id), tag]));
     return new Map(contacts.map(contact => {
         const contactTags = (contact.tags ?? []).map(id => tagById.get(String(id))).filter(Boolean);
+        const contactNotes = notesByContact.get(String(contact._id));
         return [contact.phone, {
             ...contact,
             tagKeys: contactTags.map(tag => tag.key),
             tagNames: contactTags.map(tag => tag.name),
+            noteTexts: [...(contactNotes?.texts ?? []), ...(contact.notes ? [contact.notes] : [])],
+            noteCount: contactNotes?.count ?? 0,
         }];
     }));
+};
+
+/**
+ * Las notas del archivo, a nombre de quien importa. Por `importKey`: si otra
+ * importación a la vez ya la creó, el índice único lo frena (E11000) y aquí no
+ * se repite (revisión de Codex del plan).
+ */
+const insertImportNotes = async (userId, author, notes) => {
+    if (notes.length === 0) return;
+    const operations = notes.map(({ contactId, text }) => {
+        const importKey = importKeyFor(text);
+        return {
+            updateOne: {
+                filter: { userId, contactId, importKey },
+                update: { $setOnInsert: {
+                    text, source: 'import', authorId: author.id, authorName: author.name,
+                    createdAt: new Date(), editedAt: null,
+                } },
+                upsert: true,
+            },
+        };
+    });
+    try {
+        await ContactNote.collection.bulkWrite(operations, { ordered: false });
+    } catch (error) {
+        const writeErrors = error.writeErrors ?? [];
+        if (writeErrors.length === 0 || writeErrors.some(e => e.code !== 11000)) throw error;
+    }
 };
 
 const buildPlan = async (userId, { rows, country, extraTagNames }) => {
@@ -136,8 +175,13 @@ export const importContacts = async (req, res) => {
         const result = await runUpserts(toWrite.map(entry =>
             importUpsert(userId, entry, entry.tagNames.map(name => tagByKey.get(tagKey(name))._id))));
 
-        const contacts = await Contact.find({ userId, phone: { $in: plan.entries.map(entry => entry.phone) } }).select('_id').lean();
+        const contacts = await Contact.find({ userId, phone: { $in: plan.entries.map(entry => entry.phone) } }).select('_id phone').lean();
+        const contactIdByPhone = new Map(contacts.map(contact => [contact.phone, contact._id]));
+        await insertImportNotes(userId, { id: new mongoose.Types.ObjectId(req.auth.userId), name: req.auth.name },
+            toWrite.filter(entry => entry.note && contactIdByPhone.has(entry.phone))
+                .map(entry => ({ contactId: contactIdByPhone.get(entry.phone), text: entry.note })));
         const created = result.upsertedCount;
+        // Uno que solo gana una nota también cuenta: su upsert le pone `updatedAt`.
         const updated = result.modifiedCount;
         if (created + updated > 0) notifyContactsChanged(userId);
         return res.json({
