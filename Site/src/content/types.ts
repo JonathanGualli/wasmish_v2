@@ -24,8 +24,28 @@ export type HeroScene = {
   items: ChatItem[]
 }
 
+// Una historia animada simple (el chat del bot): qué aparece en cada fase y cuánto dura.
+export type StoryPhase = { show?: string[]; compose?: string; step: number; ms: number }
+
+// «Lo que pasa hoy» → «con Wasmish». Una hora como «22:00» se dibuja en mono.
+export type BeforeAfter = { before: string; after: string }
+
+// Las pantallas de «Lo que ve su equipo» (componente «PantallaFuncion» del diseño).
+export type FeatureMessage = { from: 'in' | 'out'; text: string; time: string; by?: string; fromApp?: boolean }
+export type FeatureScreen =
+  | { kind: 'chat'; contact: ExampleContact; messages: FeatureMessage[] }
+  | { kind: 'ficha'; contact: ExampleContact; tags: string[]; newTag: string; note: { text: string; author: string; date: string } }
+  | { kind: 'campaign'; title: string; detail: string; message: string; sent: number; delivered: number; read: number }
+  | { kind: 'phone'; notifications: { name: string; text: string }[] }
+export type Feature = { title: string; text: string; screen: FeatureScreen }
+
+// Las respuestas automáticas: el chat de una noche y los ejemplos de «Probar»
+// (son datos, sin lógica: cada pregunta trae su respuesta y por qué sale).
+export type BotScene = { contact: ExampleContact; labels: string[]; items: ChatItem[]; phases: StoryPhase[] }
+export type ProbeExample = { question: string; answer: string; reason: string }
+
 // Una página de venta (el inicio o un nicho). Todo su texto vive aquí: el molde
-// es VentaPage. Las secciones que faltan se suman a medida que se construyen.
+// es VentaPage.
 export type Niche = {
   slug: 'inicio' | 'capacitacion' | 'imprentas'
   path: string
@@ -40,4 +60,7 @@ export type Niche = {
     // Debajo de la conversación: «Luis no atendió la primera vez. Igual supo qué se le ofreció.»
     caption: { strong: string; soft: string }
   }
+  beforeAfter: BeforeAfter[]
+  features: Feature[]
+  bot: { scene: BotScene; examples: ProbeExample[]; selected: number }
 }

@@ -98,7 +98,7 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
 - **Página pública `wasmish.com`** (spec `docs/superpowers/specs/2026-10-17-pagina-publica-design.md`, plan `docs/superpowers/plans/2026-10-17-pagina-publica.md`, detalle en [pagina-publica.md](arquitectura/pagina-publica.md)).
   - **Hecho (Jonathan, 2026-10-17):** el DNS de `wasmish.com` en Cloudflare, con los tres A al servidor en «DNS only» (la app, el webhook y la API siguieron en 200), y `hola@wasmish.com` reenviado al Gmail de Jonathan con Email Routing. Falta confirmar que llega un correo de prueba: el primero rebotó mientras se propagaba el cambio.
   - **El esqueleto de `Site/`** está unido (PR #93), y Cloudflare Pages está conectado: `wasmish-site.pages.dev` y una vista previa por PR.
-  - **El inicio con el diseño v3, en dos PR:** el 3a (rama `pagina-inicio`: cabecera, pie, el botón y el hero con su conversación animada) y el 3b (las demás secciones). Hasta el 3b, los enlaces «Precio» y «Qué cambia» bajan a secciones que todavía no existen.
+  - **El inicio con el diseño v3, en dos PR:** el 3a (el hero) está unido (PR #94); el 3b (rama `pagina-inicio-secciones`) trae las demás secciones, del «antes y después» al cierre.
   - **Después:** los nichos y las imágenes de vista previa (PR 4) y el lanzamiento (PR 5).
 
 ## Lo siguiente

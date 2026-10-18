@@ -7,7 +7,7 @@ import { read } from './helpers.mjs'
 // hasta que la animación lo muestra.
 test('el hero trae la conversación completa en el HTML', () => {
   const html = read('index.html')
-  assert.match(html, /<div class="hero-demo[^"]*"[^>]*data-hero="still"/)
+  assert.match(html, /<div class="hero-demo[^"]*"[^>]*data-story="still"/)
   for (const text of ['Hola, ¿tienen la silla Oslo?', 'Catálogo sillas 2026.pdf', 'USD 567 en total', 'Quiere 3 unidades.']) {
     assert.ok(html.includes(text), `Falta en el hero: ${text}`)
   }

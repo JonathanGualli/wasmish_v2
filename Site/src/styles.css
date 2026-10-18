@@ -180,7 +180,7 @@
   details[open] .faq-plus { transform: rotate(45deg); }
 }
 
-/* ── La conversación del hero (sections/HeroDemo.tsx) ────────────────────── */
+/* ── Las historias animadas: el hero (sections/HeroDemo.tsx) y el chat del bot ── */
 /* La ficha va al lado de la conversación si caben 560 px; si no, debajo
    (sin JavaScript o sin animaciones) o como una hoja que entra desde el costado. */
 .hero-demo { container-type: inline-size; }
@@ -193,7 +193,7 @@
 }
 /* Sin animación (sin JavaScript o con las animaciones desactivadas), el chat
    crece hasta mostrar la historia entera; con animación, alto fijo como en el diseño. */
-.hero-chat { min-height: 330px; }
+.story-chat { min-height: 330px; }
 .hero-ficha { position: relative; }
 .hero-back { display: none; }
 .hero-title { display: flex; }
@@ -203,7 +203,7 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  html.js .hero-chat { height: min(500px, 118vw); }
+  html.js .story-chat { height: min(500px, 118vw); }
 
   @container (max-width: 559.98px) {
     html.js .hero-grid { gap: 0; overflow: hidden; }
@@ -219,7 +219,7 @@
   }
 
   /* Antes de arrancar la animación se ve su primera fase, no la historia completa. */
-  html.js [data-hero='still'] [data-later] { display: none; }
+  html.js [data-story='still'] [data-later] { display: none; }
 }
 
 /* La barra de pasos solo tiene sentido si la historia se mueve. */

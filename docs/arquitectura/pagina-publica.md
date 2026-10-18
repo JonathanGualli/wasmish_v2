@@ -37,6 +37,12 @@ React 19, Vite y Tailwind v4, como la app, pero **pre-renderizado**: WhatsApp y 
 - con la clase `js` y las animaciones permitidas, el CSS esconde desde el primer instante lo marcado `data-later` (lo que todavía no llegó) y pone la ficha como hoja;
 - al montar, React pasa a `data-hero="anim"` en la primera fase, y la animación solo corre mientras se ve (`IntersectionObserver`).
 
+**Las secciones**, en el orden del diseño (`pages/VentaPage.tsx`): el hero, «Lo que pasa hoy» (`BeforeAfter`), «Lo que ve su equipo» (`Features`), las respuestas automáticas (`AutoReplies`), la implementación (`Setup`), el precio (`Pricing`, `#precio`), «Lo que cambia» (`WhatChanges`, `#cambios`), las preguntas (`Faq`, con `<details>`: se abren sin JavaScript) y el cierre (`ClosingCta`).
+- **«Lo que ve su equipo»:** en la computadora (≥ 900 px), la pantalla de la derecha queda fija (`sticky`) y cambia con la función que está en el centro, que se calcula al bajar; en el celular, cada función lleva su pantalla debajo. Las pantallas (`components/app/FeatureScreen.tsx`) animan su detalle cuando están en foco. Hasta montar, y siempre sin animaciones, se dibujan en su estado final.
+- **El chat del bot** usa `useStory` (`components/app/useStory.ts`), la misma idea que el hero con menos estados: `data-story="still"` con la historia completa, `data-later` y la animación al montar.
+- **«Probar»** son datos (`bot.examples` del nicho): cada pregunta trae su respuesta y por qué sale. No imita la lógica del bot.
+- **Lo que dicen igual todas las páginas** (las cuatro formas del bot, los pasos de la implementación, «Lo que cambia», las preguntas) está en `content/home.ts`; lo propio de cada nicho, en `content/niches/`. **El JSON-LD del inicio** (`content/structuredData.ts`) toma el precio de `content/price.ts`, igual que la sección del precio.
+
 **Las secciones aparecen al bajar** (`useReveal`, atributos `data-reveal` y `data-delay`): después de hidratar se esconden solo las que todavía no están en pantalla, así que nada parpadea.
 
 **De la app solo se copian** los tokens de la marca (`src/styles.css`, de `Frontend/src/App.css`: si cambian allí, se cambian aquí), el logo y el favicon. Las fuentes (Inter y JetBrains Mono, variables) se sirven desde la página, sin Google Fonts.
@@ -45,7 +51,7 @@ React 19, Vite y Tailwind v4, como la app, pero **pre-renderizado**: WhatsApp y 
 
 Cada página de venta es un archivo de textos en `src/content/niches/` (tipo `Niche`, en `src/content/types.ts`), y `VentaPage` es el único molde. Para un nicho nuevo:
 
-1. Crear `src/content/niches/<nicho>.ts`, con su `path`, su `demoLabel` (va en el texto del botón), su `meta` (título, descripción e imagen de vista previa) y sus textos.
+1. Crear `src/content/niches/<nicho>.ts`, con su `path`, su `demoLabel` (va en el texto del botón), su `meta` (título, descripción e imagen de vista previa) y lo propio de su página: el hero con su conversación, las parejas de «Lo que pasa hoy», las funciones con sus pantallas y el bot con sus ejemplos de «Probar».
 2. Sumarlo a `NICHES`, en `src/routes.ts`.
 3. Generar su imagen de vista previa.
 
