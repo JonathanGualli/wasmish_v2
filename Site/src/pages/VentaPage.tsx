@@ -22,13 +22,13 @@ export function VentaPage({ niche }: { niche: Niche }) {
       <main>
         <Hero niche={niche} />
         <BeforeAfter pairs={niche.beforeAfter} />
-        <Features features={niche.features} />
-        <AutoReplies scene={niche.bot.scene} examples={niche.bot.examples} selected={niche.bot.selected} />
+        <Features features={niche.features} stripText={niche.stripText} />
+        <AutoReplies scene={niche.bot.scene} keywords={niche.bot.keywords} examples={niche.bot.examples} selected={niche.bot.selected} />
         <Setup />
         <Pricing />
         <WhatChanges />
         <Faq />
-        <ClosingCta demoLabel={niche.demoLabel} />
+        <ClosingCta demoLabel={niche.demoLabel} caseWord={niche.closingWord} />
       </main>
       <Footer />
     </>

@@ -13,10 +13,11 @@ export const FEATURE_STRIP = [
 ]
 
 // Las cuatro formas de las respuestas automáticas (brief, § 3.3).
-export const AUTO_REPLY_FORMS: { name: string; text: Rich; keywords?: string[] }[] = [
+// «Palabras clave» se escribe con las dos palabras de cada nicho (bot.keywords).
+export const AUTO_REPLY_FORMS: { name: string; text: Rich; keywords?: true }[] = [
   { name: 'Bienvenida', text: ['A quien escribe por primera vez, o vuelve después de un tiempo.'] },
   { name: 'Fuera de horario', text: ['Un aviso con su horario. Una sola vez, no a cada mensaje.'] },
-  { name: 'Palabras clave', text: [], keywords: ['precio', 'ubicación'] },
+  { name: 'Palabras clave', text: [], keywords: true },
   { name: 'Si no entiende', text: ['Si el mensaje no coincide con nada, la respuesta que usted preparó. Una sola vez por conversación.'] },
 ]
 

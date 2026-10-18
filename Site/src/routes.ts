@@ -1,6 +1,8 @@
 import type { PageMeta } from './lib/head.ts'
 import { normalizePath } from './lib/paths.ts'
 import { inicio } from './content/niches/inicio.ts'
+import { capacitacion } from './content/niches/capacitacion.ts'
+import { imprentas } from './content/niches/imprentas.ts'
 import type { Niche } from './content/types.ts'
 import { HOME_JSON_LD } from './content/structuredData.ts'
 
@@ -14,7 +16,7 @@ export type Route = {
   meta: PageMeta
 }
 
-export const NICHES: Niche[] = [inicio]
+export const NICHES: Niche[] = [inicio, capacitacion, imprentas]
 
 const nicheRoute = (niche: Niche): Route => ({
   path: niche.path,
