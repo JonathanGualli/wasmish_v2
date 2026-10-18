@@ -7,6 +7,7 @@
 import { parsePhoneNumberFromString, validatePhoneNumberLength, isSupportedCountry } from 'libphonenumber-js/max';
 import { z } from 'zod';
 import { MAX_TAGS_PER_CONTACT, splitTagCell, tagKey } from './contact.tags.js';
+import { NOTES_PER_CONTACT_MAX, pickImportNote } from './contact.notes.js';
 
 export const IMPORT_MAX_ROWS = 10000;
 export const IMPORT_BATCH_MAX = 500;
@@ -91,7 +92,10 @@ export const cleanImportRow = (row, country) => {
         fields[field] = value.slice(0, max);
     }
 
-    return { row: row.row, phone: phoneResult.phone ?? null, fields, tagNames: splitTagCell(row.tags), errors, warnings };
+    // La nota va aparte: no es un campo que se rellena, sino una nota nueva del
+    // contacto (`ContactNote`, 2026-10-17).
+    const { notes: note = null, ...contactFields } = fields;
+    return { row: row.row, phone: phoneResult.phone ?? null, fields: contactFields, note, tagNames: splitTagCell(row.tags), errors, warnings };
 };
 
 /**
@@ -104,11 +108,12 @@ const mergeByPhone = (cleanRows) => {
     for (const row of cleanRows) {
         const entry = byPhone.get(row.phone);
         if (!entry) {
-            byPhone.set(row.phone, { phone: row.phone, rows: [row.row], fields: { ...row.fields }, tagNames: [...row.tagNames] });
+            byPhone.set(row.phone, { phone: row.phone, rows: [row.row], fields: { ...row.fields }, note: row.note, tagNames: [...row.tagNames] });
             continue;
         }
         entry.rows.push(row.row);
         for (const [field, value] of Object.entries(row.fields)) entry.fields[field] ??= value;
+        entry.note ??= row.note;
         entry.tagNames.push(...row.tagNames);
     }
     return [...byPhone.values()];
@@ -132,7 +137,9 @@ const uniqueTagNames = (names) => {
  * no se toca nunca.
  *
  * Cada entrada: `{ action: 'create' | 'update' | 'unchanged', phone, rows,
- * fields, tagNames, ignored, contactId? }`. En `update`, `fields` y `tagNames`
+ * fields, note, tagNames, ignored, contactId? }`. `note` es la nota que se le
+ * añade (null si no trae, si ya la tiene —`noteTexts`— o si está en el límite
+ * de notas —`noteCount`—). En `update`, `fields` y `tagNames`
  * son solo lo que se añade; `ignored`, lo que el archivo trae distinto de lo
  * que el contacto ya tiene, y por eso no se aplica.
  */
@@ -157,7 +164,7 @@ export const planImportRows = (rows, { country, extraTagNames = [], existingByPh
             if (tagNames.length > MAX_TAGS_PER_CONTACT) {
                 issues.push({ row: entry.rows[0], type: 'warning', field: 'tags', message: `Lleva más de ${MAX_TAGS_PER_CONTACT} etiquetas: se ponen las primeras.` });
             }
-            return { action: 'create', phone: entry.phone, rows: entry.rows, fields: entry.fields, tagNames: tagNames.slice(0, MAX_TAGS_PER_CONTACT), ignored: {} };
+            return { action: 'create', phone: entry.phone, rows: entry.rows, fields: entry.fields, note: entry.note, tagNames: tagNames.slice(0, MAX_TAGS_PER_CONTACT), ignored: {} };
         }
 
         if (existing.marketingOptOut) optedOutExisting += 1;
@@ -169,8 +176,13 @@ export const planImportRows = (rows, { country, extraTagNames = [], existingByPh
             issues.push({ row: entry.rows[0], type: 'warning', field: 'tags', message: `Ya tiene ${existing.tagKeys.length} etiquetas: no caben todas las del archivo.` });
         }
         const tagNames = newTags.slice(0, Math.max(room, 0));
-        const changed = Object.keys(fields).length > 0 || tagNames.length > 0;
-        return { action: changed ? 'update' : 'unchanged', phone: entry.phone, rows: entry.rows, fields, tagNames, ignored, contactId: existing._id };
+        let note = pickImportNote(entry.note, existing.noteTexts ?? []);
+        if (note && (existing.noteCount ?? 0) >= NOTES_PER_CONTACT_MAX) {
+            issues.push({ row: entry.rows[0], type: 'warning', field: 'notes', message: `Ya tiene ${NOTES_PER_CONTACT_MAX} notas: la del archivo no se añade.` });
+            note = null;
+        }
+        const changed = Object.keys(fields).length > 0 || tagNames.length > 0 || Boolean(note);
+        return { action: changed ? 'update' : 'unchanged', phone: entry.phone, rows: entry.rows, fields, note, tagNames, ignored, contactId: existing._id };
     });
 
     const count = (action) => entries.filter(e => e.action === action).length;
@@ -207,11 +219,11 @@ export const pickImportSample = (plan, existingByPhone, size) => {
         .slice(0, size)
         .sort((a, b) => a.rows[0] - b.rows[0]);
 
-    return picked.map(({ action, phone, rows, fields, tagNames, ignored }) => {
+    return picked.map(({ action, phone, rows, fields, note, tagNames, ignored }) => {
         const existing = existingByPhone.get(phone);
         const current = existing
             ? { name: existing.name ?? null, email: existing.email ?? null, company: existing.company ?? null, tagNames: existing.tagNames ?? [] }
             : null;
-        return { action, phone, rows, fields, tagNames, ignored, current };
+        return { action, phone, rows, fields, note, tagNames, ignored, current };
     });
 };
