@@ -57,6 +57,13 @@ export const useAutosave = <T,>(value: T, { savedValue, save, delay = 1000, onLo
         else if (mounted.current) setStatus('saved');
     }, []);
 
+    // Lo guardado cambió por fuera (otra persona de la cuenta): si aquí no hay
+    // nada pendiente, eso pasa a ser lo guardado, y mostrarlo no se guarda otra
+    // vez. Antes que el efecto del valor, que lo compara con esto.
+    useEffect(() => {
+        if (!saving.current && latest.current === saved.current) saved.current = savedValue;
+    }, [savedValue]);
+
     useEffect(() => {
         latest.current = value;
         window.clearTimeout(timer.current);

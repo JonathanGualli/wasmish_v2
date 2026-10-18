@@ -1,4 +1,7 @@
+import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSSE } from "../context/sse.context";
+import { useThrottledInvalidate } from "./useThrottledInvalidate";
 import type { AxiosError } from "axios";
 import {
     bulkTagContactsService, createTagService, deleteTagService, getTagsService, renameTagService, tagSelectionSummaryService,
@@ -6,12 +9,29 @@ import {
 import type { CampaignRecipientsInput } from "../models/campaign.model";
 import type { BulkTagResult, Tag, TagSelectionSummary } from "../models/tag.model";
 
-/** Las etiquetas de la cuenta, por nombre, con cuántos contactos tiene cada una. */
-export const useTags = () => useQuery<Tag[]>({
-    queryKey: ['tags'],
-    queryFn: getTagsService,
-    staleTime: 30_000,
-});
+/**
+ * Las etiquetas de la cuenta, por nombre, con cuántos contactos tiene cada una.
+ * Se vuelven a pedir cuando otra persona de la cuenta crea, renombra o borra
+ * una (`tags_updated`) o etiqueta muchos contactos a la vez (`contacts_updated`).
+ */
+export const useTags = () => {
+    const { subscribe } = useSSE();
+    const refresh = useThrottledInvalidate(['tags']);
+    useEffect(() => {
+        const unsubTags = subscribe("tags_updated", refresh);
+        const unsubContacts = subscribe("contacts_updated", refresh);
+        return () => {
+            unsubTags();
+            unsubContacts();
+        };
+    }, [subscribe, refresh]);
+
+    return useQuery<Tag[]>({
+        queryKey: ['tags'],
+        queryFn: getTagsService,
+        staleTime: 30_000,
+    });
+};
 
 /** Cuántos de la selección tienen cada etiqueta: los números del menú «Etiquetar». */
 export const useTagSelectionSummary = (selection: CampaignRecipientsInput, enabled: boolean) => useQuery<TagSelectionSummary>({

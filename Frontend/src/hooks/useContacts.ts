@@ -13,17 +13,20 @@ export const useContacts = (pageIndex: number, pageSize: number, search: string,
     const { subscribe } = useSSE();
 
     // Un mensaje cambia la «última interacción», abre la ventana o trae un
-    // contacto nuevo, y `contact_updated` es una baja o un alta de publicidad:
-    // la lista y la ficha se refrescan, como la bandeja. Agrupado: una campaña
-    // dispara cientos de `message_created` seguidos.
+    // contacto nuevo; `contact_updated` y `contacts_updated` son cambios de
+    // otra persona de la cuenta (o de WhatsApp, como una baja de publicidad), y
+    // `tags_updated`, una etiqueta borrada o renombrada: la lista y la ficha se
+    // refrescan, como la bandeja. Agrupado: una campaña dispara cientos de
+    // `message_created` seguidos.
     const refresh = useThrottledInvalidate(['contacts']);
     useEffect(() => {
-        const unsubMessage = subscribe("message_created", refresh);
-        const unsubContact = subscribe("contact_updated", refresh);
-        return () => {
-            unsubMessage();
-            unsubContact();
-        };
+        const unsubscribers = [
+            subscribe("message_created", refresh),
+            subscribe("contact_updated", refresh),
+            subscribe("contacts_updated", refresh),
+            subscribe("tags_updated", refresh),
+        ];
+        return () => unsubscribers.forEach(unsubscribe => unsubscribe());
     }, [subscribe, refresh]);
 
     return useQuery<ContactsPage>({
@@ -47,8 +50,9 @@ export const useContact = (id: string | null) => {
 /**
  * Un contacto que se ve junto a su conversación (la ficha del chat). Sus cifras
  * y sus ventanas cambian con cada mensaje de **cualquiera** de sus
- * conversaciones (una por línea), y `contact_updated` trae una baja de
- * publicidad o un cambio de número: se vuelve a pedir solo entonces.
+ * conversaciones (una por línea), y `contact_updated` trae lo que cambió otra
+ * persona de la cuenta, una baja de publicidad o un cambio de número: se vuelve
+ * a pedir solo entonces.
  *
  * El evento no trae el contacto: se busca en la bandeja de quién es la
  * conversación. Una que la bandeja aún no tiene puede ser suya, recién creada
@@ -67,9 +71,12 @@ export const useLiveContact = (id: string, conversationId: string) => {
         const unsubContact = subscribe("contact_updated", payload => {
             if (payload.id === id) refresh();
         });
+        // Muchos a la vez (etiquetar en bloque, importar): puede ser este.
+        const unsubContacts = subscribe("contacts_updated", refresh);
         return () => {
             unsubMessage();
             unsubContact();
+            unsubContacts();
         };
     }, [subscribe, refresh, queryClient, id, conversationId]);
 
