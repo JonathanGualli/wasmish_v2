@@ -9,6 +9,7 @@ import { SkeletonBox, SkeletonLine } from "../../Skeleton/Skeleton";
 import { NoteComposer } from "./NoteComposer";
 import { NoteItem } from "./NoteItem";
 import { NoteActionsSheet, NoteDeleteSheet } from "./NoteSheets";
+import { updatePendingNotes, usePendingNotes, type PendingNote } from "./pendingNotes";
 
 /**
  * El borrador de nota nueva de cada contacto, mientras viva la pestaña: si se
@@ -22,7 +23,6 @@ const FRESH_MS = 6000;
 
 const EMPTY_PLACEHOLDER = 'Apunta lo que no quieras olvidar. Ej.: paga a 30 días, prefiere que le escriban por la tarde.';
 
-interface Pending { key: string; text: string; error: string | null }
 interface Editing { id: string; text: string; baseText: string; baseEditedAt: string | null; error: string | null }
 
 interface Props {
@@ -48,7 +48,8 @@ export const ContactNotesCard = ({ contact, initialVisible, bordered = false }: 
 
     const [draft, setDraftState] = useState(() => drafts.get(contact.id) ?? '');
     const [composerOpen, setComposerOpen] = useState(() => Boolean(drafts.get(contact.id)));
-    const [pending, setPending] = useState<Pending[]>([]);
+    const pending = usePendingNotes(contact.id);
+    const setPending = (change: (notes: PendingNote[]) => PendingNote[]) => updatePendingNotes(contact.id, change);
     const [editing, setEditing] = useState<Editing | null>(null);
     const [confirmingId, setConfirmingId] = useState<string | null>(null);
     const [removing, setRemoving] = useState<Set<string>>(new Set());
@@ -74,29 +75,33 @@ export const ContactNotesCard = ({ contact, initialVisible, bordered = false }: 
         else drafts.delete(contact.id);
     };
 
-    const save = (key: string, text: string) => {
-        add.mutate(text.trim(), {
-            onSuccess: note => {
-                seen.current.add(note.id);
-                setPending(current => current.filter(item => item.key !== key));
-            },
-            onError: error => setPending(current => current.map(item => (item.key === key ? { ...item, error: noteErrorText(error) } : item))),
-        });
+    // Cada guardado espera su propia respuesta: con `mutate`, React Query solo
+    // avisa al último, y una nota guardada antes se quedaba en «Guardando…»
+    // (revisión de Codex del PR #89). Va al almacén de fuera, no al estado: la
+    // ficha puede haberse cerrado cuando responda.
+    const save = async (key: string, text: string) => {
+        try {
+            const note = await add.mutateAsync(text.trim());
+            seen.current.add(note.id);
+            setPending(current => current.filter(item => item.key !== key));
+        } catch (error) {
+            setPending(current => current.map(item => (item.key === key ? { ...item, error: noteErrorText(error) } : item)));
+        }
     };
 
     const addNote = (text = draft) => {
-        const key = `temp-${Date.now()}`;
+        const key = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
         setPending(current => [{ key, text: text.trim(), error: null }, ...current]);
         if (text === draft) {
             setDraft('');
             setComposerOpen(false);
         }
-        save(key, text);
+        void save(key, text);
     };
 
-    const retryPending = (item: Pending) => {
+    const retryPending = (item: PendingNote) => {
         setPending(current => current.map(other => (other.key === item.key ? { ...other, error: null } : other)));
-        save(item.key, item.text);
+        void save(item.key, item.text);
     };
 
     const startEditing = (note: ContactNote) => {
@@ -104,28 +109,37 @@ export const ContactNotesCard = ({ contact, initialVisible, bordered = false }: 
         setEditing({ id: note.id, text: note.text, baseText: note.text, baseEditedAt: note.editedAt, error: null });
     };
 
-    const saveEdit = () => {
+    // Al responder, solo se cierra si el campo sigue en esa nota y con lo que se
+    // envió: lo que se escribió mientras tanto no se pierde (revisión de Codex
+    // del PR #89). Si no, lo guardado pasa a ser la versión de referencia.
+    const saveEdit = async () => {
         if (!editing) return;
-        const current = editing;
-        edit.mutate({ noteId: current.id, text: current.text.trim() }, {
-            onSuccess: () => setEditing(null),
-            onError: error => setEditing(state => state && { ...state, error: noteErrorText(error) }),
-        });
+        const { id, text } = editing;
+        const sent = text.trim();
+        try {
+            const saved = await edit.mutateAsync({ noteId: id, text: sent });
+            setEditing(state => {
+                if (!state || state.id !== id) return state;
+                if (state.text.trim() === sent) return null;
+                return { ...state, baseText: saved.text, baseEditedAt: saved.editedAt, error: null };
+            });
+        } catch (error) {
+            setEditing(state => (state && state.id === id ? { ...state, error: noteErrorText(error) } : state));
+        }
     };
 
-    const deleteNote = (id: string) => {
+    const deleteNote = async (id: string) => {
         setConfirmingId(null);
         setSheet(null);
         setRemoving(current => new Set(current).add(id));
         setDeleteErrors(current => { const next = new Map(current); next.delete(id); return next; });
-        const settle = () => setRemoving(current => { const next = new Set(current); next.delete(id); return next; });
-        remove.mutate(id, {
-            onSuccess: settle,
-            onError: error => {
-                settle();
-                setDeleteErrors(current => new Map(current).set(id, noteErrorText(error)));
-            },
-        });
+        try {
+            await remove.mutateAsync(id);
+        } catch (error) {
+            setDeleteErrors(current => new Map(current).set(id, noteErrorText(error)));
+        } finally {
+            setRemoving(current => { const next = new Set(current); next.delete(id); return next; });
+        }
     };
 
     // La nota que se edita, tal como está ahora en el servidor: si otra persona
@@ -151,7 +165,7 @@ export const ContactNotesCard = ({ contact, initialVisible, bordered = false }: 
             ariaLabel="Editar la nota"
             value={editing!.text}
             onChange={text => setEditing(state => state && { ...state, text, error: null })}
-            onSave={saveEdit}
+            onSave={() => void saveEdit()}
             onCancel={() => setEditing(null)}
             autoFocus
             error={editing!.error}
@@ -236,10 +250,10 @@ export const ContactNotesCard = ({ contact, initialVisible, bordered = false }: 
                                 fresh={fresh.has(note.id)}
                                 editor={editing?.id === note.id ? editor(note) : null}
                                 failure={deleteError ? {
-                                    title: 'No se pudo borrar.', message: deleteError, onRetry: () => deleteNote(note.id),
+                                    title: 'No se pudo borrar.', message: deleteError, onRetry: () => void deleteNote(note.id),
                                 } : null}
                                 confirmDelete={confirmingId === note.id ? {
-                                    onConfirm: () => deleteNote(note.id), onCancel: () => setConfirmingId(null),
+                                    onConfirm: () => void deleteNote(note.id), onCancel: () => setConfirmingId(null),
                                 } : null}
                                 onEdit={() => startEditing(note)}
                                 onDelete={() => { setEditing(null); setConfirmingId(note.id); }}
@@ -268,7 +282,7 @@ export const ContactNotesCard = ({ contact, initialVisible, bordered = false }: 
             <NoteDeleteSheet
                 note={sheet?.kind === 'delete' ? sheetNote : null}
                 mine={sheetNote ? isMine(sheetNote) : false}
-                onConfirm={() => sheet && deleteNote(sheet.id)}
+                onConfirm={() => { if (sheet) void deleteNote(sheet.id); }}
                 onClose={() => setSheet(null)}
             />
         </section>
