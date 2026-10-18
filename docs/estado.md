@@ -11,10 +11,16 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 - **Coexistencia con la app de WhatsApp Business** (PRs #78 a #80, cada uno con su revisión de Codex; spec `docs/superpowers/specs/2026-10-16-coexistencia-design.md`, plan `docs/superpowers/plans/2026-10-16-coexistencia.md`, diseño `Design/Wasmish Líneas - Junto con la app.html`). Un cliente conecta un número que sigue usando en la app de WhatsApp Business, sin perderla.
   - **Al conectar,** Wasmish pregunta si el número está en la app y abre el Embedded Signup por el camino de la app; el backend deduce el número (Meta solo da el WABA), lee `is_on_biz_app` y no llama a `/register`. Detalle en [whatsapp-envio.md](arquitectura/whatsapp-envio.md).
   - **Lo que el negocio responde desde la app** llega como eco (`smb_message_echoes`) y sale en el chat como «Desde la app de WhatsApp», con su pausa del bot. **`PARTNER_REMOVED`** desconecta las líneas del WABA y Ajustes → Líneas dice el motivo. Detalle en [webhook-adjuntos.md](arquitectura/webhook-adjuntos.md).
-  - **Probado** con los tests, con `webhook:simulate` (`eco`, `retiro-acceso`) y en Chrome contra un backend local. **Sin probar con Meta de verdad**: el popup de Facebook por el camino de la app y un eco con foto.
+  - **Probado** con los tests, con `webhook:simulate` (`eco`, `retiro-acceso`) y en Chrome contra un backend local.
+  - **Probado con Meta de verdad el 2026-10-16** (pasos 1 a 6 del spec, § 7), con un número de Jonathan que sigue en la app de WhatsApp Business y su cuenta de prueba:
+    - La ventana de Facebook es el flujo nuevo que empieza por el número (Embedded Signup v4): **no hay una opción aparte para la app**. La coexistencia se dispara sola al elegir o escribir un número que está en la app, y después pide escanear un código QR desde la app («Importar contactos e historial de chat»). Al final dice «Tu cuenta está conectada a Solventyc»: Meta muestra el negocio dueño de la app de Meta, no Wasmish.
+    - Conectar respondió 200 en unos 4 s, sin `/register`, y la línea quedó «Junto con la app» (`is_on_biz_app: true`).
+    - Los entrantes llegan a Wasmish y a la app, y lo que se responde desde Wasmish llega al cliente.
+    - Lo respondido desde la app (texto, foto y **nota de voz**) sale en el chat como «Desde la app de WhatsApp». La nota de voz se escucha, aunque Meta no la lista entre los tipos de eco.
+    - Falta el paso 7 (más de 24 h sin sincronizar: sigue conectado) y el 8 (desconectarlo desde la app: Ajustes → Líneas dice el motivo).
   - **En el panel de Meta (hecho por Jonathan el 2026-10-16):** suscritos `smb_message_echoes`, `history` y `smb_app_state_sync`, y comprobado `account_update`. El webhook no se tocó.
   - **Al desplegar:** se reconstruyen `wasmish-api` y `wasmish-web`. Sin migración, índices ni variables nuevas: los campos nuevos (`Line.businessApp`, `Line.disconnectionReason`, `Waba.authorizedAt`) son opcionales. Para un número normal, conectar funciona como antes: comprobar en los logs entrantes del webhook y `POST /api/v1/templates/send` con 200.
-  - **Después:** la prueba real del spec, § 7, con el chip en la app de WhatsApp Business. **Hasta que salga bien, la página y el guion de ventas no prometen la coexistencia.**
+  - **Después:** los pasos 7 y 8 de la prueba real. **Hasta que salgan bien, la página y el guion de ventas no prometen la coexistencia.**
 
 La 1.0.24 (desplegada el 2026-10-16) llevó:
 
@@ -84,9 +90,9 @@ Nada en curso.
 
 ## Lo siguiente
 
-- **La prueba real de la coexistencia** (spec `2026-10-16-coexistencia-design.md`, § 7), con el chip en la app de WhatsApp Business y la cuenta de prueba de Jonathan. Si sale bien, la página pública y el guion de ventas pueden ofrecerla.
+- **Terminar la prueba real de la coexistencia** (spec `2026-10-16-coexistencia-design.md`, § 7): los pasos 1 a 6 salieron bien el 2026-10-16; faltan el 7 (24 h sin sincronizar) y el 8 (desconectar desde la app). Si salen bien, la página pública y el guion de ventas pueden ofrecerla.
 
-- **Avisar al cliente real** de que ya puede usar Wasmish en el celular, con los avisos, **cuando la app ya esté en `app.wasmish.com`** (si la instala antes, tendrá que instalarla dos veces). Cuando le convenga, que cambie la URL de su integración a `app.wasmish.com`; la vieja sigue funcionando.
+- **Avisar al cliente real** de que ya puede usar Wasmish en el celular, con los avisos: la app ya está en `app.wasmish.com` (desde la 1.0.24), que es donde tiene que instalarla. Cuando le convenga, que cambie la URL de su integración a `app.wasmish.com`; la vieja sigue funcionando.
 - **Multi-línea y multi-agente, fases 1 a 4** (diseño aprobado, sin preguntas abiertas: `docs/superpowers/specs/2026-10-11-multi-linea-multi-agente-design.md`). Fases 1, 2a y 2b en producción (la 2b, enrutar por línea, desde la 1.0.14). La **Fase 2c** está en producción desde la 1.0.15.
   - **Para encender varias líneas** (plan de la 2c, «Después de desplegar»):
     1. La prueba del token: ¿un token nuevo del Embedded Signup cubre todos los números del WABA? (spec § 2.2). Se puede hacer en producción con la cuenta de prueba de Jonathan (`maxLines: 2`), pero necesita **dos números en el mismo WABA**: hoy tiene uno conectado. Una cuenta con dos líneas de WABA distintos ya se probó el 2026-10-14.
