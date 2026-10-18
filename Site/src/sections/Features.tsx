@@ -23,7 +23,7 @@ function Counter({ index, total }: { index: number; total: number }) {
 // (≥ 900 px), los textos pasan a la izquierda y la pantalla de la derecha queda
 // fija y cambia con la función que está en el centro. En el celular, cada
 // función lleva su pantalla debajo, y se anima al llegar a ella.
-export function Features({ features }: { features: Feature[] }) {
+export function Features({ features, stripText = {} }: { features: Feature[]; stripText?: Record<string, string> }) {
   const rootRef = useRef<HTMLDivElement>(null)
   // Hasta montar, todo «encendido»: es lo que dibuja el servidor y lo que ve
   // quien no tiene JavaScript o desactivó las animaciones.
@@ -114,7 +114,7 @@ export function Features({ features }: { features: Feature[] }) {
           {FEATURE_STRIP.map((item) => (
             <div key={item.title}>
               <div className="text-base font-bold">{item.title}</div>
-              <div className="mt-1 text-[14.5px] leading-normal text-brand-on-deep">{item.text}</div>
+              <div className="mt-1 text-[14.5px] leading-normal text-brand-on-deep">{stripText[item.title] ?? item.text}</div>
             </div>
           ))}
         </div>

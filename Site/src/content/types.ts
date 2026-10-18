@@ -1,7 +1,8 @@
 import type { PageMeta } from '../lib/head.ts'
 
 // Un titular con su palabra resaltada: «Que su equipo sepa [qué se habló] con cada cliente.»
-export type HighlightedText = { before: string; highlight: string; after: string }
+// `wraps`: la palabra resaltada es larga y puede partirse en dos renglones (ver components/Highlight.tsx).
+export type HighlightedText = { before: string; highlight: string; after: string; wraps?: true }
 
 // Un mensaje de las conversaciones de ejemplo (imitan la app: nunca datos reales).
 export type ChatItem =
@@ -62,5 +63,12 @@ export type Niche = {
   }
   beforeAfter: BeforeAfter[]
   features: Feature[]
-  bot: { scene: BotScene; examples: ProbeExample[]; selected: number }
+  // Textos de la franja de abajo de las funciones que cambian en este nicho, por su título.
+  stripText?: Record<string, string>
+  // Las dos palabras clave de la tabla del bot, y los ejemplos de «Probar».
+  bot: { scene: BotScene; keywords: [string, string]; examples: ProbeExample[]; selected: number }
+  // «Véalo con el caso de su <closingWord>, en 15 minutos.»
+  closingWord: string
+  // La imagen de vista previa (scripts/og.mjs): una respuesta de la historia, con quién la envió.
+  og: { bubble: string; by: string; time: string }
 }

@@ -39,7 +39,7 @@ const keyword = 'rounded px-1.5 py-px font-mono text-[13px] text-brand-text bg-b
 
 // «Lo que siempre preguntan ya tiene respuesta»: las cuatro formas y «Probar»,
 // con respuestas de ejemplo de un negocio.
-export function AutoReplies({ scene, examples, selected }: { scene: BotScene; examples: ProbeExample[]; selected: number }) {
+export function AutoReplies({ scene, keywords, examples, selected }: { scene: BotScene; keywords: [string, string]; examples: ProbeExample[]; selected: number }) {
   const [pick, setPick] = useState(selected)
   const example = examples[pick]
 
@@ -65,7 +65,7 @@ export function AutoReplies({ scene, examples, selected }: { scene: BotScene; ex
                 <span className="flex-[0_0_150px] text-[15px] font-bold">{form.name}</span>
                 <span className="flex-[1_1_220px] text-[14.5px] leading-normal text-brand-gray-600">
                   {form.keywords ? (
-                    <>Si el mensaje dice <span className={keyword}>{form.keywords[0]}</span> o <span className={keyword}>{form.keywords[1]}</span>, responde el texto que usted preparó.</>
+                    <>Si el mensaje dice <span className={keyword}>{keywords[0]}</span> o <span className={keyword}>{keywords[1]}</span>, responde el texto que usted preparó.</>
                   ) : (
                     <RichText parts={form.text} />
                   )}

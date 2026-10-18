@@ -123,6 +123,9 @@ export const inicio: Niche = {
       { question: '¿Cuál es su ubicación?', answer: 'Estamos en la Av. Amazonas y Naciones Unidas, Quito. Atendemos de lunes a viernes, de 9:00 a 18:00.', reason: 'Palabra clave «ubicación»' },
       { question: '¿Hacen envíos a Cuenca?', answer: 'Gracias por escribir. En un momento le atiende una persona del equipo.', reason: 'Si no entiende' },
     ],
+    keywords: ['precio', 'ubicación'],
     selected: 1,
   },
+  closingWord: 'negocio',
+  og: { bubble: 'Son 3 sillas a USD 189: USD 567 en total.', by: 'Luis', time: '09:05' },
 }
