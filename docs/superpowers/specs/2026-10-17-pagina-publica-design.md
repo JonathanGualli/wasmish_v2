@@ -69,7 +69,7 @@ La compilación (`npm run build`) hace tres pasos:
 - `og:title`, `og:description`, `og:image`, `og:url`, `og:type` (`website`), `og:locale` (`es_EC`) y `og:site_name`, más `twitter:card` (`summary_large_image`). **Todas las direcciones van completas** (`https://wasmish.com/...`): WhatsApp no entiende las relativas.
 - `<html lang="es-EC">`.
 
-**Imágenes de vista previa:** una de 1200 × 630 por página de venta (inicio, capacitación e imprentas); Privacidad y Términos usan la del inicio. Las genera `scripts/og.mjs` (una plantilla HTML fotografiada con Playwright, que no entra en las dependencias del CI) a partir del diseño «og2», y se guardan en `public/` como PNG de **menos de 300 KB**. **WhatsApp guarda la vista previa** de un enlace un tiempo: si cambia una imagen, cambia también su nombre (`og-inicio-2.png`).
+**Imágenes de vista previa:** una de 1200 × 630 por página de venta (inicio, capacitación e imprentas); Privacidad y Términos usan la del inicio. Las genera `scripts/og.mjs` (una plantilla HTML fotografiada con `playwright-core` y el Chrome del sistema, como en las pruebas de la app; no descarga navegadores) a partir del diseño «og2», y se guardan en `public/` como PNG de **menos de 300 KB**. **WhatsApp guarda la vista previa** de un enlace un tiempo: si cambia una imagen, cambia también su nombre (`og-inicio-2.png`).
 
 **Para Google:**
 - `sitemap.xml` con las cinco páginas (no la 404) y `robots.txt` que lo indica. La 404 lleva `noindex`.
@@ -147,7 +147,7 @@ Cada PR, con la revisión cruzada de Codex. Si uno pasa de unas 500 líneas, se 
 - cada `og:image` existe en `public/` y pesa menos de 300 KB;
 - `sitemap.xml` lista las páginas y no la 404, y `404.html` lleva `noindex`;
 - el texto prellenado del botón de cada página de venta dice su nicho;
-- **el chequeo de huecos**: ninguna página contiene la marca de contenido pendiente (`[pendiente`). Hasta el lanzamiento solo avisa; **desde el PR 5 hace fallar el CI**, para que nunca se publique un hueco.
+- **el chequeo de huecos**: ninguna página contiene la marca de contenido pendiente (el atributo `data-pending`, que el diseño muestra como la etiqueta «pendiente»). Hasta el lanzamiento solo avisa; **desde el PR 5 hace fallar el CI**, para que nunca se publique un hueco.
 
 **En el navegador**, en cada PR con cambios visibles: capturas de cada página en celular (390 px) y en computadora, también con `prefers-reduced-motion`, y la vista previa de Pages abierta en un celular de verdad.
 
@@ -158,7 +158,7 @@ Cada PR, con la revisión cruzada de Codex. Si uno pasa de unas 500 líneas, se 
 
 ## 9. Lo que bloquea publicar (no programar)
 
-Se construye todo con los huecos marcados (`[pendiente: …]`). No se lanza hasta llenarlos:
+Se construye todo con los huecos marcados (`data-pending`). No se lanza hasta llenarlos:
 - el número de WhatsApp del botón;
 - quién factura (nombre y RUC) y si el precio lleva IVA;
 - Privacidad y Términos revisados por un abogado o contador;
