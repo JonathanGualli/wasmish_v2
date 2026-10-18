@@ -71,12 +71,16 @@ export const useLiveContact = (id: string, conversationId: string) => {
         const unsubContact = subscribe("contact_updated", payload => {
             if (payload.id === id) refresh();
         });
-        // Muchos a la vez (etiquetar en bloque, importar): puede ser este.
+        // Muchos a la vez (etiquetar en bloque, importar): puede ser este. Y una
+        // etiqueta borrada en otra pestaña se le quitó: sin volver a pedirlo,
+        // la ficha seguiría mandando su id al etiquetar (400).
         const unsubContacts = subscribe("contacts_updated", refresh);
+        const unsubTags = subscribe("tags_updated", refresh);
         return () => {
             unsubMessage();
             unsubContact();
             unsubContacts();
+            unsubTags();
         };
     }, [subscribe, refresh, queryClient, id, conversationId]);
 

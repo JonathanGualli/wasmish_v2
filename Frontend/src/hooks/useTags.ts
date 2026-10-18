@@ -12,18 +12,19 @@ import type { BulkTagResult, Tag, TagSelectionSummary } from "../models/tag.mode
 /**
  * Las etiquetas de la cuenta, por nombre, con cuántos contactos tiene cada una.
  * Se vuelven a pedir cuando otra persona de la cuenta crea, renombra o borra
- * una (`tags_updated`) o etiqueta muchos contactos a la vez (`contacts_updated`).
+ * una (`tags_updated`) o cambia contactos, uno (`contact_updated`) o muchos a
+ * la vez (`contacts_updated`): los números de cada etiqueta salen de ellos.
  */
 export const useTags = () => {
     const { subscribe } = useSSE();
     const refresh = useThrottledInvalidate(['tags']);
     useEffect(() => {
-        const unsubTags = subscribe("tags_updated", refresh);
-        const unsubContacts = subscribe("contacts_updated", refresh);
-        return () => {
-            unsubTags();
-            unsubContacts();
-        };
+        const unsubscribers = [
+            subscribe("tags_updated", refresh),
+            subscribe("contact_updated", refresh),
+            subscribe("contacts_updated", refresh),
+        ];
+        return () => unsubscribers.forEach(unsubscribe => unsubscribe());
     }, [subscribe, refresh]);
 
     return useQuery<Tag[]>({
