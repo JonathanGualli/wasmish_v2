@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+/* Fuentes propias, servidas desde la página (sin Google Fonts: más rápido y
+   ningún tercero se entera de quién la abre). Variables: un archivo por familia
+   cubre todos los grosores, y el navegador solo baja los subconjuntos que usa. */
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/jetbrains-mono";
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Tokens copiados de Frontend/src/App.css (Manual de marca v1.0 · «Barra
+   oscura»). Si cambian allí, se cambian aquí. Solo los que usa la página.
+   ───────────────────────────────────────────────────────────────────────────── */
+@theme {
+  /* Superficies — gris frío */
+  --color-brand-surface: #ffffff;
+  --color-brand-bg:      #f4f6f8;
+  --color-brand-raised:  #eef1f4;
+
+  /* Bordes */
+  --color-brand-border:        #e4e7eb;
+  --color-brand-border-strong: #c4cbd4;
+
+  /* Texto */
+  --color-brand-text:   #0e1116;
+  --color-brand-strong: #2e3540;
+  --color-brand-muted:  #6b7684;
+  --color-brand-subtle: #97a1ad;
+
+  /* Verde profundo — la estructura */
+  --color-brand-deep:          #0b3b2e;
+  --color-brand-deep-hover:    #12523f;
+  --color-brand-deep-active:   #17503f;
+  --color-brand-ink:           #06251c;
+  --color-brand-on-deep:       #cfe3da;
+  --color-brand-on-deep-muted: #7fa596;
+
+  /* Menta — el acento (un solo elemento menta por vista: el botón principal) */
+  --color-brand-accent:        #6fe3ae;
+  --color-brand-accent-hover:  #45c892;
+  --color-brand-accent-active: #2aa675;
+  --color-brand-accent-strong: #12523f;
+  --color-brand-accent-soft:   #d6f8e7;
+
+  /* Estados */
+  --color-brand-success:      #1c8560;
+  --color-brand-warning:      #b4540a;
+  --color-brand-warning-soft: #fdf7f0;
+
+  /* Tipografía */
+  --font-sans: 'Inter Variable', 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Radios */
+  --radius-brand-field: 8px;
+  --radius-brand-card:  12px;
+}
+
+@layer base {
+  html,
+  body {
+    background-color: var(--color-brand-surface);
+    color: var(--color-brand-text);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  code, kbd, samp, pre {
+    font-family: var(--font-mono);
+  }
+}
