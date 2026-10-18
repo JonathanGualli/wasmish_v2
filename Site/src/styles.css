@@ -161,8 +161,9 @@
     box-shadow: 0 4px 0 var(--color-site-mint-shadow);
     transition: transform 0.08s, box-shadow 0.08s;
   }
-  .press-mint:hover { background: var(--color-site-mint-hover); }
-  .press-mint:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--color-site-mint-shadow); }
+  .press-mint:hover:not(:disabled) { background: var(--color-site-mint-hover); }
+  .press-mint:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 var(--color-site-mint-shadow); }
+  .press-mint:disabled { cursor: default; }
 
   .press-on-deep {
     border: 1px solid var(--color-site-deep-line);
@@ -190,20 +191,22 @@
   gap: 10px;
   border-radius: 16px;
 }
-.hero-chat { height: 330px; }
+/* Sin animación (sin JavaScript o con las animaciones desactivadas), el chat
+   crece hasta mostrar la historia entera; con animación, alto fijo como en el diseño. */
+.hero-chat { min-height: 330px; }
 .hero-ficha { position: relative; }
 .hero-back { display: none; }
 .hero-title { display: flex; }
 
 @container (min-width: 560px) {
   .hero-grid { grid-template-columns: minmax(0, 1.45fr) minmax(200px, 1fr); gap: 12px; }
-  .hero-chat { height: min(500px, 118vw); }
 }
 
 @media (prefers-reduced-motion: no-preference) {
+  html.js .hero-chat { height: min(500px, 118vw); }
+
   @container (max-width: 559.98px) {
     html.js .hero-grid { gap: 0; overflow: hidden; }
-    html.js .hero-chat { height: min(500px, 118vw); }
     html.js .hero-ficha {
       position: absolute;
       inset: 0;

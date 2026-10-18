@@ -16,12 +16,12 @@ export function DemoButton({ label, large = false }: { label: string; large?: bo
           <ArrowRight size={17} strokeWidth={2.4} aria-hidden />
         </a>
       ) : (
-        // Sin número todavía: el botón se ve, pero no lleva a ningún lado.
+        // Sin número todavía: el botón se ve, deshabilitado (revisión de Codex, PR #94).
         <Pending>
-          <span className={button} aria-disabled="true">
+          <button type="button" disabled className={button}>
             Pedir una demostración
             <ArrowRight size={17} strokeWidth={2.4} aria-hidden />
-          </span>
+          </button>
         </Pending>
       )}
       <span className="mt-1 text-[13.5px] leading-[1.45] text-brand-gray-600">
