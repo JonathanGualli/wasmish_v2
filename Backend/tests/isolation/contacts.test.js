@@ -281,3 +281,19 @@ test('varias importaciones a la vez del mismo archivo crean cada nota una sola v
     const index = (await ContactNote.collection.indexes()).find(i => i.name === 'contact_note_import_unique');
     assert.equal(index?.unique, true, 'falta el índice único de las notas importadas');
 });
+
+// Regresión que vigila (revisión de Codex del PR #88): una nota importada y
+// editada seguía reservando su texto de antes (`importKey`), y al reimportarlo
+// la vista previa prometía la nota pero no se creaba.
+test('importar, editar esa nota y volver a importar el texto de antes la crea otra vez', async () => {
+    const first = await importWithNote(a, '0990007773', 'Paga a 30 días');
+    const [contactId] = first.body.contactIds;
+    const imported = await ContactNote.findOne({ contactId }).lean();
+    const edited = await request(a, 'PATCH', `/contacts/${contactId}/notes/${imported._id}`, { text: 'Paga al contado' });
+    assert.equal(edited.status, 200, edited.text);
+
+    const again = await importWithNote(a, '0990007773', 'Paga a 30 días');
+    assert.equal(again.body.summary.updated, 1, again.text);
+    const texts = (await ContactNote.find({ contactId }).lean()).map(note => note.text).sort();
+    assert.deepEqual(texts, ['Paga a 30 días', 'Paga al contado']);
+});

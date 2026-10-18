@@ -65,6 +65,9 @@ export const editContactNote = async (req, res) => {
 
         found.note.text = cleanNoteText(req.body.text);
         found.note.editedAt = new Date();
+        // Una importada y editada ya no reserva el texto del archivo: si se
+        // vuelve a importar, es nueva (revisión de Codex del PR #88).
+        found.note.importKey = null;
         await found.note.save();
         notifyContactChanged(req.auth.accountId, found.contact._id);
         return res.json(serializeNote(found.note, req.auth));
