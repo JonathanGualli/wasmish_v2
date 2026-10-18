@@ -1,8 +1,8 @@
 import mongoose from "mongoose";
 import Contact from "../models/contact.model.js";
 import ContactNote from "../models/contact.note.model.js";
-import { canEditNote, cleanNoteText, serializeNote } from "../utils/contact.notes.js";
-import { createContactNote } from "../services/contact.note.service.js";
+import { canEditNote, cleanNoteText } from "../utils/contact.notes.js";
+import { createContactNote, serializeNotes } from "../services/contact.note.service.js";
 import { findOwnedContact, notifyContactChanged } from "./contact.controller.js";
 
 // ---------------------------------------------------------------------------
@@ -50,7 +50,8 @@ export const addContactNote = async (req, res) => {
             author: { id: req.auth.userId, name: req.auth.name },
         });
         notifyContactChanged(accountId, contact._id);
-        return res.status(201).json(serializeNote(note, req.auth));
+        const [serialized] = await serializeNotes([note], req.auth);
+        return res.status(201).json(serialized);
     } catch (error) {
         if (error.code === 'notes_limit') return sendNoteError(res, 409, error.message, { code: error.code });
         return sendNoteError(res, 500, error.message);
@@ -68,9 +69,12 @@ export const editContactNote = async (req, res) => {
         // Una importada y editada ya no reserva el texto del archivo: si se
         // vuelve a importar, es nueva (revisión de Codex del PR #88).
         found.note.importKey = null;
+        found.note.editedById = req.auth.userId;
+        found.note.editedByName = req.auth.name;
         await found.note.save();
         notifyContactChanged(req.auth.accountId, found.contact._id);
-        return res.json(serializeNote(found.note, req.auth));
+        const [serialized] = await serializeNotes([found.note], req.auth);
+        return res.json(serialized);
     } catch (error) {
         return sendNoteError(res, 500, error.message);
     }

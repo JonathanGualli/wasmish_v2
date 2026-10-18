@@ -39,8 +39,8 @@ test('canEditNote: sin persona en la sesión (API key), nunca', () => {
 test('serializeNote: la forma de la API, con y sin autor', () => {
     const withAuthor = note();
     assert.deepEqual(serializeNote(withAuthor, session(agentId, 'agent')), {
-        id: String(withAuthor._id), text: 'Paga a 30 días', author: { id: String(agentId), name: 'Ana' },
-        source: 'manual', createdAt: '2026-10-17T15:00:00.000Z', editedAt: null, canEdit: true,
+        id: String(withAuthor._id), text: 'Paga a 30 días', author: { id: String(agentId), name: 'Ana', active: true },
+        source: 'manual', createdAt: '2026-10-17T15:00:00.000Z', editedAt: null, editedBy: null, canEdit: true,
     });
     const legacy = note({ authorId: null, authorName: null, source: 'legacy', editedAt: new Date('2026-10-17T16:00:00Z') });
     const serialized = serializeNote(legacy, session(agentId, 'agent'));
@@ -71,4 +71,11 @@ test('legacyNoteFrom: la nota de antes, leída al vuelo de Contact.notes', () =>
     assert.deepEqual(legacyNoteFrom({ notes: ' vieja ', createdAt }), {
         id: 'legacy', text: 'vieja', authorId: null, authorName: null, source: 'legacy', createdAt, editedAt: null,
     });
+});
+
+test('serializeNote: quien ya no está en la cuenta y quién la editó', () => {
+    const edited = note({ editedAt: new Date('2026-10-17T16:00:00Z'), editedById: ownerId, editedByName: 'Jonathan' });
+    const serialized = serializeNote(edited, session(ownerId, 'owner'), { activeAuthorIds: new Set([String(ownerId)]) });
+    assert.equal(serialized.author.active, false);
+    assert.deepEqual(serialized.editedBy, { id: String(ownerId), name: 'Jonathan' });
 });

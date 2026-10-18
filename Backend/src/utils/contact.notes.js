@@ -33,14 +33,27 @@ export const canEditNote = (auth, note) => {
 
 const toIso = (date) => (date ? new Date(date).toISOString() : null);
 
-/** Lo que la API devuelve de una nota, con `canEdit` para la persona de la sesión. */
-export const serializeNote = (note, auth) => ({
+/**
+ * Lo que la API devuelve de una nota, con `canEdit` para la persona de la
+ * sesión. `activeAuthorIds`: las personas que siguen activas en la cuenta; un
+ * autor que no está en ella sale con `active: false` («ya no está»). Sin el
+ * conjunto, se da por activo.
+ */
+export const serializeNote = (note, auth, { activeAuthorIds = null } = {}) => ({
     id: noteId(note),
     text: note.text,
-    author: note.authorId ? { id: String(note.authorId), name: note.authorName } : null,
+    author: note.authorId
+        ? {
+            id: String(note.authorId),
+            name: note.authorName,
+            active: activeAuthorIds ? activeAuthorIds.has(String(note.authorId)) : true,
+        }
+        : null,
     source: note.source,
     createdAt: toIso(note.createdAt),
     editedAt: toIso(note.editedAt),
+    // Quién la cambió por última vez: owner y admin editan las de otros.
+    editedBy: note.editedById ? { id: String(note.editedById), name: note.editedByName } : null,
     canEdit: canEditNote(auth, note),
 });
 

@@ -53,6 +53,17 @@ const contactNoteSchema = new mongoose.Schema({
         type: Date,
         default: null,
     },
+    // Quién la editó por última vez (owner y admin editan las de otros), con el
+    // nombre copiado como `authorName`.
+    editedById: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        default: null,
+    },
+    editedByName: {
+        type: String,
+        default: null,
+    },
 });
 
 // Las notas de un contacto, de la más nueva a la más vieja.

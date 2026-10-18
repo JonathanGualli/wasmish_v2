@@ -3,7 +3,7 @@
 // suyas y owner y admin, cualquiera (403 si no).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { seedAccount, seedMember, request, openStream, assertNoLeak, Contact, ContactNote } from './helpers.js';
+import { seedAccount, seedMember, request, openStream, assertNoLeak, Contact, ContactNote, User } from './helpers.js';
 
 const a = await seedAccount('A', { seq: 1 });
 const b = await seedAccount('B', { seq: 2 });
@@ -19,7 +19,7 @@ test('una nota nueva sale a nombre de quien la escribe, la primera de la lista',
     const created = await addNote(agent, a.contactId, '  Pidió cotización de 500 volantes  ');
     assert.equal(created.status, 201, created.text);
     assert.equal(created.body.text, 'Pidió cotización de 500 volantes');
-    assert.deepEqual(created.body.author, { id: agent.userId, name: 'A-agente miembro' });
+    assert.deepEqual(created.body.author, { id: agent.userId, name: 'A-agente miembro', active: true });
     assert.equal(created.body.source, 'manual');
     assert.equal(created.body.canEdit, true);
 
@@ -156,4 +156,21 @@ test('una nota nueva llega por SSE al equipo de A y no a B', async () => {
         await streamA.close();
         await streamB.close();
     }
+});
+
+test('la nota dice si su autor ya no está en la cuenta y quién la editó', async () => {
+    const leaving = await seedMember(a, { role: 'agent', label: 'A-se-va' });
+    const note = (await addNote(leaving, a.contactId, 'antes de irme')).body;
+    assert.equal(note.author.active, true);
+    await User.updateOne({ _id: leaving.userId }, { $set: { status: 'inactive' } });
+
+    const edited = await request(admin, 'PATCH', `/contacts/${a.contactId}/notes/${note.id}`, { text: 'corregida por el admin' });
+    assert.equal(edited.status, 200, edited.text);
+    assert.deepEqual(edited.body.editedBy, { id: admin.userId, name: 'A-admin miembro' });
+    assert.equal(edited.body.author.active, false);
+
+    const listed = (await notesOf(a, a.contactId)).find(item => item.id === note.id);
+    assert.equal(listed.author.active, false);
+    assert.equal(listed.author.name, 'A-se-va miembro');
+    assert.equal(listed.editedBy.name, 'A-admin miembro');
 });
