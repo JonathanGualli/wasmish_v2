@@ -7,18 +7,20 @@
 // cambia también su nombre (`og-inicio-1.png` → `og-inicio-2.png`, en el `meta`
 // del nicho).
 import { createServer } from 'node:http'
-import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs'
+import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, dirname, extname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
+import { resolveInside } from './resolveInside.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const dist = join(root, 'dist')
 const TYPES = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.woff2': 'font/woff2', '.svg': 'image/svg+xml', '.png': 'image/png' }
 
+// Solo escucha en 127.0.0.1 y solo entrega archivos de dist/.
 const server = createServer((req, res) => {
-  const file = join(dist, decodeURIComponent(new URL(req.url, 'http://x').pathname))
-  if (!file.startsWith(dist) || !existsSync(file) || statSync(file).isDirectory()) { res.writeHead(404); res.end(); return }
+  const file = resolveInside(dist, req.url ?? '/')
+  if (!file) { res.writeHead(404); res.end(); return }
   res.writeHead(200, { 'Content-Type': TYPES[extname(file)] ?? 'application/octet-stream' })
   res.end(readFileSync(file))
 })
