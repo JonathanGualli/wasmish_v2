@@ -86,14 +86,14 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
 
 ## En curso
 
-- **Contactos y etiquetas en tiempo real** — rama `contactos-tiempo-real`, empezado el 2026-10-17 por Claude. Lo que una persona de la cuenta cambia en un contacto (datos, notas, etiquetas), al etiquetar en bloque, importar o al crear, renombrar o borrar una etiqueta, les llega en vivo a las demás (`contact_updated`, `contacts_updated`, `tags_updated`), y el cuadro de notas muestra lo de la otra si aquí no se está escribiendo. Hecho: backend con tests de aislamiento, frontend y la prueba con dos sesiones (owner y agente) en Chromium contra un backend local. · Falta: la revisión de Codex. · Sin probar: en producción con dos personas.
-- **Después: las notas con autor** (decisión del 2026-10-17 en [decisiones.md](decisiones.md)): spec, brief para Claude Design y plan, antes de programar.
+- **Notas del contacto con autor** — rama `notas-con-autor`, empezado el 2026-10-17 por Claude. Las notas pasan de un solo texto a una lista con autor y fecha (colección `ContactNote`); el autor edita y borra las suyas, owner y admin, cualquiera. Spec `docs/superpowers/specs/2026-10-17-notas-contacto-design.md`, brief para Claude Design `2026-10-17-notas-contacto-brief-ui.md` y plan `docs/superpowers/plans/2026-10-17-notas-contacto.md`. Hecho: spec, brief y plan. · Falta: la revisión de Codex del plan, el diseño de Claude Design, el backend (PR 1) y el frontend (PR 2). **Entre el PR 1 y el PR 2, `master` no se despliega**; la 1.0.26 sale antes.
 
-**Unido, sin desplegar** (sale con la próxima versión; solo frontend):
+**Unido, sin desplegar** (sale con la 1.0.26):
 
 - **Coexistencia: la respuesta «está en la app» también con `FINISH`** (PR #83, con su revisión de Codex). En la prueba real, un número de la app terminó con `FINISH` y el frontend mandaba `businessApp: false`; ahora manda lo que respondió la persona, para que el backend no lo registre si Meta no dice si está en la app. · Sin probar: con Meta de verdad (se ve en la próxima conexión de un número de la app).
 - **El detalle de un mensaje fallido se parte** (PR #84): el texto de Meta con una URL larga (el 131042 trae la del panel de pagos) se salía del recuadro y quedaba cortado. Probado con el CSS compilado en Chromium.
-- **Un texto largo sin espacios se parte dentro de la burbuja** (rama `fix-texto-largo-burbuja`): un enlace largo en un mensaje (una invitación del equipo, por ejemplo) se salía de la burbuja y el hilo se desplazaba de lado. Igual en la vista previa de las plantillas (`TemplatePreview`).
+- **Un texto largo sin espacios se parte dentro de la burbuja** (PR #85): un enlace largo en un mensaje (una invitación del equipo, por ejemplo) se salía de la burbuja y el hilo se desplazaba de lado. Igual en la vista previa de las plantillas (`TemplatePreview`).
+- **Contactos y etiquetas en tiempo real** (PR #86, con su revisión de Codex): lo que una persona de la cuenta cambia en un contacto (datos, notas, etiquetas), al etiquetar en bloque, importar o al crear, renombrar o borrar una etiqueta, les llega en vivo a las demás (`contact_updated`, `contacts_updated`, `tags_updated`), y el cuadro de notas muestra lo de la otra si aquí no se está escribiendo. Probado con dos sesiones (owner y agente) en Chromium contra un backend local. · Sin probar: en producción con dos personas.
 
 ## Lo siguiente
 
