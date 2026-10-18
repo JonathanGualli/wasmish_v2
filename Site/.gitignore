@@ -1,0 +1,5 @@
+node_modules
+# Las salidas de la compilación. Ojo: el .gitignore de la raíz ignora cualquier
+# carpeta dist/, por eso los tests del HTML generado viven en tests/output/.
+/dist
+/dist-ssr

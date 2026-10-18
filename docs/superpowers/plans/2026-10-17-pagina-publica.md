@@ -73,7 +73,7 @@ El spec, el brief, la decisión en `docs/decisiones.md` y este plan. Lo revisa C
   - **`package.json`:** las dependencias en las versiones de `Frontend/package.json`, más `marked`, `@fontsource/inter`, `@fontsource/jetbrains-mono` y `playwright-core` (de desarrollo). Los scripts:
     - `"build": "tsc -b && vite build && vite build --ssr src/entry-server.tsx --outDir dist-ssr && node scripts/prerender.mjs"`
     - `"lint": "eslint ."`
-    - `"test": "node --experimental-strip-types --test tests/unit/*.test.ts tests/dist/*.test.mjs"`
+    - `"test": "node --experimental-strip-types --test tests/unit/*.test.ts tests/output/*.test.mjs"`
   - **`tsconfig.json`:** `allowImportingTsExtensions` y `noEmit`, para que `node:test` importe los `.ts` de `lib/` con su extensión. Los módulos de `lib/` no usan JSX ni dependencias.
   - **`eslint.config.js`:** copia del de `Frontend/`, ignorando `dist` y `dist-ssr`. `.gitignore` con `dist` y `dist-ssr`.
   - **`styles.css`:** `@import "tailwindcss"`, el `@theme` con los tokens copiados de `Frontend/src/App.css` (con el comentario: «copiado de Frontend/src/App.css; si cambian allí, se cambian aquí») y las fuentes latinas de `@fontsource`: Inter en 400, 500, 600, 700 y 800, y JetBrains Mono en 400 y 500.
@@ -134,7 +134,7 @@ assert.equal(JSON.parse(ld.match(/<script type="application\/ld\+json">(.*?)<\/s
 - Crear: `Site/src/content/types.ts`, `Site/src/content/price.ts` y `Site/src/content/niches/inicio.ts`.
 - Crear: `Site/src/pages/VentaPage.tsx` (por ahora solo el titular y el botón), `Site/src/pages/LegalPage.tsx` y `Site/src/pages/NotFoundPage.tsx`.
 - Crear: `Site/src/components/Pending.tsx` y `Site/public/_headers`.
-- Test: `Site/tests/dist/helpers.mjs` (`read(file)`, `allHtmlFiles()`, `title(file)` y `jsonLdBlocks(html)`, sobre `Site/dist/`) y `Site/tests/dist/pages.test.mjs`.
+- Test: `Site/tests/output/helpers.mjs` (`read(file)`, `allHtmlFiles()`, `title(file)` y `jsonLdBlocks(html)`, sobre `Site/dist/`) y `Site/tests/output/pages.test.mjs`.
 
 **Interfaces:**
 - Consume: `renderHead`, `PageMeta`, `normalizePath` y `demoHref` (tarea 1).
@@ -200,7 +200,7 @@ https://:project.pages.dev/*
 - Crear: `Site/src/legal/privacidad.md` y `Site/src/legal/terminos.md`.
 - Crear: `Site/src/lib/markdown.ts`.
 - Modificar: `Site/src/entry-server.tsx`, `Site/src/routes.ts` y `Site/src/pages/LegalPage.tsx`.
-- Test: `Site/tests/unit/markdown.test.ts` y `Site/tests/dist/pending.test.mjs`.
+- Test: `Site/tests/unit/markdown.test.ts` y `Site/tests/output/pending.test.mjs`.
 
 **Interfaces:**
 - Consume: `LAUNCHED` (tarea 1) y `Pending` (tarea 2).
@@ -332,7 +332,7 @@ Cada tarea dibuja una parte de la v3 con el texto del brief. Los valores visuale
 - Crear, en `Site/src/sections/`: `Setup.tsx`, `Pricing.tsx`, `WhatChanges.tsx`, `Faq.tsx` y `ClosingCta.tsx`.
 - Crear: `Site/src/content/faq.ts`.
 - Modificar: `Site/src/routes.ts`, para el JSON-LD del inicio en su `meta`.
-- Test: `Site/tests/dist/content.test.mjs`.
+- Test: `Site/tests/output/content.test.mjs`.
 
 - [ ] **Paso 1: El test.**
 
@@ -374,8 +374,8 @@ assert.match(home, /¿Tengo que dejar la app de WhatsApp Business\?/)
 **Archivos:**
 - Crear: `Site/src/content/niches/capacitacion.ts` y `Site/src/content/niches/imprentas.ts`.
 - Modificar: `Site/src/routes.ts` y `Site/src/salesPages.tsx`.
-- Modificar: `Site/tests/dist/pages.test.mjs`, para sumar las dos páginas.
-- Crear: `Site/tests/dist/niches.test.mjs`.
+- Modificar: `Site/tests/output/pages.test.mjs`, para sumar las dos páginas.
+- Crear: `Site/tests/output/niches.test.mjs`.
 
 - [ ] **Paso 1: El test.**
 
@@ -406,7 +406,7 @@ assert.notEqual(title('imprentas.html'), title('capacitacion.html'))
 **Archivos:**
 - Crear: `Site/src/og/OgCard.tsx` y `Site/scripts/og.mjs`.
 - Crear: `Site/public/og-inicio-1.png`, `Site/public/og-capacitacion-1.png` y `Site/public/og-imprentas-1.png`.
-- Modificar: `Site/tests/dist/pages.test.mjs`.
+- Modificar: `Site/tests/output/pages.test.mjs`.
 
 - [ ] **Paso 1: El test.** Cada `og:image` de las páginas existe en `dist/`, pesa menos de 300 KB, y su PNG mide 1200 × 630, leído de los bytes 16 a 23 de la cabecera.
 - [ ] **Paso 2: Comprobar que falla.**
