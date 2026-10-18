@@ -46,7 +46,7 @@ El precio no va en el nicho: sale de `src/content/price.ts`, el mismo dato que u
 
 Un dato que todavía no existe (el número de WhatsApp, el RUC, una cifra de Meta) **no se inventa**: en el código, `<Pending>`; en Privacidad y Términos (`src/legal/*.md`), `[pendiente: …]`, que `markdownToHtml` convierte en lo mismo. Los dos dejan `data-pending` en el HTML y se ven con la etiqueta «pendiente».
 
-`LAUNCHED`, en `src/site.ts`, está en `false` hasta el lanzamiento. Mientras tanto, `tests/dist/pending.test.mjs` solo **avisa** de las páginas con huecos. Con `true`, una página con huecos **hace fallar el CI**, y así no se publica.
+`LAUNCHED`, en `src/site.ts`, está en `false` hasta el lanzamiento. Mientras tanto, `tests/output/pending.test.mjs` solo **avisa** de las páginas con huecos. Con `true`, una página con huecos **hace fallar el CI**, y así no se publica.
 
 Los datos fijos (`SITE_URL`, `APP_LOGIN_URL`, `CONTACT_EMAIL`, `WHATSAPP_NUMBER`, `BILLING`) están en `src/site.ts`.
 
@@ -84,7 +84,7 @@ En `Site/`:
 | `npm run dev` | Vite en modo desarrollo (sin pre-renderizar: para ver los componentes) |
 | `npm run build` | Las dos compilaciones y el pre-renderizado, en `dist/` |
 | `npm run preview` | Sirve `dist/` en local |
-| `npm test` | Los tests de `tests/unit/` (funciones puras, con la eliminación de tipos de Node) y de `tests/dist/` (el HTML generado: hay que compilar antes) |
+| `npm test` | Los tests de `tests/unit/` (funciones puras, con la eliminación de tipos de Node) y de `tests/output/` (el HTML generado: hay que compilar antes) |
 | `npm run lint` | ESLint |
 
 **`vite preview` no se porta como Cloudflare:** responde el inicio a una ruta con barra final (`/privacidad/`) o desconocida. La barra final, las redirecciones y la 404 se comprueban en la vista previa de Pages.

@@ -1,6 +1,6 @@
 // Datos fijos de la página. Un `null` es un hueco: se dibuja con <Pending>
 // («pendiente») hasta que Jonathan dé el dato, y LAUNCHED no se enciende
-// mientras quede alguno (tests/dist/pending.test.mjs).
+// mientras quede alguno (tests/output/pending.test.mjs).
 
 export const SITE_URL = 'https://wasmish.com'
 export const APP_LOGIN_URL = 'https://app.wasmish.com/login'
