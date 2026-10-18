@@ -60,7 +60,7 @@ export interface ImportSummary {
 }
 
 /** Los datos de texto de un contacto que trae el archivo. */
-export type ImportContactFields = Partial<Record<'name' | 'email' | 'company' | 'notes', string>>;
+export type ImportContactFields = Partial<Record<'name' | 'email' | 'company', string>>;
 
 /** Un contacto de ejemplo para «Así quedarán». */
 export interface ImportSampleEntry {
@@ -69,6 +69,8 @@ export interface ImportSampleEntry {
     rows: number[];
     /** Lo que se le pone (a uno existente, solo lo que le faltaba). */
     fields: ImportContactFields;
+    /** La nota que se le añade (una nota nueva, a nombre de quien importa); null si no trae o ya la tiene. */
+    note: string | null;
     tagNames: string[];
     /** Lo que el archivo trae distinto de lo que ya tiene: no se aplica. */
     ignored: ImportContactFields;

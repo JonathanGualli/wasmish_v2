@@ -11,7 +11,7 @@ import { Callout } from "../../Callout/Callout";
 import { CustomButton } from "../../Button/Button";
 import { ContactSidebarTags } from "./ContactSidebarTags";
 import { ContactIdentitySkeleton, ContactSidebarSkeleton } from "./ContactSidebarSkeleton";
-import { ContactNotes } from "./ContactNotes";
+import { ContactNotesCard } from "../../Contact/ContactNotes/ContactNotesCard";
 import { ContactDataCard } from "./ContactDataCard";
 import { LineWindowList } from "../../Contact/LineWindowList";
 import { useLines } from "../../../hooks/useLines";
@@ -63,8 +63,8 @@ export const ContactSidebar = ({ contactId, conversationId, windowExpiresAt, onO
                                 Solo plantillas de servicio o utilidad.
                             </Callout>
                         )}
-                        {/* Por contacto: al cambiar de conversación, el de antes termina de guardar lo suyo. */}
-                        <ContactNotes key={contact.id} contact={contact} />
+                        {/* Por contacto: lo que se escribe, se edita o falló es de esa ficha. */}
+                        <ContactNotesCard key={contact.id} contact={contact} initialVisible={3} />
                         <ContactDataCard key={`data-${contact.id}`} contact={contact} />
                         <ActivityCard contact={contact} conversationCount={byLine ? contact.conversations.length : 1} />
                     </div>

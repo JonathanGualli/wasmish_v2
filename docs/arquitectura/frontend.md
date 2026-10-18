@@ -59,8 +59,8 @@ Lógica no obvia del `AuthProvider`, los errores de WhatsApp en palabras y la li
 - `useLinePin(lineId)` — el PIN de dos pasos de una línea, pedido solo al pulsar «Mostrar» (`pin`, `isLoading`, `error`, `isMissing`, `reveal`, `hide`). Vive solo en el estado del componente, **sin React Query**: hasta una mutación guarda su resultado en la caché unos minutos (revisión de Codex del PR #31). Desaparece al ocultarlo, al cerrar «Detalles» o al salir de Ajustes, y una respuesta que llegue después se descarta
 - `useCopyToClipboard(resetMs)` — copiar con `copied` un momento en true (las API keys, los IDs de línea, `CodeBlock`)
 - `useConversationWindow(windowExpiresAt)` — cuenta atrás de la ventana de 24 h (tick de 60 s); con `msSinceClosed` para «hace 2 días»
-- `useAutosave(value, { savedValue, save, delay, onLost })` — guardar solo mientras se escribe (las notas de la ficha del chat)
 - `useAutosizeTextarea(ref, value, maxHeight)` — un `<textarea>` que crece con lo escrito (el campo de escribir y las notas)
+- `useContactNoteMutations(contactId)` — añadir, editar y borrar las notas de un contacto (en `useContactNotes.ts`); la tarjeta es `ContactNotesCard` ([chat.md § Ficha del contacto en el chat](chat.md#ficha-del-contacto-en-el-chat))
 - `useSendTemplate` — envío de plantilla a una conversación (sin UI optimista); `useStartConversation`, en el mismo archivo, la conversación nueva
 - `useTemplateForm` — estado compartido del formulario de plantilla (elegida, valores, botones, payload); lo usan `SendTemplateDialog` y `NewConversationPanel`
 - `useHeaderMediaUpload(template, onUploaded)` — subir el archivo de la cabecera de un envío (progreso, cancelar, error en palabras)
@@ -71,7 +71,7 @@ Lógica no obvia del `AuthProvider`, los errores de WhatsApp en palabras y la li
 - `useAutoReplies`, `useSaveAutoReplies` (la respuesta reemplaza la caché: trae los ids de las reglas nuevas) y `usePreviewAutoReply(settings, messages, enabled)` (una consulta con la conversación de prueba entera: se vuelve a simular al cambiar la configuración o añadir un mensaje) — respuestas automáticas, solo `autoReplies.manage` ([respuestas-automaticas.md § La página](respuestas-automaticas.md#la-página-pagesprivateautoreplies))
 - `useLeaveGuard(active, onLeave)` (en `components/Layout/NavigationGuardContext.ts`) — preguntar antes de salir por el menú con cambios sin guardar; también `beforeunload`
 - `useAdminStats`, `useAdminClients`, `useUpdateAccountLimits` — el panel de superadmin (en `useAdmin.ts`)
-- `useContacts(pageIndex, pageSize, search, filter, tagIds)`, `useContact(id)`, `useLiveContact(id, conversationId)`, `useContactByPhone(phone)`, `useContactMutations` (create/update/remove, y `saveNotes`/`setTags` para la ficha del chat) — en `useContacts.ts`
+- `useContacts(pageIndex, pageSize, search, filter, tagIds)`, `useContact(id)`, `useLiveContact(id, conversationId)`, `useContactByPhone(phone)`, `useContactMutations` (create/update/remove, y `setTags` para la ficha del chat) — en `useContacts.ts`
 - `useTags`, `useTagSelectionSummary(selection, enabled)`, `useTagMutations` (create/rename/remove/bulk y `createMissing`), `tagError` — etiquetas (en `useTags.ts`)
 - `useDebouncedValue` — retrasa un valor (la búsqueda de contactos)
 - `useOnVisible(onVisible, enabled)` — centinela de scroll infinito (IntersectionObserver); al reactivarse vuelve a avisar si sigue a la vista
@@ -132,7 +132,7 @@ Lógica no obvia del `AuthProvider`, los errores de WhatsApp en palabras y la li
   - **La bandeja** (`ConversationListSkeleton`): filas con las medidas de las reales (avatar de 38 px, 46 en el teléfono) y, con varias líneas, el sitio de su etiqueta. La cabecera lleva un bloque en lugar de «Todo al día», que mientras carga sería falso.
   - **El hilo** (`ThreadSkeleton`): burbujas de los dos lados, con su día. La cabecera y el cuadro de escribir ya funcionan mientras llegan los mensajes.
 - **La ficha del contacto:**
-  - **En Chats** (`ContactSidebarSkeleton.tsx`): la identidad sobre el verde y las tarjetas reales (Notas, Datos con sus etiquetas, la actividad).
+  - **En Chats** (`ContactSidebarSkeleton.tsx`): la identidad sobre el verde y las tarjetas reales (Notas con el campo y tres notas, Datos con sus etiquetas, la actividad).
   - **En Contactos** (dentro de `ContactPanel.tsx`): `ContactViewSkeleton` sigue `ContactDetails` y `ContactFormSkeleton` sigue `ContactForm` (sus campos, con `SkeletonField`).
 - **El detalle de una campaña** (`CampaignDetailSkeleton`): ya no sale en blanco. El enlace a Campañas, la cabecera como bloques, las cifras con sus etiquetas reales (`CampaignMetricsSkeleton`, sobre `MetricGridSkeleton`) y la tabla de destinatarios cargando. Los filtros de destinatarios no salen, porque llevan la cuenta de cada estado.
 - **Admin:** las cifras de arriba son bloques mientras cargan (`StatTile` acepta un `ReactNode`), no «—».

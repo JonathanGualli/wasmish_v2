@@ -1,4 +1,5 @@
 import ContactNote from '../models/contact.note.model.js';
+import User from '../models/user.model.js';
 import { NOTES_PER_CONTACT_MAX, legacyNoteFrom, serializeNote } from '../utils/contact.notes.js';
 
 export const NOTES_LIMIT_MESSAGE = `Este contacto ya tiene ${NOTES_PER_CONTACT_MAX} notas.`;
@@ -14,7 +15,20 @@ export const listContactNotes = async (contact, auth) => {
         .sort({ createdAt: -1 }).limit(NOTES_PER_CONTACT_MAX + 1).lean();
     const legacy = notes.some(note => note.source === 'legacy') ? null : legacyNoteFrom(contact);
     if (legacy) notes.push(legacy);
-    return notes.map(note => serializeNote(note, auth));
+    return serializeNotes(notes, auth);
+};
+
+/**
+ * Las notas como las devuelve la API, sabiendo qué autores siguen activos en
+ * la cuenta (los demás salen como «ya no está»).
+ */
+export const serializeNotes = async (notes, auth) => {
+    const authorIds = [...new Set(notes.map(note => note.authorId).filter(Boolean).map(String))];
+    const active = authorIds.length === 0 ? [] : await User.find({
+        _id: { $in: authorIds }, accountId: auth.accountId, status: 'active',
+    }).distinct('_id');
+    const activeAuthorIds = new Set(active.map(String));
+    return notes.map(note => serializeNote(note, auth, { activeAuthorIds }));
 };
 
 /**

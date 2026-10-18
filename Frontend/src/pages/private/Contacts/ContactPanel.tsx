@@ -21,6 +21,7 @@ import { formatActivityTime, formatDateTime } from '../../../utils/formatChatTim
 import { ContactAvatar } from './ContactRow';
 import { ContactForm } from './ContactForm';
 import { ReferralCard } from '../../../components/Contact/ReferralCard';
+import { ContactNotesCard, ContactNotesSkeleton } from '../../../components/Contact/ContactNotes/ContactNotesCard';
 import { LineWindowList } from '../../../components/Contact/LineWindowList';
 import { useLines } from '../../../hooks/useLines';
 import { useAuthContext } from "../../../context/auth.context";
@@ -133,7 +134,7 @@ const PanelState = ({ children }: { children: ReactNode }) => (
 const FORM_FIELDS = ['Teléfono', 'Nombre', 'Email', 'Empresa', 'Etiquetas', 'Notas'];
 /** El alto y el radio de `AuthField`. */
 const FIELD_BOX = 'h-[56px] lg:h-[50px] rounded-[10px] lg:rounded-[8px]';
-const DATA_LABELS = ['Etiquetas', 'Email', 'Empresa', 'Notas', 'Origen', 'Creado'];
+const DATA_LABELS = ['Etiquetas', 'Email', 'Empresa', 'Origen', 'Creado'];
 
 /** La ficha (`ContactDetails`): identidad, acciones, actividad y datos, con sus títulos reales. */
 const ContactViewSkeleton = () => (
@@ -149,6 +150,7 @@ const ContactViewSkeleton = () => (
             <div className="flex-1"><SkeletonBox className="w-full h-10 rounded-[8px]" /></div>
             <span className="hidden md:block"><SkeletonBox className="w-[92px] h-10 rounded-[8px]" /></span>
         </div>
+        <ContactNotesSkeleton bordered />
         <div className="grid gap-2.5">
             <SectionLabel>Actividad</SectionLabel>
             <SkeletonBox tone="soft" className="h-[62px] w-full rounded-xl" />
@@ -289,7 +291,6 @@ const ContactDetails = ({ contact, onClose, onEdit }: {
         )],
         ['Email', contact.email],
         ['Empresa', contact.company],
-        ['Notas', contact.notes && <span className="whitespace-pre-wrap">{contact.notes}</span>],
         ['Origen', sourceLabel(contact.source)],
         // Los anteriores a los contactos se crearon al migrar: esa fecha no dice nada.
         ['Creado', contact.source && <span className="font-mono text-[13px] tabular-nums">{formatDateTime(contact.createdAt)}</span>],
@@ -337,6 +338,8 @@ const ContactDetails = ({ contact, onClose, onEdit }: {
                         Solo se le pueden enviar plantillas de servicio o utilidad.
                     </Callout>
                 )}
+
+                <ContactNotesCard key={contact.id} contact={contact} initialVisible={5} bordered />
 
                 <div className="grid gap-2.5">
                     <SectionLabel>Actividad</SectionLabel>

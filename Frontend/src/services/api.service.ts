@@ -1,7 +1,7 @@
 import type { QueryFunctionContext } from '@tanstack/react-query';
 import axios from 'axios';
 import type { Template, TemplateButtonParam, TemplateHeaderMedia } from '../models/template.model';
-import type { ContactFilter, ContactInput } from '../models/contact.model';
+import type { ContactFilter, ContactInput, ContactNote } from '../models/contact.model';
 import type { ImportBatchResult, ImportInput, ImportPreview } from '../models/contactImport.model';
 import type { BulkTagResult, Tag, TagSelectionSummary } from '../models/tag.model';
 import type { CampaignAudienceInput, CampaignDraftInput, CampaignRecipientsInput, CreateCampaignInput, RecipientState } from '../models/campaign.model';
@@ -368,6 +368,22 @@ export const updateContactService = async (id: string, input: ContactInput) => {
 
 export const deleteContactService = async (id: string) => {
     await axios.delete(`${API_URL}/contacts/${id}`, { withCredentials: true });
+}
+
+// --- Notas de un contacto ----------------------------------------------------
+
+export const createContactNoteService = async (contactId: string, text: string): Promise<ContactNote> => {
+    const { data } = await axios.post(`${API_URL}/contacts/${contactId}/notes`, { text }, { withCredentials: true });
+    return data;
+}
+
+export const updateContactNoteService = async (contactId: string, noteId: string, text: string): Promise<ContactNote> => {
+    const { data } = await axios.patch(`${API_URL}/contacts/${contactId}/notes/${noteId}`, { text }, { withCredentials: true });
+    return data;
+}
+
+export const deleteContactNoteService = async (contactId: string, noteId: string) => {
+    await axios.delete(`${API_URL}/contacts/${contactId}/notes/${noteId}`, { withCredentials: true });
 }
 
 // --- Importar contactos ------------------------------------------------------

@@ -1,6 +1,7 @@
 import { SkeletonBox, SkeletonLine } from "../../Skeleton/Skeleton";
 import { SkeletonFrame } from "../../Skeleton/SkeletonFrame";
 import { SidebarCard } from "./SidebarCard";
+import { ContactNotesSkeleton } from "../../Contact/ContactNotes/ContactNotesCard";
 
 const DATA_LABELS = ['Email', 'Empresa', 'Origen', 'Desde'];
 const DATA_WIDTHS = ['72%', '56%', '40%', '32%'];
@@ -24,9 +25,7 @@ export const ContactIdentitySkeleton = () => (
 /** El cuerpo de la ficha mientras carga: sus tarjetas, con sus títulos y etiquetas reales (diseño 3.3). */
 export const ContactSidebarSkeleton = () => (
     <SkeletonFrame label="Cargando la ficha del contacto" className="flex-1 min-h-0 p-3.5 grid gap-2.5 content-start">
-        <SidebarCard title="Notas">
-            <SkeletonBox tone="soft" className="h-[72px] w-full rounded-[10px]" />
-        </SidebarCard>
+        <ContactNotesSkeleton />
         <SidebarCard title="Datos">
             <dl className="grid grid-cols-[64px_minmax(0,1fr)] gap-x-2.5 gap-y-[7px] text-[13px] leading-[1.5]">
                 {DATA_LABELS.map((label, i) => (
