@@ -2,6 +2,7 @@ import type { PageMeta } from './lib/head.ts'
 import { normalizePath } from './lib/paths.ts'
 import { inicio } from './content/niches/inicio.ts'
 import type { Niche } from './content/types.ts'
+import { HOME_JSON_LD } from './content/structuredData.ts'
 
 // Las páginas del sitio: solo datos, sin componentes. Lo importan el navegador
 // (para saber qué hidratar) y el pre-renderizado (para escribir cada archivo).
@@ -19,7 +20,7 @@ const nicheRoute = (niche: Niche): Route => ({
   path: niche.path,
   file: niche.path === '/' ? 'index.html' : `${niche.path.slice(1)}.html`,
   hydrate: true,
-  meta: { path: niche.path, ...niche.meta },
+  meta: { path: niche.path, ...niche.meta, ...(niche.path === '/' ? { jsonLd: HOME_JSON_LD } : {}) },
 })
 
 export const ROUTES: Route[] = [
