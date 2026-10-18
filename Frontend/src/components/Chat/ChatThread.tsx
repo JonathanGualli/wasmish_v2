@@ -82,7 +82,7 @@ const FailedBadge = ({ msg }: { msg: Message }) => (
                 {whatsappErrorText(msg.errorCode, msg.errorDetail)}
             </span>
             {msg.errorCode && (
-                <span className="mt-2 text-brand-muted text-xs leading-relaxed">
+                <span className="mt-2 text-brand-muted text-xs leading-relaxed [overflow-wrap:anywhere]">
                     <span className="font-mono">Código {msg.errorCode}</span>
                     {whatsappErrorLabel(msg.errorCode) && msg.errorDetail && <> · {msg.errorDetail}</>}
                 </span>

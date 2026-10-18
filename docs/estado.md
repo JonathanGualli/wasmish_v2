@@ -17,10 +17,11 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
     - Conectar respondió 200 en unos 4 s, sin `/register`, y la línea quedó «Junto con la app» (`is_on_biz_app: true`).
     - Los entrantes llegan a Wasmish y a la app, y lo que se responde desde Wasmish llega al cliente.
     - Lo respondido desde la app (texto, foto y **nota de voz**) sale en el chat como «Desde la app de WhatsApp». La nota de voz se escucha, aunque Meta no la lista entre los tipos de eco.
-    - Falta el paso 7 (más de 24 h sin sincronizar: sigue conectado) y el 8 (desconectarlo desde la app: Ajustes → Líneas dice el motivo).
+    - **Pasos 7 y 8, bien el 2026-10-17:** pasadas más de 24 h sin sincronizar, sigue conectado; y al desconectarlo desde la app (Ajustes → Cuenta → Plataforma empresarial), Ajustes → Líneas lo dice con el motivo.
+    - Al enviar una plantilla desde ese WABA, Meta la rechazó con **131042** (el WABA no tiene moneda ni método de pago): ver «Cabos sueltos».
   - **En el panel de Meta (hecho por Jonathan el 2026-10-16):** suscritos `smb_message_echoes`, `history` y `smb_app_state_sync`, y comprobado `account_update`. El webhook no se tocó.
   - **Al desplegar:** se reconstruyen `wasmish-api` y `wasmish-web`. Sin migración, índices ni variables nuevas: los campos nuevos (`Line.businessApp`, `Line.disconnectionReason`, `Waba.authorizedAt`) son opcionales. Para un número normal, conectar funciona como antes: comprobar en los logs entrantes del webhook y `POST /api/v1/templates/send` con 200.
-  - **Después:** los pasos 7 y 8 de la prueba real. **Hasta que salgan bien, la página y el guion de ventas no prometen la coexistencia.**
+  - **La prueba real del spec, § 7, está completa:** la página y el guion de ventas ya pueden ofrecer la coexistencia.
 
 La 1.0.24 (desplegada el 2026-10-16) llevó:
 
@@ -86,11 +87,13 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
 
 ## En curso
 
-- **Coexistencia: la respuesta «está en la app» también con `FINISH`** — rama `coexistencia-respuesta-app`, empezado el 2026-10-17 por Claude. En la prueba real, un número de la app terminó con `FINISH` y el frontend mandaba `businessApp: false`; ahora manda lo que respondió la persona, para que el backend no lo registre si Meta no dice si está en la app. Solo frontend. · Sin probar: con Meta de verdad (se ve en la próxima conexión de un número de la app).
+**Unido, sin desplegar** (sale con la próxima versión; solo frontend):
+
+- **Coexistencia: la respuesta «está en la app» también con `FINISH`** (PR #83, con su revisión de Codex). En la prueba real, un número de la app terminó con `FINISH` y el frontend mandaba `businessApp: false`; ahora manda lo que respondió la persona, para que el backend no lo registre si Meta no dice si está en la app. · Sin probar: con Meta de verdad (se ve en la próxima conexión de un número de la app).
+- **El detalle de un mensaje fallido se parte** (rama `fix-error-url-cortada`): el texto de Meta con una URL larga (el 131042 trae la del panel de pagos) se salía del recuadro y quedaba cortado. Probado con el CSS compilado en Chromium.
 
 ## Lo siguiente
 
-- **Terminar la prueba real de la coexistencia** (spec `2026-10-16-coexistencia-design.md`, § 7): los pasos 1 a 6 salieron bien el 2026-10-16; faltan el 7 (24 h sin sincronizar) y el 8 (desconectar desde la app). Si salen bien, la página pública y el guion de ventas pueden ofrecerla.
 
 - **Avisar al cliente real** de que ya puede usar Wasmish en el celular, con los avisos: la app ya está en `app.wasmish.com` (desde la 1.0.24), que es donde tiene que instalarla. Cuando le convenga, que cambie la URL de su integración a `app.wasmish.com`; la vieja sigue funcionando.
 - **Multi-línea y multi-agente, fases 1 a 4** (diseño aprobado, sin preguntas abiertas: `docs/superpowers/specs/2026-10-11-multi-linea-multi-agente-design.md`). Fases 1, 2a y 2b en producción (la 2b, enrutar por línea, desde la 1.0.14). La **Fase 2c** está en producción desde la 1.0.15.
@@ -117,6 +120,7 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
 - **Archivos de cabecera y líneas (Fase 3):** `GET /templates/media/:id` solo comprueba la cuenta, no la línea: alguien de la cuenta que conozca el id de una cabecera de una plantilla de otro WABA puede descargarla. Los archivos (`TemplateMedia`) no son de ninguna línea ni WABA (una campaña puede usar cualquiera, y se suben antes de elegir) y su contenido es lo que la cuenta manda a sus clientes. Atarlos a un WABA es un cambio de modelo aparte, si Jonathan lo quiere (revisión de Codex del PR #34).
 - **Conectar WhatsApp contra Meta de verdad:** el Embedded Signup se probó en producción el 2026-10-14 (conectar, registrar, renovar el token, crear su `Waba` y su `Line`). Falta el formulario manual contra Meta y ver que un número de otro WABA da 400. **El `.env` local está mezclado** (el backend con la app WasmishTest y el frontend con la de producción): para el Embedded Signup en local, los dos tienen que apuntar a WasmishTest, con un Config ID propio de esa app.
 - **Adjuntos:** nadie limpia el volumen de archivos (`MEDIA_DIR`, también `outbound/` y `templates/`): se acumulan sin política de retención. Los mensajes anteriores al 2026-09-08 no tienen archivo, y el script para recuperar los que Meta aún guarda no existe. Jonathan decidió que las dos cosas pueden esperar.
+- **Un WABA nuevo sin método de pago** (visto el 2026-10-17, con el de la coexistencia): el Embedded Signup **no pide** moneda ni método de pago, y la primera plantilla falla con **131042** («Hay un problema con el método de pago de la cuenta de WhatsApp»; el detalle trae la URL del panel de pagos de Meta). Se arregla en Meta, en la facturación del portafolio (la URL del error lleva directo), no en Wasmish. Cada cliente nuevo va a pasar por esto: va en la guía de alta y en la implementación incluida. Si Wasmish debería avisarlo antes de enviar, es otra decisión.
 - **Plantillas con cabecera de archivo:** ningún cliente tiene todavía. El primero que la cree tiene que subir el archivo en Plantillas (sin él, el envío da 400 antes de llegar a Meta).
 - **Plantillas sincronizadas hace mucho:** si les falta `Template.buttons`, el diálogo de enviar plantilla no pide los valores de los botones. Se arregla pulsando *Sincronizar* en Plantillas.
 - **Conversación nueva con plantilla:** cuatro detalles los decidió el agente y Jonathan no los confirmó. Si Meta rechaza el envío, la conversación queda creada con el mensaje fallido junto al borrador. «Esperando respuesta» conserva el botón «Enviar plantilla». El aviso de la cabecera es genérico. Y si se cambia de conversación antes de que termine el envío, al acabar lleva al chat nuevo.
