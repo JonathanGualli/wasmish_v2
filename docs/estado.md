@@ -9,7 +9,7 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 **Versión 1.0.26**, desplegada el 2026-10-17 (etiqueta `v1.0.26`; comprobar con `curl https://app.wasmish.com/api/version`). Lleva:
 
 - **Notas del contacto con autor** (PRs #87 a #89, cada uno con su revisión de Codex; spec `docs/superpowers/specs/2026-10-17-notas-contacto-design.md`, plan `docs/superpowers/plans/2026-10-17-notas-contacto.md`, diseño `Design/Wasmish Notas del contacto.html`). Las notas pasan de un solo texto a una **lista** (`ContactNote`), cada nota con quién la escribió y cuándo, en la ficha del chat y en Contactos. Cada persona edita y borra las suyas; owner y admin, cualquiera. Importar crea una nota firmada, y el formulario la pide solo al crear. Detalle en [contactos.md § Notas del contacto](arquitectura/contactos.md#notas-del-contacto-contactnote-contactnotecontrollerjs) y [chat.md § Ficha del contacto en el chat](arquitectura/chat.md#ficha-del-contacto-en-el-chat).
-  - **Probado** con los tests (unitarios y de aislamiento) y en Chromium con dos sesiones (owner y agente) contra un backend aparte, también en el teléfono emulado y con `migrate:notes`. Sin probar en un teléfono de verdad ni en producción con dos personas.
+  - **Probado** con los tests (unitarios y de aislamiento) y en Chromium con dos sesiones (owner y agente) contra un backend aparte, también en el teléfono emulado y con `migrate:notes`. **Probado en producción el 2026-10-17** por Jonathan, con su cuenta y un agente: notas con autor, en vivo, permisos y etiquetas en tiempo real, también en el celular. En el despliegue, `migrate:notes` pasó 2 notas de antes.
   - **Al desplegar:** `mongodump` antes; se reconstruyen y arrancan `wasmish-api` y `wasmish-web` (la colección `contactnotes` y sus índices se crean al arrancar); **después**, con la imagen nueva, `npm run migrate:notes` y `npm run migrate:notes -- --check`, que tiene que salir con 0. **Sin parar la API:** mientras tanto, la ficha lee la nota de antes al vuelo. Sin variables nuevas.
   - **Volver atrás** a la 1.0.25 es seguro: `Contact.notes` sigue intacto (lo escrito con la 1.0.26 no se ve en la 1.0.25).
 - **Contactos y etiquetas en tiempo real** (PR #86, con su revisión de Codex): lo que una persona de la cuenta cambia en un contacto, al etiquetar en bloque, importar o al crear, renombrar o borrar una etiqueta, les llega en vivo a las demás (`contact_updated`, `contacts_updated`, `tags_updated`). Probado con dos sesiones en Chromium.
@@ -99,7 +99,6 @@ Nada en curso.
 
 ## Lo siguiente
 
-- **Probar en producción las notas y el tiempo real con dos personas** (la cuenta de prueba de Jonathan y un agente).
 - **Cerrar la transición de las notas** en una versión posterior, cuando nadie tenga abierta una pestaña de la 1.0.25: quitar `notes` (texto) de las respuestas de contactos, el 400 `notes_moved` de `PATCH /contacts/:id` y la lectura al vuelo de la nota de antes, y borrar `Contact.notes` con su propio paso (spec de las notas, § 3 y § 8).
 
 - **Avisar al cliente real** de que ya puede usar Wasmish en el celular, con los avisos: la app ya está en `app.wasmish.com` (desde la 1.0.24), que es donde tiene que instalarla. Cuando le convenga, que cambie la URL de su integración a `app.wasmish.com`; la vieja sigue funcionando.
