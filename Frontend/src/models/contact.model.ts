@@ -27,7 +27,6 @@ export interface Contact {
     username: string | null;
     email: string | null;
     company: string | null;
-    notes: string | null;
     source: ContactSource;
     referral: ContactReferral | null;
     marketingOptOut: boolean;
@@ -62,8 +61,29 @@ export interface ContactActivity {
     failed: number;
 }
 
+/** De dónde salió una nota: escrita en Wasmish, de un archivo importado o la de antes (sin autor). */
+export type ContactNoteSource = 'manual' | 'import' | 'legacy';
+
+/** Una nota del contacto, con quién la escribió y cuándo (`GET /contacts/:id` → `noteList`). */
+export interface ContactNote {
+    /** `legacy` en la nota de antes leída al vuelo, mientras no se migra. */
+    id: string;
+    text: string;
+    /** `null` en la nota de antes. `active: false`: ya no está en la cuenta. */
+    author: { id: string; name: string; active: boolean } | null;
+    source: ContactNoteSource;
+    createdAt: string;
+    editedAt: string | null;
+    /** Quién la cambió por última vez (owner y admin editan las de otros). */
+    editedBy: { id: string; name: string } | null;
+    /** Lo decide el backend: la suya, o cualquiera si es owner o admin. */
+    canEdit: boolean;
+}
+
 export interface ContactDetail extends Contact {
     activity: ContactActivity;
+    /** De la más nueva a la más vieja. */
+    noteList: ContactNote[];
 }
 
 export interface ContactsPage {
@@ -79,6 +99,7 @@ export interface ContactInput {
     name?: string;
     email?: string;
     company?: string;
+    /** Solo al crear: la primera nota, a nombre de quien lo crea. */
     notes?: string;
     tagIds?: string[];
 }

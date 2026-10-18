@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { AlertTriangle, Lock } from 'lucide-react';
+import { AlertTriangle, Lock, Pencil } from 'lucide-react';
 import { AuthField } from '../../../components/Auth/AuthField';
 import { CustomButton } from '../../../components/Button/Button';
 import { Callout } from '../../../components/Callout/Callout';
@@ -41,7 +41,8 @@ export const ContactForm = ({ contact, onCancel, onSaved, onViewContact }: Props
     const [name, setName] = useState(contact?.name ?? '');
     const [email, setEmail] = useState(contact?.email ?? '');
     const [company, setCompany] = useState(contact?.company ?? '');
-    const [notes, setNotes] = useState(contact?.notes ?? '');
+    // Solo al crear: es la primera nota de la lista. Al editar, las notas se gestionan en la ficha.
+    const [notes, setNotes] = useState('');
     const [tags, setTags] = useState<TagSelection>({ ids: contact?.tagIds ?? [], newNames: [] });
     const [touched, setTouched] = useState({ phone: false, email: false });
     // El 409 del backend, por si el aviso de duplicado no llegó a tiempo.
@@ -97,7 +98,8 @@ export const ContactForm = ({ contact, onCancel, onSaved, onViewContact }: Props
         setTags({ ids: tagIds, newNames: [] });
 
         // El texto vacío borra el campo; el backend lo guarda como null.
-        const input: ContactInput = { name: name.trim(), email: email.trim(), company: company.trim(), notes: notes.trim(), tagIds };
+        const input: ContactInput = { name: name.trim(), email: email.trim(), company: company.trim(), tagIds };
+        if (!contact && notes.trim()) input.notes = notes.trim();
         if (!phoneLocked) input.phone = digits;
 
         try {
@@ -187,15 +189,20 @@ export const ContactForm = ({ contact, onCancel, onSaved, onViewContact }: Props
                     maxLength={NAME_MAX}
                 />
                 <TagSelector label={<Optional>Etiquetas</Optional>} value={tags} onChange={setTags} />
-                <AuthField
-                    label={<Optional>Notas</Optional>}
-                    labelAction={<Counter value={notes} max={NOTES_MAX} />}
-                    value={notes}
-                    onChange={e => setNotes(e.target.value)}
-                    placeholder="Prefiere que le escriban por la tarde…"
-                    maxLength={NOTES_MAX}
-                    rows={4}
-                />
+                {contact ? (
+                    <NotesLivePlace count={contact.noteList.length} onGoToNotes={onCancel} />
+                ) : (
+                    <AuthField
+                        label={<Optional>Notas</Optional>}
+                        labelAction={<Counter value={notes} max={NOTES_MAX} />}
+                        value={notes}
+                        onChange={e => setNotes(e.target.value)}
+                        placeholder="Prefiere que le escriban por la tarde…"
+                        maxLength={NOTES_MAX}
+                        rows={4}
+                        hint="Será la primera nota de la lista, a tu nombre."
+                    />
+                )}
             </div>
 
             <div className="flex-none border-t border-brand-border px-4 md:px-6 py-3.5 flex items-center gap-2.5">
@@ -214,3 +221,27 @@ export const ContactForm = ({ contact, onCancel, onSaved, onViewContact }: Props
         </form>
     );
 };
+
+/**
+ * Al editar no hay campo «Notas»: son una lista, cada una con su autor, en la
+ * ficha (diseño F2). Esta línea dice cuántas hay y lleva a ellas.
+ */
+const NotesLivePlace = ({ count, onGoToNotes }: { count: number; onGoToNotes: () => void }) => (
+    <div className="flex gap-2.5 rounded-[10px] bg-brand-bg px-3.5 py-3 text-[13px] leading-[1.5] text-brand-strong">
+        <Pencil size={15} className="flex-none mt-0.5 text-brand-accent-strong" />
+        {count > 0 ? (
+            <p>
+                <span className="font-semibold text-brand-text">
+                    {count === 1 ? 'Su nota está en la ficha.' : `Sus ${count} notas están en la ficha.`}
+                </span>{' '}
+                Se añaden y editan desde la lista «Notas», cada una con su autor.{' '}
+                <button type="button" onClick={onGoToNotes}
+                    className="font-semibold text-brand-accent-strong underline cursor-pointer">
+                    Ir a las notas
+                </button>
+            </p>
+        ) : (
+            <p>Las notas se añaden desde la ficha.</p>
+        )}
+    </div>
+);

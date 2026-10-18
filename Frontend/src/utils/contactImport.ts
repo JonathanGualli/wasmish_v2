@@ -256,7 +256,7 @@ export const saveImportCountry = (country: CountryCode) => {
 
 /** «el nombre», «el email»… para las frases de la muestra. */
 const FIELD_THE: Record<keyof ImportContactFields, string> = {
-    name: 'el nombre', email: 'el email', company: 'la empresa', notes: 'la nota',
+    name: 'el nombre', email: 'el email', company: 'la empresa',
 };
 
 /** «a», «a y b», «a, b y c». */
@@ -270,10 +270,11 @@ const joinWithAnd = (parts: string[]) =>
 export const sampleNote = (entry: ImportSampleEntry, issues: ImportIssue[]) => {
     const sentences: string[] = [];
     for (const [field, value] of Object.entries(entry.ignored) as [keyof ImportContactFields, string][]) {
-        if (field !== 'notes') sentences.push(`En el archivo: «${value}». Se queda ${FIELD_THE[field]} que ya tiene.`);
+        sentences.push(`En el archivo: «${value}». Se queda ${FIELD_THE[field]} que ya tiene.`);
     }
     if (entry.action === 'update') {
         const added = (Object.keys(entry.fields) as (keyof ImportContactFields)[]).map(f => FIELD_THE[f]);
+        if (entry.note) added.push('una nota');
         if (entry.tagNames.length === 1) added.push(`la etiqueta ${entry.tagNames[0]}`);
         if (entry.tagNames.length > 1) added.push(`${entry.tagNames.length} etiquetas`);
         if (added.length > 0) sentences.push(`Se le añade ${joinWithAnd(added)}.`);

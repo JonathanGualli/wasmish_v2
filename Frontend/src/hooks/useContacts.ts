@@ -142,17 +142,6 @@ export const useContactMutations = () => {
         },
     });
 
-    // Las notas se guardan solas mientras se escriben (la ficha del chat): basta
-    // con poner al día la ficha. Ni la bandeja ni las etiquetas dependen de
-    // ellas, y la lista de Contactos se vuelve a pedir cuando se abra.
-    const saveNotes = useMutation<ContactDetail, unknown, { id: string; notes: string }>({
-        mutationFn: ({ id, notes }) => updateContactService(id, { notes }),
-        onSuccess: (saved, { id }) => {
-            queryClient.setQueryData<ContactDetail>(detailKey(id), old => old && { ...old, notes: saved.notes });
-            queryClient.invalidateQueries({ queryKey: ['contacts', 'list'], refetchType: 'none' });
-        },
-    });
-
     // Las etiquetas de la ficha del chat se guardan al ponerlas o quitarlas: se
     // ven al momento y, si falla, vuelven a como estaban.
     const setTags = useMutation<ContactDetail, unknown, { id: string; tagIds: string[] }, { previous?: ContactDetail }>({
@@ -167,7 +156,7 @@ export const useContactMutations = () => {
         onSettled: refresh,
     });
 
-    return { create, update, remove, saveNotes, setTags };
+    return { create, update, remove, setTags };
 };
 
 interface ContactErrorItem { message: string; field?: string; contactId?: string | null }
