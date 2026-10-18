@@ -19,7 +19,7 @@
 - `source`: `'manual' | 'import' | 'legacy'`. Orden de la lista: `createdAt` de la más nueva a la más vieja.
 - Editan y borran: el autor (`authorId === auth.userId`) y los roles `owner` y `admin`. Nadie más; la API key nunca.
 - `authorName` se copia de `req.auth.name` al escribir; nunca se recalcula.
-- `Contact.notes` **no se borra** en esta versión (solo se vacía al borrar su nota `legacy`).
+- La lista va en **`noteList`**. `notes` (el texto de `Contact.notes`) **sigue** en las respuestas de contactos en esta versión, para las pestañas viejas (revisión de Codex, spec § 12). `Contact.notes` no se borra (solo se vacía al borrar su nota `legacy`).
 - Cada `POST`, `PATCH` y `DELETE` de notas llama a `notifyContactChanged(accountId, contactId)`.
 - Textos de error en español: «Las notas cambiaron: recarga la página.» (`notes_moved`), «Solo quien la escribió, el owner o un admin pueden cambiar esta nota.» (`note_not_yours`), «Este contacto ya tiene 500 notas.» (`notes_limit`).
 - Comentarios, commits, PRs y textos en español; identificadores nuevos en inglés.
@@ -47,7 +47,8 @@
 - Produce: `canEditNote(auth, note)` → boolean. `note` con `authorId` (ObjectId, string o `null`) y `id`. `false` siempre para `id === 'legacy'` (la nota leída al vuelo) y para un `auth` sin `userId`.
 - Produce: `serializeNote(note, auth)` → `{ id, text, author: { id, name } | null, source, createdAt, editedAt, canEdit }` (fechas ISO; `author` `null` si no hay `authorId`).
 - Produce: `cleanNoteText(text)` → el texto recortado, o `null` si queda vacío o pasa de `NOTE_TEXT_MAX`.
-- Produce: `pickImportNote(text, existingTexts)` → texto recortado o `null` (vacío, o ya existe uno igual comparando recortado y en minúsculas).
+- Produce: `importKeyFor(text)` → el texto recortado y en minúsculas.
+- Produce: `pickImportNote(text, existingTexts)` → texto recortado o `null` (vacío, o ya existe uno con el mismo `importKeyFor`).
 - Produce: `legacyNoteFrom(contact)` → la nota virtual `{ id: 'legacy', text, authorId: null, authorName: null, source: 'legacy', createdAt: contact.createdAt, editedAt: null }`, o `null` si `contact.notes` recortado está vacío.
 
 - [ ] **Paso 1: Tests que fallan:**
@@ -76,10 +77,11 @@
 - Produce: `listContactNotes(contact, auth)` → notas serializadas, con la `legacy` virtual si `legacyNoteFrom(contact)` y no hay ninguna guardada con `source: 'legacy'`.
 - Produce: `createContactNote({ accountId, contactId, text, author: { id, name }, source })` → el documento; lanza un error con `statusCode: 409` y `code: 'notes_limit'` si ya hay 500.
 - Produce: rutas `POST /contacts/:id/notes`, `PATCH /contacts/:id/notes/:noteId`, `DELETE /contacts/:id/notes/:noteId` (`authRequired`, `validateSchema` con `{ text }` recortado de 1 a 1000; `:noteId` con `objectIdSchema`, así `legacy` da 404).
-- Produce: `GET /contacts/:id` con `notes`; `GET /contacts` sin `notes`.
+- Produce: `GET /contacts/:id` con `noteList`; `notes` (texto) sigue igual en todas las respuestas de contactos.
+- El modelo lleva también `importKey` (`String`, `null` por defecto) y el índice `contact_note_import_unique` `{ contactId: 1, importKey: 1 }` único parcial con `{ importKey: { $type: 'string' } }`.
 
 - [ ] **Paso 1: Tests de aislamiento que fallan** en `contact-notes.test.js` (cuentas A y B con `seedAccount`; un agente y un admin de A con `seedMember`):
-  - `POST` como agente de A → 201 con `author.name` del agente, `source: 'manual'`, `canEdit: true`; aparece primera en `GET /contacts/:id` de A.
+  - `POST` como agente de A → 201 con `author.name` del agente, `source: 'manual'`, `canEdit: true`; aparece primera en `noteList` de `GET /contacts/:id` de A, y `notes` sigue siendo el texto de `Contact.notes` (comentario: «Regresión que vigila: una pestaña con el frontend anterior recibía una lista donde esperaba texto»).
   - B: `GET /contacts/<de A>` 404; `POST`, `PATCH`, `DELETE` sobre un contacto o una nota de A → 404 y nada cambia.
   - La nota de un contacto de A por la URL de **otro** contacto de A → 404.
   - El agente edita la nota del owner → 403 `note_not_yours`; la borra → 403; edita la suya → 200 con `editedAt`; el admin borra la del agente → 204; el supervisor no edita la del agente → 403.
@@ -106,16 +108,17 @@
 
 **Interfaces:**
 - Consume: `pickImportNote` (tarea 1), `ContactNote` (tarea 2).
-- Produce: cada fila limpia y cada entrada del plan llevan `note: string | null` aparte de `fields` (que ya no tiene `notes`). `existingByPhone` lleva `noteTexts: string[]` (los textos de sus `ContactNote` y su `Contact.notes`). En `update`, `note` es `pickImportNote(entry.note, existing.noteTexts)`; `changed` cuenta también la nota. La muestra (`pickImportSample`) devuelve `note` de cada entrada.
+- Produce: cada fila limpia y cada entrada del plan llevan `note: string | null` aparte de `fields` (que ya no tiene `notes`). `existingByPhone` lleva `noteTexts: string[]` (los textos de sus `ContactNote` y su `Contact.notes`) y `noteCount`. En `update`, `note` es `pickImportNote(entry.note, existing.noteTexts)`, o `null` con un aviso en su fila («Ya tiene 500 notas: la del archivo no se añade.») si `noteCount >= NOTES_PER_CONTACT_MAX`; `changed` cuenta también la nota. La muestra (`pickImportSample`) devuelve `note` de cada entrada.
 - Produce: `importContacts` responde `updated` = contactos modificados por el upsert **o** que recibieron una nota (sin contar dos veces).
 
 - [ ] **Paso 1: Tests puros que fallan** en `contact.import.test.js`:
   - una fila con `notes: ' Paga a 30 '` → `note: 'Paga a 30'` y `fields` sin `notes`; con más de 1000 → recortada y aviso (como hoy).
   - dos filas del mismo teléfono con notas `'A'` y `'B'` → `note: 'A'`.
   - existente con `noteTexts: ['a']` y fila `'A '` → `note: null` y `action: 'unchanged'`; con `noteTexts: []` → `note: 'A'` y `action: 'update'`.
-- [ ] **Paso 2: Test de aislamiento que falla** en `isolation/contacts.test.js`: `POST /contacts/import` dos veces con la misma fila con nota → una sola `ContactNote` con `source: 'import'` y `authorName` de quien importa; el segundo resumen dice `unchanged: 1`.
+  - existente con `noteCount: 500` y una nota nueva → `note: null` y el aviso en su fila.
+- [ ] **Paso 2: Test de aislamiento que falla** en `isolation/contacts.test.js`: `POST /contacts/import` dos veces con la misma fila con nota → una sola `ContactNote` con `source: 'import'` y `authorName` de quien importa; el segundo resumen dice `unchanged: 1`. Y dos importaciones **a la vez** (`Promise.all`) del mismo archivo → una sola nota (comentario: «Regresión que vigila: dos importaciones a la vez leían las mismas notas y las dos la creaban»).
 - [ ] **Paso 3:** `node --test tests/contact.import.test.js && node --test tests/isolation/contacts.test.js` → FALLA.
-- [ ] **Paso 4:** implementar. Las notas se crean con `ContactNote.insertMany` después de los upserts, con el `_id` de cada contacto por su teléfono (la consulta del final ya existe: añadirle `phone`).
+- [ ] **Paso 4:** implementar. Las notas se crean con `ContactNote.insertMany(docs, { ordered: false })` después de los upserts, con `importKey` y el `_id` de cada contacto por su teléfono (la consulta del final ya existe: añadirle `phone`). Un E11000 de `contact_note_import_unique` se ignora (otra importación ya la creó) y esa nota no cuenta como añadida; cualquier otro error sube.
 - [ ] **Paso 5:** el comando del paso 3 → PASA; `npm test` y `npm run test:isolation` en verde.
 - [ ] **Paso 6:** `contactos.md` § Importar: la nota ya no «se rellena si está vacía», crea una nota.
 - [ ] **Paso 7:** commit «Importar: la columna Notas crea una nota firmada, sin repetir».
@@ -150,7 +153,7 @@ Los nombres de los componentes y los textos los fija el diseño de Claude Design
 ### Tarea 5: Datos y mutaciones
 
 **Archivos:**
-- Modificar: `Frontend/src/models/contact.model.ts` (`ContactDetail.notes: ContactNote[]`; tipo `ContactNote` con la forma de la tarea 1; `ContactInput.notes` solo para crear), `Frontend/src/services/api.service.ts` (`createContactNoteService`, `updateContactNoteService`, `deleteContactNoteService`), `Frontend/src/hooks/useContacts.ts` (`useContactNoteMutations(contactId)`; quitar `saveNotes`)
+- Modificar: `Frontend/src/models/contact.model.ts` (`ContactDetail.noteList: ContactNote[]`, y `notes` deja de leerse; tipo `ContactNote` con la forma de la tarea 1; `ContactInput.notes` solo para crear), `Frontend/src/services/api.service.ts` (`createContactNoteService`, `updateContactNoteService`, `deleteContactNoteService`), `Frontend/src/hooks/useContacts.ts` (`useContactNoteMutations(contactId)`; quitar `saveNotes`)
 
 **Interfaces:**
 - Produce: `useContactNoteMutations(contactId)` → `{ add, edit, remove }` (React Query). `add` es optimista: inserta arriba una nota temporal (`id: 'temp-…'`, autor = la persona de la sesión) y la cambia por la del servidor; si falla, la nota temporal queda marcada como fallida con su texto para «Reintentar». `edit` y `remove` invalidan `['contacts', 'detail', contactId]` al terminar; `remove` revierte si falla.
@@ -167,7 +170,7 @@ Los nombres de los componentes y los textos los fija el diseño de Claude Design
 - Borrar: `Frontend/src/components/Chat/ContactSidebar/ContactNotes.tsx` y `Frontend/src/hooks/useAutosave.ts` (solo lo usaba `ContactNotes`)
 
 **Interfaces:**
-- Consume: `useContactNoteMutations` (tarea 5); `notes` de `useLiveContact` / `useContact`.
+- Consume: `useContactNoteMutations` (tarea 5); `noteList` de `useLiveContact` / `useContact`.
 
 - [ ] **Paso 1:** implementar siguiendo el diseño. Lo que tiene que cumplir pase lo que pase (spec § 7): lo escrito nunca se pierde si falla; lo que llega por `contact_updated` no cierra una nota que se está escribiendo o editando (el borrador vive en el estado del componente, no en la query); sin «Editar» ni «Borrar» si `canEdit` es `false`; borrar con `ConfirmDialog`.
 - [ ] **Paso 2:** `npm run lint` y `npm run build` en verde.

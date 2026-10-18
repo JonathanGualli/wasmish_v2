@@ -37,7 +37,9 @@ Colección nueva **`ContactNote`** (`models/contact.note.model.js`):
 | `createdAt` | Cuándo se escribió. En la `legacy`, la fecha de creación del contacto (la de la nota no se sabe). |
 | `editedAt` | Cuándo se editó por última vez; `null` si nunca. |
 
-Índices: `{ userId: 1, contactId: 1, createdAt: -1 }` (la lista de un contacto) y uno **único parcial** `{ contactId: 1 }` con `{ source: 'legacy' }`, para que la migración no cree dos notas `legacy` del mismo contacto aunque se corra dos veces a la vez.
+Un campo más, **`importKey`**: solo en las notas importadas, el texto recortado y en minúsculas (`null` en las demás).
+
+Índices: `{ userId: 1, contactId: 1, createdAt: -1 }` (la lista de un contacto); uno **único parcial** `{ contactId: 1 }` con `{ source: 'legacy' }`, para que la migración no cree dos notas `legacy` del mismo contacto aunque se corra dos veces a la vez; y uno **único parcial** `{ contactId: 1, importKey: 1 }` con `importKey` de tipo texto, para que dos importaciones **a la vez** del mismo archivo no dupliquen una nota (revisión de Codex, § 12).
 
 **Por qué una colección y no una lista dentro del contacto:** dos personas que escriben a la vez nunca se pisan, editar o borrar toca un solo documento, el contacto no crece sin límite y no hay que transformar en el sitio un campo que hoy es texto (durante el despliegue convivirían las dos formas). Ver § 9.
 
@@ -47,17 +49,17 @@ Colección nueva **`ContactNote`** (`models/contact.note.model.js`):
 
 Todas con sesión (`authRequired`); la API key no llega a ellas.
 
-- **`GET /contacts/:id`** devuelve además `notes`, de la más nueva a la más vieja:
+- **`GET /contacts/:id`** devuelve además **`noteList`**, de la más nueva a la más vieja:
   ```
-  notes: [{ id, text, author: { id, name } | null, source, createdAt, editedAt, canEdit }]
+  noteList: [{ id, text, author: { id, name } | null, source, createdAt, editedAt, canEdit }]
   ```
   `canEdit` lo calcula el backend (§ 5), para que la interfaz no adivine los permisos. Mientras la migración no haya pasado por ese contacto, si tiene `Contact.notes` y ninguna nota `legacy`, la lista incluye una nota `legacy` **leída al vuelo** de `Contact.notes` (con `id` `legacy` y `canEdit: false`): así la ficha no pierde nada entre que arranca la imagen nueva y termina el script, unos minutos. No se puede editar ni borrar hasta que el script la crea de verdad.
-- **`GET /contacts`** (la lista) deja de devolver `notes`: no lo usa nadie y crecería con la lista.
+- **`notes` (el texto de hoy) sigue en las respuestas de contactos en esta versión**, con `Contact.notes`, sin cambiar de forma: una pestaña abierta con el frontend anterior vuelve a pedir el contacto al reconectar el tiempo real, y su formulario y su cuadro de notas esperan texto (con una lista, el formulario fallaba al guardar; revisión de Codex, § 12). Se quita junto con `Contact.notes`, en una versión posterior.
 - **`POST /contacts/:id/notes`** `{ text }` → 201 con la nota. A nombre de quien escribe (`req.auth.userId` y su nombre).
 - **`PATCH /contacts/:id/notes/:noteId`** `{ text }` → 200 con la nota, `editedAt` al día.
 - **`DELETE /contacts/:id/notes/:noteId`** → 204. Borrar la nota `legacy` también vacía `Contact.notes`: si no, la lectura al vuelo la haría reaparecer.
 - **`DELETE /contacts/:id`** (un contacto sin conversación) borra también sus notas.
-- **Errores:** un contacto o una nota de otra cuenta, o una nota que no es de ese contacto → **404** (regla 1). Editar o borrar una nota sin permiso → **403** `note_not_yours`. Más de **500 notas** en un contacto → **409** `notes_limit` (para que la ficha no crezca sin fin; nadie debería llegar).
+- **Errores:** un contacto o una nota de otra cuenta, o una nota que no es de ese contacto → **404** (regla 1). Editar o borrar una nota sin permiso → **403** `note_not_yours`. Más de **500 notas** en un contacto → **409** `notes_limit` (para que la ficha no crezca sin fin; nadie debería llegar). El límite es una barrera, no una garantía: dos escrituras justo a la vez sobre un contacto con 499 pueden dejarlo en 501, y está bien.
 - **`POST /contacts`** acepta `notes` (texto) como hoy: si viene, crea la primera nota (`source: 'manual'`) a nombre de quien crea el contacto.
 - **`PATCH /contacts/:id`** deja de cambiar `notes`. Es para las pestañas abiertas durante el despliegue: si trae `notes` **igual** a `Contact.notes` (el formulario de editar viejo lo manda siempre, sin tocarlo), se ignora y el resto se guarda; si trae otro texto, **400** «Las notas cambiaron: recarga la página.» (`notes_moved`) y no se guarda nada. El cuadro de notas viejo conserva el texto cuando falla, así que nadie pierde lo escrito, y al recargar ve la lista.
 - Cada `POST`, `PATCH` y `DELETE` de notas avisa con **`contact_updated { id }`** (`notifyContactChanged`, Parte 1): la ficha y el panel de Contactos de los demás se vuelven a pedir.
@@ -78,7 +80,8 @@ Los permisos van con la regla y no con `requirePermission`: dependen de la nota 
 **Importar** (`contact.import.controller.js`, `utils/contact.import.js`):
 - `notes` deja de ser un campo que «solo se rellena si está vacío»: sale de `fields` y del merge (`planImportRows`) y pasa a ser `note` de cada fila.
 - `buildPlan` lee los textos de las notas que ya tienen esos contactos (una consulta por tanda) y decide con `pickImportNote`.
-- `importContacts` crea las notas nuevas (`source: 'import'`, a nombre de quien importa) en un `insertMany` después de los contactos. Un contacto que solo gana una nota cuenta como **actualizado**.
+- `importContacts` crea las notas nuevas (`source: 'import'`, a nombre de quien importa, con su `importKey`) en un `insertMany` sin orden después de los contactos; un choque con el índice de `importKey` (otra importación a la vez) se ignora. Un contacto que solo gana una nota cuenta como **actualizado**.
+- **El límite de 500 también al importar:** un contacto que ya tiene 500 notas no recibe la del archivo, y la vista previa lo avisa en su fila («Ya tiene 500 notas: la del archivo no se añade.»).
 - La muestra de la vista previa lo dice: «Se le añade una nota.» (hoy la nota se ignora en silencio si el contacto ya tenía una).
 - `contacts_updated` ya avisa al terminar (Parte 1).
 
@@ -104,7 +107,7 @@ Lo que la implementación tiene que cumplir pase lo que pase con el diseño:
 
 **Volver atrás** a la versión anterior: seguro. `Contact.notes` sigue intacto; lo que se escribió con la versión nueva (notas nuevas, ediciones) no se ve en la vieja hasta volver a la nueva.
 
-**Entre el PR del backend y el del frontend, `master` no se despliega** (el frontend de hoy espera `notes` como texto). La versión lleva los dos; `docs/estado.md` lo dice mientras tanto. La 1.0.26 (los arreglos ya unidos) se despliega antes de unir el backend de las notas.
+**Entre el PR del backend y el del frontend, `master` no se despliega** (con el backend nuevo, el frontend de hoy no puede guardar notas: su cuadro recibiría el 400 de § 4). La versión lleva los dos; `docs/estado.md` lo dice mientras tanto. La 1.0.26 (los arreglos ya unidos) se despliega antes de unir el backend de las notas.
 
 ## 9. Preguntas y respuestas (2026-10-17)
 
@@ -114,13 +117,14 @@ Lo que la implementación tiene que cumplir pase lo que pase con el diseño:
 - **¿Campo «Notas» del formulario?** Solo al crear.
 - **¿La API pública ve las notas?** No aplica: no tiene endpoints de contactos.
 - **¿Dónde se guardan?** Colección propia (enfoque A). Se descartaron la lista dentro del contacto (B: transformar el campo en el sitio, ediciones a la vez delicadas, el contacto crece sin fin) y seguir con un texto con historial (C: no da autor por nota).
-- **Decidido por Claude, para revisar:** el límite de 500 notas por contacto; el orden de la más nueva a la más vieja; la fecha de la nota `legacy` (la del contacto); que la lista de contactos deje de traer `notes`; el 400 para las pestañas viejas.
+- **Decidido por Claude, para revisar:** el límite de 500 notas por contacto; el orden de la más nueva a la más vieja; la fecha de la nota `legacy` (la del contacto); el 400 para las pestañas viejas.
 
 ## 10. Pruebas
 
 - **Funciones puras:** `canEditNote` (autor, otro agente, owner, admin, supervisor, nota `legacy`), `serializeNote`, `cleanNoteText`, `pickImportNote` (vacía, repetida con otro espaciado o mayúsculas, nueva).
 - **Aislamiento** (`tests/isolation/`, endpoints nuevos con `:id` y `:noteId`): B no lee (la ficha no trae notas de A), no crea, edita ni borra notas de A (404); una nota de A no se edita por la URL de otro contacto de A (404); un agente de A no edita ni borra la nota del owner (403) y sí la suya; un admin sí la del agente; cada cambio llega por SSE al equipo de A y no a B.
-- **Importar:** dos veces el mismo archivo crea las notas una sola vez; a nombre de quien importa.
+- **Importar:** dos veces el mismo archivo, seguidas y **a la vez**, crea las notas una sola vez; a nombre de quien importa; un contacto con 500 notas no recibe la del archivo y lo avisa.
+- **Pestaña vieja:** `GET /contacts/:id` sigue trayendo `notes` como texto.
 - **Migración:** con contactos con y sin nota, dos pasadas crean una sola `legacy` por contacto; `--check` en 0 después; la lectura al vuelo antes de migrar.
 - **Navegador:** dos sesiones (owner y agente) contra un backend aparte con una base desechable: añadir, editar y borrar; lo de una se ve en la otra; un agente no ve «Editar» en la nota del owner; el celular.
 
@@ -130,3 +134,9 @@ Lo que la implementación tiene que cumplir pase lo que pase con el diseño:
 2. **Backend** con sus tests: modelo, endpoints, reglas, importar, `migrate:notes`, documentación (`contactos.md`, `api.md`, `pruebas-y-scripts.md`).
 3. **Frontend**, con el diseño de Claude Design: la lista en la ficha y en Contactos, el formulario, importar. Probado en el navegador.
 4. **Versión**, `estado.md` y desplegar con `/deploy`.
+
+## 12. Revisión de Codex (2026-10-17) y qué cambió
+
+1. **Las pestañas viejas recibirían una lista donde esperan texto** (alta): al reconectar el tiempo real vuelven a pedir el contacto, y el formulario de editar llama a `notes.trim()`. **Aceptado:** la lista va en un campo nuevo, `noteList`, y `notes` sigue siendo el texto de hoy en esta versión (§ 4).
+2. **Importar podía pasar de 500 notas** (media). **Aceptado:** el límite se aplica también al importar, con aviso en la vista previa (§ 6). Con escrituras a la vez sigue siendo aproximado, a propósito (§ 4).
+3. **Dos importaciones a la vez podían duplicar una nota** (media). **Aceptado:** `importKey` con su índice único parcial (§ 3) y un test con dos importaciones a la vez (§ 10).
