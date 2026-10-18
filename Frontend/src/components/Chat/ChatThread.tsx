@@ -210,7 +210,7 @@ export const ChatThread = ({
                         </div>
                     )}
                     <div
-                        className={`px-3.5 py-2.5 text-sm max-md:text-[15px] leading-[1.5] whitespace-pre-line
+                        className={`px-3.5 py-2.5 text-sm max-md:text-[15px] leading-[1.5] whitespace-pre-line [overflow-wrap:anywhere]
                             ${mine
                                 ? "bg-brand-deep text-white rounded-[12px_12px_3px_12px]"
                                 : "bg-brand-surface text-brand-text border border-brand-border rounded-[12px_12px_12px_3px]"}`}

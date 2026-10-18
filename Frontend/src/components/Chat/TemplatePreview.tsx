@@ -54,7 +54,7 @@ export const TemplateBubble = ({ bodyText, values, highlights, template }: {
   /** Para enseñar su cabecera encima del cuerpo. */
   template?: Template;
 }) => (
-  <div className="text-sm leading-[1.6] whitespace-pre-line text-white
+  <div className="text-sm leading-[1.6] whitespace-pre-line [overflow-wrap:anywhere] text-white
     bg-brand-deep rounded-[12px_12px_3px_12px] px-3.5 py-2.5">
     {template && <TemplateHeaderPreview template={template} />}
     {bodyText.split(/(\{\{\s*[^}]+?\s*\}\})/g).map((part, i) => {
