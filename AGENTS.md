@@ -6,13 +6,13 @@ Este archivo es para **cualquier agente**: Claude Code lo importa desde `CLAUDE.
 
 ## Comandos de desarrollo
 
-Monorepo con dos workspaces independientes: `Backend/` y `Frontend/`. Cada uno tiene su propio `package.json` y `node_modules`.
+Monorepo con tres workspaces independientes: `Backend/` y `Frontend/` (la app) y `Site/` (la página pública `wasmish.com`). Cada uno tiene su propio `package.json` y `node_modules`.
 
-| | Backend (`Backend/`) | Frontend (`Frontend/`) |
-|---|---|---|
-| Stack | Express 5 + MongoDB (Mongoose) + Zod | React 19 + TypeScript + Vite + Tailwind v4 + React Query |
-| Arrancar | `npm run dev` (puerto 3001) | `npm run dev` (puerto 5173, proxy de `/api` al 3001) |
-| Comprobar | `npm test` y `npm run test:isolation` | `npm run lint` y `npm run build` |
+| | Backend (`Backend/`) | Frontend (`Frontend/`) | Página (`Site/`) |
+|---|---|---|---|
+| Stack | Express 5 + MongoDB (Mongoose) + Zod | React 19 + TypeScript + Vite + Tailwind v4 + React Query | React 19 + Vite + Tailwind v4, pre-renderizado |
+| Arrancar | `npm run dev` (puerto 3001) | `npm run dev` (puerto 5173, proxy de `/api` al 3001) | `npm run build && npm run preview` |
+| Comprobar | `npm test` y `npm run test:isolation` | `npm run lint` y `npm run build` | `npm run lint`, `npm run build` y `npm test` |
 
 **Antes de tocar `Backend/`, leer [Backend/AGENTS.md](Backend/AGENTS.md); antes de tocar `Frontend/`, [Frontend/AGENTS.md](Frontend/AGENTS.md).** Claude Code los carga solo al trabajar en esa carpeta; Codex, si se arranca en la raíz, no.
 
@@ -102,9 +102,9 @@ Fuentes originales del manual: `Frontend/brand/wasmishbrand/*.dc.html` (canvas d
 
 ## CI y git
 
-**CI** (`.github/workflows/ci.yml`, GitHub Actions, 2026-10-11): en cada push a `master` y en cada PR, dos trabajos en paralelo con Node 22 (el de los Dockerfiles) y `npm ci`: Backend `npm test` + `npm run test:isolation` (con caché del binario de Mongo por versión), Frontend `npm run lint` + `npm run build` (que incluye `tsc -b`). No usa secretos: los tests no tocan red y el build compila sin las `VITE_META_*`. **No despliega**, y **no se despliega un commit en rojo**.
+**CI** (`.github/workflows/ci.yml`, GitHub Actions, 2026-10-11): en cada push a `master` y en cada PR, trabajos en paralelo con Node 22 (el de los Dockerfiles) y `npm ci`: Backend `npm test` + `npm run test:isolation` (con caché del binario de Mongo por versión), Frontend `npm run lint` + `npm run build` (que incluye `tsc -b`), Site `npm run lint` + `npm run build` + `npm test` (desde 2026-10-17), y Docs (enlaces y mapa). No usa secretos: los tests no tocan red y el build compila sin las `VITE_META_*`. **No despliega**, y **no se despliega un commit en rojo**.
 
-**Flujo con git** (2026-10-11): a `master` **no se hace push directo**. Lo impide la regla `master` del repo (*Settings → Rules → Rulesets*): pide un PR, que los dos trabajos del CI estén en verde y prohíbe force push y borrar la rama; no pide aprobación (no se puede aprobar un PR propio). Cada funcionalidad va en **su rama**, con nombre simple (`chatbot-menu`, `fix-envio-sin-whatsapp`), en **commits pequeños** que tengan sentido solos, y entra por **un PR** que se revisa en GitHub. Si pasa de unas 400–500 líneas de código real, se parte: primero el backend con sus tests, después la UI. El repo solo admite **squash**: `master` queda con un commit por PR (con el título del PR) y la rama se borra al unir. `version:bump` va **dentro del PR**, como último commit. **Se despliega solo desde `master` unido y en verde**: antes de subir el código, `git switch master && git pull && git status` limpio, porque `git archive` sube el commit en el que estás (`HEAD`), no la rama unida. Claude crea ramas y PRs con `gh` (con la sesión de Jonathan) y nunca se pone de coautor.
+**Flujo con git** (2026-10-11): a `master` **no se hace push directo**. Lo impide la regla `master` del repo (*Settings → Rules → Rulesets*): pide un PR, que los trabajos del CI estén en verde y prohíbe force push y borrar la rama; no pide aprobación (no se puede aprobar un PR propio). Cada funcionalidad va en **su rama**, con nombre simple (`chatbot-menu`, `fix-envio-sin-whatsapp`), en **commits pequeños** que tengan sentido solos, y entra por **un PR** que se revisa en GitHub. Si pasa de unas 400–500 líneas de código real, se parte: primero el backend con sus tests, después la UI. El repo solo admite **squash**: `master` queda con un commit por PR (con el título del PR) y la rama se borra al unir. `version:bump` va **dentro del PR**, como último commit. **Se despliega solo desde `master` unido y en verde**: antes de subir el código, `git switch master && git pull && git status` limpio, porque `git archive` sube el commit en el que estás (`HEAD`), no la rama unida. Claude crea ramas y PRs con `gh` (con la sesión de Jonathan) y nunca se pone de coautor.
 
 ## Mapa: dónde consultar cada tema
 
@@ -126,6 +126,7 @@ Cada archivo de `docs/arquitectura/` empieza con su índice. Las secciones son t
 | Estado del proyecto | [docs/estado.md](docs/estado.md) | versión en producción, trabajo en curso, lo siguiente, cabos sueltos conocidos |
 | Decisiones de producto | [docs/decisiones.md](docs/decisiones.md) | lo que Jonathan decidió y por qué, con fecha |
 | Diseños y briefs | `Design/*.html`, `docs/superpowers/specs/` | diseños exportados de Claude Design; briefs de UI y specs técnicas de cada módulo |
+| Página pública | [pagina-publica.md](docs/arquitectura/pagina-publica.md) | `Site/`, pre-renderizado (`prerender.mjs`, `renderHead`), agregar un nicho, huecos (`<Pending>`, `data-pending`, `LAUNCHED`), vista previa en WhatsApp (`og:`), Cloudflare Pages, el DNS en Cloudflare, `hola@wasmish.com` |
 | Producción | `deploy/README.md` y la skill `deploy` | compose, Traefik, despliegue con `git archive` paso a paso, etiquetas `vX.Y.Z`, volver a una versión anterior |
 
 **Para buscar algo concreto:** `grep -rn "<palabra>" AGENTS.md Backend/AGENTS.md Frontend/AGENTS.md docs/`. El nombre de una función o un código de error de Meta (`131047`, `132012`…) suele llevar directo a su sección.
