@@ -2,6 +2,12 @@ import mongoose from "mongoose";
 import Tag from "../models/tag.model.js";
 import Contact from "../models/contact.model.js";
 import { cleanTagName, tagKey } from "../utils/contact.tags.js";
+import { sendToAccount } from "./stream.controller.js";
+
+// La lista de etiquetas de la cuenta cambió (una nueva, renombrada o borrada):
+// las demás pestañas la vuelven a pedir, y con ella los contactos (borrar la
+// quita de los suyos).
+const notifyTagsChanged = (accountId) => sendToAccount(String(accountId), 'tags_updated', {});
 
 // ---------------------------------------------------------------------------
 // Las etiquetas de la cuenta: listarlas con cuántos contactos tienen, crearlas
@@ -53,6 +59,7 @@ export const createTag = async (req, res) => {
         if (existing) return res.json(serializeTag(existing, await countContacts(userId, existing._id)));
 
         const tag = await Tag.create({ userId, name, key });
+        notifyTagsChanged(userId);
         return res.status(201).json(serializeTag(tag));
     } catch (error) {
         // La misma etiqueta creada a la vez desde otra pestaña.
@@ -79,6 +86,7 @@ export const renameTag = async (req, res) => {
         tag.name = name;
         tag.key = key;
         await tag.save();
+        notifyTagsChanged(userId);
         return res.json(serializeTag(tag, await countContacts(userId, tag._id)));
     } catch (error) {
         if (error.code === 11000) return sendTagError(res, 409, 'Ya hay una etiqueta con ese nombre', { field: 'name' });
@@ -95,6 +103,7 @@ export const deleteTag = async (req, res) => {
 
         const { modifiedCount } = await Contact.updateMany({ userId, tags: tag._id }, { $pull: { tags: tag._id } });
         await Tag.deleteOne({ _id: tag._id, userId });
+        notifyTagsChanged(userId);
         return res.json({ removedFrom: modifiedCount });
     } catch (error) {
         return sendTagError(res, 500, error.message);

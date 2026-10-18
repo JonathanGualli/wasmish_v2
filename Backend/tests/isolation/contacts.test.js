@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
-import { seedAccount, request, assertNoLeak, assertHasOwn, Contact, Conversation, Message, Tag } from './helpers.js';
+import { seedAccount, seedMember, request, openStream, assertNoLeak, assertHasOwn, Contact, Conversation, Message, Tag } from './helpers.js';
 
 const a = await seedAccount('A', { seq: 1 });
 const b = await seedAccount('B', { seq: 2 });
@@ -189,4 +189,59 @@ test('las conversaciones de un contacto nunca traen las de otra cuenta', async (
     assert.ok(!detail.body.conversations.some(item => item.conversationId === String(intruder._id)));
     const list = await request(a, 'GET', `/contacts?search=${a.phone}`);
     assert.ok(!list.text.includes(String(intruder._id)));
+});
+
+// Regresión que vigila (2026-10-17): con dos personas en la cuenta, lo que una
+// cambiaba en un contacto o en las etiquetas no le llegaba a la otra hasta
+// recargar, y el cuadro de notas de la otra podía pisar lo guardado. Los avisos
+// van a toda la cuenta de A (también a un agente) y nunca a B.
+const streamsOfAandB = async () => {
+    const agentA = await seedMember(a, { role: 'agent', label: `A-agente-${Date.now()}` });
+    return { streamA: await openStream(agentA), streamB: await openStream(b) };
+};
+
+test('editar un contacto de A avisa (contact_updated) al equipo de A y no a B', async () => {
+    const { streamA, streamB } = await streamsOfAandB();
+    try {
+        const edited = await request(a, 'PATCH', `/contacts/${a.contactId}`, { notes: 'nota del owner' });
+        assert.equal(edited.status, 200, edited.text);
+        assert.ok(await streamA.waitFor(`"id":"${a.contactId}"`, 2000), 'el agente de A no se enteró');
+        assert.ok(await streamA.waitFor('event: contact_updated', 0));
+        assert.equal(await streamB.waitFor('contact_updated', 300), false, 'B recibió un cambio de A');
+    } finally {
+        await streamA.close();
+        await streamB.close();
+    }
+});
+
+test('etiquetar varios contactos de A avisa (contacts_updated) a A y no a B', async () => {
+    const tag = await Tag.create({ userId: a.accountId, name: 'aviso en bloque', key: 'aviso en bloque' });
+    const { streamA, streamB } = await streamsOfAandB();
+    try {
+        const tagged = await request(a, 'POST', '/contacts/tags', {
+            selection: { mode: 'ids', contactIds: [a.contactId] }, add: [String(tag._id)],
+        });
+        assert.equal(tagged.body.modified, 1, tagged.text);
+        assert.ok(await streamA.waitFor('event: contacts_updated', 2000), 'el agente de A no se enteró');
+        assert.equal(await streamB.waitFor('contacts_updated', 300), false, 'B recibió un cambio de A');
+    } finally {
+        await streamA.close();
+        await streamB.close();
+    }
+});
+
+test('crear, renombrar y borrar una etiqueta de A avisa (tags_updated) a A y no a B', async () => {
+    const { streamA, streamB } = await streamsOfAandB();
+    try {
+        const created = await request(a, 'POST', '/tags', { name: 'aviso de etiqueta' });
+        assert.equal(created.status, 201, created.text);
+        assert.equal((await request(a, 'PATCH', `/tags/${created.body.id}`, { name: 'aviso renombrado' })).status, 200);
+        assert.equal((await request(a, 'DELETE', `/tags/${created.body.id}`)).status, 200);
+        for (let i = 0; i < 100 && streamA.count('event: tags_updated') < 3; i++) await new Promise(r => setTimeout(r, 20));
+        assert.equal(streamA.count('event: tags_updated'), 3, 'el agente de A no se enteró de los tres cambios');
+        assert.equal(await streamB.waitFor('tags_updated', 300), false, 'B recibió un cambio de A');
+    } finally {
+        await streamA.close();
+        await streamB.close();
+    }
 });

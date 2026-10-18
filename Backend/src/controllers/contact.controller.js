@@ -8,6 +8,7 @@ import { resolveMarketingPreference } from "../utils/marketing.preference.js";
 import { MAX_TAGS_PER_CONTACT } from "../utils/contact.tags.js";
 import { resolveOwnedTagIds } from "../services/tag.service.js";
 import { inLineScope, lineScope } from "../utils/permissions.js";
+import { sendToAccount } from "./stream.controller.js";
 
 // ---------------------------------------------------------------------------
 // Contactos y su conversación. Lo usan los sitios por donde entra un número o
@@ -392,6 +393,15 @@ export const selectionQueryStages = (userId, { search, filter, tagIds, excludeId
     { $match: { _id: { $nin: toObjectIds(excludeIds ?? []) } } },
 ];
 
+// Los contactos y sus etiquetas son de toda la cuenta (sin línea ni permiso):
+// las demás pestañas abiertas, también las de otras personas del equipo, se
+// enteran de lo que cambió aquí sin recargar. Uno (`contact_updated`, la ficha
+// y la lista) o muchos a la vez (`contacts_updated`: la lista, las fichas
+// abiertas y los números de cada etiqueta).
+export const notifyContactChanged = (accountId, contactId) =>
+    sendToAccount(String(accountId), 'contact_updated', { id: String(contactId) });
+export const notifyContactsChanged = (accountId) => sendToAccount(String(accountId), 'contacts_updated', {});
+
 /**
  * GET /contacts?search=&filter=&tags=&page=&limit=
  *
@@ -477,6 +487,7 @@ export const createContact = async (req, res) => {
         if (!tags) return sendUnknownTags(res);
 
         const contact = await Contact.create({ userId, ...fields, tags, source: 'manual' });
+        notifyContactChanged(userId, contact._id);
         return res.status(201).json(serializeContact(contact));
     } catch (error) {
         if (error.code === 11000) return sendDuplicatePhone(res, userId, fields.phone);
@@ -510,6 +521,7 @@ export const updateContact = async (req, res) => {
 
         Object.assign(contact, fields);
         await contact.save();
+        notifyContactChanged(userId, contact._id);
         return res.json(serializeContact(contact, visibleConversations(req.auth, conversations)));
     } catch (error) {
         if (error.code === 11000) return sendDuplicatePhone(res, userId, fields.phone);
@@ -531,6 +543,7 @@ export const deleteContact = async (req, res) => {
         }
 
         await Contact.deleteOne({ _id: contact._id, userId });
+        notifyContactChanged(userId, contact._id);
         return res.sendStatus(204);
     } catch (error) {
         return sendContactError(res, 500, error.message);
@@ -598,6 +611,7 @@ export const bulkTagContacts = async (req, res) => {
             { _id: { $in: contactIds }, userId, $expr: { $lte: [{ $size: nextTags }, MAX_TAGS_PER_CONTACT] } },
             [{ $set: { tags: nextTags } }],
         );
+        if (modifiedCount > 0) notifyContactsChanged(userId);
         return res.json({ matched: contactIds.length, modified: modifiedCount, overLimit: contactIds.length - matchedCount });
     } catch (error) {
         return sendContactError(res, 500, error.message);

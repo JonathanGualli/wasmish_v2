@@ -22,18 +22,26 @@ const unsavedNotes = new Map<string, string>();
  * Las notas del contacto: un solo texto que se edita en el sitio y se guarda
  * solo, al dejar de escribir 1 s y al salir del campo. Si falla, el texto se
  * queda en el campo con «Reintentar»: nunca solo en el aviso global.
- * Se monta una por contacto (`key`): lo que llegue del servidor mientras se ve
- * no pisa lo que se está escribiendo.
+ * Se monta una por contacto (`key`). Lo que guarde otra persona de la cuenta
+ * (llega con `contact_updated`) se ve aquí si no se ha tocado el texto desde lo
+ * último que llegó del servidor; si se está cambiando, se conserva lo escrito.
  */
 export const ContactNotes = ({ contact }: { contact: ContactDetail }) => {
     const { saveNotes } = useContactMutations();
     const [text, setText] = useState(() => unsavedNotes.get(contact.id) ?? contact.notes ?? '');
+    const serverNotes = contact.notes ?? '';
+    // Lo último que llegó del servidor, para saber si el texto se tocó desde entonces.
+    const [lastServerNotes, setLastServerNotes] = useState(serverNotes);
+    if (serverNotes !== lastServerNotes) {
+        setLastServerNotes(serverNotes);
+        if (text === lastServerNotes) setText(serverNotes);
+    }
     const [focused, setFocused] = useState(false);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     useAutosizeTextarea(textareaRef, text, MAX_HEIGHT);
 
     const { status, flush } = useAutosave(text, {
-        savedValue: contact.notes ?? '',
+        savedValue: serverNotes,
         save: async notes => {
             await saveNotes.mutateAsync({ id: contact.id, notes });
             unsavedNotes.delete(contact.id);

@@ -24,6 +24,8 @@ export const SSEProvider = ({ children }: { children: ReactNode }) => {
         message_status: new Set(),
         conversation_updated: new Set(),
         contact_updated: new Set(),
+        contacts_updated: new Set(),
+        tags_updated: new Set(),
         campaign_progress: new Set(),
     });
 
@@ -58,6 +60,8 @@ export const SSEProvider = ({ children }: { children: ReactNode }) => {
                 onMessageStatus: dispatch("message_status"),
                 onConversationUpdated: dispatch("conversation_updated"),
                 onContactUpdated: dispatch("contact_updated"),
+                onContactsUpdated: dispatch("contacts_updated"),
+                onTagsUpdated: dispatch("tags_updated"),
                 onCampaignProgress: dispatch("campaign_progress"),
                 onAccessChanged: () => accessChanged.current(),
                 onOpen: () => {
