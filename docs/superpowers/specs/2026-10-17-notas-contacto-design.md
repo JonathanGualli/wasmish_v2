@@ -55,10 +55,11 @@ Todas con sesión (`authRequired`); la API key no llega a ellas.
 - **`GET /contacts`** (la lista) deja de devolver `notes`: no lo usa nadie y crecería con la lista.
 - **`POST /contacts/:id/notes`** `{ text }` → 201 con la nota. A nombre de quien escribe (`req.auth.userId` y su nombre).
 - **`PATCH /contacts/:id/notes/:noteId`** `{ text }` → 200 con la nota, `editedAt` al día.
-- **`DELETE /contacts/:id/notes/:noteId`** → 204.
+- **`DELETE /contacts/:id/notes/:noteId`** → 204. Borrar la nota `legacy` también vacía `Contact.notes`: si no, la lectura al vuelo la haría reaparecer.
+- **`DELETE /contacts/:id`** (un contacto sin conversación) borra también sus notas.
 - **Errores:** un contacto o una nota de otra cuenta, o una nota que no es de ese contacto → **404** (regla 1). Editar o borrar una nota sin permiso → **403** `note_not_yours`. Más de **500 notas** en un contacto → **409** `notes_limit` (para que la ficha no crezca sin fin; nadie debería llegar).
 - **`POST /contacts`** acepta `notes` (texto) como hoy: si viene, crea la primera nota (`source: 'manual'`) a nombre de quien crea el contacto.
-- **`PATCH /contacts/:id`** deja de aceptar `notes`: si lo trae, **400** «Las notas cambiaron: recarga la página.» (`notes_moved`). Es para las pestañas abiertas durante el despliegue, cuyo cuadro de notas viejo sigue guardando solo: el cuadro conserva el texto cuando falla, así que nadie pierde lo escrito, y al recargar ve la lista.
+- **`PATCH /contacts/:id`** deja de cambiar `notes`. Es para las pestañas abiertas durante el despliegue: si trae `notes` **igual** a `Contact.notes` (el formulario de editar viejo lo manda siempre, sin tocarlo), se ignora y el resto se guarda; si trae otro texto, **400** «Las notas cambiaron: recarga la página.» (`notes_moved`) y no se guarda nada. El cuadro de notas viejo conserva el texto cuando falla, así que nadie pierde lo escrito, y al recargar ve la lista.
 - Cada `POST`, `PATCH` y `DELETE` de notas avisa con **`contact_updated { id }`** (`notifyContactChanged`, Parte 1): la ficha y el panel de Contactos de los demás se vuelven a pedir.
 
 ## 5. Reglas (funciones puras con test)
