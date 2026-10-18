@@ -6,7 +6,16 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En producción
 
-**Versión 1.0.25**, desplegada el 2026-10-16 (etiqueta `v1.0.25`; comprobar con `curl https://app.wasmish.com/api/version`). Lleva:
+**Versión 1.0.26**, desplegada el 2026-10-17 (etiqueta `v1.0.26`; comprobar con `curl https://app.wasmish.com/api/version`). Lleva:
+
+- **Notas del contacto con autor** (PRs #87 a #89, cada uno con su revisión de Codex; spec `docs/superpowers/specs/2026-10-17-notas-contacto-design.md`, plan `docs/superpowers/plans/2026-10-17-notas-contacto.md`, diseño `Design/Wasmish Notas del contacto.html`). Las notas pasan de un solo texto a una **lista** (`ContactNote`), cada nota con quién la escribió y cuándo, en la ficha del chat y en Contactos. Cada persona edita y borra las suyas; owner y admin, cualquiera. Importar crea una nota firmada, y el formulario la pide solo al crear. Detalle en [contactos.md § Notas del contacto](arquitectura/contactos.md#notas-del-contacto-contactnote-contactnotecontrollerjs) y [chat.md § Ficha del contacto en el chat](arquitectura/chat.md#ficha-del-contacto-en-el-chat).
+  - **Probado** con los tests (unitarios y de aislamiento) y en Chromium con dos sesiones (owner y agente) contra un backend aparte, también en el teléfono emulado y con `migrate:notes`. Sin probar en un teléfono de verdad ni en producción con dos personas.
+  - **Al desplegar:** `mongodump` antes; se reconstruyen y arrancan `wasmish-api` y `wasmish-web` (la colección `contactnotes` y sus índices se crean al arrancar); **después**, con la imagen nueva, `npm run migrate:notes` y `npm run migrate:notes -- --check`, que tiene que salir con 0. **Sin parar la API:** mientras tanto, la ficha lee la nota de antes al vuelo. Sin variables nuevas.
+  - **Volver atrás** a la 1.0.25 es seguro: `Contact.notes` sigue intacto (lo escrito con la 1.0.26 no se ve en la 1.0.25).
+- **Contactos y etiquetas en tiempo real** (PR #86, con su revisión de Codex): lo que una persona de la cuenta cambia en un contacto, al etiquetar en bloque, importar o al crear, renombrar o borrar una etiqueta, les llega en vivo a las demás (`contact_updated`, `contacts_updated`, `tags_updated`). Probado con dos sesiones en Chromium.
+- **Arreglos:** la respuesta «está en la app» también cuando Meta termina con `FINISH` (PR #83; se verá en la próxima conexión de un número de la app); el detalle de un mensaje fallido y un texto largo sin espacios se parten dentro de su recuadro y de la burbuja (PRs #84 y #85).
+
+La 1.0.25 (desplegada el 2026-10-16) llevó:
 
 - **Coexistencia con la app de WhatsApp Business** (PRs #78 a #80, cada uno con su revisión de Codex; spec `docs/superpowers/specs/2026-10-16-coexistencia-design.md`, plan `docs/superpowers/plans/2026-10-16-coexistencia.md`, diseño `Design/Wasmish Líneas - Junto con la app.html`). Un cliente conecta un número que sigue usando en la app de WhatsApp Business, sin perderla.
   - **Al conectar,** Wasmish pregunta si el número está en la app y abre el Embedded Signup por el camino de la app; el backend deduce el número (Meta solo da el WABA), lee `is_on_biz_app` y no llama a `/register`. Detalle en [whatsapp-envio.md](arquitectura/whatsapp-envio.md).
@@ -86,17 +95,12 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
 
 ## En curso
 
-- **Notas del contacto con autor** — empezado el 2026-10-17 por Claude. Las notas pasan de un solo texto a una lista con autor y fecha (colección `ContactNote`); el autor edita y borra las suyas, owner y admin, cualquiera. Spec `docs/superpowers/specs/2026-10-17-notas-contacto-design.md`, plan `docs/superpowers/plans/2026-10-17-notas-contacto.md` (PR #87), diseño `Design/Wasmish Notas del contacto.html`. **Backend unido** (PR #88, revisado por Codex). **Frontend** en la rama `notas-con-autor-frontend`: la tarjeta de notas en la ficha del chat y en Contactos, el formulario (notas solo al crear), la muestra de Importar, y en el backend `author.active` («ya no está») y `editedBy`, que pedía el diseño. Hecho: probado con dos sesiones (owner y agente) en Chromium contra un backend aparte, y en el teléfono emulado. · Falta: la revisión de Codex del frontend, la versión y desplegar con `migrate:notes`. **`master` no se despliega hasta unir el frontend.**
-
-**Unido, sin desplegar** (sale con la próxima versión, junto con las notas):
-
-- **Coexistencia: la respuesta «está en la app» también con `FINISH`** (PR #83, con su revisión de Codex). En la prueba real, un número de la app terminó con `FINISH` y el frontend mandaba `businessApp: false`; ahora manda lo que respondió la persona, para que el backend no lo registre si Meta no dice si está en la app. · Sin probar: con Meta de verdad (se ve en la próxima conexión de un número de la app).
-- **El detalle de un mensaje fallido se parte** (PR #84): el texto de Meta con una URL larga (el 131042 trae la del panel de pagos) se salía del recuadro y quedaba cortado. Probado con el CSS compilado en Chromium.
-- **Un texto largo sin espacios se parte dentro de la burbuja** (PR #85): un enlace largo en un mensaje (una invitación del equipo, por ejemplo) se salía de la burbuja y el hilo se desplazaba de lado. Igual en la vista previa de las plantillas (`TemplatePreview`).
-- **Contactos y etiquetas en tiempo real** (PR #86, con su revisión de Codex): lo que una persona de la cuenta cambia en un contacto (datos, notas, etiquetas), al etiquetar en bloque, importar o al crear, renombrar o borrar una etiqueta, les llega en vivo a las demás (`contact_updated`, `contacts_updated`, `tags_updated`), y el cuadro de notas muestra lo de la otra si aquí no se está escribiendo. Probado con dos sesiones (owner y agente) en Chromium contra un backend local. · Sin probar: en producción con dos personas.
+Nada en curso.
 
 ## Lo siguiente
 
+- **Probar en producción las notas y el tiempo real con dos personas** (la cuenta de prueba de Jonathan y un agente).
+- **Cerrar la transición de las notas** en una versión posterior, cuando nadie tenga abierta una pestaña de la 1.0.25: quitar `notes` (texto) de las respuestas de contactos, el 400 `notes_moved` de `PATCH /contacts/:id` y la lectura al vuelo de la nota de antes, y borrar `Contact.notes` con su propio paso (spec de las notas, § 3 y § 8).
 
 - **Avisar al cliente real** de que ya puede usar Wasmish en el celular, con los avisos: la app ya está en `app.wasmish.com` (desde la 1.0.24), que es donde tiene que instalarla. Cuando le convenga, que cambie la URL de su integración a `app.wasmish.com`; la vieja sigue funcionando.
 - **Multi-línea y multi-agente, fases 1 a 4** (diseño aprobado, sin preguntas abiertas: `docs/superpowers/specs/2026-10-11-multi-linea-multi-agente-design.md`). Fases 1, 2a y 2b en producción (la 2b, enrutar por línea, desde la 1.0.14). La **Fase 2c** está en producción desde la 1.0.15.
