@@ -86,7 +86,7 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
 
 ## En curso
 
-Nada en curso.
+- **Coexistencia: la respuesta «está en la app» también con `FINISH`** — rama `coexistencia-respuesta-app`, empezado el 2026-10-17 por Claude. En la prueba real, un número de la app terminó con `FINISH` y el frontend mandaba `businessApp: false`; ahora manda lo que respondió la persona, para que el backend no lo registre si Meta no dice si está en la app. Solo frontend. · Sin probar: con Meta de verdad (se ve en la próxima conexión de un número de la app).
 
 ## Lo siguiente
 

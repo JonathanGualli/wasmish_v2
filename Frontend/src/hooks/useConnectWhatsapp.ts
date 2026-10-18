@@ -58,7 +58,11 @@ export const useConnectWhatsapp = () => {
                 const code = response?.authResponse?.code;
 
                 // 4. Si tenemos el code Y el final del popup → mandamos todo al backend.
-                if (code && finish) mutation.mutate({ code, finish });
+                //    Un número de la app también puede terminar con `FINISH` (el
+                //    flujo que empieza por el número), así que vale también lo
+                //    que respondió la persona: el backend no lo registra si Meta
+                //    no llega a decir si está en la app.
+                if (code && finish) mutation.mutate({ code, finish: { ...finish, businessApp: finish.businessApp || viaBusinessApp } });
             },
             {
                 config_id: CONFIG_ID,

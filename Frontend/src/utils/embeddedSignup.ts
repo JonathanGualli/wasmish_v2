@@ -1,7 +1,9 @@
 // Cómo termina la ventana de Facebook (Embedded Signup). Con un número nuevo,
 // Meta manda `FINISH` con el WABA y el número; con uno que sigue en la app de
 // WhatsApp Business (coexistencia), `FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING`
-// solo con el WABA: el backend deduce el número.
+// solo con el WABA: el backend deduce el número. En la prueba real (2026-10-16),
+// un número de la app terminó con `FINISH` y su número: `businessApp` dice solo
+// lo que trajo el evento, y `useConnectWhatsapp` le suma lo que respondió la persona.
 
 export interface EmbeddedSignupFinish {
     waBusinessId: string;
