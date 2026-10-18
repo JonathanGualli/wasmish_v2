@@ -65,15 +65,18 @@ export const useConversations = () => {
       );
     });
 
-    // Un contacto cambió de número (o de preferencia de publicidad): el título
-    // y el teléfono de la bandeja salen de él.
+    // Un contacto cambió de nombre o de número (o de preferencia de
+    // publicidad), uno o muchos a la vez (importar): el título y el teléfono de
+    // la bandeja salen de él.
     const unsubContact = subscribe("contact_updated", refreshList);
+    const unsubContacts = subscribe("contacts_updated", refreshList);
 
     // Cleanup: des-suscribir todo al desmontar
     return () => {
       unsubCreated();
       unsubUpdated();
       unsubContact();
+      unsubContacts();
     };
   }, [subscribe, queryClient, refreshList]);
 

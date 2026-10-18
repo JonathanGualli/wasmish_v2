@@ -4,6 +4,7 @@ import Tag from "../models/tag.model.js";
 import { normalizeImportPhone, pickImportSample, planImportRows } from "../utils/contact.import.js";
 import { TAG_NAME_MAX, cleanTagName, tagKey } from "../utils/contact.tags.js";
 import { findOrCreateTags } from "../services/tag.service.js";
+import { notifyContactsChanged } from "./contact.controller.js";
 
 // ---------------------------------------------------------------------------
 // Importar contactos. El navegador lee el archivo y empareja las columnas; aquí
@@ -138,6 +139,7 @@ export const importContacts = async (req, res) => {
         const contacts = await Contact.find({ userId, phone: { $in: plan.entries.map(entry => entry.phone) } }).select('_id').lean();
         const created = result.upsertedCount;
         const updated = result.modifiedCount;
+        if (created + updated > 0) notifyContactsChanged(userId);
         return res.json({
             summary: { ...plan.summary, created, updated, unchanged: plan.entries.length - created - updated },
             issues: plan.issues,

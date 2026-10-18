@@ -87,6 +87,9 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
 
 ## En curso
 
+- **Contactos y etiquetas en tiempo real** — rama `contactos-tiempo-real`, empezado el 2026-10-17 por Claude. Lo que una persona de la cuenta cambia en un contacto (datos, notas, etiquetas), al etiquetar en bloque, importar o al crear, renombrar o borrar una etiqueta, les llega en vivo a las demás (`contact_updated`, `contacts_updated`, `tags_updated`), y el cuadro de notas muestra lo de la otra si aquí no se está escribiendo. Hecho: backend con tests de aislamiento, frontend y la prueba con dos sesiones (owner y agente) en Chromium contra un backend local. · Falta: la revisión de Codex. · Sin probar: en producción con dos personas.
+- **Después: las notas con autor** (decisión del 2026-10-17 en [decisiones.md](decisiones.md)): spec, brief para Claude Design y plan, antes de programar.
+
 **Unido, sin desplegar** (sale con la próxima versión; solo frontend):
 
 - **Coexistencia: la respuesta «está en la app» también con `FINISH`** (PR #83, con su revisión de Codex). En la prueba real, un número de la app terminó con `FINISH` y el frontend mandaba `businessApp: false`; ahora manda lo que respondió la persona, para que el backend no lo registre si Meta no dice si está en la app. · Sin probar: con Meta de verdad (se ve en la próxima conexión de un número de la app).
