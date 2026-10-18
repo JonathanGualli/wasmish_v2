@@ -5,6 +5,11 @@ import { renderHead } from './lib/head.ts'
 import { renderSalesPage } from './salesPages.tsx'
 import { LegalPage } from './pages/LegalPage.tsx'
 import { NotFoundPage } from './pages/NotFoundPage.tsx'
+import { markdownToHtml } from './lib/markdown.ts'
+import privacidad from './legal/privacidad.md?raw'
+import terminos from './legal/terminos.md?raw'
+
+const LEGAL: Record<string, string> = { '/privacidad': privacidad, '/terminos': terminos }
 
 // Lo usa scripts/prerender.mjs, al compilar, para escribir cada página.
 export function listRoutes(): Route[] {
@@ -14,8 +19,9 @@ export function listRoutes(): Route[] {
 function pageFor(route: Route): ReactElement {
   if (route.hydrate) return renderSalesPage(route.path)
   if (route === NOT_FOUND) return <NotFoundPage />
-  // Privacidad y Términos: el contenido real llega con el Markdown (tarea 3).
-  return <LegalPage title={route.meta.title.replace(/ · Wasmish$/, '')} html="<p>Contenido en preparación.</p>" />
+  const md = LEGAL[route.path]
+  if (!md) throw new Error(`Sin contenido para ${route.path}`)
+  return <LegalPage title={route.meta.title.replace(/ · Wasmish$/, '')} html={markdownToHtml(md)} />
 }
 
 export function render(path: string): { html: string; head: string } {
