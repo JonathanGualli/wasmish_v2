@@ -30,6 +30,15 @@ React 19, Vite y Tailwind v4, como la app, pero **pre-renderizado**: WhatsApp y 
 
 **Lo que se anima** no puede dibujarse distinto en el servidor y en el navegador, o React rehace la página. El HTML es siempre el mismo, y el estado oculto lo pone el CSS gracias a la clase `js`, que un script en línea de `index.html` le pone a `<html>` antes de dibujar. Sin JavaScript, o con `prefers-reduced-motion`, se ve todo.
 
+**El diseño es la v3 de Claude Design** («Wasmish Inicio v3 - Calma con vida», en la carpeta comercial privada de Jonathan, con capturas por sección). Sus medidas se copian tal cual, en Tailwind. Los tonos que el manual no tiene (las sombras «de tecla», las líneas sobre la banda oscura, algunos de las pantallas de ejemplo) son tokens `site-*` en `src/styles.css`, nunca colores sueltos. Los íconos son de Lucide, como en la app. El diseño suma el relleno lateral **por fuera** de los 1320 px: por eso los contenedores llevan `box-content`.
+
+**La conversación del hero** (`sections/HeroDemo.tsx`, el componente «ChatFicha» del diseño) tiene 16 fases con sus tiempos: Ana atiende, deja una nota en la ficha (que se escribe letra por letra y queda con su nombre y su fecha, como en la app 1.0.26), y días después Luis retoma. Con la ficha al lado si caben 560 px (consulta de contenedor) o, en el celular, como una hoja que entra desde el costado. Para que no haya un salto al cargar:
+- el servidor la dibuja completa (`data-hero="still"`): es lo que ven quien no tiene JavaScript, quien desactivó las animaciones, WhatsApp y Google;
+- con la clase `js` y las animaciones permitidas, el CSS esconde desde el primer instante lo marcado `data-later` (lo que todavía no llegó) y pone la ficha como hoja;
+- al montar, React pasa a `data-hero="anim"` en la primera fase, y la animación solo corre mientras se ve (`IntersectionObserver`).
+
+**Las secciones aparecen al bajar** (`useReveal`, atributos `data-reveal` y `data-delay`): después de hidratar se esconden solo las que todavía no están en pantalla, así que nada parpadea.
+
 **De la app solo se copian** los tokens de la marca (`src/styles.css`, de `Frontend/src/App.css`: si cambian allí, se cambian aquí), el logo y el favicon. Las fuentes (Inter y JetBrains Mono, variables) se sirven desde la página, sin Google Fonts.
 
 ### Agregar una página de nicho
