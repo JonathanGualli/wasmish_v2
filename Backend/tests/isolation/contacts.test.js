@@ -30,7 +30,7 @@ test('PATCH /contacts/:id: B no edita un contacto de A', async () => {
     assert.equal(asB.status, 404);
     assert.equal((await contactOf(a.contactId)).name, `${a.marker} contacto`);
 
-    const asA = await request(a, 'PATCH', `/contacts/${a.contactId}`, { notes: 'nota de A' });
+    const asA = await request(a, 'PATCH', `/contacts/${a.contactId}`, { company: 'empresa de A' });
     assert.equal(asA.status, 200, asA.text);
 });
 
@@ -203,7 +203,7 @@ const streamsOfAandB = async () => {
 test('editar un contacto de A avisa (contact_updated) al equipo de A y no a B', async () => {
     const { streamA, streamB } = await streamsOfAandB();
     try {
-        const edited = await request(a, 'PATCH', `/contacts/${a.contactId}`, { notes: 'nota del owner' });
+        const edited = await request(a, 'PATCH', `/contacts/${a.contactId}`, { company: 'empresa del owner' });
         assert.equal(edited.status, 200, edited.text);
         assert.ok(await streamA.waitFor(`"id":"${a.contactId}"`, 2000), 'el agente de A no se enteró');
         assert.ok(await streamA.waitFor('event: contact_updated', 0));

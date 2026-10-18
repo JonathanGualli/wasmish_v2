@@ -16,8 +16,8 @@ test('solo pasan los campos editables', () => {
 });
 
 test('el texto vacío borra el campo y lo demás se recorta', () => {
-    const fields = pickContactFields({ email: '', company: '  Ferretería X  ', notes: '   ' });
-    assert.deepEqual(fields, { email: null, company: 'Ferretería X', notes: null });
+    const fields = pickContactFields({ email: '', company: '  Ferretería X  ', name: '   ' });
+    assert.deepEqual(fields, { email: null, company: 'Ferretería X', name: null });
 });
 
 // En un PATCH, lo que no viene no se toca: no puede aparecer como null.

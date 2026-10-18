@@ -92,10 +92,13 @@ No se aplica a `/api/webhook` (Meta manda ráfagas) ni a `/api/stream` (conexió
 | POST | `/api/chats/template` | JWT | Iniciar conversación con plantilla desde la bandeja. Body: `{ destinationNumber, contactName?, templateName, language?, parameters?, buttons?, lineId? }` — el número solo dígitos (8–15); `lineId` elige la línea (404 si es de otra cuenta; sin él, la por defecto) |
 | GET | `/api/media/:id` | JWT | Adjunto de un mensaje (`:id` es el **id del mensaje**, no el del archivo) |
 | GET | `/api/contacts` | JWT | Contactos paginados (`?search`, `?filter=all\|with_conversation\|without_conversation\|opted_out`, `?tags=id,id` —alguna de—, `?page`, `?limit` máx 50), ordenados por actividad |
-| GET | `/api/contacts/:id` | JWT | Ficha: contacto + `activity` (primer mensaje, enviados, recibidos, fallidos) |
-| POST | `/api/contacts` | JWT | Alta manual (`phone` obligatorio). No envía nada. 409 con `contactId` si el teléfono ya existe |
-| PATCH | `/api/contacts/:id` | JWT | Editar `phone`, `name`, `email`, `company`, `notes`. El teléfono **no** cambia si hay conversación (409) |
-| DELETE | `/api/contacts/:id` | JWT | Borrar, **solo si nunca hubo conversación** (409 si la hay) |
+| GET | `/api/contacts/:id` | JWT | Ficha: contacto + `activity` (primer mensaje, enviados, recibidos, fallidos) + `noteList` (las notas, de la más nueva a la más vieja: [contactos.md § Notas del contacto](contactos.md#notas-del-contacto-contactnote-contactnotecontrollerjs)) |
+| POST | `/api/contacts` | JWT | Alta manual (`phone` obligatorio). No envía nada. 409 con `contactId` si el teléfono ya existe. `notes`, si viene, es la primera nota, a nombre de quien lo crea |
+| PATCH | `/api/contacts/:id` | JWT | Editar `phone`, `name`, `email`, `company`. El teléfono **no** cambia si hay conversación (409). `notes` ya no se cambia aquí: igual a la de antes se ignora; distinta, 400 `notes_moved` (pestañas con el frontend anterior) |
+| DELETE | `/api/contacts/:id` | JWT | Borrar, **solo si nunca hubo conversación** (409 si la hay), con sus notas |
+| POST | `/api/contacts/:id/notes` | JWT | Nota nueva `{ text }` (1 a 1000), a nombre de quien la escribe. 409 `notes_limit` con 500 |
+| PATCH | `/api/contacts/:id/notes/:noteId` | JWT | Editar `{ text }`: el autor, o owner y admin (403 `note_not_yours`) |
+| DELETE | `/api/contacts/:id/notes/:noteId` | JWT | Borrar: el autor, o owner y admin (403 `note_not_yours`) |
 | POST | `/api/contacts/tags` | JWT | Etiquetar en bloque: `{ selection, add, remove }` (`selection` = el formato de los destinatarios de una campaña). Devuelve `{ matched, modified, overLimit }` |
 | POST | `/api/contacts/tags/summary` | JWT | Cuántos de una `selection` tienen cada etiqueta, antes de etiquetar: `{ total, tags: [{ id, count }] }` (las que no tiene nadie no salen). Son los números del menú «Etiquetar» |
 | POST | `/api/contacts/import/preview` | JWT | Importar, sin escribir nada: `{ rows, country, extraTagNames }` (≤ 10 000 filas ya emparejadas, con su número de fila). Conteos, errores y avisos por fila (con el `field` que los causó), una muestra de 3 (`sample`, con lo que ya tiene el existente en `current` y lo que no se aplica en `ignored`) y `rowGroups` (las filas de cada teléfono, para armar las tandas) |

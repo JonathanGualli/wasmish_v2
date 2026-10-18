@@ -6,6 +6,8 @@ import { bulkTagContactsSchema, createContactSchema, tagSelectionSummarySchema, 
 import { previewImport, importContacts } from "../controllers/contact.import.controller.js";
 import { importContactsSchema, importPreviewSchema } from "../schemas/contact.import.schema.js";
 import { requirePermission } from "../middlewares/require.permission.middleware.js";
+import { addContactNote, editContactNote, removeContactNote } from "../controllers/contact.note.controller.js";
+import { contactNoteSchema } from "../schemas/contact.note.schema.js";
 
 const router = Router();
 
@@ -18,5 +20,9 @@ router.post('/contacts/import/preview', authRequired, requirePermission('contact
 router.post('/contacts/import', authRequired, requirePermission('contacts.import'), validateSchema(importContactsSchema), importContacts);
 router.patch('/contacts/:id', authRequired, validateSchema(updateContactSchema), updateContact);
 router.delete('/contacts/:id', authRequired, requirePermission('contacts.delete'), deleteContact);
+// Las notas: cualquiera de la cuenta añade; editar y borrar, el autor o owner y admin (`canEditNote`).
+router.post('/contacts/:id/notes', authRequired, validateSchema(contactNoteSchema), addContactNote);
+router.patch('/contacts/:id/notes/:noteId', authRequired, validateSchema(contactNoteSchema), editContactNote);
+router.delete('/contacts/:id/notes/:noteId', authRequired, removeContactNote);
 
 export default router;
