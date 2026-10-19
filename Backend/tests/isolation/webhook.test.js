@@ -454,6 +454,8 @@ test('BSUID, eco con el teléfono y luego los dos: un contacto y una conversaci�
     try {
         await postWebhook(A_NUMBER, withBoth(phone, waUserId, 'Gracias', ts + 1));
         assert.ok(await stream.waitFor('contacts_updated', 2000), 'la bandeja no se enteró de la fusión');
+        // Revisión de Codex del #102: el chat abierto de la verdadera vuelve a pedir sus mensajes.
+        assert.ok(await stream.waitFor('conversation_merged', 2000), 'el chat abierto no se enteró de la fusión');
     } finally {
         await stream.close();
     }
@@ -496,5 +498,56 @@ test('la fusión no cruza de cuenta: el mismo teléfono en B no se toca', async 
 
     assert.ok(await Contact.exists({ _id: echoOfB._id }), 'se borró el contacto de B');
     assert.equal(await Message.countDocuments({ text: 'Respuesta de B', conversationId: (await Conversation.findOne({ contactId: echoOfB._id }).lean())._id }), 1);
+    assert.equal(await Contact.countDocuments({ userId: a.accountId, phone }), 1);
+});
+
+// Regresión que vigila (revisión de Codex del #102): un eco que se guardaba en la
+// conversación absorbida mientras la fusión la borraba quedaba huérfano, fuera
+// de todo historial, y su reentrega se descartaba por el waMessageId repetido.
+test('un eco guardado en la conversación absorbida justo antes de borrarla no se pierde', async () => {
+    const phone = '573990008005';
+    const waUserId = 'CO.9000000000008005';
+    const { echoContact, ts } = await splitByEcho(phone, waUserId);
+    const absorbed = await Conversation.findOne({ contactId: echoContact._id }).lean();
+    const original = Conversation.deleteOne;
+    Conversation.deleteOne = async function (...args) {
+        // El eco que gana la carrera: se guarda después del primer barrido.
+        if (String(args[0]?._id) === String(absorbed._id)) {
+            await Message.create({ conversationId: absorbed._id, direction: 'outbound', sender: 'me', origin: 'businessApp',
+                waMessageId: `wamid.carrera.${++echoSeq}`, text: 'Llegó durante la fusión', timestamp: new Date(), status: 'sent' });
+        }
+        return original.apply(this, args);
+    };
+    try {
+        await postWebhook(A_NUMBER, withBoth(phone, waUserId, 'Gracias', ts + 1));
+    } finally {
+        Conversation.deleteOne = original;
+    }
+    const late = await Message.findOne({ text: 'Llegó durante la fusión' }).lean();
+    assert.ok(await Conversation.exists({ _id: late.conversationId }), 'el eco quedó en una conversación borrada');
+});
+
+test('un eco que se guarda después de que la fusión borró su conversación se muda a la verdadera', async () => {
+    const phone = '573990008006';
+    const waUserId = 'CO.9000000000008006';
+    const { keeper, ts } = await splitByEcho(phone, waUserId);
+    const original = Message.create;
+    Message.create = async function (...args) {
+        // Entre que procesarEco buscó la conversación y guarda el mensaje, entra
+        // el mensaje con los dos identificadores y la fusión la borra.
+        if (args[0]?.text === 'Respondido en plena fusión') {
+            await postWebhook(A_NUMBER, withBoth(phone, waUserId, 'Gracias', ts + 1));
+        }
+        return original.apply(this, args);
+    };
+    try {
+        await postEcho(A_NUMBER, [echoOf({ to: phone, body: 'Respondido en plena fusión', ts: ts + 2 })]);
+    } finally {
+        Message.create = original;
+    }
+    const echo = await Message.findOne({ text: 'Respondido en plena fusión' }).lean();
+    const conversation = await Conversation.findById(echo.conversationId).lean();
+    assert.ok(conversation, 'el eco quedó en una conversación borrada');
+    assert.equal(String(conversation.contactId), String(keeper._id));
     assert.equal(await Contact.countDocuments({ userId: a.accountId, phone }), 1);
 });

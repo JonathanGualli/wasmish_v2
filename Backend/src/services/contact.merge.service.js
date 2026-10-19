@@ -8,6 +8,7 @@ import Message from '../models/message.model.js';
 import ContactNote from '../models/contact.note.model.js';
 import CampaignRecipient from '../models/campaign.recipient.model.js';
 import { isUntouchedEchoContact } from '../utils/contact.merge.js';
+import { sendToAccount } from '../controllers/stream.controller.js';
 
 // Lo que hay del contacto fuera de su documento (`usage` de isUntouchedEchoContact).
 const describeUsage = async (contact) => {
@@ -37,9 +38,16 @@ const keeperConversationFor = (keeper, conversation) => Conversation.findOne({
  *
  * Por cada conversación del contacto de eco: si `keeper` ya tiene una en esa
  * línea, los ecos pasan a ella (con su vista previa y la pausa del bot, que
- * nunca retroceden) y la otra se borra; si no, la conversación pasa a `keeper`.
- * El contacto de eco se borra al final. Todo es repetible: dos entrantes a la
- * vez pueden llegar aquí los dos, y el segundo no encuentra nada que mover.
+ * nunca retroceden), la otra se borra y se avisa con `conversation_merged`, para
+ * que el chat abierto de la verdadera vuelva a pedir sus mensajes; si no, la
+ * conversación pasa a `keeper`. El contacto de eco se borra al final. Todo es
+ * repetible: dos entrantes a la vez pueden llegar aquí los dos, y el segundo no
+ * encuentra nada que mover.
+ *
+ * Un eco que se guarda en la conversación absorbida mientras tanto no se pierde
+ * (revisión de Codex del PR #102): si llega antes del borrado, lo recoge el
+ * segundo barrido de después; si llega después, `procesarEco` ve que su
+ * conversación ya no existe y se muda solo.
  */
 export const mergeEchoContactInto = async (keeper, phone) => {
     const echoContact = await Contact.findOne({ userId: keeper.userId, phone, _id: { $ne: keeper._id } });
@@ -54,7 +62,8 @@ export const mergeEchoContactInto = async (keeper, phone) => {
             continue;
         }
 
-        await Message.updateMany({ conversationId: conversation._id }, { $set: { conversationId: target._id } });
+        const moveMessages = () => Message.updateMany({ conversationId: conversation._id }, { $set: { conversationId: target._id } });
+        await moveMessages();
         if (conversation.lastMessageAt) {
             await Conversation.updateOne(
                 { _id: target._id, $or: [{ lastMessageAt: null }, { lastMessageAt: { $lt: conversation.lastMessageAt } }] },
@@ -70,6 +79,10 @@ export const mergeEchoContactInto = async (keeper, phone) => {
             );
         }
         await Conversation.deleteOne({ _id: conversation._id, userId: keeper.userId });
+        await moveMessages();
+        sendToAccount(String(keeper.userId), 'conversation_merged',
+            { id: String(target._id), mergedId: String(conversation._id) },
+            { lineId: target.lineId ?? null });
     }
 
     await Contact.deleteOne({ _id: echoContact._id, userId: keeper.userId });

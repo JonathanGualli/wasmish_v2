@@ -259,7 +259,7 @@ const procesarEco = async (inbound, echoData) => {
     // Wasmish solo tiene BSUID no se puede reconocer y se crea otro (limitación
     // documentada en el spec).
     const contact = await resolveContact(inbound.accountId, { phone: toPhone }, { source: 'inbound' });
-    const conversation = await findOrCreateConversation({ userId: inbound.accountId, contact, line: inbound });
+    let conversation = await findOrCreateConversation({ userId: inbound.accountId, contact, line: inbound });
 
     let message;
     try {
@@ -281,6 +281,18 @@ const procesarEco = async (inbound, echoData) => {
         // Otra entrega del mismo eco ya lo guardó: ella hace el resto.
         if (error.code === 11000) return;
         throw error;
+    }
+
+    // Un entrante con BSUID y teléfono pudo absorber el contacto de este eco
+    // (`mergeEchoContactInto`) entre buscar la conversación y guardar el mensaje,
+    // y borrarla: el mensaje se muda a la del contacto que lo absorbió, que ahora
+    // tiene el teléfono (revisión de Codex del PR #102).
+    if (!await Conversation.exists({ _id: conversation._id })) {
+        const owner = await resolveContact(inbound.accountId, { phone: toPhone }, { source: 'inbound' });
+        conversation = await findOrCreateConversation({ userId: inbound.accountId, contact: owner, line: inbound });
+        if (conversation.isModified()) await conversation.save();
+        await Message.updateOne({ _id: message._id }, { $set: { conversationId: conversation._id } });
+        message.conversationId = conversation._id;
     }
 
     // Una persona respondió: el bot se calla, y cuanto antes (antes de bajar nada).
