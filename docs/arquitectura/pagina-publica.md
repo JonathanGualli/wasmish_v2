@@ -65,7 +65,9 @@ El precio no va en el nicho: sale de `src/content/price.ts`, el mismo dato que u
 
 Un dato que todavía no existe (el número de WhatsApp, un plazo de los Términos) **no se inventa**: en el código, `<Pending>`; en Privacidad y Términos (`src/legal/*.md`), `[pendiente: …]`, que `markdownToHtml` convierte en lo mismo. Los dos dejan `data-pending` en el HTML y se ven con la etiqueta «pendiente».
 
-`LAUNCHED`, en `src/site.ts`, está en `false` hasta el lanzamiento. Mientras tanto, `tests/output/pending.test.mjs` solo **avisa** de las páginas con huecos. Con `true`, una página con huecos **hace fallar el CI**, y así no se publica.
+`LAUNCHED`, en `src/site.ts`, está en `true` desde el PR del lanzamiento (2026-10-19): una página con huecos **hace fallar el CI**, y así no se publica. Antes, con `false`, `tests/output/pending.test.mjs` solo avisaba.
+
+Los textos legales dicen el proveedor del servidor (GTHost) y su país: si el servidor se muda, se corrige Privacidad. El plazo de los datos de facturación (siete años) es el de la normativa tributaria de Ecuador, sin revisar por un contador.
 
 Los datos fijos (`SITE_URL`, `APP_LOGIN_URL`, `CONTACT_EMAIL`, `WHATSAPP_NUMBER`) están en `src/site.ts`. **El RUC no se publica** (decisión de Jonathan, 2026-10-19): ni en el pie de página ni en Privacidad ni en Términos.
 
