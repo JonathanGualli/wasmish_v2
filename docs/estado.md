@@ -11,9 +11,9 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 **Versión 1.0.27**, desplegada el 2026-10-19 (etiqueta `v1.0.27`; comprobar con `curl https://app.wasmish.com/api/version`). Lleva:
 
 - **Los ecos de la coexistencia a quien tiene nombre de usuario** (PR #102, con dos revisiones de Codex y un diagnóstico a ciegas suyo, y PR #103). Wasmish no leía `to_user_id` (el BSUID) del eco: si Meta omitía `to` (el teléfono), el eco se descartaba en silencio y **lo respondido desde la app no aparecía**; si lo traía, creaba otro contacto y otra conversación. Ahora el eco busca al contacto como un entrante (el BSUID primero), un `to` con letras no se toma por teléfono y un eco sin destinatario deja un aviso en el log. Visto en producción el 2026-10-19 con dos contactos de la cuenta de prueba de Jonathan. Se probó una fusión automática del contacto partido y se descartó en el #103: un webhook sigue sin fusionar contactos (decisión de Jonathan). Detalle en [webhook-adjuntos.md](arquitectura/webhook-adjuntos.md).
-  - **Probado** con los tests (unitarios y de aislamiento: eco solo con BSUID, eco con los dos). Falta probarlo con Meta de verdad: responder desde la app a esos dos contactos.
-  - **Después de desplegar:** `mongodump` y borrar a mano los dos contactos de la persona que quedó partida, con sus conversaciones y mensajes (script de un solo uso fuera del repo), para que entre limpia la próxima vez que escriba. Los ecos perdidos antes del despliegue no vuelven.
-- **`wasmish.com` y `www` salen del servidor** (PR #101): sus routers de Traefik dejan el `compose.yml`, porque la página pública vive en Cloudflare Pages. **Al desplegar se sube el `compose.yml`**; después, `app.wasmish.com` y `wasmish.solventyc.com/api/version` tienen que seguir en 200.
+  - **Probado** con los tests (unitarios y de aislamiento: eco solo con BSUID, eco con los dos). **Probado en producción el 2026-10-19** por Jonathan: lo que respondió desde la app al contacto sin teléfono aparece en su conversación de Wasmish.
+  - **Hecho tras desplegar** (2026-10-19): con `mongodump` antes, se borraron a mano los dos contactos de la persona que quedó partida, con sus 2 conversaciones y 35 mensajes, para que entre limpia la próxima vez que escriba. Los ecos perdidos antes del despliegue no vuelven.
+- **`wasmish.com` y `www` salen del servidor** (PR #101): sus routers de Traefik dejan el `compose.yml`, porque la página pública vive en Cloudflare Pages. Se subió el `compose.yml` al desplegar, y después `app.wasmish.com`, `wasmish.solventyc.com/api/version` y `wasmish.com` siguieron en 200 (`www`, 301 a `wasmish.com`).
 - Sin migración, scripts previos ni variables nuevas.
 
 La 1.0.26 (desplegada el 2026-10-17) llevó:
@@ -131,6 +131,7 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
 
 ## Cabos sueltos conocidos
 
+- **Ecos de la coexistencia** (diagnóstico a ciegas de Codex, PR #102): solo deja aviso en el log el eco descartado **sin destinatario**; los otros descartes (edición o eliminación, anterior a la conexión de la línea, duplicado) siguen sin aviso. Y un contacto que ya quedó partido en dos (uno con teléfono, otro con BSUID) se queda así, porque el webhook no fusiona: hoy solo puede pasar con datos anteriores a la 1.0.27, o si Meta mandara un eco sin `to_user_id`.
 - **Tres fallos del webhook que ya existen** (los encontró Codex al revisar las respuestas automáticas, 2026-10-15; no son del bot):
   - si Mongo falla en mitad de `procesarEntrante`, el entrante se pierde aunque Meta reciba 200 (el `catch` por mensaje no distingue un mensaje roto de un fallo de la BD);
   - dos entrantes a la vez de una conversación pueden pisarse `unreadCount` (leer, sumar uno y `save()`);
