@@ -12,6 +12,7 @@ import { sendToAccount } from "./stream.controller.js";
 import ContactNote from "../models/contact.note.model.js";
 import { cleanNoteText } from "../utils/contact.notes.js";
 import { createContactNote, listContactNotes } from "../services/contact.note.service.js";
+import { mergeEchoContactInto } from "../services/contact.merge.service.js";
 
 // ---------------------------------------------------------------------------
 // Contactos y su conversación. Lo usan los sitios por donde entra un número o
@@ -27,21 +28,33 @@ export const findContactByIdentity = async (userId, { phone, waUserId }) => {
     return phone ? Contact.findOne({ userId, phone }) : null;
 };
 
-const applyContactUpdates = async (contact, incoming) => {
+const applyContactUpdates = async (contact, incoming, { mergeEchoContact = false } = {}) => {
     const changes = mergeContactUpdates(contact, incoming);
     if (Object.keys(changes).length === 0) return contact;
 
+    Object.assign(contact, changes);
     try {
-        Object.assign(contact, changes);
         return await contact.save();
     } catch (error) {
-        // El teléfono o el BSUID ya son de OTRO contacto de la cuenta (uno se creó
-        // solo con teléfono y otro solo con BSUID). Fusionarlos no es algo que deba
-        // decidir un webhook: se deja como está y el mensaje sigue su camino.
         if (error.code !== 11000) throw error;
-        console.warn('Identificador ya usado por otro contacto; no se actualiza:', { contactId: String(contact._id) });
-        return Contact.findById(contact._id);
     }
+
+    // El teléfono o el BSUID ya son de OTRO contacto de la cuenta (uno se creó
+    // solo con teléfono y otro solo con BSUID). Fusionarlos no es algo que deba
+    // decidir un webhook, con una excepción: el contacto que crearon los ecos de
+    // la coexistencia y nadie tocó (utils/contact.merge.js). Ese se absorbe y el
+    // teléfono pasa a este. Si no, se deja como está y el mensaje sigue su camino.
+    if (mergeEchoContact && changes.phone && await mergeEchoContactInto(contact, changes.phone)) {
+        try {
+            const saved = await contact.save();
+            notifyContactsChanged(contact.userId);
+            return saved;
+        } catch (error) {
+            if (error.code !== 11000) throw error;
+        }
+    }
+    console.warn('Identificador ya usado por otro contacto; no se actualiza:', { contactId: String(contact._id) });
+    return Contact.findById(contact._id);
 };
 
 /**
@@ -49,9 +62,11 @@ const applyContactUpdates = async (contact, incoming) => {
  * día lo que sabe WhatsApp de él (ver `mergeContactUpdates`).
  *
  * `name`, `source` y `referral` solo cuentan al crearlo, salvo `name`, que
- * además rellena el de un contacto que no tenga ninguno.
+ * además rellena el de un contacto que no tenga ninguno. `mergeEchoContact`
+ * (solo el webhook de entrada) absorbe el contacto de eco que tenga el teléfono
+ * que llega (ver `applyContactUpdates`).
  */
-export const resolveContact = async (userId, identity, { name = null, source = null, referral = null } = {}) => {
+export const resolveContact = async (userId, identity, { name = null, source = null, referral = null, mergeEchoContact = false } = {}) => {
     if (!hasContactIdentity(identity)) {
         const error = new Error('El contacto necesita un teléfono o un BSUID');
         error.statusCode = 400;
@@ -60,7 +75,7 @@ export const resolveContact = async (userId, identity, { name = null, source = n
 
     const incoming = { ...identity, name };
     const existing = await findContactByIdentity(userId, identity);
-    if (existing) return applyContactUpdates(existing, incoming);
+    if (existing) return applyContactUpdates(existing, incoming, { mergeEchoContact });
 
     try {
         return await Contact.create({

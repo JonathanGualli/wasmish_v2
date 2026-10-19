@@ -114,6 +114,9 @@ const procesarEntrante = async (inbound, messageData, contacts) => {
     const contact = await resolveContact(inbound.accountId, identity, {
         source: identity.referral ? 'ad' : 'inbound',
         referral: identity.referral,
+        // Si llega con BSUID y teléfono, y el teléfono es de un contacto que
+        // crearon los ecos de la coexistencia, es esta misma persona.
+        mergeEchoContact: true,
     });
     // La conversación del contacto EN ESTA LÍNEA: la de otro número tiene su
     // propio historial y su propia ventana.

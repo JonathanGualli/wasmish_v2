@@ -417,3 +417,84 @@ test('un eco roto en un lote con un entrante: el entrante se guarda y la respues
     assert.equal(res.status, 200);
     assert.ok(await Message.exists({ text: 'el entrante del lote' }));
 });
+
+// --- Coexistencia: el contacto partido por los ecos (2026-10-19) ---
+// Alguien con nombre de usuario escribe y Meta manda solo su BSUID; el negocio
+// responde desde la app y el eco trae solo su teléfono. Cuando después llega un
+// mensaje con los dos, el contacto que crearon los ecos se absorbe.
+
+const bsuidOnly = (waUserId, body, ts = nowSeconds()) => ({
+    contacts: [{ profile: { name: 'Albert' }, user_id: waUserId, username: 'albert' }],
+    messages: [{ from_user_id: waUserId, id: `wamid.bsuid.${Date.now()}.${++echoSeq}`, timestamp: String(ts), type: 'text', text: { body } }],
+});
+const withBoth = (phone, waUserId, body, ts = nowSeconds()) => ({
+    contacts: [{ profile: { name: 'Albert' }, wa_id: phone, user_id: waUserId, username: 'albert' }],
+    messages: [{ from: phone, from_user_id: waUserId, id: `wamid.both.${Date.now()}.${++echoSeq}`, timestamp: String(ts), type: 'text', text: { body } }],
+});
+// El caso entero hasta el eco: el contacto del BSUID y el que crea el eco, partidos.
+const splitByEcho = async (phone, waUserId) => {
+    // El eco, con la hora de ahora: uno anterior a la conexión de la línea se descarta.
+    const ts = nowSeconds();
+    await postWebhook(A_NUMBER, bsuidOnly(waUserId, 'Hola, ¿tienen precios?', ts - 20));
+    await postEcho(A_NUMBER, [echoOf({ to: phone, body: 'Sí, te paso la lista', ts })]);
+    const keeper = await Contact.findOne({ userId: a.accountId, waUserId }).lean();
+    const echoContact = await Contact.findOne({ userId: a.accountId, phone }).lean();
+    assert.notEqual(String(keeper._id), String(echoContact._id), 'el eco debía crear otro contacto (el caso del bug)');
+    return { keeper, echoContact, ts };
+};
+
+// Regresión que vigila: lo respondido desde la app quedaba para siempre en otra
+// conversación, la del contacto que crea el eco, aunque después Meta mandara
+// el teléfono y el BSUID juntos («Identificador ya usado por otro contacto»).
+test('BSUID, eco con el teléfono y luego los dos: un contacto y una conversación con todo', async () => {
+    const phone = '573990008001';
+    const waUserId = 'CO.9000000000008001';
+    const { keeper, echoContact, ts } = await splitByEcho(phone, waUserId);
+    const stream = await openStream(a);
+    try {
+        await postWebhook(A_NUMBER, withBoth(phone, waUserId, 'Gracias', ts + 1));
+        assert.ok(await stream.waitFor('contacts_updated', 2000), 'la bandeja no se enteró de la fusión');
+    } finally {
+        await stream.close();
+    }
+
+    assert.equal(await Contact.exists({ _id: echoContact._id }), null, 'el contacto del eco sigue ahí');
+    const merged = await Contact.findById(keeper._id).lean();
+    assert.equal(merged.phone, phone);
+    assert.equal(merged.waUserId, waUserId);
+
+    const conversations = await Conversation.find({ userId: a.accountId, contactId: keeper._id }).lean();
+    assert.equal(conversations.length, 1);
+    assert.equal(await Conversation.countDocuments({ contactId: echoContact._id }), 0);
+    const texts = (await Message.find({ conversationId: conversations[0]._id }).sort({ timestamp: 1 }).lean()).map(m => m.text);
+    assert.deepEqual(texts, ['Hola, ¿tienen precios?', 'Sí, te paso la lista', 'Gracias']);
+    assert.equal(conversations[0].lastMessage, 'Gracias');
+    assert.ok(conversations[0].bot?.humanRepliedAt, 'la respuesta desde la app no pausó al bot en la conversación verdadera');
+});
+
+test('un contacto del eco con nombre o con un envío desde Wasmish no se fusiona', async () => {
+    const named = await splitByEcho('573990008002', 'CO.9000000000008002');
+    await Contact.updateOne({ _id: named.echoContact._id }, { $set: { name: 'Albert (trabajo)' } });
+    await postWebhook(A_NUMBER, withBoth('573990008002', 'CO.9000000000008002', 'Gracias', named.ts + 1));
+    assert.ok(await Contact.exists({ _id: named.echoContact._id }), 'se fusionó un contacto con nombre puesto a mano');
+
+    const answered = await splitByEcho('573990008003', 'CO.9000000000008003');
+    const conversation = await Conversation.findOne({ contactId: answered.echoContact._id }).lean();
+    await Message.create({ conversationId: conversation._id, direction: 'outbound', sender: 'me', origin: 'chat', text: 'Desde Wasmish', timestamp: new Date(), status: 'sent' });
+    await postWebhook(A_NUMBER, withBoth('573990008003', 'CO.9000000000008003', 'Gracias', answered.ts + 1));
+    assert.ok(await Contact.exists({ _id: answered.echoContact._id }), 'se fusionó un contacto con un envío desde Wasmish');
+    assert.equal(await Message.countDocuments({ conversationId: conversation._id }), 2, 'se movieron mensajes sin fusionar');
+});
+
+test('la fusión no cruza de cuenta: el mismo teléfono en B no se toca', async () => {
+    const phone = '573990008004';
+    const waUserId = 'CO.9000000000008004';
+    await postEcho(`99${b.seq}`, [echoOf({ to: phone, body: 'Respuesta de B' })]);
+    const echoOfB = await Contact.findOne({ userId: b.accountId, phone }).lean();
+    const { ts } = await splitByEcho(phone, waUserId);
+    await postWebhook(A_NUMBER, withBoth(phone, waUserId, 'Gracias', ts + 1));
+
+    assert.ok(await Contact.exists({ _id: echoOfB._id }), 'se borró el contacto de B');
+    assert.equal(await Message.countDocuments({ text: 'Respuesta de B', conversationId: (await Conversation.findOne({ contactId: echoOfB._id }).lean())._id }), 1);
+    assert.equal(await Contact.countDocuments({ userId: a.accountId, phone }), 1);
+});
