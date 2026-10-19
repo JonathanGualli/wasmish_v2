@@ -1,12 +1,10 @@
 import { APP_LOGIN_URL, CONTACT_EMAIL, WHATSAPP_NUMBER } from '../site.ts'
+import { formatPhone } from '../lib/links.ts'
 import { Logo, Wordmark } from './Logo.tsx'
 import { Pending } from './Pending.tsx'
 
 const label = 'text-xs font-bold uppercase tracking-[0.1em] text-brand-green-200'
 const link = 'flex min-h-9 items-center text-white no-underline hover:underline'
-
-// «+593 98 765 4321» a partir de «593987654321».
-const formatPhone = (n: string) => `+${n.slice(0, 3)} ${n.slice(3, 5)} ${n.slice(5, 8)} ${n.slice(8)}`
 
 export function Footer() {
   return (

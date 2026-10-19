@@ -1,4 +1,5 @@
 import { CONTACT_EMAIL, WHATSAPP_NUMBER } from '../site.ts'
+import { formatPhone } from '../lib/links.ts'
 import { SETUP_STEPS } from '../content/home.ts'
 import { Highlight } from '../components/Highlight.tsx'
 import { Pending } from '../components/Pending.tsx'
@@ -41,7 +42,7 @@ export function Setup() {
             <div className="mt-0.5 text-[14.5px] leading-normal text-brand-gray-600">Desarrollador de Wasmish, en Ecuador. Atiende y da soporte él mismo.</div>
           </div>
           <div className="grid gap-[3px] font-mono text-[13px] text-brand-strong">
-            <span>{WHATSAPP_NUMBER ? `+${WHATSAPP_NUMBER}` : <Pending>+593 9X XXX XXXX</Pending>}</span>
+            <span>{WHATSAPP_NUMBER ? formatPhone(WHATSAPP_NUMBER) : <Pending>+593 9X XXX XXXX</Pending>}</span>
             <a href={`mailto:${CONTACT_EMAIL}`} className="text-brand-strong no-underline hover:underline">{CONTACT_EMAIL}</a>
           </div>
         </div>
