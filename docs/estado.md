@@ -100,8 +100,8 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
     - el DNS de `wasmish.com` en Cloudflare, con los tres A al servidor en «DNS only» (la app, el webhook y la API siguieron en 200), y `hola@wasmish.com` reenviado al Gmail de Jonathan con Email Routing;
     - Cloudflare Pages conectado al repo: se publica al unir y cada PR que toca `Site/` tiene su vista previa;
     - el esqueleto (PR #93), el inicio con el diseño v3 (PRs #94 y #95), y `/capacitacion`, `/imprentas` y las imágenes de vista previa (PR #96), cada uno con su revisión de Codex.
-  - **Sin probar:** que llegue un correo de prueba a `hola@wasmish.com` (el primero rebotó mientras se propagaba el DNS), y la vista previa de los enlaces en WhatsApp de verdad.
-  - **Falta Jonathan:** sumar `Site · lint, build y tests` a la regla de `master`, si no lo hizo.
+  - **Probado por Jonathan el 2026-10-19:** el correo de prueba a `hola@wasmish.com` llega, y la vista previa de los enlaces en WhatsApp sale bien.
+  - La regla de `master` pide también `Site · lint, build y tests` desde el 2026-10-19 (el trabajo corre en todos los PRs, sin filtro de rutas).
   - **El lanzamiento (PR 5 del plan)** espera el contenido de Jonathan: el número de WhatsApp del botón, el RUC y el IVA (contador), Privacidad y Términos revisados, y las tarifas de Meta confirmadas. Entonces: los huecos llenos, `LAUNCHED = true`, conectar `wasmish.com` a Pages, `www` con proxy y su 301, y quitar los routers de `wasmish.com` y `www` del `compose.yml` (spec, § 6 y § 7).
 
 ## Lo siguiente
