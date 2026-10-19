@@ -100,8 +100,8 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
     - el DNS de `wasmish.com` en Cloudflare, con los tres A al servidor en «DNS only» (la app, el webhook y la API siguieron en 200), y `hola@wasmish.com` reenviado al Gmail de Jonathan con Email Routing;
     - Cloudflare Pages conectado al repo: se publica al unir y cada PR que toca `Site/` tiene su vista previa;
     - el esqueleto (PR #93), el inicio con el diseño v3 (PRs #94 y #95), y `/capacitacion`, `/imprentas` y las imágenes de vista previa (PR #96), cada uno con su revisión de Codex.
-  - **Sin probar:** que llegue un correo de prueba a `hola@wasmish.com` (el primero rebotó mientras se propagaba el DNS), y la vista previa de los enlaces en WhatsApp de verdad.
-  - **Falta Jonathan:** sumar `Site · lint, build y tests` a la regla de `master`, si no lo hizo.
+  - **Probado por Jonathan el 2026-10-19:** el correo de prueba a `hola@wasmish.com` llega, y la vista previa de los enlaces en WhatsApp sale bien.
+  - La regla de `master` pide también `Site · lint, build y tests` desde el 2026-10-19 (el trabajo corre en todos los PRs, sin filtro de rutas).
   - **Ya resuelto (PR #99, 2026-10-19):** el RUC no se publica, los precios llevan el IVA incluido y las tarifas de Meta del ejemplo están confirmadas.
   - **El lanzamiento (PR 5 del plan, rama `pagina-lanzamiento`):** el número del chip nuevo (`+593 98 415 2777`) en el botón, los huecos de Privacidad y Términos llenos (Quito, transferencia bancaria, GTHost en Estados Unidos, siete años para la facturación; sin revisar por un abogado ni un contador) y `LAUNCHED = true`. Después de unirlo, Jonathan conecta `wasmish.com` a Pages y pone `www` con proxy y su 301, y en otro PR se quitan los routers de `wasmish.com` y `www` del `compose.yml` (plan, tarea 13). El chip se conecta a Wasmish con la coexistencia (pendiente: 2026-10-20).
 
