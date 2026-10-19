@@ -103,7 +103,7 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
   - **Probado por Jonathan el 2026-10-19:** el correo de prueba a `hola@wasmish.com` llega, y la vista previa de los enlaces en WhatsApp sale bien.
   - La regla de `master` pide también `Site · lint, build y tests` desde el 2026-10-19 (el trabajo corre en todos los PRs, sin filtro de rutas).
   - **Ya resuelto (PR #99, 2026-10-19):** el RUC no se publica, los precios llevan el IVA incluido y las tarifas de Meta del ejemplo están confirmadas.
-  - **El lanzamiento (PR 5 del plan)** espera el contenido de Jonathan: el número de WhatsApp del botón (el chip nuevo, que Jonathan conecta con la coexistencia), y los huecos de Privacidad y Términos (plazos, ciudad, medio de pago, proveedor del servidor y el plazo de los datos de facturación, que dice el contador). Entonces: los huecos llenos, `LAUNCHED = true`, conectar `wasmish.com` a Pages, `www` con proxy y su 301, y quitar los routers de `wasmish.com` y `www` del `compose.yml` (spec, § 6 y § 7).
+  - **El lanzamiento (PR 5 del plan, rama `pagina-lanzamiento`):** el número del chip nuevo (`+593 98 415 2777`) en el botón, los huecos de Privacidad y Términos llenos (Quito, transferencia bancaria, GTHost en Estados Unidos, siete años para la facturación; sin revisar por un abogado ni un contador) y `LAUNCHED = true`. Después de unirlo, Jonathan conecta `wasmish.com` a Pages y pone `www` con proxy y su 301, y en otro PR se quitan los routers de `wasmish.com` y `www` del `compose.yml` (plan, tarea 13). El chip se conecta a Wasmish con la coexistencia (pendiente: 2026-10-20).
 
 ## Lo siguiente
 

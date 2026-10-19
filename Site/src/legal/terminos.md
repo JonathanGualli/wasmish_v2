@@ -1,4 +1,4 @@
-*Última actualización: [pendiente: fecha de publicación]*
+*Última actualización: 19 de octubre de 2026*
 
 Estos términos son el acuerdo entre su negocio y Jonathan Gualli («Wasmish»), para usar Wasmish. Al contratarlo, su negocio los acepta.
 
@@ -8,11 +8,11 @@ Una herramienta para que el equipo de un negocio atienda su WhatsApp desde la co
 
 ## 2. Precio y pago
 
-- La mensualidad es la publicada en wasmish.com al contratar, con IVA incluido. Se paga por mes adelantado, por [pendiente: medio de pago].
+- La mensualidad es la publicada en wasmish.com al contratar, con IVA incluido. Se paga por mes adelantado, por transferencia bancaria.
 - **Los cargos de Meta van aparte**: Meta los cobra directamente a la tarjeta que su negocio registra en su cuenta de Meta. Wasmish no los cobra ni gana nada con ellos.
 - La oferta de fundador (USD 20 al mes durante 12 meses) vale para los primeros 10 clientes. Desde el mes 13 se paga el precio normal, USD 30 al mes. Si su negocio cancela, la oferta termina: si vuelve, paga el precio vigente.
-- Si un pago se atrasa más de [pendiente: 10] días, podemos suspender el acceso hasta que se regularice. Sus datos no se borran por eso.
-- Si cambiamos el precio, lo avisamos con al menos [pendiente: 30] días de anticipación.
+- Si un pago se atrasa más de 10 días, podemos suspender el acceso hasta que se regularice. Sus datos no se borran por eso.
+- Si cambiamos el precio, lo avisamos con al menos 30 días de anticipación.
 
 ## 3. La implementación incluida
 
@@ -35,7 +35,7 @@ No se puede usar Wasmish para enviar mensajes a personas que no lo pidieron, par
 
 ## 6. Responsabilidad
 
-Si algo sale mal por causa de Wasmish, nuestra responsabilidad tiene como tope lo que su negocio pagó a Wasmish en los últimos [pendiente: 3 meses, a revisar por el abogado]. No respondemos por ventas perdidas ni por los cargos de Meta.
+Si algo sale mal por causa de Wasmish, nuestra responsabilidad tiene como tope lo que su negocio pagó a Wasmish en los últimos 3 meses. No respondemos por ventas perdidas ni por los cargos de Meta.
 
 ## 7. Sus datos
 
@@ -45,8 +45,8 @@ Los datos de su negocio son suyos. Cómo los tratamos está en la [política de 
 
 Su negocio puede cancelar cuando quiera, sin permanencia ni multa: no se cobra el mes siguiente y el mes pagado sigue funcionando hasta que termina. Ese día desconectamos su número de Wasmish. Durante los 30 días siguientes puede pedirnos sus contactos y sus conversaciones, y se los entregamos en Excel; después se borran.
 
-Wasmish puede terminar el servicio avisando con [pendiente: 30] días de anticipación, o de inmediato si se incumple el punto 4.
+Wasmish puede terminar el servicio avisando con 30 días de anticipación, o de inmediato si se incumple el punto 4.
 
 ## 9. Cambios y ley aplicable
 
-Si cambiamos estos términos, lo avisamos con al menos [pendiente: 15] días de anticipación. Se rigen por las leyes de Ecuador; cualquier desacuerdo se intenta resolver primero conversando y, si no, ante los jueces de [pendiente: ciudad].
+Si cambiamos estos términos, lo avisamos con al menos 15 días de anticipación. Se rigen por las leyes de Ecuador; cualquier desacuerdo se intenta resolver primero conversando y, si no, ante los jueces de Quito.

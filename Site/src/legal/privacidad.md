@@ -1,10 +1,10 @@
-*Última actualización: [pendiente: fecha de publicación]*
+*Última actualización: 19 de octubre de 2026*
 
 Esta política explica qué datos guarda Wasmish, para qué, con quién se comparten y cómo puede pedir que se corrijan o se borren.
 
 ## Quién es el responsable
 
-Wasmish es un servicio de Jonathan Gualli, en [pendiente: ciudad], Ecuador. Contacto para temas de privacidad: hola@wasmish.com.
+Wasmish es un servicio de Jonathan Gualli, en Quito, Ecuador. Contacto para temas de privacidad: hola@wasmish.com.
 
 ## Dos tipos de datos
 
@@ -24,7 +24,7 @@ Wasmish es un servicio de Jonathan Gualli, en [pendiente: ciudad], Ecuador. Cont
 ## Con quién se comparten
 
 - **Meta Platforms** (WhatsApp): los mensajes viajan por la plataforma oficial de WhatsApp Business, que es de Meta. Meta trata esos datos según sus propias condiciones.
-- **[pendiente: el proveedor del servidor]**, donde se guardan los datos, en [pendiente: país].
+- **GTHost**, el proveedor del servidor donde se guardan los datos, en Estados Unidos.
 - **Cloudflare**, que aloja esta página y gestiona el dominio wasmish.com y el correo hola@wasmish.com.
 - **El servicio de avisos de su navegador** (Google, Apple o Mozilla, según el celular o la computadora), si activa los avisos. El aviso lleva el nombre del contacto y el comienzo del mensaje, y viaja cifrado: ese servicio no puede leerlo.
 - Las autoridades, solo si la ley lo exige.
@@ -41,14 +41,14 @@ Esta página (wasmish.com) **no usa cookies**. Cuenta las visitas con Cloudflare
 
 ## Cuánto tiempo los guardamos
 
-Mientras su negocio use Wasmish. Si cancela, los guardamos 30 días desde que termina el último mes pagado, para que pueda pedirnos una copia en Excel de sus contactos y sus conversaciones, y después los borramos. Se conservan solo los datos de facturación, que la ley obliga a conservar [pendiente: el plazo que diga el contador].
+Mientras su negocio use Wasmish. Si cancela, los guardamos 30 días desde que termina el último mes pagado, para que pueda pedirnos una copia en Excel de sus contactos y sus conversaciones, y después los borramos. Se conservan solo los datos de facturación, que la normativa tributaria de Ecuador obliga a conservar durante siete años.
 
 ## Sus derechos
 
-Puede pedir acceder a sus datos, corregirlos, borrarlos, oponerse a su uso o llevárselos, escribiendo a hola@wasmish.com. Respondemos en [pendiente: 15 días, a confirmar con el abogado según la ley de protección de datos].
+Puede pedir acceder a sus datos, corregirlos, borrarlos, oponerse a su uso o llevárselos, escribiendo a hola@wasmish.com. Respondemos en 15 días como máximo.
 
 **Si usted es cliente de un negocio que usa Wasmish** y quiere que borren su conversación o su número, escríbale a ese negocio: es el responsable de sus datos. Si no le responde, escríbanos y le ayudamos a ubicarlo.
 
 ## Cambios
 
-Si cambiamos esta política, lo avisamos a los negocios con al menos [pendiente: 15] días de anticipación.
+Si cambiamos esta política, lo avisamos a los negocios con al menos 15 días de anticipación.
