@@ -7,7 +7,7 @@ export const APP_LOGIN_URL = 'https://app.wasmish.com/login'
 export const CONTACT_EMAIL = 'hola@wasmish.com'
 
 // El número del botón «Pedir una demostración», sin «+» ni espacios (593…).
-export const WHATSAPP_NUMBER: string | null = null
+export const WHATSAPP_NUMBER: string | null = '593984152777'
 
 // Se enciende en el PR del lanzamiento. Desde entonces, un hueco hace fallar el CI.
-export const LAUNCHED: boolean = false
+export const LAUNCHED: boolean = true
