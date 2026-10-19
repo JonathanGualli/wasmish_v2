@@ -63,11 +63,13 @@ El precio no va en el nicho: sale de `src/content/price.ts`, el mismo dato que u
 
 ### Huecos y lanzamiento
 
-Un dato que todavía no existe (el número de WhatsApp, el RUC, una cifra de Meta) **no se inventa**: en el código, `<Pending>`; en Privacidad y Términos (`src/legal/*.md`), `[pendiente: …]`, que `markdownToHtml` convierte en lo mismo. Los dos dejan `data-pending` en el HTML y se ven con la etiqueta «pendiente».
+Un dato que todavía no existe (el número de WhatsApp, un plazo de los Términos) **no se inventa**: en el código, `<Pending>`; en Privacidad y Términos (`src/legal/*.md`), `[pendiente: …]`, que `markdownToHtml` convierte en lo mismo. Los dos dejan `data-pending` en el HTML y se ven con la etiqueta «pendiente».
 
 `LAUNCHED`, en `src/site.ts`, está en `false` hasta el lanzamiento. Mientras tanto, `tests/output/pending.test.mjs` solo **avisa** de las páginas con huecos. Con `true`, una página con huecos **hace fallar el CI**, y así no se publica.
 
-Los datos fijos (`SITE_URL`, `APP_LOGIN_URL`, `CONTACT_EMAIL`, `WHATSAPP_NUMBER`, `BILLING`) están en `src/site.ts`.
+Los datos fijos (`SITE_URL`, `APP_LOGIN_URL`, `CONTACT_EMAIL`, `WHATSAPP_NUMBER`) están en `src/site.ts`. **El RUC no se publica** (decisión de Jonathan, 2026-10-19): ni en el pie de página ni en Privacidad ni en Términos.
+
+Las cifras de Meta del ejemplo de un mes (`META_EXAMPLE`, en `src/sections/Pricing.tsx`) salen de su tabla de tarifas para «Resto de Latinoamérica», comprobada el 2026-10-19. Meta las cambia cada trimestre: hay que revisarlas cuando publica una tabla nueva.
 
 ### Vista previa en WhatsApp y SEO
 
