@@ -14,6 +14,7 @@
 //                                                ← cambia de número y de BSUID
 //   npm run webhook:simulate -- eco               ← el negocio responde desde la app
 //                                                  de WhatsApp Business (coexistencia)
+//   npm run webhook:simulate -- eco --username ana ← al que tiene nombre de usuario: sin teléfono
 //   npm run webhook:simulate -- retiro-acceso --reason PRIMARY_INACTIVITY
 //                                                ← Meta retira el acceso al WABA de la
 //                                                  línea (--reason ninguno: sin motivo)
@@ -246,14 +247,16 @@ const retiroDeAcceso = async () => {
     };
 };
 
-// Un eco: el negocio le respondió desde la app al contacto de prueba.
+// Un eco: el negocio le respondió desde la app al contacto de prueba. Como Meta,
+// lleva siempre su BSUID (`to_user_id`) y el teléfono (`to`) solo si no usa
+// nombre de usuario: con --username, `to` no va (el caso del 2026-10-19).
 const eco = () => ({
     field: 'smb_message_echoes',
     value: {
         messaging_product: 'whatsapp',
         metadata: { display_phone_number: DISPLAY_NUMBER, phone_number_id: phoneNumberId },
         message_echoes: [{
-            from: DISPLAY_NUMBER, to: PHONE ?? FROM,
+            from: DISPLAY_NUMBER, ...(PHONE && { to: PHONE }), to_user_id: USER_ID,
             id: `wamid.eco.${Date.now()}.${Math.random().toString(36).slice(2)}`,
             timestamp: String(Math.floor(Date.now() / 1000)),
             type: 'text', text: { body: 'Respondido desde la app de WhatsApp Business (simulado)' },
