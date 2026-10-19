@@ -6,6 +6,8 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 ## En producción
 
+**La página pública `wasmish.com`**, en el aire desde el 2026-10-19: el inicio, `/capacitacion`, `/imprentas`, Privacidad y Términos (PRs #93 a #100, cada uno con su revisión de Codex; spec `docs/superpowers/specs/2026-10-17-pagina-publica-design.md`, plan `docs/superpowers/plans/2026-10-17-pagina-publica.md`, detalle en [pagina-publica.md](arquitectura/pagina-publica.md)). Vive en Cloudflare Pages y **se publica al unir un PR que toca `Site/`**, sin desplegar la app. `www` redirige a `wasmish.com` con una regla de Cloudflare (301, con la ruta y los parámetros), y `hola@wasmish.com` llega al Gmail de Jonathan. Probado el 2026-10-19: las páginas, la 404, las redirecciones de `www` y de `http://`, la vista previa en WhatsApp y el correo; Lighthouse en celular, rendimiento de 94 a 97. La app, el webhook y la API siguieron en 200.
+
 **Versión 1.0.26**, desplegada el 2026-10-17 (etiqueta `v1.0.26`; comprobar con `curl https://app.wasmish.com/api/version`). Lleva:
 
 - **Notas del contacto con autor** (PRs #87 a #89, cada uno con su revisión de Codex; spec `docs/superpowers/specs/2026-10-17-notas-contacto-design.md`, plan `docs/superpowers/plans/2026-10-17-notas-contacto.md`, diseño `Design/Wasmish Notas del contacto.html`). Las notas pasan de un solo texto a una **lista** (`ContactNote`), cada nota con quién la escribió y cuándo, en la ficha del chat y en Contactos. Cada persona edita y borra las suyas; owner y admin, cualquiera. Importar crea una nota firmada, y el formulario la pide solo al crear. Detalle en [contactos.md § Notas del contacto](arquitectura/contactos.md#notas-del-contacto-contactnote-contactnotecontrollerjs) y [chat.md § Ficha del contacto en el chat](arquitectura/chat.md#ficha-del-contacto-en-el-chat).
@@ -95,15 +97,12 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
 
 ## En curso
 
-- **Página pública `wasmish.com`: construida y publicada en `wasmish-site.pages.dev`, falta el lanzamiento** (spec `docs/superpowers/specs/2026-10-17-pagina-publica-design.md`, plan `docs/superpowers/plans/2026-10-17-pagina-publica.md`, detalle en [pagina-publica.md](arquitectura/pagina-publica.md)).
-  - **Hecho el 2026-10-17:**
-    - el DNS de `wasmish.com` en Cloudflare, con los tres A al servidor en «DNS only» (la app, el webhook y la API siguieron en 200), y `hola@wasmish.com` reenviado al Gmail de Jonathan con Email Routing;
-    - Cloudflare Pages conectado al repo: se publica al unir y cada PR que toca `Site/` tiene su vista previa;
-    - el esqueleto (PR #93), el inicio con el diseño v3 (PRs #94 y #95), y `/capacitacion`, `/imprentas` y las imágenes de vista previa (PR #96), cada uno con su revisión de Codex.
-  - **Probado por Jonathan el 2026-10-19:** el correo de prueba a `hola@wasmish.com` llega, y la vista previa de los enlaces en WhatsApp sale bien.
-  - La regla de `master` pide también `Site · lint, build y tests` desde el 2026-10-19 (el trabajo corre en todos los PRs, sin filtro de rutas).
-  - **Ya resuelto (PR #99, 2026-10-19):** el RUC no se publica, los precios llevan el IVA incluido y las tarifas de Meta del ejemplo están confirmadas.
-  - **El lanzamiento (PR 5 del plan, rama `pagina-lanzamiento`):** el número del chip nuevo (`+593 98 415 2777`) en el botón, los huecos de Privacidad y Términos llenos (Quito, transferencia bancaria, GTHost en Estados Unidos, siete años para la facturación; sin revisar por un abogado ni un contador) y `LAUNCHED = true`. Después de unirlo, Jonathan conecta `wasmish.com` a Pages y pone `www` con proxy y su 301, y en otro PR se quitan los routers de `wasmish.com` y `www` del `compose.yml` (plan, tarea 13). El chip se conecta a Wasmish con la coexistencia (pendiente: 2026-10-20).
+- **Quitar `wasmish.com` y `www` del servidor** (rama `dominios-pagina-fuera`, plan de la página, tarea 13): los routers de Traefik que ya no reciben visitas salen del `compose.yml`. **Sale con el siguiente despliegue de la app**; hasta entonces no se rompe nada (Traefik solo intenta renovar dos certificados que ya no le llegan).
+- **Lo que queda de la página pública:**
+  - Jonathan conecta el chip del botón (`+593 98 415 2777`) a Wasmish con la coexistencia (2026-10-20) y prueba el botón desde otro celular;
+  - Jonathan confirma en el panel de GTHost el país del servidor: Privacidad dice Estados Unidos, sacado del registro de la IP;
+  - **Google Search Console** (registro TXT en Cloudflare) con `https://wasmish.com/sitemap.xml`;
+  - cabo suelto: el texto gris pequeño de las imitaciones de la app no llega al contraste mínimo (Lighthouse, accesibilidad 95).
 
 ## Lo siguiente
 

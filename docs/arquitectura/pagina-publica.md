@@ -98,7 +98,11 @@ Conectado al repo desde el panel de Cloudflare: no hay claves en GitHub.
 
 - **Se publica al unir un PR que toca `Site/`**, y cada uno de esos PR tiene su vista previa en `*.pages.dev`.
 - **`public/_headers`:** caché de un año para `/assets/*`, cabeceras de seguridad básicas y `X-Robots-Tag: noindex` para las direcciones `*.pages.dev`, para que Google indexe solo `wasmish.com`.
-- **El DNS de `wasmish.com` está en Cloudflare** desde el 2026-10-17. Hasta el lanzamiento, los tres registros A (`@`, `www` y `app`) apuntan al servidor en «DNS only», y `wasmish.com` sigue llevando a la app. `hola@wasmish.com` se reenvía con Email Routing. Lo que cambia al lanzar está en el [spec, § 6 y § 7](../superpowers/specs/2026-10-17-pagina-publica-design.md#6-publicación-dns-y-correo).
+- **El DNS de `wasmish.com` está en Cloudflare** desde el 2026-10-17, y la página, en el aire desde el 2026-10-19:
+  - `wasmish.com` es un dominio propio del proyecto de Pages (un CNAME a `wasmish-site.pages.dev`, «Proxied»);
+  - `www` es «Proxied» y una *Redirect Rule* («www a wasmish.com»: `https://www.*` → `https://${1}`, 301, conservando los parámetros) lo manda a `wasmish.com`. Sin el proxy, la regla no actúa;
+  - `app` sigue en «DNS only», al servidor: ver [deploy/README.md § Dominios](../../deploy/README.md#dominios);
+  - `hola@wasmish.com` se reenvía con Email Routing.
 
 ### Comandos y pruebas
 

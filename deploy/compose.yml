@@ -1,7 +1,8 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # prod-wasmish-main  →  app.wasmish.com   (CRM WhatsApp — Node + React)
 #   · wasmish.solventyc.com: solo /api (webhook de Meta y API pública); el resto
-#     redirige a app.wasmish.com · wasmish.com y www: ver las etiquetas de la web
+#     redirige a app.wasmish.com · wasmish.com y www no pasan por aquí: los sirve
+#     Cloudflare (la página pública, en Site/)
 # Patrón copiado de prod-dashboard-solventyc:
 #   · web (nginx) sirve el SPA Y hace de reverse-proxy de /api → api
 #   · api (Node) NO se expone a Traefik; solo lo ve la web por la red interna
@@ -79,7 +80,7 @@ services:
       - "traefik.http.services.prod-wasmish-main.loadbalancer.server.port=80"
       # http → redirige a https, en los cuatro dominios
       - "traefik.http.routers.prod-wasmish-main-http.entrypoints=web"
-      - "traefik.http.routers.prod-wasmish-main-http.rule=Host(`app.wasmish.com`) || Host(`wasmish.com`) || Host(`www.wasmish.com`) || Host(`wasmish.solventyc.com`)"
+      - "traefik.http.routers.prod-wasmish-main-http.rule=Host(`app.wasmish.com`) || Host(`wasmish.solventyc.com`)"
       - "traefik.http.routers.prod-wasmish-main-http.middlewares=prod-wasmish-main-redir"
       - "traefik.http.routers.prod-wasmish-main-http.service=noop@internal"
       - "traefik.http.middlewares.prod-wasmish-main-redir.redirectscheme.scheme=https"
@@ -113,25 +114,3 @@ services:
       - "traefik.http.middlewares.prod-wasmish-main-to-app.redirectregex.regex=^https?://wasmish\\.solventyc\\.com(:[0-9]+)?/(.*)"
       - "traefik.http.middlewares.prod-wasmish-main-to-app.redirectregex.replacement=https://app.wasmish.com/$${2}"
       - "traefik.http.middlewares.prod-wasmish-main-to-app.redirectregex.permanent=true"
-      # wasmish.com: la página pública. Mientras no exista, lleva a la app con un
-      # 302: un 301 se queda guardado en el navegador y, con la página ya hecha,
-      # quien hubiera entrado antes seguiría yendo a la app.
-      - "traefik.http.routers.prod-wasmish-main-site.entrypoints=websecure"
-      - "traefik.http.routers.prod-wasmish-main-site.rule=Host(`wasmish.com`)"
-      - "traefik.http.routers.prod-wasmish-main-site.tls=true"
-      - "traefik.http.routers.prod-wasmish-main-site.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.prod-wasmish-main-site.middlewares=prod-wasmish-main-site-to-app"
-      - "traefik.http.routers.prod-wasmish-main-site.service=noop@internal"
-      - "traefik.http.middlewares.prod-wasmish-main-site-to-app.redirectregex.regex=^https?://wasmish\\.com(:[0-9]+)?/(.*)"
-      - "traefik.http.middlewares.prod-wasmish-main-site-to-app.redirectregex.replacement=https://app.wasmish.com/$${2}"
-      - "traefik.http.middlewares.prod-wasmish-main-site-to-app.redirectregex.permanent=false"
-      # www.wasmish.com → wasmish.com, para siempre (una sola dirección de la página)
-      - "traefik.http.routers.prod-wasmish-main-www.entrypoints=websecure"
-      - "traefik.http.routers.prod-wasmish-main-www.rule=Host(`www.wasmish.com`)"
-      - "traefik.http.routers.prod-wasmish-main-www.tls=true"
-      - "traefik.http.routers.prod-wasmish-main-www.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.prod-wasmish-main-www.middlewares=prod-wasmish-main-www-to-site"
-      - "traefik.http.routers.prod-wasmish-main-www.service=noop@internal"
-      - "traefik.http.middlewares.prod-wasmish-main-www-to-site.redirectregex.regex=^https?://www\\.wasmish\\.com(:[0-9]+)?/(.*)"
-      - "traefik.http.middlewares.prod-wasmish-main-www-to-site.redirectregex.replacement=https://wasmish.com/$${2}"
-      - "traefik.http.middlewares.prod-wasmish-main-www-to-site.redirectregex.permanent=true"
