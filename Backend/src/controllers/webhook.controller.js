@@ -20,7 +20,7 @@ import { notifyInbound } from '../services/push.service.js';
 import { buildAutoReplyJob } from '../services/auto.reply.service.js';
 import { wakeAutoReplyWorker } from '../workers/auto.reply.worker.js';
 import { markHumanReply } from '../services/auto.reply.service.js';
-import { describeEcho, parsePartnerRemoved } from '../utils/business.app.js';
+import { describeEcho, parsePartnerRemoved, ECHO_IGNORED_TYPES } from '../utils/business.app.js';
 import { serializeMessage } from './chat.controller.js';
 
 // Baja el adjunto y lo deja en disco. Devuelve SIEMPRE un objeto: si algo falla
@@ -249,16 +249,23 @@ const procesarEntrante = async (inbound, messageData, contacts) => {
 // SSE. Sin aviso push: lo escribió el propio negocio.
 const procesarEco = async (inbound, echoData) => {
     const eco = describeEcho(echoData, { connectedAt: inbound.connectedAt });
-    if (!eco) return;
-    const { waMessageId, toPhone, timestamp, entrante } = eco;
+    if (!eco) {
+        // Sin destinatario no hay conversación: que quede en el log (sin datos
+        // de la persona), no como antes, que se perdía en silencio.
+        if (echoData?.id && !ECHO_IGNORED_TYPES.includes(echoData.type) && !echoData.to && !echoData.to_user_id) {
+            console.warn('Eco sin destinatario (ni to ni to_user_id); se descarta:', { waMessageId: echoData.id, type: echoData.type });
+        }
+        return;
+    }
+    const { waMessageId, toPhone, toUserId, timestamp, entrante } = eco;
+    const identity = { phone: toPhone, waUserId: toUserId };
 
     // El `exists` ahorra el trabajo de un reintento; la garantía es el índice único.
     if (await Message.exists({ waMessageId })) return;
 
-    // Meta solo manda el teléfono del cliente, sin BSUID: un contacto que en
-    // Wasmish solo tiene BSUID no se puede reconocer y se crea otro (limitación
-    // documentada en el spec).
-    const contact = await resolveContact(inbound.accountId, { phone: toPhone }, { source: 'inbound' });
+    // Como un entrante: por el BSUID primero, y si el teléfono que trae es de un
+    // contacto que crearon ecos anteriores, es esta misma persona y se absorbe.
+    const contact = await resolveContact(inbound.accountId, identity, { source: 'inbound', mergeEchoContact: true });
     let conversation = await findOrCreateConversation({ userId: inbound.accountId, contact, line: inbound });
 
     let message;
@@ -288,7 +295,7 @@ const procesarEco = async (inbound, echoData) => {
     // y borrarla: el mensaje se muda a la del contacto que lo absorbió, que ahora
     // tiene el teléfono (revisión de Codex del PR #102).
     if (!await Conversation.exists({ _id: conversation._id })) {
-        const owner = await resolveContact(inbound.accountId, { phone: toPhone }, { source: 'inbound' });
+        const owner = await resolveContact(inbound.accountId, identity, { source: 'inbound' });
         conversation = await findOrCreateConversation({ userId: inbound.accountId, contact: owner, line: inbound });
         if (conversation.isModified()) await conversation.save();
         await Message.updateOne({ _id: message._id }, { $set: { conversationId: conversation._id } });

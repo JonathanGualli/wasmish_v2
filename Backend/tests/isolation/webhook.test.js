@@ -418,10 +418,12 @@ test('un eco roto en un lote con un entrante: el entrante se guarda y la respues
     assert.ok(await Message.exists({ text: 'el entrante del lote' }));
 });
 
-// --- Coexistencia: el contacto partido por los ecos (2026-10-19) ---
-// Alguien con nombre de usuario escribe y Meta manda solo su BSUID; el negocio
-// responde desde la app y el eco trae solo su teléfono. Cuando después llega un
-// mensaje con los dos, el contacto que crearon los ecos se absorbe.
+// --- Coexistencia: los ecos a quien tiene nombre de usuario (2026-10-19) ---
+// Alguien con nombre de usuario escribe y Meta manda solo su BSUID. El eco de la
+// respuesta trae su BSUID en `to_user_id`, y `to` (el teléfono) solo si Meta
+// puede compartirlo. Wasmish ignoraba `to_user_id`: sin `to`, el eco se perdía;
+// con `to`, creaba otro contacto. Los contactos que ya quedaron partidos así se
+// absorben con el siguiente mensaje que traiga los dos identificadores.
 
 const bsuidOnly = (waUserId, body, ts = nowSeconds()) => ({
     contacts: [{ profile: { name: 'Albert' }, user_id: waUserId, username: 'albert' }],
@@ -431,7 +433,46 @@ const withBoth = (phone, waUserId, body, ts = nowSeconds()) => ({
     contacts: [{ profile: { name: 'Albert' }, wa_id: phone, user_id: waUserId, username: 'albert' }],
     messages: [{ from: phone, from_user_id: waUserId, id: `wamid.both.${Date.now()}.${++echoSeq}`, timestamp: String(ts), type: 'text', text: { body } }],
 });
-// El caso entero hasta el eco: el contacto del BSUID y el que crea el eco, partidos.
+// Regresión que vigila: los ecos sin `to` se descartaban en silencio.
+test('eco solo con BSUID (to_user_id, sin to): cae en la conversación de su contacto', async () => {
+    const waUserId = 'CO.9000000000009001';
+    await postWebhook(A_NUMBER, bsuidOnly(waUserId, 'Hola', nowSeconds() - 5));
+    const contact = await Contact.findOne({ userId: a.accountId, waUserId }).lean();
+    const res = await postEcho(A_NUMBER, [echoOf({ to: undefined, to_user_id: waUserId, body: 'Respondido desde el teléfono' })]);
+    assert.equal(res.status, 200);
+    const echo = await Message.findOne({ text: 'Respondido desde el teléfono' }).lean();
+    assert.ok(echo, 'el eco sin teléfono se perdió');
+    const conversation = await Conversation.findById(echo.conversationId).lean();
+    assert.equal(String(conversation.contactId), String(contact._id));
+    assert.equal(await Contact.countDocuments({ userId: a.accountId, waUserId }), 1);
+});
+
+// Regresión que vigila: el eco con teléfono y BSUID creaba otro contacto por el teléfono.
+test('eco con teléfono y BSUID: cae en el contacto del BSUID, que se queda con el teléfono', async () => {
+    const phone = '573990009002';
+    const waUserId = 'CO.9000000000009002';
+    await postWebhook(A_NUMBER, bsuidOnly(waUserId, 'Hola', nowSeconds() - 5));
+    const contact = await Contact.findOne({ userId: a.accountId, waUserId }).lean();
+    await postEcho(A_NUMBER, [echoOf({ to: phone, to_user_id: waUserId, body: 'Te respondo desde la app' })]);
+    const echo = await Message.findOne({ text: 'Te respondo desde la app' }).lean();
+    assert.equal(String((await Conversation.findById(echo.conversationId).lean()).contactId), String(contact._id));
+    assert.equal((await Contact.findById(contact._id).lean()).phone, phone);
+    assert.equal(await Contact.countDocuments({ userId: a.accountId, phone }), 1);
+});
+
+test('un contacto ya partido se repara también con el siguiente eco que trae los dos', async () => {
+    const phone = '573990009003';
+    const waUserId = 'CO.9000000000009003';
+    const { keeper, echoContact, ts } = await splitByEcho(phone, waUserId);
+    await postEcho(A_NUMBER, [echoOf({ to: phone, to_user_id: waUserId, body: 'Otra respuesta', ts: ts + 1 })]);
+    assert.equal(await Contact.exists({ _id: echoContact._id }), null, 'el contacto del eco sigue ahí');
+    const conversations = await Conversation.find({ userId: a.accountId, contactId: keeper._id }).lean();
+    assert.equal(conversations.length, 1);
+    assert.equal(await Message.countDocuments({ conversationId: conversations[0]._id, origin: 'businessApp' }), 2);
+});
+
+// El caso entero hasta el eco: el contacto del BSUID y el que crea un eco que
+// solo trae el teléfono (como los que llegaron antes de leer `to_user_id`), partidos.
 const splitByEcho = async (phone, waUserId) => {
     // El eco, con la hora de ahora: uno anterior a la conexión de la línea se descarta.
     const ts = nowSeconds();

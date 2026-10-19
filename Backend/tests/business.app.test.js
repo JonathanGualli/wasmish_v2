@@ -36,11 +36,26 @@ test('las ediciones y eliminaciones desde la app no se guardan en esta versión'
     for (const type of ECHO_IGNORED_TYPES) assert.equal(describeEcho(echo({ type, text: undefined, [type]: {} })), null, type);
 });
 
-test('sin id o sin destinatario, se descarta', () => {
+test('sin id o sin destinatario (ni teléfono ni BSUID), se descarta', () => {
     assert.equal(describeEcho(echo({ id: undefined })), null);
     assert.equal(describeEcho(echo({ to: undefined })), null);
     assert.equal(describeEcho(echo({ to: '' })), null);
+    assert.equal(describeEcho(echo({ to: undefined, to_user_id: '  ' })), null);
     assert.equal(describeEcho(null), null);
+});
+
+// Regresión que vigila: Meta omite `to` si la persona tiene nombre de usuario y
+// no comparte su teléfono, y esos ecos se descartaban en silencio (2026-10-19).
+test('sin teléfono pero con BSUID (to_user_id), el eco se guarda', () => {
+    const result = describeEcho(echo({ to: undefined, to_user_id: 'CO.1830780421280372' }));
+    assert.equal(result.toPhone, null);
+    assert.equal(result.toUserId, 'CO.1830780421280372');
+});
+
+test('con teléfono y BSUID, llegan los dos', () => {
+    const result = describeEcho(echo({ to_user_id: 'CO.1433329108757971' }));
+    assert.equal(result.toPhone, '593990001111');
+    assert.equal(result.toUserId, 'CO.1433329108757971');
 });
 
 test('el teléfono del cliente, solo con dígitos (Meta lo manda con y sin +)', () => {
