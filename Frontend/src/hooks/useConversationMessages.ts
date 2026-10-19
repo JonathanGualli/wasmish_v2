@@ -195,16 +195,9 @@ export const useConversationMessages = (conversationId: string) => {
         });
     });
 
-    // Le llegaron los mensajes de otra conversación de la misma persona (el
-    // contacto que crearon los ecos de la coexistencia): se vuelven a pedir.
-    const unsubMerged = subscribe("conversation_merged", ({ id }) => {
-      if (id === conversationId) void queryClient.invalidateQueries({ queryKey: ["conversation", conversationId] });
-    });
-
     return () => {
       unsubCreated();
       unsubStatus();
-      unsubMerged();
     };
   }, [subscribe, queryClient, conversationId]);
 

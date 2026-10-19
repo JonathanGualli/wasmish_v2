@@ -2,7 +2,6 @@ import { WHATSAPP_VERIFY_TOKEN } from '../config.js';
 import Message from "../models/message.model.js";
 import { sendToAccount } from './stream.controller.js';
 import Conversation from "../models/conversation.model.js";
-import Contact from "../models/contact.model.js";
 import {
     resolveContact, findOrCreateConversation, findContactByIdentity, getConversationContact, applyMarketingPreference,
     applyUserIdUpdate,
@@ -115,9 +114,6 @@ const procesarEntrante = async (inbound, messageData, contacts) => {
     const contact = await resolveContact(inbound.accountId, identity, {
         source: identity.referral ? 'ad' : 'inbound',
         referral: identity.referral,
-        // Si llega con BSUID y teléfono, y el teléfono es de un contacto que
-        // crearon los ecos de la coexistencia, es esta misma persona.
-        mergeEchoContact: true,
     });
     // La conversación del contacto EN ESTA LÍNEA: la de otro número tiene su
     // propio historial y su propia ventana.
@@ -259,15 +255,15 @@ const procesarEco = async (inbound, echoData) => {
         return;
     }
     const { waMessageId, toPhone, toUserId, timestamp, entrante } = eco;
-    const identity = { phone: toPhone, waUserId: toUserId };
 
     // El `exists` ahorra el trabajo de un reintento; la garantía es el índice único.
     if (await Message.exists({ waMessageId })) return;
 
-    // Como un entrante: por el BSUID primero, y si el teléfono que trae es de un
-    // contacto que crearon ecos anteriores, es esta misma persona y se absorbe.
-    const contact = await resolveContact(inbound.accountId, identity, { source: 'inbound', mergeEchoContact: true });
-    let conversation = await findOrCreateConversation({ userId: inbound.accountId, contact, line: inbound });
+    // Como un entrante: por el BSUID primero, que identifica a la persona aunque
+    // Meta no mande el teléfono (antes se buscaba solo por teléfono, y el eco a
+    // quien tenía nombre de usuario creaba otro contacto o se perdía).
+    const contact = await resolveContact(inbound.accountId, { phone: toPhone, waUserId: toUserId }, { source: 'inbound' });
+    const conversation = await findOrCreateConversation({ userId: inbound.accountId, contact, line: inbound });
 
     let message;
     try {
@@ -289,28 +285,6 @@ const procesarEco = async (inbound, echoData) => {
         // Otra entrega del mismo eco ya lo guardó: ella hace el resto.
         if (error.code === 11000) return;
         throw error;
-    }
-
-    // Un entrante o un eco con BSUID y teléfono pudo absorber el contacto de
-    // este eco (`mergeEchoContactInto`) mientras tanto: borrar su conversación
-    // antes de guardar el mensaje, o borrar el contacto antes de que este eco
-    // le creara una. El mensaje se muda a la conversación del contacto que lo
-    // absorbió, que ahora tiene el teléfono, y la que nació para el contacto
-    // borrado, ya vacía, se borra (revisiones de Codex del PR #102).
-    const [conversationExists, contactExists] = await Promise.all([
-        Conversation.exists({ _id: conversation._id }), Contact.exists({ _id: contact._id }),
-    ]);
-    if (!conversationExists || !contactExists) {
-        const stale = conversation;
-        const owner = await resolveContact(inbound.accountId, identity, { source: 'inbound' });
-        conversation = await findOrCreateConversation({ userId: inbound.accountId, contact: owner, line: inbound });
-        if (conversation.isModified()) await conversation.save();
-        await Message.updateOne({ _id: message._id }, { $set: { conversationId: conversation._id } });
-        message.conversationId = conversation._id;
-        if (conversationExists && String(stale._id) !== String(conversation._id)
-            && !await Message.exists({ conversationId: stale._id })) {
-            await Conversation.deleteOne({ _id: stale._id, contactId: contact._id });
-        }
     }
 
     // Una persona respondió: el bot se calla, y cuanto antes (antes de bajar nada).
