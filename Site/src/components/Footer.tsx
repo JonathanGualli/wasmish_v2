@@ -1,4 +1,4 @@
-import { APP_LOGIN_URL, BILLING, CONTACT_EMAIL, WHATSAPP_NUMBER } from '../site.ts'
+import { APP_LOGIN_URL, CONTACT_EMAIL, WHATSAPP_NUMBER } from '../site.ts'
 import { Logo, Wordmark } from './Logo.tsx'
 import { Pending } from './Pending.tsx'
 
@@ -32,14 +32,6 @@ export function Footer() {
             <a href={APP_LOGIN_URL} className={link}>Iniciar sesión</a>
             <a href="/privacidad" className={link}>Privacidad</a>
             <a href="/terminos" className={link}>Términos</a>
-          </div>
-
-          <div className="grid content-start gap-1.5 text-[14.5px]">
-            <span className={label}>Factura</span>
-            <span className="text-white">{BILLING.name}</span>
-            <span className="font-mono">
-              {BILLING.ruc ? `RUC ${BILLING.ruc}` : <Pending onDeep>RUC 0000000000001</Pending>}
-            </span>
           </div>
         </div>
 

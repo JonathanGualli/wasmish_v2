@@ -70,7 +70,7 @@ export const FAQ: { q: string; a: Rich }[] = [
   },
   {
     q: '¿Qué necesito para empezar?',
-    a: ['Su número, una cuenta de Facebook, una tarjeta registrada en Meta para las plantillas y, si usa la app de WhatsApp Business, el celular a mano para escanear un código. Lo demás lo hacemos juntos.'],
+    a: ['Su número, una cuenta de Facebook, una tarjeta registrada en Meta para sus cobros (las plantillas, y las respuestas que pasen de 1.000 al mes) y, si usa la app de WhatsApp Business, el celular a mano para escanear un código. Lo demás lo hacemos juntos.'],
   },
   {
     q: '¿Se puede usar desde el celular?',

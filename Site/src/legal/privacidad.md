@@ -4,7 +4,7 @@ Esta política explica qué datos guarda Wasmish, para qué, con quién se compa
 
 ## Quién es el responsable
 
-Wasmish es un servicio de Jonathan Gualli, con RUC [pendiente: número de RUC], en [pendiente: ciudad], Ecuador. Contacto para temas de privacidad: hola@wasmish.com.
+Wasmish es un servicio de Jonathan Gualli, en [pendiente: ciudad], Ecuador. Contacto para temas de privacidad: hola@wasmish.com.
 
 ## Dos tipos de datos
 
