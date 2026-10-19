@@ -31,9 +31,10 @@ cd Backend && npm run webhook:simulate -- baja-marketing  # aviso de baja de pub
 cd Backend && npm run webhook:simulate -- cambio-numero --new-from 593000000001   # cambia de número y de BSUID
 cd Backend && npm run webhook:simulate -- texto --display-number 15551635863        # el número visible de la línea (por defecto 15550000000)
 cd Backend && npm run webhook:simulate -- eco                                        # el negocio responde desde la app de WhatsApp Business (coexistencia)
+cd Backend && npm run webhook:simulate -- texto eco --username ana                   # lo mismo a quien tiene nombre de usuario: el eco va sin teléfono, solo con su BSUID
 cd Backend && npm run webhook:simulate -- retiro-acceso --reason PRIMARY_INACTIVITY  # Meta retira el acceso al WABA de la línea (--reason ninguno: sin motivo)
 ```
-`scripts/simulate-webhook.js` firma el payload con `META_APP_SECRET` igual que Meta y se lo manda al backend local (que tiene que estar levantado). Como el SSE dispara igual, los mensajes **aparecen en vivo** en el chat del navegador. Las muestras de cada tipo están escritas a mano desde la documentación de Meta: si alguna no cuadra con la realidad, se corrige ahí **y** en `utils/inbound.message.js`. `eco` y `retiro-acceso` (2026-10-16) son de la coexistencia: el eco va al contacto de prueba (`--from`) y `retiro-acceso` usa el WABA de la línea activa, con la forma del ejemplo de Meta (`entry.id` distinto del WABA).
+`scripts/simulate-webhook.js` firma el payload con `META_APP_SECRET` igual que Meta y se lo manda al backend local (que tiene que estar levantado). Como el SSE dispara igual, los mensajes **aparecen en vivo** en el chat del navegador. Las muestras de cada tipo están escritas a mano desde la documentación de Meta: si alguna no cuadra con la realidad, se corrige ahí **y** en `utils/inbound.message.js`. `eco` y `retiro-acceso` (2026-10-16) son de la coexistencia: el eco va al contacto de prueba (`--from`), siempre con su BSUID en `to_user_id` y, como hace Meta, sin `to` (el teléfono) si se pasa `--username`; y `retiro-acceso` usa el WABA de la línea activa, con la forma del ejemplo de Meta (`entry.id` distinto del WABA).
 
 ### Probar las campañas en local
 
