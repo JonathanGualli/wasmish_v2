@@ -9,10 +9,5 @@ export const CONTACT_EMAIL = 'hola@wasmish.com'
 // El número del botón «Pedir una demostración», sin «+» ni espacios (593…).
 export const WHATSAPP_NUMBER: string | null = null
 
-export const BILLING: { name: string; ruc: string | null } = {
-  name: 'Jonathan Gualli',
-  ruc: null,
-}
-
 // Se enciende en el PR del lanzamiento. Desde entonces, un hueco hace fallar el CI.
 export const LAUNCHED: boolean = false

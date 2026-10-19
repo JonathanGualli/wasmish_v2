@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react'
 
-// Un dato que todavía no existe (el número de WhatsApp, el RUC, una cifra de
-// Meta): el valor de ejemplo y la etiqueta, como en el diseño. `data-pending`
+// Un dato que todavía no existe (el número de WhatsApp, por ejemplo): el valor de ejemplo y la etiqueta, como en el diseño. `data-pending`
 // es lo que busca el chequeo de huecos del lanzamiento (tests/output/pending.test.mjs).
 // `stacked`: la etiqueta debajo del valor, alineada a la derecha (los montos del precio).
 export function Pending({ children, label = 'pendiente', onDeep = false, stacked = false }: { children?: ReactNode; label?: string; onDeep?: boolean; stacked?: boolean }) {

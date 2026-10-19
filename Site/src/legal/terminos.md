@@ -1,6 +1,6 @@
 *Última actualización: [pendiente: fecha de publicación]*
 
-Estos términos son el acuerdo entre su negocio y Jonathan Gualli, RUC [pendiente: número de RUC] («Wasmish»), para usar Wasmish. Al contratarlo, su negocio los acepta.
+Estos términos son el acuerdo entre su negocio y Jonathan Gualli («Wasmish»), para usar Wasmish. Al contratarlo, su negocio los acepta.
 
 ## 1. Qué es Wasmish
 
@@ -8,7 +8,7 @@ Una herramienta para que el equipo de un negocio atienda su WhatsApp desde la co
 
 ## 2. Precio y pago
 
-- La mensualidad es la publicada en wasmish.com al contratar, [pendiente: con IVA incluido o más IVA]. Se paga por mes adelantado, por [pendiente: medio de pago].
+- La mensualidad es la publicada en wasmish.com al contratar, con IVA incluido. Se paga por mes adelantado, por [pendiente: medio de pago].
 - **Los cargos de Meta van aparte**: Meta los cobra directamente a la tarjeta que su negocio registra en su cuenta de Meta. Wasmish no los cobra ni gana nada con ellos.
 - La oferta de fundador (USD 20 al mes durante 12 meses) vale para los primeros 10 clientes. Desde el mes 13 se paga el precio normal, USD 30 al mes. Si su negocio cancela, la oferta termina: si vuelve, paga el precio vigente.
 - Si un pago se atrasa más de [pendiente: 10] días, podemos suspender el acceso hasta que se regularice. Sus datos no se borran por eso.
