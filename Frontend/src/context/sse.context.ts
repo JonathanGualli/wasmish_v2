@@ -10,6 +10,9 @@ export interface SSEEventMap {
         & Partial<Pick<Message, "waMessageId" | "deliveredAt" | "readAt" | "failedAt" | "errorCode" | "errorDetail">>
         & { campaignId?: string };
     conversation_updated: { id: string; unreadCount: number };
+    // Los mensajes de otra conversación (mergedId, ya borrada) pasaron a esta:
+    // el chat abierto de `id` vuelve a pedirlos
+    conversation_merged: { id: string; mergedId: string };
     // Sin los campos de publicidad cuando es un cambio de número
     contact_updated: { id: string; marketingOptOut?: boolean; marketingOptOutAt?: string | null };
     // Muchos contactos a la vez (etiquetar en bloque, importar): sin ids, se refresca todo

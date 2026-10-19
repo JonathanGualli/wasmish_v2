@@ -97,6 +97,8 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
 
 ## En curso
 
+- **Ecos de la coexistencia a quien tiene nombre de usuario** (rama `fix-eco-contacto-partido`, PR #102): Wasmish no leía `to_user_id` (el BSUID) del eco. Si Meta omitía `to` (el teléfono), el eco se descartaba en silencio y **lo respondido desde la app no aparecía**; si lo traía, creaba otro contacto y otra conversación. Visto en producción el 2026-10-19 con dos contactos de la cuenta de prueba de Jonathan. El arreglo lee `to_user_id` y absorbe el contacto partido con el siguiente entrante o eco que traiga los dos identificadores, así que el caso partido de producción se repara solo. Los ecos perdidos antes del despliegue no vuelven. Falta: unir y desplegar.
+
 - **Quitar `wasmish.com` y `www` del servidor** (rama `dominios-pagina-fuera`, plan de la página, tarea 13): los routers de Traefik que ya no reciben visitas salen del `compose.yml`. **Sale con el siguiente despliegue de la app**; hasta entonces no se rompe nada (Traefik solo intenta renovar dos certificados que ya no le llegan).
 - **Lo que queda de la página pública:**
   - Jonathan conecta el chip del botón (`+593 98 415 2777`) a Wasmish con la coexistencia (2026-10-20) y prueba el botón desde otro celular;
