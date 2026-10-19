@@ -131,6 +131,7 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
 
 ## Cabos sueltos conocidos
 
+- **Ecos de la coexistencia** (diagnóstico a ciegas de Codex, PR #102): solo deja aviso en el log el eco descartado **sin destinatario**; los otros descartes (edición o eliminación, anterior a la conexión de la línea, duplicado) siguen sin aviso. Y un contacto que ya quedó partido en dos (uno con teléfono, otro con BSUID) se queda así, porque el webhook no fusiona: hoy solo puede pasar con datos anteriores a la 1.0.27, o si Meta mandara un eco sin `to_user_id`.
 - **Tres fallos del webhook que ya existen** (los encontró Codex al revisar las respuestas automáticas, 2026-10-15; no son del bot):
   - si Mongo falla en mitad de `procesarEntrante`, el entrante se pierde aunque Meta reciba 200 (el `catch` por mensaje no distingue un mensaje roto de un fallo de la BD);
   - dos entrantes a la vez de una conversación pueden pisarse `unreadCount` (leer, sumar uno y `save()`);
