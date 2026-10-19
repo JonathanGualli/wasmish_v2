@@ -62,6 +62,15 @@ test('el teléfono del cliente, solo con dígitos (Meta lo manda con y sin +)', 
     assert.equal(describeEcho(echo({ to: '+593 99 000 1111' })).toPhone, '593990001111');
 });
 
+// Regresión que vigila (diagnóstico de Codex): un `to` con forma de BSUID se
+// convertía en un teléfono inventado («CO.1830…» → «1830…»).
+test('un to con letras no es un teléfono', () => {
+    assert.equal(describeEcho(echo({ to: 'CO.1830780421280372' })), null);
+    const withBsuid = describeEcho(echo({ to: 'CO.1830780421280372', to_user_id: 'CO.1830780421280372' }));
+    assert.equal(withBsuid.toPhone, null);
+    assert.equal(withBsuid.toUserId, 'CO.1830780421280372');
+});
+
 // Regresión que vigila: un número que pasó a otra cuenta recibía ahí un eco viejo de la anterior.
 test('un eco anterior a la conexión de la línea se descarta', () => {
     const connectedAt = new Date(1760630500 * 1000);

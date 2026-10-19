@@ -2,6 +2,7 @@ import { WHATSAPP_VERIFY_TOKEN } from '../config.js';
 import Message from "../models/message.model.js";
 import { sendToAccount } from './stream.controller.js';
 import Conversation from "../models/conversation.model.js";
+import Contact from "../models/contact.model.js";
 import {
     resolveContact, findOrCreateConversation, findContactByIdentity, getConversationContact, applyMarketingPreference,
     applyUserIdUpdate,
@@ -290,16 +291,26 @@ const procesarEco = async (inbound, echoData) => {
         throw error;
     }
 
-    // Un entrante con BSUID y teléfono pudo absorber el contacto de este eco
-    // (`mergeEchoContactInto`) entre buscar la conversación y guardar el mensaje,
-    // y borrarla: el mensaje se muda a la del contacto que lo absorbió, que ahora
-    // tiene el teléfono (revisión de Codex del PR #102).
-    if (!await Conversation.exists({ _id: conversation._id })) {
+    // Un entrante o un eco con BSUID y teléfono pudo absorber el contacto de
+    // este eco (`mergeEchoContactInto`) mientras tanto: borrar su conversación
+    // antes de guardar el mensaje, o borrar el contacto antes de que este eco
+    // le creara una. El mensaje se muda a la conversación del contacto que lo
+    // absorbió, que ahora tiene el teléfono, y la que nació para el contacto
+    // borrado, ya vacía, se borra (revisiones de Codex del PR #102).
+    const [conversationExists, contactExists] = await Promise.all([
+        Conversation.exists({ _id: conversation._id }), Contact.exists({ _id: contact._id }),
+    ]);
+    if (!conversationExists || !contactExists) {
+        const stale = conversation;
         const owner = await resolveContact(inbound.accountId, identity, { source: 'inbound' });
         conversation = await findOrCreateConversation({ userId: inbound.accountId, contact: owner, line: inbound });
         if (conversation.isModified()) await conversation.save();
         await Message.updateOne({ _id: message._id }, { $set: { conversationId: conversation._id } });
         message.conversationId = conversation._id;
+        if (conversationExists && String(stale._id) !== String(conversation._id)
+            && !await Message.exists({ conversationId: stale._id })) {
+            await Conversation.deleteOne({ _id: stale._id, contactId: contact._id });
+        }
     }
 
     // Una persona respondió: el bot se calla, y cuanto antes (antes de bajar nada).

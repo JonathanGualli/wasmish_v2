@@ -45,21 +45,22 @@ const keeperConversationFor = (keeper, conversation) => Conversation.findOne({
  * encuentra nada que mover.
  *
  * Un eco que se guarda en la conversación absorbida mientras tanto no se pierde
- * (revisión de Codex del PR #102): si llega antes del borrado, lo recoge el
+ * (revisiones de Codex del PR #102): si llega antes del borrado, lo recoge el
  * segundo barrido de después; si llega después, `procesarEco` ve que su
- * conversación ya no existe y se muda solo.
+ * conversación o su contacto ya no existen y se muda solo. Y una conversación
+ * que un eco cree para el contacto de eco mientras tanto la recoge la segunda
+ * pasada, que vuelve a buscarlas después de borrar el contacto.
  */
 export const mergeEchoContactInto = async (keeper, phone) => {
     const echoContact = await Contact.findOne({ userId: keeper.userId, phone, _id: { $ne: keeper._id } });
     if (!echoContact) return false;
     if (!isUntouchedEchoContact(echoContact, await describeUsage(echoContact))) return false;
 
-    const conversations = await Conversation.find({ userId: keeper.userId, contactId: echoContact._id });
-    for (const conversation of conversations) {
+    const absorb = async (conversation) => {
         const target = await keeperConversationFor(keeper, conversation);
         if (!target) {
             await Conversation.updateOne({ _id: conversation._id }, { $set: { contactId: keeper._id } });
-            continue;
+            return;
         }
 
         const moveMessages = () => Message.updateMany({ conversationId: conversation._id }, { $set: { conversationId: target._id } });
@@ -83,9 +84,16 @@ export const mergeEchoContactInto = async (keeper, phone) => {
         sendToAccount(String(keeper.userId), 'conversation_merged',
             { id: String(target._id), mergedId: String(conversation._id) },
             { lineId: target.lineId ?? null });
-    }
+    };
+    const conversationsOf = () => Conversation.find({ userId: keeper.userId, contactId: echoContact._id });
 
+    const conversations = await conversationsOf();
+    for (const conversation of conversations) await absorb(conversation);
     await Contact.deleteOne({ _id: echoContact._id, userId: keeper.userId });
+    // Segunda pasada: las que se crearon para el contacto de eco mientras tanto.
+    // Las que nazcan después ya no lo encuentran (`procesarEco` se muda solo).
+    for (const conversation of await conversationsOf()) await absorb(conversation);
+
     console.log('Contacto de eco fusionado con el de su BSUID:', {
         contactId: String(keeper._id), absorbedId: String(echoContact._id), conversaciones: conversations.length,
     });

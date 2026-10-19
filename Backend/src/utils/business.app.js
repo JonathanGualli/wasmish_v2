@@ -22,7 +22,10 @@ export const ECHO_IGNORED_TYPES = ['edit', 'revoke'];
  */
 export const describeEcho = (echoData, { connectedAt = null } = {}) => {
     if (!echoData?.id || ECHO_IGNORED_TYPES.includes(echoData.type)) return null;
-    const toPhone = String(echoData.to ?? '').replace(/\D/g, '') || null;
+    // Un `to` con letras no es un teléfono (p. ej. un BSUID): quitarle las
+    // letras inventaría un número (diagnóstico de Codex, 2026-10-19).
+    const rawTo = String(echoData.to ?? '').trim();
+    const toPhone = /^\+?[\d\s().-]+$/.test(rawTo) ? rawTo.replace(/\D/g, '') || null : null;
     const toUserId = typeof echoData.to_user_id === 'string' ? echoData.to_user_id.trim() || null : null;
     if (!toPhone && !toUserId) return null;
 
