@@ -97,6 +97,8 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
 
 ## En curso
 
+- **Contactos partidos por los ecos de la coexistencia** (rama `fix-eco-contacto-partido`): alguien con nombre de usuario escribe solo con BSUID, el negocio responde desde la app y el eco crea otro contacto con su teléfono; lo respondido quedaba en otra conversación. Visto en producción el 2026-10-19 con un contacto de la cuenta de prueba de Jonathan. El arreglo absorbe el contacto del eco con el siguiente entrante que traiga los dos identificadores, así que el caso de producción se arregla solo con su próximo mensaje tras desplegar. Falta: revisión de Codex, unir y desplegar.
+
 - **Quitar `wasmish.com` y `www` del servidor** (rama `dominios-pagina-fuera`, plan de la página, tarea 13): los routers de Traefik que ya no reciben visitas salen del `compose.yml`. **Sale con el siguiente despliegue de la app**; hasta entonces no se rompe nada (Traefik solo intenta renovar dos certificados que ya no le llegan).
 - **Lo que queda de la página pública:**
   - Jonathan conecta el chip del botón (`+593 98 415 2777`) a Wasmish con la coexistencia (2026-10-20) y prueba el botón desde otro celular;
