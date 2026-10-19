@@ -1,11 +1,11 @@
 import { Check } from 'lucide-react'
 import { PRICE } from '../content/price.ts'
 import { Highlight } from '../components/Highlight.tsx'
-import { Pending } from '../components/Pending.tsx'
 import { sectionTitle, sectionWrap } from '../components/RichText.tsx'
 
-// El ejemplo de un mes (brief, § 3.6). Las cifras de Meta están sin confirmar
-// en su información oficial: van como hueco hasta el lanzamiento.
+// El ejemplo de un mes (brief, § 3.6): 500 avisos de marketing a USD 0,074, la
+// tarifa de Meta para «Resto de Latinoamérica», donde entra Ecuador (tabla del
+// 1 de julio de 2026, sin cambios el 1 de octubre). Comprobado el 2026-10-19.
 const META_EXAMPLE = 37
 
 const row = 'grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3 border-t border-brand-border py-3'
@@ -30,7 +30,7 @@ export function Pricing() {
               Durante los primeros {PRICE.founderMonths} meses. Desde el mes {PRICE.founderMonths + 1}, {usd(PRICE.regular)} al mes.
             </div>
             <div className="mt-1.5 text-[14.5px] text-brand-green-200">
-              <Pending onDeep label="IVA por confirmar">Oferta para los primeros {PRICE.founderSlots} clientes. Pago mensual.</Pending>
+              Oferta para los primeros {PRICE.founderSlots} clientes. Pago mensual, IVA incluido.
             </div>
           </div>
           <div className="h-px bg-brand-deep-active" />
@@ -62,24 +62,20 @@ export function Pricing() {
                 <span className="block text-[13.5px] text-brand-gray-600">500 avisos entregados, cobrados por Meta a su tarjeta</span>
               </span>
               <span className="grid justify-items-end gap-1">
-                <Pending stacked label="cifra pendiente"><span className="text-2xl font-extrabold tracking-[-0.03em] whitespace-nowrap">≈ {usd(META_EXAMPLE)}</span></Pending>
+                <span className="text-2xl font-extrabold tracking-[-0.03em] whitespace-nowrap">≈ {usd(META_EXAMPLE)}</span>
               </span>
             </div>
             <div className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3 border-t-2 border-brand-text pt-3.5">
               <span className="text-base font-bold">= Total de este ejemplo</span>
               <span className="grid justify-items-end gap-1">
-                <Pending stacked label="incluye la cifra pendiente">
-                  <span className="text-[clamp(30px,3.2vw,40px)] font-extrabold tracking-[-0.04em] whitespace-nowrap">≈ {usd(PRICE.founder + META_EXAMPLE)}</span>
-                </Pending>
+                <span className="text-[clamp(30px,3.2vw,40px)] font-extrabold tracking-[-0.04em] whitespace-nowrap">≈ {usd(PRICE.founder + META_EXAMPLE)}</span>
               </span>
             </div>
           </div>
           <div className="mt-auto grid gap-2.5 text-[14.5px] leading-[1.55] text-brand-gray-600">
             <p className="m-0">Meta, la empresa dueña de WhatsApp, cobra por cada mensaje entregado según el tipo y el país, directamente a la tarjeta de su negocio. Wasmish no gana nada con eso.</p>
             <p className="m-0">
-              <Pending label="por confirmar">
-                <span><b className="text-brand-text">Las respuestas automáticas también son mensajes</b> y Meta las cobra igual que las de una persona, con unos 1.000 gratis al mes por número. Por eso Wasmish junta en un solo mensaje todo lo que corresponde responder.</span>
-              </Pending>
+              <b className="text-brand-text">Las respuestas automáticas también son mensajes</b> y Meta las cobra igual que las de una persona, con 1.000 gratis al mes por número. Por eso Wasmish junta en un solo mensaje todo lo que corresponde responder.
             </p>
             <p className="m-0"><b className="text-brand-text">Lo que responde desde la app de WhatsApp Business sigue siendo gratis.</b> Meta cobra lo que se envía desde Wasmish.</p>
           </div>
