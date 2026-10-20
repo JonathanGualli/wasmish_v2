@@ -22,6 +22,7 @@ export const SSEProvider = ({ children }: { children: ReactNode }) => {
     const subscribers = useRef<{ [E in SSEEventType]: Set<SSEHandler<E>> }>({
         message_created: new Set(),
         message_status: new Set(),
+        message_updated: new Set(),
         conversation_updated: new Set(),
         contact_updated: new Set(),
         contacts_updated: new Set(),
@@ -58,6 +59,7 @@ export const SSEProvider = ({ children }: { children: ReactNode }) => {
             connection = createSSEConnection("stream", {
                 onMessageCreated: dispatch("message_created"),
                 onMessageStatus: dispatch("message_status"),
+                onMessageUpdated: dispatch("message_updated"),
                 onConversationUpdated: dispatch("conversation_updated"),
                 onContactUpdated: dispatch("contact_updated"),
                 onContactsUpdated: dispatch("contacts_updated"),

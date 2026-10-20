@@ -195,9 +195,31 @@ export const useConversationMessages = (conversationId: string) => {
         });
     });
 
+    // Borrado o editado (coexistencia): el estado entero, en su sitio. Uno que
+    // llega después de otro más nuevo (dos cambios cruzados) se descarta.
+    const unsubUpdated = subscribe("message_updated", (updatedMessage) => {
+      if (updatedMessage.conversationId !== conversationId) return;
+
+      queryClient.setQueryData<InfiniteData<{ items: Message[], nextCursor: string | undefined }>>(
+        ["conversation", conversationId],
+        (oldData) => {
+          if (!oldData) return oldData;
+          const newPages = oldData.pages.map(page => ({
+            ...page,
+            items: page.items.map(msg =>
+              msg.id === updatedMessage.id && updatedMessage.changeVersion > (msg.changeVersion ?? 0)
+                ? { ...msg, ...updatedMessage }
+                : msg
+            ),
+          }));
+          return { ...oldData, pages: newPages };
+        });
+    });
+
     return () => {
       unsubCreated();
       unsubStatus();
+      unsubUpdated();
     };
   }, [subscribe, queryClient, conversationId]);
 

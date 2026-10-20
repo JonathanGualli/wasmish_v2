@@ -9,7 +9,12 @@ export interface SSEEventMap {
     message_status: Pick<Message, "id" | "conversationId" | "status">
         & Partial<Pick<Message, "waMessageId" | "deliveredAt" | "readAt" | "failedAt" | "errorCode" | "errorDetail">>
         & { campaignId?: string };
-    conversation_updated: { id: string; unreadCount: number };
+    // Borrado o editado (coexistencia): el estado entero, con su changeVersion
+    message_updated: Pick<Message, "id" | "conversationId" | "text">
+        & Pick<Message, "caption" | "deletedAt" | "editedAt" | "previousVersions">
+        & { changeVersion: number };
+    // Solo los campos que cambiaron: no leídos, o la vista previa tras un borrado o una edición
+    conversation_updated: { id: string; unreadCount?: number; lastMessage?: string };
     // Sin los campos de publicidad cuando es un cambio de número
     contact_updated: { id: string; marketingOptOut?: boolean; marketingOptOutAt?: string | null };
     // Muchos contactos a la vez (etiquetar en bloque, importar): sin ids, se refresca todo

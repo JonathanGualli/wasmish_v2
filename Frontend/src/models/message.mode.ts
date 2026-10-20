@@ -23,6 +23,13 @@ export interface PendingUpload {
   retryable?: boolean;
 }
 
+/** Lo que decía un mensaje antes de una edición, y desde cuándo (ISO). */
+export interface MessageVersion {
+  text: string;
+  caption: string | null;
+  editedAt: string;
+}
+
 export interface Message {
   id: string;
   conversationId: string;
@@ -57,4 +64,12 @@ export interface Message {
    * WhatsApp Business (`businessApp`, coexistencia). `null` en los antiguos.
    */
   origin?: { kind: 'chat' | 'api' | 'bot' | 'businessApp' } | { kind: 'campaign'; campaignName: string | null } | null;
+  /** Borrado por el contacto o por el negocio desde la app (coexistencia): se conserva lo que decía. */
+  deletedAt?: string | null;
+  /** La hora de la última edición; `text` y `caption` ya son lo nuevo. */
+  editedAt?: string | null;
+  /** Lo que decía antes de cada edición, en orden de llegada. */
+  previousVersions?: MessageVersion[];
+  /** Sube con cada borrado o edición: un `message_updated` que no lo supere es viejo. */
+  changeVersion?: number;
 }

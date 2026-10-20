@@ -58,11 +58,22 @@ export const useConversations = () => {
       });
     });
 
-    // Reset de no leídos (cuando abres la conversación)
+    // Solo los campos que vienen: los no leídos (al abrir la conversación, o un
+    // eco de la app) o la vista previa (un borrado o una edición del último
+    // mensaje). Sin `unreadCount` no se toca el contador.
     const unsubUpdated = subscribe("conversation_updated", (payload) => {
       queryClient.setQueryData<Conversation[]>(["conversations"], (old = []) =>
-        old.map((c) => (c.id === payload.id ? { ...c, unreadCount: payload.unreadCount } : c))
+        old.map((c) => (c.id === payload.id
+          ? {
+            ...c,
+            ...(payload.unreadCount !== undefined && { unreadCount: payload.unreadCount }),
+            ...(payload.lastMessage !== undefined && { lastMessage: payload.lastMessage }),
+          }
+          : c))
       );
+      // Dos avisos de la vista previa cruzados pueden llegar en otro orden; la
+      // BD sí queda en el estado final (revisión de Codex del PR #109).
+      if (payload.lastMessage !== undefined) refreshList();
     });
 
     // Un contacto cambió de nombre o de número (o de preferencia de
