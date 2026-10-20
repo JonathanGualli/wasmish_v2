@@ -24,6 +24,7 @@ SSE y sus eventos, no leídos, y la UI del chat: hilo, bandeja, conversación nu
   - [`SendTemplateDialog` + `useSendTemplate`](#sendtemplatedialog--usesendtemplate)
   - [Enviar archivos en la UI (`components/Chat/Composer/`)](#enviar-archivos-en-la-ui-componentschatcomposer)
   - [Mensajes que no son texto](#mensajes-que-no-son-texto)
+  - [Mensajes eliminados y editados en la UI](#mensajes-eliminados-y-editados-en-la-ui)
   - [`temporalId`](#temporalid)
 
 ---
@@ -93,6 +94,7 @@ SSE y sus eventos, no leídos, y la UI del chat: hilo, bandeja, conversación nu
 - **«Desde la app de WhatsApp»:** los salientes con `origin.kind === 'businessApp'` llevan esa marca (con el icono del celular) donde va el nombre o «Bot», siempre, también sin equipo.
 - Para mensajes entrantes prefiere `payload.unreadCount` (el valor real de la BD, que el webhook ya manda) sobre el `+1` local, que queda de respaldo — así no se desincroniza con varias pestañas abiertas.
 - `windowExpiresAt: payload.windowExpiresAt ?? c.windowExpiresAt` — un mensaje propio no trae el campo y **no debe** reabrir la ventana; el `??` conserva el que ya había.
+- **`conversation_updated` es parcial:** copia solo los campos que vienen (`unreadCount`, `lastMessage`); sin `unreadCount`, el contador no se toca. Con `lastMessage` (un borrado o una edición del último mensaje) además vuelve a pedir la bandeja (`refreshList`): dos avisos cruzados pueden llegar en otro orden, y la BD sí queda en el estado final.
 
 ### Ventana de 24 h en la UI (`ChatThread`)
 
@@ -163,6 +165,15 @@ Dónde:
 ### Mensajes que no son texto
 
 **Mensajes que no son texto:** el backend ya manda el `text` resuelto (el caption, el nombre del archivo o una etiqueta), así que la bandeja no necesita saber nada — pinta `lastMessage` y ya. En el hilo, `MessageTypeIcon` le pone delante el icono de Lucide que corresponde al `type`, y devuelve `null` para `'text'`, que es casi todo el historial: la burbuja normal no cambia. Un `type` desconocido cae en el interrogante, nunca en un hueco. Cuando el mensaje trae archivo (`hasMedia`), `MessageMedia` lo pinta: `<img>` para imagen y sticker, `<video controls>`, `<audio controls>`, y una fila descargable para documentos. La URL es `/api/media/<id>` y es del **mismo origen** que la app (proxy de Vite en dev, nginx en prod), así que la cookie de sesión viaja sola y basta con ponerla en el `src` — sin `fetch` ni blobs. Debajo del archivo solo se pinta el `caption`, nunca la etiqueta.
+
+### Mensajes eliminados y editados en la UI
+
+**Mensajes eliminados y editados en la UI** (coexistencia, 2026-10-20; el backend en [webhook-adjuntos.md](webhook-adjuntos.md#mensajes-eliminados-y-editados-applymessagechange)). Sin Claude Design: lo hizo el agente con la skill de marca (decisión de Jonathan).
+- **Eliminado** (`deletedAt`): la burbuja dice «Mensaje eliminado» en cursiva con el icono `Ban` (gris sobre la ajena, `brand-on-deep` sobre la propia), sin los botones de una plantilla. **Editado** (`editedAt`): el contenido nuevo y «Editado» delante de la hora. Eliminado y editado: manda «eliminado» (la línea de la hora no dice «Editado»).
+- **El ojo** (`MessageChangeToggle`, `components/Chat/MessageChange.tsx`) va al final de la línea de la hora, con `aria-label` («Ver el mensaje original» / «Ver las versiones anteriores», y «Ocultar…» abierto) y un área de toque de 44 px en el teléfono. Abierto, `MessageChangeDetails` enseña bajo la burbuja, en un recuadro claro de borde punteado: «Eliminado» con el contenido tal cual (el mismo `renderBody` que la burbuja, con el archivo si lo hay) y/o las versiones anteriores, de la más reciente a la más antigua, cada una con su hora (desde cuándo decía eso).
+- Lo abierto es un `Set` de ids en `ChatThread`: no se guarda ni se comparte entre pestañas, y al recargar sale cerrado.
+- **En vivo:** `useConversationMessages` aplica `message_updated` en su sitio en todas las páginas, **solo si su `changeVersion` es mayor** que el del mensaje en la caché (uno viejo que llega tarde se descarta). Si el hilo se está cargando, o aún no hay caché, no lo mezcla: cancela la petición en curso (`cancelQueries`) y lo vuelve a pedir, porque esa respuesta se leyó antes del cambio y lo pisaría. Solo `invalidateQueries` no basta: en la primera carga se une a la petición en curso. La bandeja cambia con `conversation_updated` (arriba).
+- La línea de la hora es `flex-wrap` con `whitespace-nowrap`: en el teléfono cada pieza («Desde la app de WhatsApp», «Editado», la hora, el acuse, el ojo) baja entera en vez de partir la hora en dos.
 
 ### `temporalId`
 

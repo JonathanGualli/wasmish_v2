@@ -1,13 +1,14 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useInView } from "react-intersection-observer";
 import { Transition } from "@headlessui/react";
-import { Bot, CircleAlert, Code2, Send, Smartphone } from "lucide-react";
+import { Ban, Bot, CircleAlert, Code2, Send, Smartphone } from "lucide-react";
 import { useConversationMessages } from "../../hooks/useConversationMessages";
 import { useConversations } from "../../hooks/useConversations.ts";
 import { useTemplates } from "../../hooks/useTemplates.ts";
 import { renderLegacyTemplateText } from "../../utils/legacyTemplate.ts";
 import { MessageTypeIcon } from "./MessageTypeIcon.tsx";
 import { MessageMedia } from "./MessageMedia.tsx";
+import { MessageChangeDetails, MessageChangeToggle } from "./MessageChange.tsx";
 import { formatDayLabel, dayKey } from "../../utils/formatChatTime.ts";
 import type { Message, MessageStatus } from "../../models/message.mode.ts";
 import { TemplateButtons } from "./TemplatePreview.tsx";
@@ -168,6 +169,56 @@ export const ChatThread = ({
         if (inView && hasNextPage) void fetchNextPage();
     }, [inView, hasNextPage, fetchNextPage]);
 
+    // Los mensajes eliminados o editados con el ojo abierto. De esta pantalla:
+    // no se guarda ni se comparte entre pestañas.
+    const [revealed, setRevealed] = useState<ReadonlySet<string>>(() => new Set());
+    const toggleRevealed = (id: string) => setRevealed(prev => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id); else next.add(id);
+        return next;
+    });
+
+    // El cuerpo de un mensaje: el archivo, un adjunto con su icono o el texto. Lo
+    // usan la burbuja y lo que enseña el ojo de un mensaje eliminado (`onDeep`:
+    // sobre la burbuja propia, en verde profundo).
+    const renderBody = (msg: Message, onDeep: boolean) => {
+        // Adjuntos, ubicaciones, respuestas a botones… El texto ya viene
+        // resuelto del backend (el caption, o una etiqueta); aquí solo se
+        // le pone delante el icono que dice de qué se trata.
+        const esAdjunto = Boolean(msg.type) && msg.type !== "text";
+        // Con archivo se pinta el archivo y, debajo, solo lo que el contacto
+        // escribió de verdad: poner «Imagen» bajo una imagen que ya se ve
+        // sobra. Sin archivo (descarga fallida, o tipo sin nada que bajar)
+        // se cae a la etiqueta con su icono, que es como estaba antes.
+        const conArchivo = Boolean(msg.hasMedia || msg.pending);
+
+        if (conArchivo) {
+            return (
+                <span className="flex flex-col gap-2">
+                    <MessageMedia msg={msg} />
+                    {msg.pending && msg.status !== "failed" && (
+                        <ProgressBar percent={uploadPercent(msg.pending)} active />
+                    )}
+                    {/* Una plantilla con archivo en la cabecera: debajo va su cuerpo. */}
+                    {msg.templateName
+                        ? <span className="min-w-0">{renderLegacyTemplateText(msg.text, templates)}</span>
+                        : msg.caption && <span className="min-w-0">{msg.caption}</span>}
+                </span>
+            );
+        }
+        if (esAdjunto) {
+            return (
+                <span className="flex items-start gap-2">
+                    <span className={`mt-[3px] ${onDeep ? "text-brand-on-deep-muted" : "text-brand-muted"}`}>
+                        <MessageTypeIcon type={msg.type} />
+                    </span>
+                    <span className="min-w-0">{msg.text}</span>
+                </span>
+            );
+        }
+        return renderLegacyTemplateText(msg.text, templates);
+    };
+
     const renderContent = () => {
         if (!conversationId) return <CenteredMessage>Selecciona una conversación</CenteredMessage>;
         if (isLoading) return <ThreadSkeleton />;
@@ -181,15 +232,10 @@ export const ChatThread = ({
 
         messages.forEach((msg: Message, i: number) => {
             const mine = msg.sender === "me";
-            // Adjuntos, ubicaciones, respuestas a botones… El texto ya viene
-            // resuelto del backend (el caption, o una etiqueta); aquí solo se
-            // le pone delante el icono que dice de qué se trata.
-            const esAdjunto = Boolean(msg.type) && msg.type !== "text";
-            // Con archivo se pinta el archivo y, debajo, solo lo que el contacto
-            // escribió de verdad: poner «Imagen» bajo una imagen que ya se ve
-            // sobra. Sin archivo (descarga fallida, o tipo sin nada que bajar)
-            // se cae a la etiqueta con su icono, que es como estaba antes.
-            const conArchivo = Boolean(msg.hasMedia || msg.pending);
+            // Borrado (coexistencia): se dice en su sitio y el ojo enseña lo que decía.
+            const deleted = Boolean(msg.deletedAt);
+            const changed = deleted || Boolean(msg.editedAt);
+            const changeOpen = changed && revealed.has(msg.id);
             // Enviado como plantilla: se nombra encima y se pintan sus botones
             // debajo, como los ve el contacto. Los botones salen de la definición
             // sincronizada; si la plantilla ya no está, solo queda el nombre.
@@ -215,35 +261,24 @@ export const ChatThread = ({
                                 ? "bg-brand-deep text-white rounded-[12px_12px_3px_12px]"
                                 : "bg-brand-surface text-brand-text border border-brand-border rounded-[12px_12px_12px_3px]"}`}
                     >
-                        {conArchivo ? (
-                            <span className="flex flex-col gap-2">
-                                <MessageMedia msg={msg} />
-                                {msg.pending && msg.status !== "failed" && (
-                                    <ProgressBar percent={uploadPercent(msg.pending)} active />
-                                )}
-                                {/* Una plantilla con archivo en la cabecera: debajo va su cuerpo. */}
-                                {msg.templateName
-                                    ? <span className="min-w-0">{renderLegacyTemplateText(msg.text, templates)}</span>
-                                    : msg.caption && <span className="min-w-0">{msg.caption}</span>}
+                        {deleted ? (
+                            <span className={`flex items-center gap-1.5 italic ${mine ? "text-brand-on-deep" : "text-brand-muted"}`}>
+                                <Ban size={14} className="flex-none" />
+                                Mensaje eliminado
                             </span>
-                        ) : esAdjunto ? (
-                            <span className="flex items-start gap-2">
-                                <span className={`mt-[3px] ${mine ? "text-brand-on-deep-muted" : "text-brand-muted"}`}>
-                                    <MessageTypeIcon type={msg.type} />
-                                </span>
-                                <span className="min-w-0">{msg.text}</span>
-                            </span>
-                        ) : (
-                            renderLegacyTemplateText(msg.text, templates)
-                        )}
+                        ) : renderBody(msg, mine)}
                     </div>
-                    <TemplateButtons buttons={plantilla?.buttons} />
+                    {!deleted && <TemplateButtons buttons={plantilla?.buttons} />}
 
-                    <div className={`flex items-center gap-[5px] text-[11px] mt-1 text-brand-subtle
+                    {/* Cada pieza baja entera si no cabe: en el teléfono, «Desde la app
+                        de WhatsApp», «Editado», la hora y el ojo partían la hora en dos. */}
+                    <div className={`flex flex-wrap items-center gap-x-[5px] gap-y-0.5 whitespace-nowrap text-[11px] mt-1 text-brand-subtle
                         ${mine ? "justify-end" : ""}`}>
                         {/* «Bot» y «Desde la app de WhatsApp» siempre: sin equipo también hay que saber
                             qué contestó la máquina y qué se respondió desde el celular. */}
                         {mine && (showAuthor || msg.origin?.kind === 'bot' || msg.origin?.kind === 'businessApp') && <MessageAuthor msg={msg} />}
+                        {/* Eliminado manda: un eliminado y editado no dice «Editado». */}
+                        {msg.editedAt && !deleted && <><span>Editado</span><span>·</span></>}
                         <span className="font-mono">{formatTime(msg.timestamp)}</span>
                         {mine && (
                             showsUploadStatus(msg)
@@ -254,7 +289,13 @@ export const ChatThread = ({
                                     {STATUS_LABEL[msg.status]}
                                 </span>
                         )}
+                        {changed && (
+                            <MessageChangeToggle msg={msg} open={changeOpen} onToggle={() => toggleRevealed(msg.id)} />
+                        )}
                     </div>
+                    {changeOpen && (
+                        <MessageChangeDetails msg={msg} renderBody={(m) => renderBody(m, false)} />
+                    )}
                 </div>
             );
 

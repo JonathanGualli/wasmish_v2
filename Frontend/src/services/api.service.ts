@@ -17,6 +17,7 @@ const API_URL = '/api'; // configuracion puesta en vite.config.ts
 interface SSEHandlers {
     onMessageCreated?: (event: MessageEvent) => void;
     onMessageStatus?: (event: MessageEvent) => void;
+    onMessageUpdated?: (event: MessageEvent) => void;
     onConversationUpdated?: (event: MessageEvent) => void;
     onContactUpdated?: (event: MessageEvent) => void;
     onContactsUpdated?: (event: MessageEvent) => void;
@@ -150,6 +151,9 @@ export const createSSEConnection = (
     }
     if (handlers.onMessageStatus) {
         source.addEventListener("message_status", handlers.onMessageStatus);
+    }
+    if (handlers.onMessageUpdated) {
+        source.addEventListener("message_updated", handlers.onMessageUpdated);
     }
     if (handlers.onConversationUpdated) {
         source.addEventListener("conversation_updated", handlers.onConversationUpdated);
