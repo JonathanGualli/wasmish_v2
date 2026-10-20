@@ -105,7 +105,7 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
 
 ## En curso
 
-- **Mensajes eliminados y editados** (coexistencia), rama `mensajes-eliminados-editados`: hoy un borrado o una edición del contacto sale como «Mensaje no compatible». Spec escrito (`docs/superpowers/specs/2026-10-19-mensajes-eliminados-editados-design.md`) y ya corregido con la revisión de Codex (§ 10). Falta: que Jonathan lo apruebe; volver a abrir las páginas de Meta del § 3 (a Codex le dieron 429); después, el plan (skill `writing-plans`) con su revisión de Codex, y el PR del plan. Sin código todavía.
+- **Mensajes eliminados y editados** (coexistencia), rama `mensajes-eliminados-editados`: hoy un borrado o una edición del contacto sale como «Mensaje no compatible». Spec (`docs/superpowers/specs/2026-10-19-mensajes-eliminados-editados-design.md`) aprobado, con la revisión de Codex y las páginas de Meta revisadas el 2026-10-20. Plan escrito (`docs/superpowers/plans/2026-10-20-mensajes-eliminados-editados.md`), en su PR esperando la revisión de Codex. Después, dos PRs: backend (rama `mensajes-eliminados-editados-backend`) y UI (`mensajes-eliminados-editados-ui`), que se despliegan juntos. Sin código todavía.
 
 - **Lo que queda de la página pública:**
   - Jonathan conecta el chip del botón (`+593 98 415 2777`) a Wasmish con la coexistencia (2026-10-20) y prueba el botón desde otro celular;

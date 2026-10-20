@@ -20,7 +20,7 @@ Los ecos (lo que el negocio borra o edita desde la app de WhatsApp Business) ya 
 
 ## 3. Lo que dice Meta (fuentes oficiales)
 
-Revisado el 2026-10-19 en la documentación de Meta para desarrolladores: las referencias de los webhooks [`revoke`](https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/reference/messages/revoke/), [`edit`](https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/reference/messages/edit/), [`unsupported`](https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/reference/messages/unsupported/) y [`smb_message_echoes`](https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/reference/smb_message_echoes). **Antes de escribir el plan se vuelven a abrir** (en la revisión de Codex, Meta respondió 429).
+Revisado el 2026-10-19 en la documentación de Meta para desarrolladores: las referencias de los webhooks [`revoke`](https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/reference/messages/revoke/), [`edit`](https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/reference/messages/edit/), [`unsupported`](https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/reference/messages/unsupported/) y [`smb_message_echoes`](https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/reference/smb_message_echoes). Vueltas a abrir el 2026-10-20, antes del plan (en la revisión de Codex, Meta había respondido 429): las formas de abajo cuadran.
 
 - **Solo con la coexistencia:** los dos webhooks «are only available to WhatsApp Business app users (aka "Coexistence")». Una línea sin coexistencia no los recibe.
 - **Borrado (entrante):** campo `messages`, `type: "revoke"`, con su propio `id` (el del evento) y `revoke: { original_message_id }`. Se puede borrar hasta dos días después de enviar.
@@ -28,6 +28,7 @@ Revisado el 2026-10-19 en la documentación de Meta para desarrolladores: las re
 - **Ecos:** la misma forma dentro de `smb_message_echoes` (`type: "revoke"` con `revoke.original_message_id`; `type: "edit"` con `edit.original_message_id` y `edit.message`), con el destinatario en `to` / `to_user_id`.
 - Sin coexistencia, la página de `unsupported` lista `edit` como subtipo posible de un `type: "unsupported"` (código 131051). No trae `original_message_id`: ese caso sigue cayendo en «Mensaje no compatible», como hoy.
 - El `timestamp` es la hora en que Meta disparó el webhook, no la del mensaje original.
+- En el ejemplo de Meta, `edit.message` trae `context: { id: "M0" }`, sin explicar. No es una respuesta citada: se ignora.
 
 ## 4. Cómo funciona
 
