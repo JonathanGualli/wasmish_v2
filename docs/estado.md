@@ -14,6 +14,7 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
   - **Probado** con los tests (unitarios y de aislamiento, con las carreras forzadas) y en Chromium contra el backend local con `webhook:simulate` (en vivo, tras recargar y en el teléfono). Falta probarlo con Meta de verdad: con una línea de coexistencia, borrar y editar un mensaje desde el celular del contacto y desde la app del negocio, y comprobar que no nace ningún «Mensaje no compatible».
   - Los «Mensaje no compatible» que ya se guardaron por un borrado o una edición se quedan como están.
 - La línea de la hora del chat ya no parte la hora en dos en el teléfono (PR #110).
+- **El motivo de un entrante que Meta no entregó, al log** (PR #112, con su revisión de Codex): con un `unsupported` o `unknown`, `procesarEntrante` registra el subtipo y el código y título de cada error, sin el contenido. Se hizo tras un texto que llegó como «Mensaje no compatible» el 2026-10-20 en una línea con coexistencia sin rastro del porqué. **Después de desplegar**, cuando vuelva a pasar, se mira el log y, si el subtipo se repite, entra en `ETIQUETAS_NO_SOPORTADO`.
 - Sin migración, scripts previos ni variables nuevas: los campos nuevos de `Message` nacen vacíos. **Volver atrás** a la 1.0.27 es seguro: ignora los campos nuevos (un mensaje borrado se vería con su texto de siempre).
 
 La 1.0.27 (desplegada el 2026-10-19) llevó:
