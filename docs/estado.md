@@ -156,6 +156,6 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
 - **Importar:** un contacto que solo tiene BSUID no se reconoce por teléfono al importar (se crea otro). La casilla de consentimiento empieza sin marcar y las tandas son de 200: decisiones del agente, a revisar. Sin probar a ojo: el aviso de más de 5000 al crear una campaña desde Importar.
 - **Bandeja de Chats:** un contacto sin ningún nombre sale con el teléfono como título y un dígito como avatar (`initials(title)` en `ConversationList`). Sin confirmar si sigue.
 - **Código muerto** en `hooks/useSendMessage.ts` y `pages/private/DashboardPage`: «dejarlo por el momento». `Frontend/src/index.js` está vacío y se puede borrar.
-- **Bundle del frontend:** 792 kB el 2026-10-11 y crece con cada módulo; candidato a cargar las páginas con `lazy`.
+- **Bundle del frontend:** 1.037 kB (310 kB con gzip) el 2026-10-20, desde 792 kB el 2026-10-11, y crece con cada módulo; candidato a cargar las páginas con `lazy` (hoy solo `ImportContactsPage` va aparte).
 - `npm run version:bump` no toca los `package-lock.json`: el siguiente `npm install` deja un diff.
 - Pregunta abierta: ¿hay lógica duplicada entre `processTemplateSending` y `processMessageSending`?
