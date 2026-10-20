@@ -48,7 +48,7 @@ Cada mensaje puede tener **hasta dos reacciones**: la del contacto y la nuestra 
 
 - Se ven **pegadas a la burbuja** del mensaje, como en WhatsApp.
 - La nuestra dice **quién del equipo** la puso (al pasar el ratón o al tocarla, por ejemplo), o «desde la app de WhatsApp» si se puso desde el celular del negocio (coexistencia). La del contacto no necesita más.
-- **Una reacción nuestra que no salió** (WhatsApp la rechazó, a veces un rato después): tiene que notarse que falló y, al mirarla, por qué. Hoy un mensaje fallido ya tiene su marca y su detalle: algo en la misma línea.
+- **Una reacción nuestra que no salió** (WhatsApp la rechazó, a veces un rato después): tiene que notarse que falló y, al mirarla, por qué. Hoy un mensaje fallido ya tiene su marca y su detalle: algo en la misma línea. Si lo que falló fue **quitar o cambiar** la reacción, el contacto sigue viendo la anterior: hay que poder decir cuál («No se pudo quitar tu 👍»).
 - Las reacciones llegan **en vivo**: si el contacto reacciona mientras miro, aparece; si la quita, desaparece. Sin saltos que muevan el hilo.
 
 ---

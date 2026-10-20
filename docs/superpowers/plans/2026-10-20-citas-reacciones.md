@@ -15,13 +15,16 @@
 - Una reacción (del contacto o de un eco) **nunca** crea un `Message` si encuentra su original, ni suma `unreadCount`, mueve `lastInboundAt`, manda push, crea trabajo del bot ni llama a `markHumanReply`.
 - El original de una reacción se toca solo si es **de la cuenta y la línea** del webhook (`conversationLineFilter`) y de **la conversación del contacto del webhook** (`findContactByIdentity`, sin crearlo). La dirección del original **no** se exige.
 - Una cita o una reacción **solo enlaza mensajes de la misma conversación**: el citado se busca con `{ waMessageId | _id, conversationId }`, nunca solo por id.
-- Una reacción solo avanza: aplica si no había, si la guardada tiene `at` menor, o el mismo `at` con otro `waMessageId`. Quitarla guarda `{ emoji: null, at, waMessageId }`. Cada reacción aplicada (y el fallo de una enviada) sube `changeVersion` en 1.
+- Una reacción solo avanza: aplica si no había o si la guardada tiene `at` menor o igual, **y** su `waMessageId` no está en `reactions.seen` (los últimos **20** ids aplicados, `$push` con `$slice: -20` en la misma escritura). Quitarla guarda `{ emoji: null, at, waMessageId }`. Cada reacción aplicada (y el fallo de una enviada) sube `changeVersion` en 1.
+- Una reacción suelta (`type: 'reaction'`) nunca cuenta como entrante para la ventana: ni `lastInboundAt`, ni `lastInboundOf`, ni `backfill-last-inbound.js`.
+- Una reacción nuestra a la vez por mensaje: `reactions.sendingUntil` (15 s); otra en curso → 409 `reaction_in_progress` sin llamar a Meta.
+- Toda escritura de una reacción usa rutas `reactions.<lado>.<campo>`: nunca `status`, `errorCode` ni `errorDetail` del mensaje.
 - Sin original: una reacción **con** emoji del contacto se guarda como hoy (mensaje suelto «Reaccionó con 👍») pero sin no leído, sin `lastInboundAt` y sin push; **quitarla** o una reacción de eco se descarta con un aviso.
 - La bandeja: `Reaccionó 👍 a: «resumen»` (contacto) y `Reaccionaste 👍 a: «resumen»` (negocio), resumen de **40** caracteres con «…», con `lastMessageAt` = la hora de la reacción y la condición `lastMessageAt <= at`. Quitar una reacción no toca la bandeja.
 - Reaccionar desde Wasmish: solo a `inbound`, con `waMessageId`, sin `deletedAt`, que no sea `type: 'reaction'` y de menos de **30 días**. Responder: con `waMessageId`, sin `deletedAt` y que no sea `type: 'reaction'`.
 - El resumen del citado para la UI recorta el texto a **200** caracteres.
 - Emojis rápidos: 👍 ❤️ 😂 😮 😢 🙏. Quitar una reacción enviada manda `emoji: ""` a Meta.
-- Códigos de error: `reply_unavailable` (400), `reaction_unavailable` (400). El citado o el mensaje de otra conversación: 404.
+- Códigos de error: `reply_unavailable` (400), `reaction_unavailable` (400), `reaction_in_progress` (409). El citado o el mensaje de otra conversación: 404.
 - Los logs, sin emoji ni texto: `waMessageId`, tipo y motivo.
 - Comentarios, commits, PRs y textos en español; identificadores nuevos en inglés.
 
@@ -31,7 +34,9 @@
 2. **El contacto reacciona a su propio mensaje** (WhatsApp lo deja, aunque la doc de Meta hable de mensajes del negocio): se aplica igual → test en la tarea 2.
 3. **Un emoji compuesto** (👍🏽, ❤️ con selector de variante, 👨‍👩‍👧, 🇪🇨, 1️⃣) se acepta; dos emojis o texto, no → test de `isSingleEmoji` en la tarea 1.
 4. **La reacción a un mensaje viejo cuando la bandeja ya tiene algo más nuevo:** la vista previa no retrocede → test en la tarea 2.
-5. **El acuse `failed` de una reacción que ya se reemplazó o se quitó:** no marca la nueva como fallida → test en la tarea 3.
+5. **El acuse `failed` de una reacción que ya se reemplazó o se quitó:** no marca la nueva como fallida, y nunca el estado del original → test en la tarea 3.
+
+**Limitación aceptada** (spec § 4): un `failed` que llega antes de que se guarde el `waMessageId` de la reacción se pierde, como ya pasa con los mensajes.
 
 ---
 
@@ -58,7 +63,7 @@ Solo documentación: el spec, el brief, este plan y «En curso» de `docs/estado
 - Produce: `canReplyTo(msg)` y `canReactTo(msg, now = new Date())` → `boolean`, con las reglas de «Restricciones».
 - Produce: `previewSnippet(msg, max = 40)` → el texto (o el pie, o la etiqueta que ya guarda `text`) en una línea (`\s+` → espacio) y recortado con «…».
 - Produce: `reactionPreview({ side: 'them' | 'me', emoji, original })` → `Reaccionó ${emoji} a: «${previewSnippet(original)}»` o `Reaccionaste …`.
-- Produce: `serializeReactions(msg)` → `{ them: { emoji, at } | null, me: { emoji, at, status, errorCode, errorDetail, sentBy: { id, name } | null, origin } | null }` (fechas en ISO; un lado con `emoji: null` o ausente → `null`).
+- Produce: `serializeReactions(msg)` → `{ them: { emoji, at } | null, me: { emoji, previousEmoji, at, status, errorCode, errorDetail, sentBy: { id, name } | null, origin } | null }` (fechas en ISO; un lado ausente o con `emoji: null` → `null`, salvo `me` con `status: 'failed'`, que sale entero).
 - Produce: `serializeQuoted(replyTo, original)` → `null` sin `replyTo`; `{ id: null }` sin `original`; si no, `{ id, sender, type, text (200), hasMedia, deleted }`.
 
 - [ ] **Paso 1: Tests que fallan.**
@@ -67,7 +72,7 @@ Solo documentación: el spec, el brief, este plan y «En curso» de `docs/estado
   - `isSingleEmoji`: `true` con 👍, ❤️, 👍🏽, 👨‍👩‍👧, 🇪🇨, 1️⃣; `false` con `''`, `'a'`, `'1'`, `'👍👍'`, `'hola 👍'`.
   - `canReactTo`: entrante de hace 29 días → `true`; de hace 31 → `false`; saliente, sin `waMessageId`, con `deletedAt` o `type: 'reaction'` → `false`. `canReplyTo`: saliente con `waMessageId` → `true`; sin `waMessageId`, borrado o reacción → `false`.
   - `reactionPreview({ side: 'them', emoji: '👍', original: { text: 'Te paso la cotización de los volantes de mañana' } })` → `'Reaccionó 👍 a: «Te paso la cotización de los volantes de…»'` (40 + «…»); `side: 'me'` → empieza por `'Reaccionaste 👍 a: «'`; un texto con saltos de línea queda en una.
-  - `serializeReactions` de un mensaje sin el campo → `{ them: null, me: null }`; con `them.emoji: null` → `them: null`. `serializeQuoted(null, x)` → `null`; `(replyTo, null)` → `{ id: null }`; un citado de 300 caracteres → `text` de 200.
+  - `serializeReactions` de un mensaje sin el campo → `{ them: null, me: null }`; con `them.emoji: null` → `them: null`; `me` con `emoji: null`, `previousEmoji: '👍'` y `status: 'failed'` → sale entero. `serializeQuoted(null, x)` → `null`; `(replyTo, null)` → `{ id: null }`; un citado de 300 caracteres → `text` de 200.
 - [ ] **Paso 2:** `cd Backend && node --test tests/inbound.message.test.js tests/message.actions.test.js` → FALLA.
 - [ ] **Paso 3:** implementar. `describirReaccion` no cambia (lo usa el mensaje suelto).
 - [ ] **Paso 4:** el mismo comando → PASA; `npm test` en verde.
@@ -83,9 +88,9 @@ Solo documentación: el spec, el brief, este plan y «En curso» de `docs/estado
 
 **Interfaces:**
 - Consume: `describeReaction`, `reactionPreview`, `serializeReactions`, `canReactTo` (tarea 1).
-- Produce (modelo): `replyTo: { waMessageId: String, messageId: ObjectId | null }` (sin `_id`, `default: undefined`), `forwarded: { type: String, enum: ['once', 'many'], default: undefined }`, `reactions: { them: {...}, me: {...} }` con la forma del spec § 6 (`default: undefined`). Índice `reaction_me_waMessageId` = `{ 'reactions.me.waMessageId': 1 }` parcial `{ 'reactions.me.waMessageId': { $type: 'string' } }`.
+- Produce (modelo): `replyTo: { waMessageId: String, messageId: ObjectId | null }` (sin `_id`, `default: undefined`), `forwarded: { type: String, enum: ['once', 'many'], default: undefined }`, `reactions: { them: {...}, me: {...}, seen: [String], sendingUntil: Date }` con la forma del spec § 6 (`default: undefined`). Índice `reaction_me_waMessageId` = `{ 'reactions.me.waMessageId': 1 }` parcial `{ 'reactions.me.waMessageId': { $type: 'string' } }`.
 - Produce (`message.change.service.js`): `findWebhookTarget({ line, waMessageId, identity, direction = null })` → `{ status: 'found', message, conversation } | { status: 'not_found' } | { status: 'rejected', reason }`. Es `findOriginal` de hoy con `direction` opcional (`null` = cualquiera); `applyMessageChange` la usa con su dirección.
-- Produce (`message.change.js`): `serializeMessageUpdate(msg)` → `{ id, conversationId, text, caption, ...serializeMessageChange(msg), reactions: serializeReactions(msg), canReact: canReactTo(msg) }`. `applyMessageChange` emite esto (mismos campos de hoy, más dos).
+- Produce (`message.change.js`): `serializeMessageUpdate(msg)` → `{ id, conversationId, text, caption, ...serializeMessageChange(msg), reactions: serializeReactions(msg), canReact: canReactTo(msg), canReply: canReplyTo(msg) }`. `applyMessageChange` emite esto (mismos campos de hoy, más tres).
 - Produce (`reaction.service.js`): `applyReaction({ line, reaction, side: 'them' | 'me', identity, origin = null })` → `Promise<'applied' | 'unchanged' | 'not_found' | 'rejected'>`. `side: 'me'` guarda `{ emoji, at, waMessageId, status: 'sent', sentBy: null, sentByName: null, origin }`.
 - Produce: `writeReactionPreview({ accountId, conversation, at, text })` → escribe `{ lastMessage: text, lastMessageAt: at }` con `{ _id, $or: [{ lastMessageAt: null }, { lastMessageAt: { $lte: at } }] }` y, si escribió, emite `conversation_updated` con `{ id, lastMessage }` (la UI ya vuelve a pedir la bandeja con `lastMessage`). La usa también la tarea 6.
 - SSE: `message_updated` con `serializeMessageUpdate` del mensaje **releído después de escribir**, `meta = { lineId }`.
@@ -93,14 +98,14 @@ Solo documentación: el spec, el brief, este plan y «En curso» de `docs/estado
 - [ ] **Paso 1: Tests que fallan** (llamando a `applyReaction` directo, con `openStream` para el SSE):
   - poner 👍 → `'applied'`, `reactions.them.emoji === '👍'`, `changeVersion` 1, un `message_updated` con `reactions.them.emoji`, la bandeja `Reaccionó 👍 a: «…»`, y `unreadCount`, `lastInboundAt` y el número de `Message` de la conversación sin cambiar;
   - el mismo `waMessageId` otra vez → `'unchanged'`, sin SSE;
-  - una más vieja después de una nueva → `'unchanged'`; quitar (más nueva, `emoji: null`) → `them: null` en el SSE y la bandeja sin tocar; una reacción vieja después de quitarla → `'unchanged'`;
+  - una más vieja después de una nueva → `'unchanged'`; **A (👍) → B (quitar, mismo segundo) → A otra vez** → la última no hace nada y sigue sin reacción; quitar (más nueva, `emoji: null`) → `them: null` en el SSE y la bandeja sin tocar; una reacción vieja después de quitarla → `'unchanged'`;
   - reacciona a un mensaje **sin el campo** `reactions` (creado con `Message.collection.insertOne`) → `'applied'`;
   - el contacto reacciona a **su propio** mensaje (`inbound`) → `'applied'`;
   - la conversación tiene un mensaje más nuevo que la reacción → la reacción se aplica pero la bandeja no cambia;
   - original de otra cuenta, de la otra línea de la misma cuenta, o de otro contacto → `'not_found'` / `'rejected'` y nada cambia;
   - `side: 'me'` con `origin: 'businessApp'` → `reactions.me` con `origin` y la bandeja `Reaccionaste …`.
 - [ ] **Paso 2:** `cd Backend && node --test tests/isolation/reactions.test.js` → FALLA.
-- [ ] **Paso 3:** implementar. La escritura: `updateOne({ _id, $or: [{ [`reactions.${side}`]: null }, { [`reactions.${side}.at`]: { $lt: at } }, { [`reactions.${side}.at`]: at, [`reactions.${side}.waMessageId`]: { $ne: waMessageId } }] }, { $set: { [`reactions.${side}`]: … }, $inc: { changeVersion: 1 } })`; `modifiedCount === 0` → `'unchanged'`. La bandeja, solo con emoji.
+- [ ] **Paso 3:** implementar. La escritura: `updateOne({ _id, 'reactions.seen': { $ne: waMessageId }, $or: [{ [`reactions.${side}`]: null }, { [`reactions.${side}.at`]: { $lte: at } }] }, { $set: { [`reactions.${side}`]: … }, $push: { 'reactions.seen': { $each: [waMessageId], $slice: -20 } }, $inc: { changeVersion: 1 } })`; `modifiedCount === 0` → `'unchanged'`. La bandeja, solo con emoji.
 - [ ] **Paso 4:** el mismo comando → PASA; `npm run test:isolation` en verde (también `message-change.test.js`, que ahora recibe `reactions` y `canReact` de más).
 - [ ] **Paso 5:** commit «Citas y reacciones: aplicar una reacción sobre su mensaje».
 
@@ -114,7 +119,7 @@ Solo documentación: el spec, el brief, este plan y «En curso» de `docs/estado
 **Interfaces:**
 - Consume: `applyReaction`, `describeReaction`, `describeMessageContext`, `serializeMessageUpdate`.
 - Produce (`message.reply.service.js`): `findQuotedMessage(conversationId, waMessageId)` → el `Message` lean de esa conversación o `null`; `loadQuotedMessages(msgs, conversationId)` → `Map<string, Message>` (id → citado) con **una** consulta `{ _id: { $in }, conversationId }`.
-- Produce (`reaction.service.js`): `applyReactionStatus({ line, statusData })` → `Promise<boolean>` (`true` si era una reacción nuestra): busca `{ 'reactions.me.waMessageId': statusData.id }` con el control de cuenta de `procesarEstado`; con `failed` hace `updateOne({ _id, 'reactions.me.waMessageId': id, 'reactions.me.status': 'sent' }, { $set: { status: 'failed', errorCode, errorDetail }, $inc: { changeVersion: 1 } })` y emite `message_updated`.
+- Produce (`reaction.service.js`): `applyReactionStatus({ line, statusData })` → `Promise<boolean>` (`true` si era una reacción nuestra): busca `{ $and: [{ 'reactions.me.waMessageId': statusData.id }, { 'reactions.me.waMessageId': { $type: 'string' } }] }` (el predicado del índice parcial) con el control de cuenta de `procesarEstado`; con `failed` hace `updateOne({ _id, 'reactions.me.waMessageId': id, 'reactions.me.status': 'sent' }, { $set: { 'reactions.me.status': 'failed', 'reactions.me.errorCode': …, 'reactions.me.errorDetail': … }, $inc: { changeVersion: 1 } })` y emite `message_updated`.
 - Produce (`serializeMessage`, en `chat.controller.js`): acepta `{ campaignNames, quoted }` (`quoted`: `Map` de la consulta de arriba) y añade `replyTo: serializeQuoted(msg.replyTo, quoted?.get(String(msg.replyTo?.messageId)))`, `forwarded: msg.forwarded ?? null`, `reactions: serializeReactions(msg)`, `canReact` y `canReply`.
 - `business.app.js`: `describeEcho` devuelve `null` para `type: 'reaction'` (lo trata `procesarEco` antes) y su resultado incluye `context: describeMessageContext(echoData)`.
 
@@ -124,7 +129,8 @@ Solo documentación: el spec, el brief, este plan y «En curso» de `docs/estado
   - un texto con `context.id` de un mensaje de esa conversación → `replyTo: { waMessageId, messageId }` y el `message_created` con `replyTo.id`; con el `wamid` de un mensaje de **otra** conversación de la cuenta → `messageId: null`;
   - un texto con `context.frequently_forwarded` → `forwarded: 'many'`;
   - un eco `type: 'reaction'` a un entrante → `reactions.me.origin === 'businessApp'`, sin `Message` nuevo y sin `markHumanReply` (el bot sigue activo); un eco de texto con `context.id` → su `replyTo`;
-  - un acuse `failed` 131009 con el `id` de `reactions.me` → `status: 'failed'` y el error; el mismo acuse cuando `reactions.me` ya tiene otro `waMessageId` → nada;
+  - un acuse `failed` 131009 con el `id` de `reactions.me` → `reactions.me.status: 'failed'` y su error, con `status`, `errorCode` y `errorDetail` **del mensaje** sin cambiar; el mismo acuse cuando `reactions.me` ya tiene otro `waMessageId` → nada; con `recordQueries`, la búsqueda lleva el predicado `$type`;
+  - una conversación **sin `lastInboundAt`** cuya única entrada es una reacción suelta: `POST /chats/:id/messages` y `POST /chats/:id/media` siguen dando 409 `window_closed`;
   - `GET /chats/:id/messages` devuelve `replyTo` con el resumen del citado, que cambia si el citado se borra después (`deleted: true`).
   - En `business.app.test.js`: `describeEcho` de una reacción → `null`; de un texto con `context` → con su `context`.
 - [ ] **Paso 2:** `cd Backend && npm run test:isolation` → FALLA en esos.
@@ -133,8 +139,10 @@ Solo documentación: el spec, el brief, este plan y «En curso» de `docs/estado
   - El camino de siempre lee `describeMessageContext` y, con cita, `findQuotedMessage`, y guarda `replyTo` y `forwarded`. El `message_created` pasa a ser `{ ...serializeMessage(messageCreated, { quoted }), unreadCount, windowExpiresAt }` (los mismos campos de hoy y los nuevos).
   - `procesarEco`: después de `isMessageChange`, si `type === 'reaction'` → `applyReaction({ side: 'me', identity: describeEchoRecipient(echoData), origin: 'businessApp' })`; `'not_found'` / `'rejected'` → aviso y salir. Un eco normal guarda `replyTo` y `forwarded` igual que un entrante.
   - `procesarEstado`: si no encuentra el `Message`, `return applyReactionStatus({ line: inbound, statusData })`.
+  - `lastInboundOf` (`chat.controller.js`) y `scripts/backfill-last-inbound.js`: `type: { $ne: 'reaction' }` en la búsqueda del último entrante.
+  - `processTemplateSending` (`template.controller.js`): su `message_created` añade `replyTo: null`, `forwarded: null`, `reactions: { them: null, me: null }`, `canReact: false` y `canReply: canReplyTo(msg)`. **La respuesta HTTP no cambia** (`/v1`).
   - `listMessages`: `loadQuotedMessages(msgs, conversation._id)` y lo pasa a `serializeMessage`.
-- [ ] **Paso 4:** `npm test` y `npm run test:isolation` → PASAN.
+- [ ] **Paso 4:** `npm test` y `npm run test:isolation` → PASAN, también los de plantillas y `/v1` sin cambios en sus respuestas; uno nuevo: el `message_created` de una plantilla enviada trae `canReply: true`.
 - [ ] **Paso 5:** commit «Citas y reacciones: el webhook (entrantes, ecos y acuses)».
 
 ### Tarea 4: Simulador y documentación
@@ -160,10 +168,10 @@ Solo documentación: el spec, el brief, este plan y «En curso» de `docs/estado
 **Interfaces:**
 - Produce: `sendTextMessage` y `sendMediaMessage` aceptan `context` opcional (`{ message_id }`) y lo mandan solo si viene.
 - Produce (`message.reply.service.js`): `findReplyTarget(conversation, messageId)` → `{ status: 'ok', message } | { status: 'not_found' } | { status: 'unavailable' }` (`not_found`: id inválido o de otra conversación; `unavailable`: `!canReplyTo(message)`).
-- Produce: `processMessageSending({ …, replyTarget = null })`: con él, manda `context: { message_id: replyTarget.waMessageId }`, guarda `replyTo: { waMessageId, messageId: replyTarget._id }` (también si Meta lo rechaza) y emite `serializeMessage(msg, { quoted: new Map([[String(replyTarget._id), replyTarget]]) })`.
+- Produce: `processMessageSending({ …, replyTarget = null })`: con él, manda `context: { message_id: replyTarget.waMessageId }`, guarda `replyTo: { waMessageId, messageId: replyTarget._id }` (también si Meta lo rechaza) y devuelve además `serialized` = `serializeMessage(msg, { quoted: new Map([[String(replyTarget._id), replyTarget]]) })`, que es lo que emite por SSE **y** lo que responden `sendMessageController` y `sendMediaMessageController` (hoy responden `serializeMessage(msg)` sin la cita).
 - `sendMessageSchema`: `replyToMessageId: z.string().max(64).optional()`. `sendMessageController` y `sendMediaMessageController` (cabecera `X-Reply-To`): sin `:id` y con cita → 400; `not_found` → 404; `unavailable` → 400 `reply_unavailable`. La comprobación va **después** de `findOwnConversation` y **antes** de la ventana y de `markHumanReply`.
 
-- [ ] **Paso 1: Tests que fallan:** texto citando un mensaje de la conversación → 201, `metaCalls` con `context.message_id` y `replyTo.id` en la respuesta; archivo con `X-Reply-To` → igual; citando un mensaje de otra conversación de la cuenta → 404; de otra cuenta → 404; una conversación de una línea fuera del alcance (agente) → 404; citando un fallido (sin `waMessageId`) → 400 `reply_unavailable`; `POST /chats/messages` (sin `:id`) con `replyToMessageId` → 400; Meta rechaza el envío → el fallido se guarda con su `replyTo`.
+- [ ] **Paso 1: Tests que fallan:** texto citando un mensaje de la conversación → 201, `metaCalls` con `context.message_id` y `replyTo.id` en la respuesta; archivo con `X-Reply-To` → igual; citando un mensaje de otra conversación de la cuenta → 404; de otra cuenta → 404; una conversación de una línea fuera del alcance (agente) → 404; citando un fallido (sin `waMessageId`) → 400 `reply_unavailable`; `POST /chats/messages` (sin `:id`) con `replyToMessageId` → 400; Meta rechaza el envío → el fallido se guarda con su `replyTo`; la respuesta HTTP, el `message_created` y un `GET` posterior dan el mismo `replyTo` (también en el fallido).
 - [ ] **Paso 2:** `npm run test:isolation` → FALLA en esos.
 - [ ] **Paso 3:** implementar.
 - [ ] **Paso 4:** → PASA.
@@ -177,10 +185,10 @@ Solo documentación: el spec, el brief, este plan y «En curso» de `docs/estado
 
 **Interfaces:**
 - Produce: `sendReactionMessage({ token, phoneNumberId, recipient, targetWaMessageId, emoji })` → la respuesta de Meta (`type: 'reaction'`, `reaction: { message_id, emoji }`; `emoji: ''` para quitar).
-- Produce (`reaction.service.js`): `sendReaction({ line, conversation, message, emoji, sender })` → el mensaje releído. Llama a Meta (si lanza, **no escribe nada** y relanza con `waErrorCode`); guarda `reactions.me = { emoji: emoji || null, at: new Date(), waMessageId, status: 'sent', errorCode: null, errorDetail: null, sentBy, sentByName, origin: 'chat' }` con `$inc: { changeVersion: 1 }`; emite `message_updated`; con emoji, `writeReactionPreview` con `reactionPreview({ side: 'me' })`.
+- Produce (`reaction.service.js`): `sendReaction({ line, conversation, message, emoji, sender })` → el mensaje releído. Primero toma el mensaje: `updateOne({ _id, $or: [{ 'reactions.sendingUntil': null }, { 'reactions.sendingUntil': { $lt: ahora } }] }, { $set: { 'reactions.sendingUntil': ahora + 15 s } })`; si no lo toma, lanza un error con `statusCode: 409` y `code: 'reaction_in_progress'`. Llama a Meta (si lanza, suelta el mensaje, **no escribe nada más** y relanza con `waErrorCode`); guarda `reactions.me = { emoji: emoji || null, previousEmoji: el de antes ?? null, at: new Date(), waMessageId, status: 'sent', errorCode: null, errorDetail: null, sentBy, sentByName, origin: 'chat' }` y quita `reactions.sendingUntil` en la misma escritura, con `$inc: { changeVersion: 1 }`; emite `message_updated`; con emoji, `writeReactionPreview` con `reactionPreview({ side: 'me' })`.
 - Produce: `reactionSchema = z.object({ emoji: z.string().max(16).refine(v => v === '' || isSingleEmoji(v)) })`; `PUT /chats/:id/messages/:messageId/reaction` → `setReactionController`: `findOwnConversation` (404) → `Message.findOne({ _id, conversationId })` con id válido (404) → `canReactTo` (400 `reaction_unavailable`) → `findConversationLine` (409) → `sendReaction` → `markConversationRead` → 200 `serializeMessage(msg)`. Si Meta lo rechaza: 502 con `[{ message, code: waErrorCode }]`. Sin `markHumanReply`.
 
-- [ ] **Paso 1: Tests que fallan:** poner 👍 → 200, `metaCalls` con `type: 'reaction'` y el `wamid` del original, `reactions.me.sentBy` de la sesión, la bandeja `Reaccionaste 👍 a: «…»`, la conversación leída y el bot **sin** pausar; `{ emoji: '' }` → Meta recibe `emoji: ''`, `reactions.me: null` en la respuesta y la bandeja igual; reaccionar a un saliente o a uno de hace 31 días → 400 `reaction_unavailable` sin llamar a Meta; `{ emoji: 'hola' }` y `{ emoji: '👍👍' }` → 400; mensaje de otra conversación de la cuenta, de otra cuenta o de una línea fuera del alcance → 404; Meta responde error → 502 con su código y `reactions.me` sin cambiar.
+- [ ] **Paso 1: Tests que fallan:** poner 👍 → 200, `metaCalls` con `type: 'reaction'` y el `wamid` del original, `reactions.me.sentBy` de la sesión, la bandeja `Reaccionaste 👍 a: «…»`, la conversación leída y el bot **sin** pausar; `{ emoji: '' }` → Meta recibe `emoji: ''`, `reactions.me: null` en la respuesta y la bandeja igual; reaccionar a un saliente o a uno de hace 31 días → 400 `reaction_unavailable` sin llamar a Meta; `{ emoji: 'hola' }` y `{ emoji: '👍👍' }` → 400; mensaje de otra conversación de la cuenta, de otra cuenta o de una línea fuera del alcance → 404; Meta responde error → 502 con su código, `reactions.me` sin cambiar y el mensaje suelto (otra reacción enseguida sí sale); **dos peticiones a la vez** al mismo mensaje (la primera con Meta lento, `onMeta` que espera) → la segunda 409 `reaction_in_progress` sin llamar a Meta, y queda guardada la primera; `{ emoji: '' }` aceptado y después un acuse `failed` → `reactions.me` sale entero con `emoji: null`, `previousEmoji` y `status: 'failed'`.
 - [ ] **Paso 2:** → FALLA. **Paso 3:** implementar. **Paso 4:** → PASA.
 - [ ] **Paso 5:** documentación: `whatsapp-envio.md` (responder citando y reaccionar, con lo que no se comprobó con Meta: quitar con `""` y la ventana), `api.md` (la ruta nueva y `replyToMessageId` / `X-Reply-To`), `docs/estado.md`. Commit «Citas y reacciones: reaccionar desde Wasmish»; PR «Citas y reacciones: backend de lo que sale», revisión de Codex.
 
@@ -197,9 +205,9 @@ El aspecto sale del diseño (`Design/*.html`) y de la skill de marca, que se con
 - Crear: `Frontend/src/hooks/useMessageReaction.ts`, `Frontend/src/hooks/useJumpToMessage.ts`
 
 **Interfaces:**
-- `Message` gana `replyTo?: QuotedMessage | null` (`{ id: string; sender: Sender; type: MessageType; text: string; hasMedia: boolean; deleted: boolean } | { id: null }`), `forwarded?: 'once' | 'many' | null`, `reactions?: { them: { emoji: string; at: string } | null; me: OwnReaction | null }`, `canReact?: boolean`, `canReply?: boolean`. `message_updated` en `sse.context.ts` pasa a incluir `reactions` y `canReact`.
+- `Message` gana `replyTo?: QuotedMessage | null` (`{ id: string; sender: Sender; type: MessageType; text: string; hasMedia: boolean; deleted: boolean } | { id: null }`), `forwarded?: 'once' | 'many' | null`, `reactions?: { them: { emoji: string; at: string } | null; me: OwnReaction | null }` (`OwnReaction` con `previousEmoji` y `status`), `canReact?: boolean`, `canReply?: boolean`. `message_updated` en `sse.context.ts` pasa a incluir `reactions`, `canReact` y `canReply`.
 - `sendMessageService(…, { replyToMessageId })` y `sendMediaMessageService` con la cabecera `X-Reply-To`; `setReactionService(conversationId, messageId, emoji)` → `Message`.
-- `useMessageReaction(conversationId)` → `{ react(message, emoji) }`: aplica `reactions.me` en la caché al instante (pulsar el emoji que ya está manda `''`), y si falla deshace y llama al aviso de errores del chat (`whatsappErrors.ts` para el código de Meta).
+- `useMessageReaction(conversationId)` → `{ react(message, emoji) }`: aplica `reactions.me` en la caché al instante (pulsar el emoji que ya está manda `''`) y no deja enviar otra a ese mensaje mientras tanto; si falla deshace y llama al aviso de errores del chat (`whatsappErrors.ts` para el código de Meta; `reaction_in_progress`: «Alguien de tu equipo está reaccionando a este mensaje»).
 - `useJumpToMessage(conversationId)` → `{ jumpTo(messageId), searching: boolean, highlightedId: string | null }`: si el mensaje está en la caché, lo hace visible (`[data-message-id]`, `scrollIntoView({ block: 'center' })`) y lo resalta 2 s; si no, `fetchNextPage` hasta encontrarlo o **10 páginas** (200 mensajes) y, si no, el aviso «Este mensaje es muy antiguo».
 - El envío optimista lleva `replyTo` armado desde el mensaje citado de la caché, para que la cita se vea antes de que vuelva el servidor.
 

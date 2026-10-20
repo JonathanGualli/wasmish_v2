@@ -53,12 +53,12 @@ En `utils/inbound.message.js`, que sigue siendo el único sitio que conoce las f
 `applyReaction({ line, reaction, side: 'them', identity })`:
 
 1. **Busca el original** por `waMessageId: targetWaMessageId`, con los mismos controles que `applyMessageChange`: su conversación es de **la cuenta y la línea** del webhook (`conversationLineFilter`) y **del contacto del webhook** (`findContactByIdentity`, sin crearlo). La dirección del original no se exige (§ 3). Se reutilizan las funciones de `message.change.service.js` que hacen esto; si hace falta, se sacan a un sitio común en lugar de copiarlas.
-2. **Lo aplica solo hacia delante**, con una escritura condicionada (sin leer y escribir): `reactions.them` pasa a `{ emoji, at, waMessageId }` si no había, o si la guardada es más vieja (`at` menor), o del mismo segundo con otro `waMessageId`. Un reintento de Meta (el mismo `waMessageId`) no hace nada. **Quitarla** guarda `{ emoji: null, at, waMessageId }`: así una reacción vieja que llega tarde no resucita. `changeVersion` sube en 1.
+2. **Lo aplica solo hacia delante**, con una escritura condicionada (sin leer y escribir): `reactions.them` pasa a `{ emoji, at, waMessageId }` si no había, o si la guardada es más vieja (`at` menor) o del mismo segundo, **y** su `waMessageId` no está en `reactions.seen` (los ids de las últimas 20 reacciones aplicadas al mensaje, de los dos lados, que la misma escritura amplía con `$push`/`$slice`). Así un reintento de Meta nunca se reaplica, aunque después haya llegado otra del mismo segundo (revisión de Codex del plan, 3). Dos reacciones distintas del mismo segundo quedan en el orden de llegada: Meta da la hora en segundos y no hay otro desempate. **Quitarla** guarda `{ emoji: null, at, waMessageId }`: así una reacción vieja que llega tarde no resucita. `changeVersion` sube en 1.
 3. **La bandeja**, solo si puso un emoji (quitarla no toca la bandeja): `lastMessage` = `Reaccionó 👍 a: «resumen»` y `lastMessageAt` = la hora de la reacción, con la condición `lastMessageAt <= at` (como los ecos: si llegó algo más nuevo, no se toca). La conversación sube aunque el original sea viejo (§ 10). El resumen es el texto del original recortado (unos 40 caracteres) o su etiqueta («Foto»), con la función de recortar que ya use la bandeja si la hay.
 4. **Lo que NO hace:** crear un `Message`, sumar `unreadCount`, mover `lastInboundAt` (es la opción conservadora: si Meta abre la ventana con una reacción, Wasmish no lo aprovecha, pero nunca deja enviar fuera de ella), mandar push, crear trabajo del bot ni pausarlo.
 5. **SSE:** `message_updated` con las reacciones (§ 6) y, si cambió la bandeja, `conversation_updated` con `{ id, lastMessage }` (con `lastMessage`, la UI ya vuelve a pedir la bandeja, que trae el orden nuevo).
 
-**Si no encuentra el original** (anterior a la conexión de la línea, uno que llegó como «no compatible», de otra conversación…): se guarda como hoy, como mensaje suelto `type: 'reaction'` con «Reaccionó con 👍» (o «Quitó su reacción»), **pero** sin sumar `unreadCount`, sin push, sin mover `lastInboundAt` y sin bot (ya hoy una reacción no deja trabajo). Sí actualiza la bandeja, como cualquier mensaje. El `waMessageId` de la reacción garantiza que un reintento no la duplique. Quitar una reacción a un mensaje que no tenemos no se guarda (un «Quitó su reacción» suelto no dice nada): solo un aviso en el log.
+**Si no encuentra el original** (anterior a la conexión de la línea, uno que llegó como «no compatible», de otra conversación…): se guarda como hoy, como mensaje suelto `type: 'reaction'` con «Reaccionó con 👍» (o «Quitó su reacción»), **pero** sin sumar `unreadCount`, sin push, sin mover `lastInboundAt` y sin bot (ya hoy una reacción no deja trabajo). Sí actualiza la bandeja, como cualquier mensaje. Para que tampoco abra la ventana por la otra vía, `lastInboundOf` (`chat.controller.js`, que busca el último entrante cuando falta `lastInboundAt`) y `scripts/backfill-last-inbound.js` excluyen `type: 'reaction'` (revisión de Codex del plan, 1). El `waMessageId` de la reacción garantiza que un reintento no la duplique. Quitar una reacción a un mensaje que no tenemos no se guarda (un «Quitó su reacción» suelto no dice nada): solo un aviso en el log.
 
 ### Una cita o un reenvío del contacto
 
@@ -74,7 +74,9 @@ En `procesarEntrante`, el camino de siempre más dos campos: `describeMessageCon
 
 ### El acuse de una reacción enviada
 
-`procesarEstado` busca el `Message` por `waMessageId`; si no lo encuentra, busca uno con `reactions.me.waMessageId` igual, con el mismo control de cuenta. Con `failed`, marca `reactions.me.status = 'failed'` con `errorCode` y `errorDetail` (como un mensaje), solo si `reactions.me.waMessageId` sigue siendo ese (una reacción más nueva ya lo reemplazó: se ignora), sube `changeVersion` y emite `message_updated`. `sent` no cambia nada (ya se guardó como `sent` al enviar).
+`procesarEstado` busca el `Message` por `waMessageId`; si no lo encuentra, busca uno con `reactions.me.waMessageId` igual, con el mismo control de cuenta. Con `failed`, marca `reactions.me.status`, `reactions.me.errorCode` y `reactions.me.errorDetail` (rutas con punto: nunca los campos del mensaje, que son los del original; revisión de Codex del plan, 2), solo si `reactions.me.waMessageId` sigue siendo ese (una reacción más nueva ya lo reemplazó: se ignora), sube `changeVersion` y emite `message_updated`. `sent` no cambia nada (ya se guardó como `sent` al enviar). La búsqueda lleva también `{ 'reactions.me.waMessageId': { $type: 'string' } }`, el predicado del índice parcial (sin él, Mongo no lo usa: el mismo caso de `waMessageId_busqueda`).
+
+**Limitación aceptada:** un `failed` que llegue **antes** de que `sendReaction` guarde el `waMessageId` (los milisegundos entre la respuesta de Meta y la escritura) no encuentra la reacción y se pierde: queda como `sent`. Es el mismo límite que ya tienen los mensajes (`docs/estado.md`, cabos sueltos: «un acuse de Meta que llega antes de que se guarde el saliente se descarta»), y el 131009 de una reacción llega en la práctica segundos después.
 
 ## 5. Lo que sale de Wasmish
 
@@ -93,7 +95,9 @@ En `procesarEntrante`, el camino de siempre más dos campos: `describeMessageCon
 2. **Se puede reaccionar** si es `inbound`, tiene `waMessageId`, no está borrado, no es una reacción suelta y tiene menos de 30 días. Si no: **400** con `code: 'reaction_unavailable'`. La regla vive en una función pura (`canReactTo(message, now)`, en `utils/`, con test) que también usa `serializeMessage` para decirle a la UI si se puede (`canReact`), así las dos no se desfasan.
 3. **La línea** con `findConversationLine` (409 si se desconectó).
 4. **A Meta** con `sendReactionMessage({ token, phoneNumberId, recipient, targetWaMessageId, emoji })`, nueva en `libs/whatsapp.js`. Si Meta lo rechaza en la respuesta, **no se guarda nada** y responde con el error (el código de Meta en `code`, como los demás envíos), para que la UI deshaga la reacción optimista.
-5. **Se guarda** `reactions.me = { emoji | null, at: ahora, waMessageId, status: 'sent', sentBy, sentByName, origin: 'chat' }`, sube `changeVersion`, se emite `message_updated` y responde el mensaje serializado. Si dos personas reaccionan a la vez, gana la última (para el contacto, el negocio es uno solo).
+5. **Se guarda** `reactions.me = { emoji | null, previousEmoji, at: ahora, waMessageId, status: 'sent', sentBy, sentByName, origin: 'chat' }` (`previousEmoji`: el que había, para enseñar qué sigue viendo el contacto si esto falla después), sube `changeVersion`, se emite `message_updated` y responde el mensaje serializado.
+
+**Una reacción a la vez por mensaje** (revisión de Codex del plan, 4): antes de llamar a Meta se toma el mensaje con `reactions.sendingUntil` (una escritura condicionada a que esté vacío o vencido, de 15 s) y se suelta al terminar, también si falla. Si otra persona (u otro clic) ya está enviando una reacción a ese mensaje: **409** con `code: 'reaction_in_progress'`, sin llamar a Meta. Así lo guardado es siempre lo último que aceptó Meta: dos respuestas que llegan en otro orden no pueden dejar en Wasmish una reacción distinta de la que ve el contacto.
 6. **La bandeja**, solo si puso un emoji: `Reaccionaste 👍 a: «resumen»`, con la hora de ahora (la misma condición de § 4).
 7. **Marca la conversación como leída** (`markConversationRead`), como responder. **No** llama a `markHumanReply`: reaccionar no pausa al bot.
 
@@ -111,20 +115,24 @@ reactions: {
     me:   { emoji: String | null, at: Date, waMessageId: String,
             status: 'sent' | 'failed', errorCode, errorDetail,
             sentBy: ObjectId | null, sentByName: String | null,
-            origin: 'chat' | 'businessApp' },
+            origin: 'chat' | 'businessApp', previousEmoji: String | null },
+    seen: [String],          // ids de las últimas 20 reacciones aplicadas (§ 4)
+    sendingUntil: Date,      // una reacción nuestra en curso (§ 5)
 }
 ```
 
 - `changeVersion` (ya existe) sube también con cada reacción aplicada y con el fallo de una reacción enviada.
-- **Índice nuevo:** `reaction_me_waMessageId` = `{ 'reactions.me.waMessageId': 1 }` **parcial** con `$type: 'string'`, para el acuse de una reacción (§ 4). Va en `Backend/AGENTS.md § Índices`.
+- **Índice nuevo:** `reaction_me_waMessageId` = `{ 'reactions.me.waMessageId': 1 }` **parcial** con `$type: 'string'`, para el acuse de una reacción (§ 4); la consulta repite el predicado para que Mongo lo use. Va en `Backend/AGENTS.md § Índices`.
 
 **Lo que ve la UI** (`serializeMessage`, la lista y el SSE):
 
 - `replyTo`: `null`, o `{ id, sender, type, text, hasMedia, deleted }` del citado (`text` recortado a 200 caracteres), o `{ id: null }` si Wasmish no lo tiene. Se lee **al servir**: `listMessages` busca de una vez los citados de la página (con `conversationId` en el filtro), y un mensaje nuevo lo busca al emitirlo. Una edición o un borrado posterior del citado se ve al recargar; la UI prefiere el original si lo tiene cargado.
 - `forwarded`: `'once' | 'many' | null`.
-- `reactions`: `{ them: { emoji, at } | null, me: { emoji, at, status, errorCode, errorDetail, sentBy, origin } | null }`. Una reacción quitada (`emoji: null`) sale como `null`.
+- `reactions`: `{ them: { emoji, at } | null, me: { emoji, previousEmoji, at, status, errorCode, errorDetail, sentBy, origin } | null }`. Una reacción quitada (`emoji: null`) sale como `null`, **salvo** la nuestra con `status: 'failed'`: sale entera, para que la UI diga que no se pudo quitar o cambiar y qué sigue viendo el contacto (`previousEmoji`; revisión de Codex del plan, 6).
 - `canReact` y `canReply`: `boolean` (§ 5). La UI enseña las acciones solo si son `true`.
-- **`message_updated`** lleva además `reactions` (con `changeVersion`, como hoy). Los campos de hoy no cambian.
+- **`message_updated`** lleva además `reactions`, `canReact` y `canReply` (un borrado quita «Responder» en vivo; revisión de Codex del plan, 8). Los campos de hoy no cambian.
+- **Los demás productores de `message_created`** dan los campos nuevos: el entrante pasa a `serializeMessage`; `processTemplateSending`, que arma el suyo a mano, añade `replyTo: null`, `forwarded: null`, `reactions: { them: null, me: null }`, `canReact: false` y `canReply` **solo en el SSE**: la respuesta HTTP de `/v1` no cambia (revisión de Codex del plan, 9).
+- **La respuesta HTTP de un envío** es el mismo objeto que su `message_created`, con la cita resuelta (revisión de Codex del plan, 7).
 
 ## 7. Aislamiento y seguridad
 
@@ -136,7 +144,7 @@ reactions: {
 ## 8. Pruebas
 
 - **Unitarias:** `describeReaction` (con emoji, sin emoji, sin `message_id`, sin `id`), `describeMessageContext` (cita, reenviado, muy reenviado, sin `context`, `context` de una edición, que no se lee), `canReactTo` (entrante, saliente, sin `waMessageId`, borrado, 29 y 31 días), `canReplyTo`, la validación del emoji y el resumen de la bandeja.
-- **De aislamiento y de servicio** (Mongo en memoria): reacción que llega dos veces, reacciones desordenadas (una vieja después de una nueva), quitar y volver a poner, reacción sin original (mensaje suelto sin no leído), acuse `failed` de una reacción ya reemplazada, cita al mismo mensaje en otra conversación, y los 404 de § 7.
+- **De aislamiento y de servicio** (Mongo en memoria): reacción que llega dos veces, reacciones desordenadas (una vieja después de una nueva), quitar y volver a poner, reacción sin original (mensaje suelto sin no leído, que tampoco abre la ventana en una conversación sin `lastInboundAt`), A → B → reintento de A del mismo segundo, acuse `failed` de una reacción ya reemplazada (sin tocar el estado del original), quitar una reacción que después falla, dos reacciones a la vez (409), cita al mismo mensaje en otra conversación, y los 404 de § 7.
 - **`webhook:simulate`:** `reaction --original <wamid> --emoji 👍` (sin `--emoji`, la quita), `--reply-to <wamid>` y `--forwarded [many]` en `text`, y `--eco` en los dos.
 - **Navegador:** Chromium contra el backend local, en la computadora y en el teléfono emulado: reaccionar, quitar, responder con texto y con archivo, tocar una cita vieja (más de 20 mensajes atrás), en vivo con dos pestañas.
 - **Con Meta de verdad**, antes de dar la funcionalidad por cerrada: una línea con coexistencia y otro celular. Reaccionar desde el celular del contacto y desde Wasmish; quitar la reacción desde Wasmish (`emoji: ""`); reaccionar fuera de la ventana de 24 h; responder citando en los dos sentidos; y desde la app del negocio, responder citando y reaccionar (si llegan los ecos). Lo que salga distinto de este spec se corrige en el spec y en `webhook-adjuntos.md`.
