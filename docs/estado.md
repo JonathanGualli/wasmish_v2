@@ -114,6 +114,7 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
 
 ## En curso
 
+- **Citas y reacciones** (rama `citas-reacciones`, 2026-10-20): responder citando y reaccionar con emoji, en los dos sentidos y en los ecos, más «Reenviado». Spec `docs/superpowers/specs/2026-10-20-citas-reacciones-design.md` y brief de UI `docs/superpowers/specs/2026-10-20-citas-reacciones-brief-ui.md` (Jonathan se lo pasa a Claude Design). Plan `docs/superpowers/plans/2026-10-20-citas-reacciones.md`, en revisión de Codex; después el backend (lo que entra, lo que sale) y la UI con el diseño.
 - **Lo que queda de la página pública:**
   - Jonathan conecta el chip del botón (`+593 98 415 2777`) a Wasmish con la coexistencia (2026-10-20) y prueba el botón desde otro celular;
   - Jonathan confirma en el panel de GTHost el país del servidor: Privacidad dice Estados Unidos, sacado del registro de la IP;
