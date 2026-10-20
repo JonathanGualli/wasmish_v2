@@ -6,6 +6,7 @@
 // Spec: docs/superpowers/specs/2026-10-19-mensajes-eliminados-editados-design.md.
 
 import { describeInboundMessage } from './inbound.message.js';
+import { serializeReactions, canReactTo, canReplyTo } from './message.actions.js';
 
 // La vista previa de la bandeja cuando el último mensaje está eliminado.
 export const DELETED_PREVIEW = 'Mensaje eliminado';
@@ -82,4 +83,20 @@ export const serializeMessageChange = (msg) => ({
         editedAt: iso(version.editedAt),
     })),
     changeVersion: msg.changeVersion ?? 0,
+});
+
+/**
+ * Lo que lleva `message_updated`: un mensaje que cambió en su sitio (borrado,
+ * editado, una reacción). `canReact` y `canReply` van también: un borrado quita
+ * «Responder» en vivo (revisión de Codex del plan, 8).
+ */
+export const serializeMessageUpdate = (msg) => ({
+    id: String(msg._id),
+    conversationId: String(msg.conversationId),
+    text: msg.text,
+    caption: msg.caption ?? null,
+    ...serializeMessageChange(msg),
+    reactions: serializeReactions(msg),
+    canReact: canReactTo(msg),
+    canReply: canReplyTo(msg),
 });
