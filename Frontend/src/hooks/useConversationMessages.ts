@@ -200,6 +200,18 @@ export const useConversationMessages = (conversationId: string) => {
     const unsubUpdated = subscribe("message_updated", (updatedMessage) => {
       if (updatedMessage.conversationId !== conversationId) return;
 
+      // Con el hilo cargándose (o sin caché todavía), la respuesta se leyó antes
+      // del cambio y lo pisaría al llegar. Se cancela y se vuelve a pedir: la
+      // nueva lee la BD ya cambiada (el backend avisa después de escribir).
+      // `cancelQueries` primero: en la primera carga, `invalidateQueries` solo
+      // se une a la petición en curso y se queda con la respuesta vieja
+      // (comprobado con query-core). Revisión de Codex del PR #110.
+      const key = ["conversation", conversationId];
+      if (queryClient.isFetching({ queryKey: key }) > 0 || !queryClient.getQueryData(key)) {
+        void queryClient.cancelQueries({ queryKey: key }).then(() => queryClient.invalidateQueries({ queryKey: key }));
+        return;
+      }
+
       queryClient.setQueryData<InfiniteData<{ items: Message[], nextCursor: string | undefined }>>(
         ["conversation", conversationId],
         (oldData) => {
