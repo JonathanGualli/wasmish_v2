@@ -142,7 +142,7 @@ Antes de tocar nada visual: la skill `brand-guidelines`.
 - `SSEEventMap.message_updated: Pick<Message, 'id' | 'conversationId' | 'text'> & Pick<Message, 'caption' | 'deletedAt' | 'editedAt' | 'previousVersions'> & { changeVersion: number }`; `conversation_updated: { id: string; unreadCount?: number; lastMessage?: string }`.
 - `onMessageUpdated` en `SSEHandlers`, su `addEventListener` y su `Set` y `dispatch` en el provider.
 - `useConversationMessages`: `message_updated` se mezcla en su sitio en todas las páginas, como `message_status` (copias, nunca mutar la caché), **solo si `payload.changeVersion > (msg.changeVersion ?? 0)`**: uno que llega después de otro más nuevo se descarta (revisión de Codex del plan, 1).
-- `useConversations`: el handler de `conversation_updated` copia solo los campos presentes (`'unreadCount' in payload`, `'lastMessage' in payload`).
+- `useConversations`: el handler de `conversation_updated` copia solo los campos presentes (`'unreadCount' in payload`, `'lastMessage' in payload`) y, si viene `lastMessage`, además vuelve a pedir la bandeja (`refreshList`): dos avisos cruzados pueden llegar en otro orden, y la BD sí queda en el estado final (revisión de Codex del PR #109, 2).
 
 - [ ] **Paso 1:** implementar.
 - [ ] **Paso 2:** `cd Frontend && npm run lint && npm run build` en verde.

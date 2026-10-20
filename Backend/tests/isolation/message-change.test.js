@@ -256,6 +256,67 @@ test('un borrado que se cuela entre la lectura y la escritura de la bandeja de u
     assert.equal(await previewOf(conversation), 'Mensaje eliminado');
 });
 
+// Revisión de Codex del PR #109, 1: los entrantes traen la hora en segundos. M2, del mismo segundo que
+// M1, llega entre la comprobación del último y la escritura: la condición `lastMessageAt <= timestamp`
+// lo deja pasar, y el borrado de M1 dejaba «Mensaje eliminado» como vista previa de M2.
+test('un mensaje del mismo segundo que se cuela antes de escribir la bandeja: queda su vista previa', async () => {
+    const { conversation, identity } = await chat();
+    const msg = await message(conversation, { text: 'M1', ts: at(0) });
+    const original = Conversation.updateOne;
+    let intercepted = false;
+    Conversation.updateOne = async function (...args) {
+        if (!intercepted) {
+            intercepted = true;
+            Conversation.updateOne = original;
+            await message(conversation, { text: 'M2', ts: at(0) });
+        }
+        return original.apply(this, args);
+    };
+    try {
+        assert.equal(await apply(revokeOf(msg), identity), 'applied');
+    } finally {
+        Conversation.updateOne = original;
+    }
+    assert.ok(intercepted);
+    assert.equal(await previewOf(conversation), 'M2');
+});
+
+// Revisión de Codex del PR #109, 2: la edición escribe su vista previa y, antes de avisar, entra el
+// borrado entero y avisa «Mensaje eliminado». La edición avisaba después con su «hola!»: el último
+// aviso enseñaba el texto de un mensaje eliminado, aunque la BD quedaba bien.
+test('dos cambios que se cruzan: ningún aviso de la bandeja enseña el texto de antes', async () => {
+    const { conversation, identity } = await chat();
+    const msg = await message(conversation, { text: 'hola' });
+    const original = Conversation.findById;
+    let intercepted = false;
+    const stream = await openStream(a);
+    Conversation.findById = function (...args) {
+        if (!intercepted) {
+            intercepted = true;
+            Conversation.findById = original;
+            // El borrado entero antes de que la edición lea lo que va a avisar.
+            const query = original.apply(this, args);
+            const exec = query.exec.bind(query);
+            query.exec = async () => { await apply(revokeOf(msg, 60), identity); return exec(); };
+            return query;
+        }
+        return original.apply(this, args);
+    };
+    try {
+        assert.equal(await apply(editOf(msg, 'hola!', 30), identity), 'applied');
+        const deleted = `{"id":"${conversation._id}","lastMessage":"Mensaje eliminado"}`;
+        assert.ok(await stream.waitFor(deleted, 2000));
+        await new Promise(resolve => setTimeout(resolve, 200));
+        assert.equal(stream.count(`{"id":"${conversation._id}","lastMessage":"hola!"}`), 0, 'un aviso con el texto de antes');
+        assert.equal(stream.count(deleted), 2);
+    } finally {
+        Conversation.findById = original;
+        await stream.close();
+    }
+    assert.ok(intercepted);
+    assert.equal(await previewOf(conversation), 'Mensaje eliminado');
+});
+
 // Revisión de Codex del plan, 2: un mensaje nuevo que escribe la conversación entre la comprobación del último y la escritura.
 test('si ya llegó un mensaje más nuevo, la bandeja se queda con él y no se avisa', async () => {
     const { conversation, identity } = await chat();

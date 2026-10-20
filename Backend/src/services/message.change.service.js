@@ -87,35 +87,45 @@ const applyEdit = async (message, change) => {
 
 const previewOf = (message) => (message.deletedAt ? DELETED_PREVIEW : message.text);
 
+const findLastMessage = (conversationId) =>
+    Message.findOne({ conversationId }).sort({ timestamp: -1, _id: -1 }).lean();
+
+const isSameState = (a, b) => String(a._id) === String(b._id) && (a.changeVersion ?? 0) === (b.changeVersion ?? 0);
+
 // Si el mensaje es el último de la conversación, su vista previa en la bandeja,
 // desde su estado final: eliminado manda aunque después llegue una edición. La
 // escritura queda sin efecto si entretanto llegó un mensaje más nuevo (todo el
 // que escribe la vista previa pone `lastMessageAt` = el `timestamp` de su
-// mensaje), y se repite si otro cambio del mismo mensaje se cruzó (su
-// `changeVersion` ya no es el escrito): la última escritura es la del estado
-// final (revisión de Codex del plan, 1 y 2).
+// mensaje). Después se relee el último mensaje: si otro cambio se cruzó (su
+// `changeVersion` ya no es el escrito) o llegó otro mensaje del mismo segundo
+// (los entrantes traen la hora en segundos y la condición lo deja pasar), se
+// reescribe desde él. Así la última escritura es la del estado final
+// (revisiones de Codex del plan, 1 y 2, y del PR #109, 1).
+//
+// El aviso lleva la vista previa LEÍDA de la BD justo antes de emitir, no la
+// escrita: si dos cambios se cruzan, el último aviso no enseña la de antes
+// (revisión de Codex del PR #109, 2). La UI, además, vuelve a pedir la bandeja.
 const refreshPreview = async ({ accountId, conversation, message }) => {
-    const last = await Message.findOne({ conversationId: conversation._id })
-        .sort({ timestamp: -1, _id: -1 }).select('_id').lean();
+    let last = await findLastMessage(conversation._id);
     if (!last || String(last._id) !== String(message._id)) return;
 
-    let current = message;
-    let written = null;
+    let wrote = false;
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-        const lastMessage = previewOf(current);
         const result = await Conversation.updateOne(
-            { _id: conversation._id, lastMessageAt: { $lte: current.timestamp } },
-            { $set: { lastMessage } },
+            { _id: conversation._id, lastMessageAt: { $lte: last.timestamp } },
+            { $set: { lastMessage: previewOf(last) } },
         );
-        if (result.matchedCount === 0) return;
-        written = lastMessage;
+        if (result.matchedCount === 0) break;
+        wrote = true;
 
-        const reread = await Message.findById(message._id).lean();
-        if (!reread || (reread.changeVersion ?? 0) === (current.changeVersion ?? 0)) break;
-        current = reread;
+        const now = await findLastMessage(conversation._id);
+        if (!now || isSameState(now, last)) break;
+        last = now;
     }
+    if (!wrote) return;
 
-    sendToAccount(accountId, 'conversation_updated', { id: String(conversation._id), lastMessage: written },
+    const { lastMessage = '' } = await Conversation.findById(conversation._id).select('lastMessage').lean() ?? {};
+    sendToAccount(accountId, 'conversation_updated', { id: String(conversation._id), lastMessage },
         { lineId: conversation.lineId ?? null });
 };
 
