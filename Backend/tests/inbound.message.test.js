@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { describeInboundMessage } from '../src/utils/inbound.message.js';
+import { describeInboundMessage, describeUnsupportedReason } from '../src/utils/inbound.message.js';
 
 // EL test que importa: Message.text es required, así que un texto vacío hace
 // throw dentro del webhook, Meta reintenta y el mensaje del cliente se pierde.
@@ -174,4 +174,43 @@ test('un tipo desconocido se guarda como no compatible', () => {
 
     assert.equal(salida.type, 'nfm_reply');
     assert.equal(salida.text, 'Mensaje no compatible');
+});
+
+// --- El motivo de un no soportado (para el log) ---
+
+// Regresión que vigila: el 2026-10-20 un texto llegó como `unsupported` en una línea con coexistencia y
+// el motivo de Meta (subtipo y errores) no quedó en ningún sitio: no se pudo saber por qué.
+test('describeUnsupportedReason: el subtipo y, de cada error, solo el código y el título', () => {
+    const reason = describeUnsupportedReason({
+        type: 'unsupported',
+        errors: [{
+            code: 131051, title: 'Message type unknown', message: 'Message type unknown',
+            error_data: { details: 'Message type is currently not supported.' },
+        }],
+        unsupported: { type: 'edit' },
+    });
+    assert.deepEqual(reason, { subtype: 'edit', errors: [{ code: 131051, title: 'Message type unknown' }] });
+});
+
+test('describeUnsupportedReason: el raw_type si no hay type, y sin errores una lista vacía', () => {
+    assert.deepEqual(describeUnsupportedReason({ type: 'unsupported', unsupported: { raw_type: 'poll_creation' } }),
+        { subtype: 'poll_creation', errors: [] });
+    assert.deepEqual(describeUnsupportedReason({ type: 'unknown', errors: [{ code: 131060, title: 'This message is currently unavailable' }] }),
+        { subtype: null, errors: [{ code: 131060, title: 'This message is currently unavailable' }] });
+});
+
+test('describeUnsupportedReason: nada del contenido, aunque Meta lo meta en los errores', () => {
+    const reason = describeUnsupportedReason({
+        type: 'unsupported',
+        text: { body: 'el texto del cliente' },
+        errors: [{ code: 131051, title: 'Message type unknown', message: 'el texto del cliente', error_data: { details: 'el texto del cliente' } }, 'raro', null],
+        unsupported: { type: 'text', body: 'el texto del cliente' },
+    });
+    assert.ok(!JSON.stringify(reason).includes('el texto del cliente'));
+    assert.deepEqual(reason.errors, [{ code: 131051, title: 'Message type unknown' }]);
+});
+
+test('describeUnsupportedReason: un mensaje que no es un no soportado → null', () => {
+    assert.equal(describeUnsupportedReason({ type: 'text', text: { body: 'hola' } }), null);
+    assert.equal(describeUnsupportedReason(null), null);
 });

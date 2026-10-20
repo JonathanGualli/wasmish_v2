@@ -81,6 +81,29 @@ const describirNoSoportado = (contenido) => {
     return ETIQUETAS_NO_SOPORTADO[subtipo] ?? ETIQUETA_DESCONOCIDO;
 };
 
+/**
+ * Por qué Meta no entregó un mensaje (`unsupported` o `unknown`), para el log:
+ * `{ subtype, errors: [{ code, title }] }`, o null si el mensaje no es de esos.
+ * Solo el subtipo y, de cada error, el código y el título, que son de Meta:
+ * nunca `message` ni `error_data`, ni nada del contenido, porque el log no rota
+ * y lo lee quien entra al servidor. Si el subtipo se repite, va a
+ * `ETIQUETAS_NO_SOPORTADO`, como las encuestas.
+ */
+export const describeUnsupportedReason = (messageData) => {
+    if (messageData?.type !== 'unsupported' && messageData?.type !== 'unknown') return null;
+    const contenido = messageData[messageData.type];
+    const errores = Array.isArray(messageData.errors) ? messageData.errors : [];
+    return {
+        subtype: conTexto(contenido?.type) ?? conTexto(contenido?.raw_type),
+        errors: errores
+            .filter(error => error && typeof error === 'object')
+            .map(error => ({
+                code: typeof error.code === 'number' || typeof error.code === 'string' ? error.code : null,
+                title: conTexto(error.title),
+            })),
+    };
+};
+
 // La respuesta a una plantilla con botones. Es el caso que más se pierde hoy:
 // el cliente pulsa «Confirmar» y en el chat no aparecía nada.
 const describirInteractivo = (interactive) =>
