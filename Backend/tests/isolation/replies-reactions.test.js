@@ -274,3 +274,42 @@ test('quitarla y que Meta lo rechace después: sale entera, con la que sigue vie
     assert.equal(me.status, 'failed');
     assert.equal(me.errorCode, '131009');
 });
+
+// Revisión de Codex del PR #116, 1: con 👍 puesta y dos cambios seguidos que
+// fallan (❤️ y 🙏), `previousEmoji` decía ❤️, que el contacto nunca vio.
+test('dos cambios seguidos que fallan: el contacto sigue viendo la primera', async () => {
+    const conversation = await openChat();
+    const target = await inboundIn(conversation);
+    metaAccepts();
+    const failLast = async () => {
+        const id = (await Message.findById(target._id).lean()).reactions.me.waMessageId;
+        await postWebhook('13301', { statuses: [{
+            id, status: 'failed', timestamp: String(Math.floor(Date.now() / 1000)), recipient_id: conversation.contactPhone,
+            errors: [{ code: 131009, title: 'Parameter value is not valid' }],
+        }] });
+    };
+    await react(r, conversation, target, '👍');
+    await react(r, conversation, target, '❤️');
+    await failLast();
+    await react(r, conversation, target, '🙏');
+    await failLast();
+    const me = (await Message.findById(target._id).lean()).reactions.me;
+    assert.equal(me.emoji, '🙏');
+    assert.equal(me.status, 'failed');
+    assert.equal(me.previousEmoji, '👍');
+});
+
+// Revisión de Codex del PR #116, 2: el PUT respondía la cita como «no disponible».
+test('reaccionar a un mensaje con cita: la respuesta trae la misma cita que la lista', async () => {
+    const conversation = await openChat();
+    const quoted = await Message.create({
+        conversationId: conversation._id, direction: 'outbound', sender: 'me', text: 'Tarjetas: $20', waMessageId: `wamid.rr.q.${++seq}`,
+    });
+    const target = await inboundIn(conversation, { text: 'esta', replyTo: { waMessageId: quoted.waMessageId, messageId: quoted._id } });
+    metaAccepts();
+    const res = await react(r, conversation, target, '👍');
+    assert.equal(res.status, 200, res.text);
+    assert.equal(res.body.replyTo.id, String(quoted._id));
+    const list = await request(r, 'GET', `/chats/${conversation._id}/messages`);
+    assert.deepEqual(res.body.replyTo, list.body.items.find(item => item.id === String(target._id)).replyTo);
+});

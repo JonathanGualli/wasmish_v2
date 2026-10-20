@@ -439,7 +439,9 @@ export const setReactionController = async (req, res) => {
         }
 
         await markConversationRead(req.auth.accountId, conversation._id, conversation.lineId);
-        return res.json(serializeMessage(updated));
+        // Con su cita resuelta, como la lista (revisión de Codex del PR #116, 2).
+        const quoted = await loadQuotedMessages([updated], conversation._id);
+        return res.json(serializeMessage(updated, { quoted }));
     } catch (error) {
         if (!error.statusCode) console.error('Error reaccionando:', error.message);
         res.status(error.statusCode || 500).json([{ message: error.message, ...(error.code && { code: error.code }) }]);

@@ -194,12 +194,17 @@ export const sendReaction = async ({ line, conversation, message, emoji, sender 
         throw error;
     }
 
+    // La que ve el contacto: si la última nuestra falló, nunca le llegó, y sigue
+    // viendo la de antes de esa (revisión de Codex del PR #116, 1).
+    const last = before.reactions?.me;
+    const seenByContact = last?.status === 'failed' ? last.previousEmoji : last?.emoji;
+
     await Message.updateOne(
         { _id: message._id },
         {
             $set: { 'reactions.me': {
                 emoji: emoji || null,
-                previousEmoji: before.reactions?.me?.emoji ?? null,
+                previousEmoji: seenByContact ?? null,
                 at: now,
                 waMessageId,
                 status: 'sent',
