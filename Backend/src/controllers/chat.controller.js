@@ -18,6 +18,7 @@ import { MEDIA_DIR } from "../config.js";
 import { findConversationLine, findStartLine } from "../services/line.service.js";
 import { conversationScope } from "../utils/permissions.js";
 import { messageOrigin, messageSender } from "../utils/message.origin.js";
+import { serializeMessageChange } from "../utils/message.change.js";
 import { markHumanReply } from "../services/auto.reply.service.js";
 import Campaign from "../models/campaign.model.js";
 
@@ -53,6 +54,8 @@ export const serializeMessage = (msg, { campaignNames } = {}) => ({
     // Quién lo envió y de dónde salió (Fase 3): con varias personas, el chat lo dice.
     sentBy: messageSender(msg),
     origin: messageOrigin(msg, campaignNames),
+    // Borrado o editado (coexistencia): lo mismo que trae `message_updated`.
+    ...serializeMessageChange(msg),
 });
 
 // A Meta: un texto o, si hay archivo, el archivo. El archivo se sube primero

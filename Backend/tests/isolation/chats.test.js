@@ -277,3 +277,26 @@ test('quién envió y de dónde salió: el chat lo firma; la API no', async () =
         onMeta(null);
     }
 });
+
+// Mensajes eliminados y editados: recargar la página da lo mismo que llegó en vivo por `message_updated`.
+test('GET /chats/:id/messages devuelve el borrado y las ediciones de cada mensaje', async () => {
+    const c = await seedAccount('MCL', { seq: 31 });
+    const changed = await Message.create({
+        conversationId: c.conversationId, direction: 'inbound', sender: 'them', text: 'hola!!', timestamp: new Date(),
+        deletedAt: new Date('2026-10-20T10:05:00Z'), editedAt: new Date('2026-10-20T10:02:00Z'), changeVersion: 3,
+        previousVersions: [{ text: 'hola', caption: null, editedAt: new Date('2026-10-20T10:00:00Z') }],
+    });
+    const list = await request(c, 'GET', `/chats/${c.conversationId}/messages`);
+    assert.equal(list.status, 200, list.text);
+    const item = list.body.items.find(entry => entry.id === String(changed._id));
+    assert.equal(item.deletedAt, '2026-10-20T10:05:00.000Z');
+    assert.equal(item.editedAt, '2026-10-20T10:02:00.000Z');
+    assert.deepEqual(item.previousVersions, [{ text: 'hola', caption: null, editedAt: '2026-10-20T10:00:00.000Z' }]);
+    assert.equal(item.changeVersion, 3);
+
+    const plain = list.body.items.find(entry => entry.id === c.messageId);
+    assert.equal(plain.deletedAt, null);
+    assert.equal(plain.editedAt, null);
+    assert.deepEqual(plain.previousVersions, []);
+    assert.equal(plain.changeVersion, 0);
+});

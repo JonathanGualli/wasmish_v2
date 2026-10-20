@@ -18,11 +18,19 @@
 //   npm run webhook:simulate -- retiro-acceso --reason PRIMARY_INACTIVITY
 //                                                ← Meta retira el acceso al WABA de la
 //                                                  línea (--reason ninguno: sin motivo)
+//   npm run webhook:simulate -- revoke --original <wamid>
+//                                                ← el contacto borra ese mensaje
+//   npm run webhook:simulate -- edit --original <wamid> --text "otro texto"
+//                                                ← el contacto edita ese mensaje
+//   (con --eco, lo borra o lo edita el negocio desde la app: el original es un eco)
 //
 // Opciones: --from <numero>  --url <http://...>  --phone-number-id <id>
 //           --name <nombre de perfil>  --username <usuario>  --new-from <numero>
 //           --display-number <numero visible de la línea, como lo manda Meta>
 //           --reason <motivo de retiro-acceso>
+//           --original <wamid del mensaje que se borra o se edita>  --text <texto editado>  --eco
+//
+// El wamid de cada mensaje sale en la lista «Guardado» del final.
 //
 // Después de cambio-numero, el contacto de prueba es el de --from <número nuevo>.
 //
@@ -82,6 +90,10 @@ const CAMBIO_NUMERO = 'cambio-numero';
 const ECO = 'eco';
 const RETIRO = 'retiro-acceso';
 
+// Mensajes eliminados y editados (spec 2026-10-19): un mensaje que apunta al
+// original con `original_message_id`. Del contacto o, con --eco, del negocio.
+const CAMBIOS = ['revoke', 'edit'];
+
 // --- argumentos -------------------------------------------------------------
 const argv = process.argv.slice(2);
 const opcion = (nombre, porDefecto) => {
@@ -99,6 +111,9 @@ const NEW_FROM = opcion('new-from', null);
 // guarda si la línea no lo tiene (lo usa `from` en la API pública).
 const DISPLAY_NUMBER = opcion('display-number', '15550000000');
 const REASON = opcion('reason', 'PRIMARY_INACTIVITY');
+const ORIGINAL = opcion('original', null);
+const EDITED_TEXT = opcion('text', 'Texto editado (simulado)');
+const COMO_ECO = argv.includes('--eco');
 
 // El BSUID que Meta generaría: país + id. Se deriva del número o del usuario
 // para que el mismo contacto de prueba tenga siempre el mismo.
@@ -108,7 +123,7 @@ const PHONE = USERNAME ? null : FROM;
 // Tras el cambio de número, el BSUID es el que tendría --from <número nuevo>.
 const NEW_USER_ID = NEW_FROM && simulatedUserId(NEW_FROM);
 
-const valoresDeOpciones = [FROM, URL_BASE, phoneNumberIdArg, PROFILE_NAME, USERNAME, NEW_FROM, DISPLAY_NUMBER, REASON];
+const valoresDeOpciones = [FROM, URL_BASE, phoneNumberIdArg, PROFILE_NAME, USERNAME, NEW_FROM, DISPLAY_NUMBER, REASON, ORIGINAL, EDITED_TEXT];
 const nombres = argv.filter(a => !a.startsWith('--') && !valoresDeOpciones.includes(a));
 const todos = argv.includes('--all');
 const listar = argv.includes('--list');
@@ -120,6 +135,7 @@ if (listar) {
     console.log('Tipos disponibles:\n  ' + Object.keys(MUESTRAS).join('\n  '));
     console.log('\nPreferencias de marketing:\n  ' + Object.keys(PREFERENCIAS).join('\n  '));
     console.log(`\nOtros avisos:\n  ${CAMBIO_NUMERO}   (con --new-from <número>)\n  ${ECO}             (respuesta desde la app de WhatsApp Business)\n  ${RETIRO}   (Meta retira el acceso al WABA; --reason <motivo> o ninguno)`);
+    console.log('\nBorrar o editar un mensaje (con --original <wamid>; --eco si lo hace el negocio):\n  revoke\n  edit            (--text <texto nuevo>)');
     process.exit(0);
 }
 
@@ -131,9 +147,10 @@ if (!limpiar && elegidos.length === 0) {
     morir('Dime qué mandar.  Ej: npm run webhook:simulate -- audio boton   (o --all, o --list)');
 }
 
-const desconocidos = elegidos.filter(n => !MUESTRAS[n] && !PREFERENCIAS[n] && ![CAMBIO_NUMERO, ECO, RETIRO].includes(n));
+const desconocidos = elegidos.filter(n => !MUESTRAS[n] && !PREFERENCIAS[n] && ![CAMBIO_NUMERO, ECO, RETIRO, ...CAMBIOS].includes(n));
 if (desconocidos.length > 0) morir(`No conozco: ${desconocidos.join(', ')}.  Usa --list para ver los tipos.`);
 if (elegidos.includes(CAMBIO_NUMERO) && !NEW_FROM) morir(`${CAMBIO_NUMERO} necesita el número nuevo:  --new-from 593000000001`);
+if (elegidos.some(n => CAMBIOS.includes(n)) && !ORIGINAL) morir('revoke y edit necesitan el mensaje:  --original <wamid>  (sale en la lista «Guardado»)');
 
 // --- ejecución --------------------------------------------------------------
 await mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/wasmish');
@@ -225,10 +242,17 @@ const valorDe = (nombre) => {
             from_user_id: USER_ID,
             id: `wamid.sim.${Date.now()}.${Math.random().toString(36).slice(2)}`,
             timestamp: String(ahora),
-            ...MUESTRAS[nombre],
+            ...(CAMBIOS.includes(nombre) ? cambio(nombre) : MUESTRAS[nombre]),
         }],
     };
 };
+
+// El contenido de un borrado o una edición, como en la referencia de Meta.
+function cambio(nombre) {
+    return nombre === 'revoke'
+        ? { type: 'revoke', revoke: { original_message_id: ORIGINAL } }
+        : { type: 'edit', edit: { original_message_id: ORIGINAL, message: { type: 'text', text: { body: EDITED_TEXT } } } };
+}
 
 // El aviso de que Meta retiró el acceso: con la forma del ejemplo de Meta, en
 // la que `entry.id` NO es el WABA (va en `waba_info.waba_id`).
@@ -250,7 +274,8 @@ const retiroDeAcceso = async () => {
 // Un eco: el negocio le respondió desde la app al contacto de prueba. Como Meta,
 // lleva siempre su BSUID (`to_user_id`) y el teléfono (`to`) solo si no usa
 // nombre de usuario: con --username, `to` no va (el caso del 2026-10-19).
-const eco = () => ({
+// `contenido`: un texto, o un borrado o una edición desde la app (con --eco).
+const eco = (contenido = { type: 'text', text: { body: 'Respondido desde la app de WhatsApp Business (simulado)' } }) => ({
     field: 'smb_message_echoes',
     value: {
         messaging_product: 'whatsapp',
@@ -259,13 +284,16 @@ const eco = () => ({
             from: DISPLAY_NUMBER, ...(PHONE && { to: PHONE }), to_user_id: USER_ID,
             id: `wamid.eco.${Date.now()}.${Math.random().toString(36).slice(2)}`,
             timestamp: String(Math.floor(Date.now() / 1000)),
-            type: 'text', text: { body: 'Respondido desde la app de WhatsApp Business (simulado)' },
+            ...contenido,
         }],
     },
 });
 
 for (const nombre of elegidos) {
-    const body = nombre === RETIRO ? JSON.stringify(await retiroDeAcceso()) : nombre === ECO ? JSON.stringify({ entry: [{ changes: [eco()] }] }) : JSON.stringify({
+    const body = nombre === RETIRO ? JSON.stringify(await retiroDeAcceso())
+        : nombre === ECO ? JSON.stringify({ entry: [{ changes: [eco()] }] })
+        : CAMBIOS.includes(nombre) && COMO_ECO ? JSON.stringify({ entry: [{ changes: [eco(cambio(nombre))] }] })
+        : JSON.stringify({
         entry: [{ changes: [{ value: {
             metadata: { display_phone_number: DISPLAY_NUMBER, phone_number_id: phoneNumberId },
             // Desde abril de 2026 llega siempre el BSUID; el teléfono, no siempre.
@@ -305,9 +333,14 @@ if (contact) {
 if (conv) {
     const msgs = await Message.find({ conversationId: conv._id }).sort({ createdAt: -1 }).limit(elegidos.length).lean();
     console.log('\nGuardado (lo más nuevo arriba):');
+    const marcas = (m) => `${m.deletedAt ? '  [eliminado]' : ''}${m.editedAt ? `  [editado ×${m.previousVersions?.length ?? 0}]` : ''}`;
     for (const m of msgs) {
-        console.log(`  ${String(m.type).padEnd(12)} ${JSON.stringify(m.text)}`);
+        console.log(`  ${String(m.type).padEnd(12)} ${JSON.stringify(m.text)}${marcas(m)}  ·  ${m.waMessageId ?? '—'}`);
     }
+    // Un cambio no crea mensaje: el original puede no estar entre los últimos.
+    const original = ORIGINAL && await Message.findOne({ waMessageId: ORIGINAL, conversationId: conv._id }).lean();
+    if (original) console.log(`\nEl original:  ${JSON.stringify(original.text)}${marcas(original)}`);
+    else if (ORIGINAL) console.log(`\nEl original (${ORIGINAL}) no está en la conversación de prueba: el cambio se descartó.`);
     console.log(`\nlastMessage: ${JSON.stringify(conv.lastMessage)}  ·  sin leer: ${conv.unreadCount}`);
     console.log(`Para borrar el contacto de prueba:  npm run webhook:simulate -- --clean${USERNAME ? ` --username ${USERNAME}` : ''}`);
 }
