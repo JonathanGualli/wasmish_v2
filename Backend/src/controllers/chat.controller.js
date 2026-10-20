@@ -20,7 +20,8 @@ import { conversationScope } from "../utils/permissions.js";
 import { messageOrigin, messageSender } from "../utils/message.origin.js";
 import { serializeMessageChange } from "../utils/message.change.js";
 import { canReactTo, canReplyTo, serializeQuoted, serializeReactions } from "../utils/message.actions.js";
-import { loadQuotedMessages } from "../services/message.reply.service.js";
+import { findReplyTarget, loadQuotedMessages, quotedMapOf } from "../services/message.reply.service.js";
+import { sendReaction } from "../services/reaction.service.js";
 import { markHumanReply } from "../services/auto.reply.service.js";
 import Campaign from "../models/campaign.model.js";
 
@@ -70,13 +71,14 @@ export const serializeMessage = (msg, { campaignNames, quoted } = {}) => ({
 
 // A Meta: un texto o, si hay archivo, el archivo. El archivo se sube primero
 // (el id que devuelve es del número que lo subió) y se envía por ese id.
-const sendToMeta = async ({ token, phoneNumberId, recipient, text, attachment }) => {
-    if (!attachment) return sendTextMessage({ token, phoneNumberId, recipient, text });
+// `context` = `{ message_id }` si responde citando.
+const sendToMeta = async ({ token, phoneNumberId, recipient, text, attachment, context }) => {
+    if (!attachment) return sendTextMessage({ token, phoneNumberId, recipient, text, context });
 
     const { kind, buffer, mimeType, filename, caption } = attachment;
     const mediaId = await uploadMedia({ token, phoneNumberId, buffer, mimeType, filename });
     const media = buildMediaObject(kind, { mediaId, caption, filename });
-    return sendMediaMessage({ token, phoneNumberId, recipient, kind, media });
+    return sendMediaMessage({ token, phoneNumberId, recipient, kind, media, context });
 };
 
 // Lo que guarda el `Message` de un archivo enviado: lo mismo que el de uno
@@ -103,6 +105,12 @@ const attachmentFields = ({ kind, mimeType, file, filename, size, caption }) => 
  * `line` es la línea por la que sale (`findSendingLine` o `findConversationLine`,
  * Fase 2b de multi-línea): su número, el token de su WABA y la cuenta dueña de
  * lo que se guarda. Ya comprobada: está conectada.
+ *
+ * `replyTarget`: el mensaje que cita (`findReplyTarget`, ya comprobado que es
+ * de esta conversación). Va a Meta como `context` y se guarda en `replyTo`,
+ * también si Meta lo rechaza. `serialized` es lo que se emite por SSE y lo que
+ * debe responder quien llama: la misma cita en los dos (revisión de Codex del
+ * plan de citas y reacciones, 7).
  */
 export const processMessageSending = async ({
     line,
@@ -115,7 +123,8 @@ export const processMessageSending = async ({
     // `{ userId, name }` de quien lo envía desde el chat (Fase 3).
     sender = null,
     // De dónde sale: el chat o el bot de respuestas automáticas.
-    origin = 'chat' }) => {
+    origin = 'chat',
+    replyTarget = null }) => {
 
     const token = decrypt(line.tokenWhatsapp);
     const { phoneNumberId } = line;
@@ -128,7 +137,8 @@ export const processMessageSending = async ({
     let errorDetail = null;
 
     try {
-        const apiRes = await sendToMeta({ token, phoneNumberId, recipient, text, attachment });
+        const context = replyTarget ? { message_id: replyTarget.waMessageId } : null;
+        const apiRes = await sendToMeta({ token, phoneNumberId, recipient, text, attachment, context });
         waMessageId = apiRes?.data?.messages?.[0]?.id || null;
     } catch (error) {
         status = 'failed';
@@ -159,6 +169,7 @@ export const processMessageSending = async ({
         waMessageId,
         text: messageText,
         ...(attachment && attachmentFields(attachment)),
+        ...(replyTarget && { replyTo: { waMessageId: replyTarget.waMessageId, messageId: replyTarget._id } }),
         timestamp: now,
         temporalId,
         status,
@@ -167,9 +178,10 @@ export const processMessageSending = async ({
         failedAt: status === 'failed' ? now : null,
     });
 
-    sendToAccount(String(line.accountId), 'message_created', serializeMessage(msg), { lineId: line.lineId ?? null });
+    const serialized = serializeMessage(msg, { quoted: quotedMapOf(replyTarget) });
+    sendToAccount(String(line.accountId), 'message_created', serialized, { lineId: line.lineId ?? null });
 
-    return { msg, waMessageId, status, errorCode, errorDetail };
+    return { msg, serialized, waMessageId, status, errorCode, errorDetail };
 };
 
 // Lo que se le dice al usuario según `freeTextBlockReason`.
@@ -230,6 +242,19 @@ const markConversationRead = async (userId, conversationId, lineId) => {
 // Quien envía desde el chat, para firmar el mensaje (Fase 3).
 const senderOf = (auth) => ({ userId: auth.userId, name: auth.name ?? null });
 
+// El citado de una respuesta, ya en su conversación: `{ replyTarget }`, o
+// `{ error: [status, cuerpo] }` para responder (404 si no es de ella, 400 si
+// no se puede citar).
+const resolveReplyTarget = async (conversation, replyToMessageId) => {
+    if (!replyToMessageId) return { replyTarget: null };
+    const found = await findReplyTarget(conversation, replyToMessageId);
+    if (found.status === 'not_found') return { error: [404, [{ message: 'Message not found' }]] };
+    if (found.status === 'unavailable') {
+        return { error: [400, [{ message: 'Ese mensaje no se puede citar.', code: 'reply_unavailable' }]] };
+    }
+    return { replyTarget: found.message };
+};
+
 const findOwnConversation = (auth, id) =>
     mongoose.isValidObjectId(id)
         ? Conversation.findOne({ _id: id, userId: auth.accountId, ...conversationScope(auth) })
@@ -238,12 +263,16 @@ const findOwnConversation = (auth, id) =>
 export const sendMessageController = async (req, res) => {
     try {
         const { id } = req.params; // Puede ser undefined si es un chat nuevo
-        const { text, temporalId, destinationNumber, contactName, lineId } = req.body;
+        const { text, temporalId, destinationNumber, contactName, lineId, replyToMessageId } = req.body;
 
         const accountId = req.auth.accountId;
 
         if (!id && !destinationNumber) {
             return res.status(400).json([{ message: "Conversation ID or Destination Number is required" }]);
+        }
+        // Una conversación nueva no tiene qué citar.
+        if (!id && replyToMessageId) {
+            return res.status(400).json([{ message: 'Solo se puede citar dentro de una conversación.', code: 'reply_unavailable' }]);
         }
 
         // Con ID, la conversación tiene que ser de esta cuenta: filtrar por userId
@@ -255,6 +284,11 @@ export const sendMessageController = async (req, res) => {
             conversation = await findOwnConversation(req.auth, id);
             if (!conversation) return res.status(404).json([{ message: "Conversation not found" }]);
         }
+        // El citado, de ESTA conversación, antes de la ventana y de pausar al bot.
+        const { replyTarget, error: replyError } = conversation
+            ? await resolveReplyTarget(conversation, replyToMessageId)
+            : { replyTarget: null };
+        if (replyError) return res.status(replyError[0]).json(replyError[1]);
 
         // Sin conversación, la línea va primero (la del cuerpo o la que toca
         // según sus líneas, `findStartLine`; 404 si no es suya): la ventana es
@@ -276,7 +310,7 @@ export const sendMessageController = async (req, res) => {
         await markHumanReply(target?._id);
 
         // Llamamos al servicio (que ahora persiste incluso si el envío falla)
-        const { msg } = await processMessageSending({
+        const { msg, serialized } = await processMessageSending({
             line,
             conversation,
             text,
@@ -284,6 +318,7 @@ export const sendMessageController = async (req, res) => {
             destinationNumber,
             contactName,
             sender: senderOf(req.auth),
+            replyTarget,
         });
         // Y la que se creó con el envío, si no había.
         if (!target) await markHumanReply(msg.conversationId);
@@ -292,7 +327,7 @@ export const sendMessageController = async (req, res) => {
         // leyó y se intentó contestar.
         await markConversationRead(accountId, msg.conversationId, line.lineId);
 
-        return res.status(201).json(serializeMessage(msg));
+        return res.status(201).json(serialized);
     } catch (error) {
         if (!error.statusCode) console.error("Error enviando mensaje:", error.response?.data || error.message || error);
         res.status(error.statusCode || 500).json([{ message: error.message }]);
@@ -324,6 +359,10 @@ export const sendMediaMessageController = async (req, res) => {
         const userId = req.auth.accountId;
         const conversation = await findOwnConversation(req.auth, req.params.id);
         if (!conversation) return res.status(404).json([{ message: "Conversation not found" }]);
+        // `X-Reply-To`: el id del mensaje que cita, de esta conversación.
+        const replyToMessageId = String(req.headers['x-reply-to'] ?? '').trim() || null;
+        const { replyTarget, error: replyError } = await resolveReplyTarget(conversation, replyToMessageId);
+        if (replyError) return res.status(replyError[0]).json(replyError[1]);
 
         const blocked = freeTextBlockReason(await lastInboundOf(conversation));
         if (blocked) return res.status(409).json([{ message: WINDOW_BLOCK_MESSAGES[blocked], code: 'window_closed' }]);
@@ -344,10 +383,11 @@ export const sendMediaMessageController = async (req, res) => {
 
         const file = await saveByContentHash(MEDIA_DIR, 'outbound', buffer, mimeType);
         await markHumanReply(conversation._id);
-        const { msg } = await processMessageSending({
+        const { serialized } = await processMessageSending({
             line,
             conversation,
             sender: senderOf(req.auth),
+            replyTarget,
             temporalId: String(req.headers['x-temporal-id'] ?? '').slice(0, 64) || undefined,
             attachment: {
                 kind, buffer, mimeType, file, caption,
@@ -359,10 +399,50 @@ export const sendMediaMessageController = async (req, res) => {
         // Responder con un archivo también es haberlo leído.
         await markConversationRead(userId, conversation._id, conversation.lineId);
 
-        return res.status(201).json(serializeMessage(msg));
+        return res.status(201).json(serialized);
     } catch (error) {
         if (!error.statusCode) console.error("Error enviando archivo:", error.message);
         res.status(error.statusCode || 500).json([{ message: error.message }]);
+    }
+};
+
+/**
+ * PUT /chats/:id/messages/:messageId/reaction — reaccionar a un mensaje del
+ * contacto (`{ emoji }`; vacío la quita). El mensaje tiene que ser de esa
+ * conversación, y ella de la sesión y a su alcance: si no, 404. Que se pueda
+ * (`canReactTo`, lo mismo que dice `canReact` a la UI): si no, 400. Un rechazo
+ * de Meta: 502 con su código, sin guardar nada. Sin bloqueo por la ventana de
+ * 24 h: Meta no dice que una reacción la necesite (spec § 5). Marca la
+ * conversación como leída, pero no pausa al bot: reaccionar no es responder.
+ */
+export const setReactionController = async (req, res) => {
+    try {
+        const conversation = await findOwnConversation(req.auth, req.params.id);
+        if (!conversation) return res.status(404).json([{ message: 'Conversation not found' }]);
+        const message = mongoose.isValidObjectId(req.params.messageId)
+            ? await Message.findOne({ _id: req.params.messageId, conversationId: conversation._id }).lean()
+            : null;
+        if (!message) return res.status(404).json([{ message: 'Message not found' }]);
+        if (!canReactTo(message)) {
+            return res.status(400).json([{ message: 'A ese mensaje no se puede reaccionar.', code: 'reaction_unavailable' }]);
+        }
+
+        const line = await findConversationLine(conversation);
+        let updated;
+        try {
+            updated = await sendReaction({ line, conversation, message, emoji: req.body.emoji, sender: senderOf(req.auth) });
+        } catch (error) {
+            if (error.statusCode) throw error;
+            const errorCode = error.waErrorCode != null ? String(error.waErrorCode) : null;
+            console.error('Error enviando una reacción:', { errorCode, error: error.waErrorDetail ?? error.message });
+            return res.status(502).json([{ message: 'No se pudo enviar la reacción a WhatsApp', errorCode, errorDetail: error.waErrorDetail ?? null }]);
+        }
+
+        await markConversationRead(req.auth.accountId, conversation._id, conversation.lineId);
+        return res.json(serializeMessage(updated));
+    } catch (error) {
+        if (!error.statusCode) console.error('Error reaccionando:', error.message);
+        res.status(error.statusCode || 500).json([{ message: error.message, ...(error.code && { code: error.code }) }]);
     }
 };
 

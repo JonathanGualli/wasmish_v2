@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { templateButtonSchema } from "./template.schema.js";
 import { objectIdSchema, phoneNumberSchema } from "./contact.schema.js";
+import { isSingleEmoji } from "../utils/message.actions.js";
 
 // Como la ruta es /chats/:id/template, el destinatario sale de la
 // conversación — el cliente no lo manda y por tanto no puede falsearlo.
@@ -27,6 +28,8 @@ export const sendMessageSchema = z.object({
     temporalId: z.string().optional(),
     // Solo sin conversación (Fase 2b): la línea por la que empieza; sin ella, la por defecto.
     lineId: objectIdSchema.optional(),
+    // Solo con conversación: el id del mensaje que cita (citas y reacciones).
+    replyToMessageId: z.string().max(64).optional(),
 });
 
 export const sendNewMessageSchema = z.object({
@@ -76,4 +79,9 @@ export const sendMessageTemplateSchema = z.object({
     // 5. Campos opcionales para tu lógica de negocio
     contactName: z.string().optional(), // Para guardar el nombre si es contacto nuevo
     temporalId: z.string().optional(),  // Para tu frontend (optimistic UI)
+});
+
+// Reaccionar a un mensaje: un solo emoji, o vacío para quitarla.
+export const reactionSchema = z.object({
+    emoji: z.string().max(16).refine(value => value === '' || isSingleEmoji(value), 'Tiene que ser un solo emoji.'),
 });

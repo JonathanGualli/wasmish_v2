@@ -7,6 +7,9 @@ import Message from '../models/message.model.js';
 import Conversation from '../models/conversation.model.js';
 import { sendToAccount } from '../controllers/stream.controller.js';
 import { findWebhookTarget } from './message.change.service.js';
+import { getSendingRecipient } from '../controllers/contact.controller.js';
+import { sendReactionMessage } from '../libs/whatsapp.js';
+import { decrypt } from '../utils/crypto.js';
 import { serializeMessageUpdate } from '../utils/message.change.js';
 import { reactionPreview } from '../utils/message.actions.js';
 
@@ -15,6 +18,10 @@ const SEEN_LIMIT = 20;
 
 // Reescrituras de la bandeja cuando otra reacción se cruza, hasta aquí.
 const MAX_PREVIEW_ATTEMPTS = 3;
+
+// Lo que un mensaje queda tomado mientras una reacción nuestra va a Meta: si el
+// proceso muere a mitad, a los 15 s se puede reaccionar otra vez.
+const SENDING_LOCK_MS = 15_000;
 
 /**
  * La bandeja con la reacción VIGENTE de un lado del mensaje (no la que llamó:
@@ -142,4 +149,72 @@ export const applyReactionStatus = async ({ line, statusData }) => {
     );
     if (result.modifiedCount > 0) await emitMessageUpdated(line.accountId, message._id, conversation);
     return true;
+};
+
+/**
+ * Reacciona desde Wasmish a un mensaje del contacto (`canReactTo`, ya
+ * comprobado, de una conversación de la sesión); `emoji: ''` la quita.
+ *
+ * Una a la vez por mensaje (revisión de Codex del plan, 4): antes de llamar a
+ * Meta se toma el mensaje (`reactions.sendingUntil`) y se suelta al guardar o
+ * al fallar. Así lo guardado es siempre lo último que aceptó Meta: dos
+ * respuestas en otro orden no dejan aquí una reacción distinta de la que ve el
+ * contacto. Si otra está en curso, lanza un 409 `reaction_in_progress` sin
+ * llamar a Meta. Si Meta la rechaza, no se guarda nada y se relanza su error
+ * (`waErrorCode`). No pausa al bot: reaccionar no es responder.
+ *
+ * @returns {Promise<object>} el mensaje releído.
+ */
+export const sendReaction = async ({ line, conversation, message, emoji, sender }) => {
+    const now = new Date();
+    // `findOneAndUpdate` devuelve el de antes: su reacción es `previousEmoji`.
+    const before = await Message.findOneAndUpdate(
+        { _id: message._id, $or: [{ 'reactions.sendingUntil': null }, { 'reactions.sendingUntil': { $lt: now } }] },
+        { $set: { 'reactions.sendingUntil': new Date(now.getTime() + SENDING_LOCK_MS) } },
+        { new: false, projection: { reactions: 1 } },
+    ).lean();
+    if (!before) {
+        throw Object.assign(new Error('Alguien de tu equipo está reaccionando a este mensaje.'), {
+            statusCode: 409, code: 'reaction_in_progress',
+        });
+    }
+
+    let waMessageId = null;
+    try {
+        const response = await sendReactionMessage({
+            token: decrypt(line.tokenWhatsapp),
+            phoneNumberId: line.phoneNumberId,
+            recipient: await getSendingRecipient(conversation, null),
+            targetWaMessageId: message.waMessageId,
+            emoji,
+        });
+        waMessageId = response?.data?.messages?.[0]?.id ?? null;
+    } catch (error) {
+        await Message.updateOne({ _id: message._id }, { $unset: { 'reactions.sendingUntil': '' } });
+        throw error;
+    }
+
+    await Message.updateOne(
+        { _id: message._id },
+        {
+            $set: { 'reactions.me': {
+                emoji: emoji || null,
+                previousEmoji: before.reactions?.me?.emoji ?? null,
+                at: now,
+                waMessageId,
+                status: 'sent',
+                errorCode: null,
+                errorDetail: null,
+                sentBy: sender?.userId ?? null,
+                sentByName: sender?.name ?? null,
+                origin: 'chat',
+            } },
+            $unset: { 'reactions.sendingUntil': '' },
+            $inc: { changeVersion: 1 },
+        },
+    );
+
+    const updated = await emitMessageUpdated(line.accountId, message._id, conversation);
+    if (emoji) await syncReactionPreview({ accountId: line.accountId, conversation, messageId: message._id, side: 'me' });
+    return updated;
 };
