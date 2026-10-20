@@ -27,7 +27,8 @@ const main = async () => {
 
     // Último mensaje entrante de cada conversación, en una sola pasada.
     const ultimos = await Message.aggregate([
-        { $match: { direction: 'inbound' } },
+        // Una reacción suelta no abre la ventana (spec de citas y reacciones, § 4).
+        { $match: { direction: 'inbound', type: { $ne: 'reaction' } } },
         { $group: { _id: '$conversationId', lastInboundAt: { $max: '$timestamp' } } },
     ]);
 

@@ -148,3 +148,9 @@ test('isStalePartnerRemoval: un aviso anterior o del mismo segundo que la últim
     assert.equal(isStalePartnerRemoval(new Date('2026-10-16T12:00:01Z'), authorizedAt), false);
     assert.equal(isStalePartnerRemoval(new Date('2026-10-16T12:00:00Z'), null), false, 'un Waba sin authorizedAt aplica el evento');
 });
+
+test('describeEcho: una reacción no es un eco que se guarde; un texto trae su contexto', () => {
+    assert.equal(describeEcho(echo({ type: 'reaction', text: undefined, reaction: { message_id: 'wamid.x', emoji: '👍' } })), null);
+    assert.deepEqual(describeEcho(echo({ context: { id: 'wamid.Q' } })).context, { replyToWaMessageId: 'wamid.Q', forwarded: null });
+    assert.deepEqual(describeEcho(echo()).context, { replyToWaMessageId: null, forwarded: null });
+});

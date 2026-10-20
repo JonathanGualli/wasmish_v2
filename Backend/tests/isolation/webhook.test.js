@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
     seedAccount, seedMember, connectWhatsapp, postWebhook, postWebhookBody, postEcho, openStream, recordQueries, onMeta,
-    FAKE_MEDIA_URL, request, pushCalls, Contact, Conversation, Line, Message, User,
+    FAKE_MEDIA_URL, PNG, request, pushCalls, Contact, Conversation, Line, Message, User,
 } from './helpers.js';
 
 const { disconnectLine } = await import('../../src/services/line.service.js');
@@ -568,4 +568,162 @@ test('un entrante que Meta no entregó deja su motivo en el log, sin el contenid
     assert.deepEqual(logged[1], { waMessageId: id, subtype: 'text', errors: [{ code: 131060, title: 'This message is currently unavailable' }] });
     assert.ok(!JSON.stringify(warnings).includes('secreto del cliente'), 'el log trae el contenido');
     assert.equal((await Message.findOne({ waMessageId: id }).lean()).text, 'Mensaje no compatible', 'el mensaje se guarda igual');
+});
+
+// --- Citas, reenvíos y reacciones (spec 2026-10-20-citas-reacciones) --------
+
+const reactionOf = (from, targetWaMessageId, emoji) => ({
+    contacts: [{ profile: { name: 'Cliente de prueba' }, wa_id: from }],
+    messages: [{
+        from, id: `wamid.reaccion.${Date.now()}.${++echoSeq}`, timestamp: String(nowSeconds()), type: 'reaction',
+        reaction: emoji === undefined ? { message_id: targetWaMessageId } : { message_id: targetWaMessageId, emoji },
+    }],
+});
+const withContext = (payload, context) => ({ ...payload, messages: [{ ...payload.messages[0], context }] });
+
+test('una reacción del contacto se pega a su mensaje: sin mensaje nuevo, sin no leído, sin push ni bot', async () => {
+    const from = '593990006601';
+    await postEcho(MW_NUMBER, [echoOf({ to: from, body: 'Te paso la cotización' })]);
+    const original = await Message.findOne({ text: 'Te paso la cotización', origin: 'businessApp' }).lean();
+    const before = await Conversation.findById(original.conversationId).lean();
+    const messagesBefore = await Message.countDocuments({ conversationId: original.conversationId });
+    const pushesBefore = pushCalls.length;
+    const jobsBefore = await botJobs();
+
+    assert.equal((await postWebhook(MW_NUMBER, reactionOf(from, original.waMessageId, '👍'))).status, 200);
+
+    assert.equal((await Message.findById(original._id).lean()).reactions.them.emoji, '👍');
+    assert.equal(await Message.countDocuments({ conversationId: original.conversationId }), messagesBefore);
+    const after = await Conversation.findById(original.conversationId).lean();
+    assert.equal(after.unreadCount, before.unreadCount);
+    assert.equal(after.lastInboundAt ?? null, before.lastInboundAt ?? null);
+    assert.equal(after.lastMessage, 'Reaccionó 👍 a: «Te paso la cotización»');
+    assert.equal(await botJobs(), jobsBefore);
+    assert.equal(await eventually(() => pushCalls.length > pushesBefore, 300), false, 'una reacción avisó por push');
+});
+
+test('una reacción a un mensaje que no está: mensaje suelto sin no leído ni push; quitarla no guarda nada', async () => {
+    const from = '593990006602';
+    const pushesBefore = pushCalls.length;
+    const payload = reactionOf(from, 'wamid.que.no.existe', '❤️');
+    assert.equal((await postWebhook(MW_NUMBER, payload)).status, 200);
+    assert.equal((await postWebhook(MW_NUMBER, payload)).status, 200, 'Meta reintenta');
+
+    const contact = await Contact.findOne({ userId: changes.accountId, phone: from }).lean();
+    const conversation = await Conversation.findOne({ userId: changes.accountId, contactId: contact._id }).lean();
+    const loose = await Message.find({ conversationId: conversation._id }).lean();
+    assert.equal(loose.length, 1, 'el reintento lo duplicó');
+    assert.equal(loose[0].type, 'reaction');
+    assert.equal(loose[0].text, 'Reaccionó con ❤️');
+    assert.equal(conversation.unreadCount ?? 0, 0);
+    assert.equal(conversation.lastInboundAt ?? null, null);
+    assert.equal(conversation.lastMessage, 'Reaccionó con ❤️');
+    assert.equal(await eventually(() => pushCalls.length > pushesBefore, 300), false, 'avisó por push');
+
+    await postWebhook(MW_NUMBER, reactionOf(from, 'wamid.otro.que.no.existe', undefined));
+    assert.equal(await Message.countDocuments({ conversationId: conversation._id }), 1);
+});
+
+// Revisión de Codex del plan, 1: sin `lastInboundAt`, el envío buscaba el último
+// entrante y una reacción suelta le abría la ventana de 24 h.
+test('una reacción suelta no abre la ventana de 24 h, tampoco sin lastInboundAt', async () => {
+    const from = '593990006603';
+    await postWebhook(MW_NUMBER, reactionOf(from, 'wamid.tampoco.existe', '👍'));
+    const contact = await Contact.findOne({ userId: changes.accountId, phone: from }).lean();
+    const conversation = await Conversation.findOne({ userId: changes.accountId, contactId: contact._id }).lean();
+    await Conversation.updateOne({ _id: conversation._id }, { $unset: { lastInboundAt: '' } });
+
+    const text = await request(changes, 'POST', `/chats/${conversation._id}/messages`, { text: 'hola', temporalId: 't1' });
+    assert.equal(text.status, 409, text.text);
+    const file = await request(changes, 'POST', `/chats/${conversation._id}/media`, PNG, { 'Content-Type': 'image/png', 'X-Filename': 'f.png' });
+    assert.equal(file.status, 409, file.text);
+});
+
+test('una cita del contacto: a qué responde, solo si es de su conversación', async () => {
+    const from = '593990006604';
+    await postEcho(MW_NUMBER, [echoOf({ to: from, body: 'Tarjetas: $20' })]);
+    const quoted = await Message.findOne({ text: 'Tarjetas: $20' }).lean();
+    // Un mensaje de OTRA conversación de la misma cuenta.
+    await postEcho(MW_NUMBER, [echoOf({ to: '593990006699', body: 'de otro contacto' })]);
+    const foreign = await Message.findOne({ text: 'de otro contacto' }).lean();
+
+    const stream = await openStream(changes);
+    try {
+        await postWebhook(MW_NUMBER, withContext(textMessage(from, 'este'), { from: '15550000001', id: quoted.waMessageId }));
+        assert.ok(await stream.waitFor(`"replyTo":{"id":"${quoted._id}"`, 2000), 'el message_created no trae la cita');
+    } finally {
+        await stream.close();
+    }
+    const reply = await Message.findOne({ text: 'este', conversationId: quoted.conversationId }).lean();
+    assert.equal(reply.replyTo.waMessageId, quoted.waMessageId);
+    assert.equal(String(reply.replyTo.messageId), String(quoted._id));
+
+    await postWebhook(MW_NUMBER, withContext(textMessage(from, 'ese otro'), { id: foreign.waMessageId }));
+    const crossed = await Message.findOne({ text: 'ese otro' }).lean();
+    assert.equal(crossed.replyTo.messageId, null, 'enlazó un mensaje de otra conversación');
+
+    // La lista trae el resumen del citado, leído al servir.
+    await Message.updateOne({ _id: quoted._id }, { $set: { deletedAt: new Date() } });
+    const list = await request(changes, 'GET', `/chats/${quoted.conversationId}/messages`);
+    const listed = list.body.items.find(item => item.id === String(reply._id));
+    assert.deepEqual(listed.replyTo, {
+        id: String(quoted._id), sender: 'me', type: 'text', text: 'Tarjetas: $20', hasMedia: false, deleted: true,
+    });
+    assert.equal(list.body.items.find(item => item.id === String(crossed._id)).replyTo.id, null);
+});
+
+test('un reenvío muchas veces queda marcado', async () => {
+    await postWebhook(MW_NUMBER, withContext(textMessage('593990006605', 'cadena'), { forwarded: true, frequently_forwarded: true }));
+    assert.equal((await Message.findOne({ text: 'cadena' }).lean()).forwarded, 'many');
+});
+
+test('una reacción y una cita desde la app (eco): se pegan sin pausar al bot', async () => {
+    const to = '593990006606';
+    await postWebhook(MW_NUMBER, textMessage(to, 'gracias por todo'));
+    const inbound = await Message.findOne({ text: 'gracias por todo' }).lean();
+    const messagesBefore = await Message.countDocuments({ conversationId: inbound.conversationId });
+
+    const log = await recordQueries(() => postEcho(MW_NUMBER, [
+        echoOf({ to, type: 'reaction', text: undefined, reaction: { message_id: inbound.waMessageId, emoji: '❤️' } }),
+    ]));
+    assert.equal(pauseWrites(log), 0, 'una reacción desde la app pausó al bot');
+    const saved = await Message.findById(inbound._id).lean();
+    assert.equal(saved.reactions.me.emoji, '❤️');
+    assert.equal(saved.reactions.me.origin, 'businessApp');
+    assert.equal(await Message.countDocuments({ conversationId: inbound.conversationId }), messagesBefore);
+
+    await postEcho(MW_NUMBER, [echoOf({ to, body: 'de nada', context: { id: inbound.waMessageId } })]);
+    const reply = await Message.findOne({ text: 'de nada' }).lean();
+    assert.equal(String(reply.replyTo.messageId), String(inbound._id));
+});
+
+test('el acuse failed de una reacción nuestra la marca a ella, nunca al mensaje', async () => {
+    const to = '593990006607';
+    await postWebhook(MW_NUMBER, textMessage(to, 'me reaccionan'));
+    const inbound = await Message.findOne({ text: 'me reaccionan' }).lean();
+    const reactionId = `wamid.mireaccion.${Date.now()}`;
+    await Message.updateOne({ _id: inbound._id }, { $set: { 'reactions.me': {
+        emoji: '👍', previousEmoji: null, at: new Date(), waMessageId: reactionId, status: 'sent', origin: 'chat',
+    } } });
+    const failed = (id) => ({ statuses: [{
+        id, status: 'failed', timestamp: String(nowSeconds()), recipient_id: to,
+        errors: [{ code: 131009, title: 'Parameter value is not valid', error_data: { details: 'Message is too old' } }],
+    }] });
+
+    const log = await recordQueries(() => postWebhook(MW_NUMBER, failed(reactionId)));
+    const lookup = log.find(entry => entry.collection === 'messages' && JSON.stringify(entry.query).includes('reactions.me.waMessageId'));
+    assert.ok(lookup && JSON.stringify(lookup.query).includes('$type'), 'la búsqueda no lleva el predicado del índice');
+
+    // Revisión de Codex del plan, 2: el $set escribía `status` y `errorCode` del mensaje.
+    const saved = await Message.findById(inbound._id).lean();
+    assert.equal(saved.reactions.me.status, 'failed');
+    assert.equal(saved.reactions.me.errorCode, '131009');
+    assert.equal(saved.reactions.me.errorDetail, 'Message is too old');
+    assert.equal(saved.status, inbound.status);
+    assert.equal(saved.errorCode ?? null, null);
+
+    // Una reacción ya reemplazada: su acuse no marca la nueva.
+    await Message.updateOne({ _id: inbound._id }, { $set: { 'reactions.me.waMessageId': 'wamid.nueva', 'reactions.me.status': 'sent' } });
+    await postWebhook(MW_NUMBER, failed(reactionId));
+    assert.equal((await Message.findById(inbound._id).lean()).reactions.me.status, 'sent');
 });

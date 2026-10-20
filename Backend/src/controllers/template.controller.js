@@ -21,6 +21,7 @@ import { LINE_NOT_FOUND_MESSAGE } from "../utils/whatsapp.line.js";
 import { resolveApiLine } from "../utils/line.js";
 import { inLineScope, lineScope } from "../utils/permissions.js";
 import { messageOrigin, messageSender } from "../utils/message.origin.js";
+import { canReplyTo, serializeReactions } from "../utils/message.actions.js";
 
 
 // ---------------------------------------------------------------------------
@@ -606,6 +607,14 @@ export const processTemplateSending = async ({
         ...(campaignId && { campaignId: String(campaignId) }),
         sentBy: messageSender(msg),
         origin: messageOrigin(msg),
+        // Lo de citas y reacciones, como `serializeMessage`: sin esto, «Responder»
+        // no salía hasta recargar (revisión de Codex del plan de citas y
+        // reacciones, 9). Solo en el SSE: la respuesta de /v1 no cambia.
+        replyTo: null,
+        forwarded: null,
+        reactions: serializeReactions(msg),
+        canReact: false,
+        canReply: canReplyTo(msg),
     }, { lineId: targetConversation.lineId ?? null });
 
     return { msg, conversation: targetConversation, waMessageId, status, errorCode, errorDetail };

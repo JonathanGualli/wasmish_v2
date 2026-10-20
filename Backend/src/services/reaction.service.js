@@ -90,3 +90,43 @@ export const applyReaction = async ({ line, reaction, side, identity, origin = n
     }
     return 'applied';
 };
+
+/**
+ * El acuse de una reacción NUESTRA (`procesarEstado` no encontró un mensaje con
+ * ese `waMessageId`). Meta solo manda `sent` o, si no la entregó, `failed`
+ * (131009: el mensaje es de más de 30 días, se borró…). `failed` la marca a
+ * ella, con rutas `reactions.me.*`: nunca el estado del mensaje, que es el del
+ * original (revisión de Codex del plan, 2). Si ya se reemplazó por otra, nada.
+ *
+ * @returns {Promise<boolean>} si el acuse era de una reacción nuestra de esta cuenta.
+ */
+export const applyReactionStatus = async ({ line, statusData }) => {
+    const waMessageId = statusData?.id;
+    if (!waMessageId) return false;
+
+    // El predicado del índice parcial va repetido: sin él, Mongo no lo usa.
+    const message = await Message.findOne({ $and: [
+        { 'reactions.me.waMessageId': waMessageId },
+        { 'reactions.me.waMessageId': { $type: 'string' } },
+    ] }).select('_id conversationId').lean();
+    if (!message) return false;
+    const conversation = await Conversation.findOne({ _id: message.conversationId, userId: line.accountId })
+        .select('_id lineId').lean();
+    if (!conversation) return false;
+    if (statusData.status !== 'failed') return true;
+
+    const error = statusData.errors?.[0];
+    const result = await Message.updateOne(
+        { _id: message._id, 'reactions.me.waMessageId': waMessageId, 'reactions.me.status': 'sent' },
+        {
+            $set: {
+                'reactions.me.status': 'failed',
+                'reactions.me.errorCode': error?.code != null ? String(error.code) : null,
+                'reactions.me.errorDetail': error?.error_data?.details ?? error?.title ?? null,
+            },
+            $inc: { changeVersion: 1 },
+        },
+    );
+    if (result.modifiedCount > 0) await emitMessageUpdated(line.accountId, message._id, conversation);
+    return true;
+};

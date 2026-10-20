@@ -19,6 +19,8 @@ import { findConversationLine, findStartLine } from "../services/line.service.js
 import { conversationScope } from "../utils/permissions.js";
 import { messageOrigin, messageSender } from "../utils/message.origin.js";
 import { serializeMessageChange } from "../utils/message.change.js";
+import { canReactTo, canReplyTo, serializeQuoted, serializeReactions } from "../utils/message.actions.js";
+import { loadQuotedMessages } from "../services/message.reply.service.js";
 import { markHumanReply } from "../services/auto.reply.service.js";
 import Campaign from "../models/campaign.model.js";
 
@@ -28,7 +30,8 @@ import Campaign from "../models/campaign.model.js";
  * /api/media/<id del mensaje>, que comprueba de quién es.
  */
 // `campaignNames` (id → nombre): para decir de qué campaña salió (ver `messageOrigin`).
-export const serializeMessage = (msg, { campaignNames } = {}) => ({
+// `quoted` (id → mensaje, `loadQuotedMessages`): los citados, para el resumen de la cita.
+export const serializeMessage = (msg, { campaignNames, quoted } = {}) => ({
     id: String(msg._id),
     conversationId: String(msg.conversationId),
     sender: msg.sender,
@@ -56,6 +59,13 @@ export const serializeMessage = (msg, { campaignNames } = {}) => ({
     origin: messageOrigin(msg, campaignNames),
     // Borrado o editado (coexistencia): lo mismo que trae `message_updated`.
     ...serializeMessageChange(msg),
+    // Citas y reacciones (spec 2026-10-20): a qué responde (resumen leído al
+    // servir), si es un reenvío, las reacciones y qué se puede hacer con él.
+    replyTo: serializeQuoted(msg.replyTo, msg.replyTo?.messageId ? quoted?.get(String(msg.replyTo.messageId)) : null),
+    forwarded: msg.forwarded ?? null,
+    reactions: serializeReactions(msg),
+    canReact: canReactTo(msg),
+    canReply: canReplyTo(msg),
 });
 
 // A Meta: un texto o, si hay archivo, el archivo. El archivo se sube primero
@@ -182,11 +192,12 @@ const findConversationByNumber = async (userId, phone, line) => {
 
 // El último mensaje del contacto. `lastInboundAt` lo tiene; si falta (una
 // conversación anterior al campo, sin backfill) se busca, para no bloquear un
-// envío válido.
+// envío válido. Una reacción suelta no cuenta: tampoco mueve `lastInboundAt`
+// (revisión de Codex del plan de citas y reacciones, 1).
 const lastInboundOf = async (conversation) => {
     if (!conversation) return null;
     if (conversation.lastInboundAt) return conversation.lastInboundAt;
-    const last = await Message.findOne({ conversationId: conversation._id, direction: 'inbound' })
+    const last = await Message.findOne({ conversationId: conversation._id, direction: 'inbound', type: { $ne: 'reaction' } })
         .sort({ timestamp: -1 }).select('timestamp').lean();
     return last?.timestamp ?? null;
 };
@@ -423,7 +434,9 @@ export const listMessages = async (req, res) => {
             ? await Campaign.find({ _id: { $in: campaignIds }, userId }).select('name').lean()
             : [];
         const campaignNames = new Map(campaigns.map(campaign => [String(campaign._id), campaign.name]));
-        const items = msgs.map(msg => serializeMessage(msg, { campaignNames }));
+        // Los citados de esta página, de una vez y solo de esta conversación.
+        const quoted = await loadQuotedMessages(msgs, conversation._id);
+        const items = msgs.map(msg => serializeMessage(msg, { campaignNames, quoted }));
 
         // Solo marcamos como leído al ABRIR la conversación (primera página, sin cursor)
         if (!hasCursor) await markConversationRead(userId, conversation._id, conversation.lineId);
