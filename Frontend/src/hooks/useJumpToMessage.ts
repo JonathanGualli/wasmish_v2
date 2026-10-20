@@ -27,9 +27,13 @@ export const useJumpToMessage = (
     const run = useRef(0);
     const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+    // Al cambiar de conversación, lo que se buscaba en la anterior se olvida
+    // (revisión de Codex del PR #117: el aviso «Buscando…» se quedaba puesto).
     useEffect(() => () => {
         run.current++;
         if (timer.current) clearTimeout(timer.current);
+        setSearching(false);
+        setHighlightedId(null);
     }, [conversationId]);
 
     const pages = useCallback(
@@ -51,7 +55,11 @@ export const useJumpToMessage = (
     const jumpTo = useCallback(async (messageId: string) => {
         const mine = ++run.current;
         const has = () => pages()?.pages.some(page => page.items.some(msg => msg.id === messageId)) ?? false;
-        if (has()) return reveal(messageId);
+        if (has()) {
+            // Otra búsqueda en curso se abandona: este ya está.
+            setSearching(false);
+            return reveal(messageId);
+        }
 
         setSearching(true);
         try {

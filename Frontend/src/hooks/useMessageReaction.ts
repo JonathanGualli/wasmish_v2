@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { useMutation, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import type { AxiosError } from "axios";
 import { setReactionService } from "../services/api.service";
@@ -23,33 +24,42 @@ const reasonOf = (error: unknown) => {
  * vuelve la de antes con el aviso del motivo. Si WhatsApp la rechaza más
  * tarde, llega por el SSE (`message_updated`) como fallida.
  *
- * Tocar el emoji que ya está lo quita. Mientras una va en camino, ese mensaje
- * no admite otra (el backend respondería 409). `onRejected(motivo)`: el aviso
- * de que no salió, que pinta quien lo usa.
+ * Tocar el emoji que ya está lo quita. Mientras una va en camino (también
+ * la que quita), ese mensaje no admite otra: el backend respondería 409 y los
+ * deshacer se cruzarían. `onRejected(motivo)`: el aviso de que no salió, que
+ * pinta quien lo usa, solo si sigue en esa conversación.
+ *
+ * La conversación va con cada petición, no en los callbacks: React Query los
+ * cambia por los del render actual, y con otro chat abierto la respuesta
+ * acababa en la caché equivocada (revisión de Codex del PR #117).
  */
 export const useMessageReaction = (conversationId: string, onRejected: (reason: string) => void) => {
     const queryClient = useQueryClient();
     const { user } = useAuthContext();
-    const key = ["conversation", conversationId];
+    const current = useRef(conversationId);
+    useEffect(() => { current.current = conversationId; }, [conversationId]);
+    // Los mensajes con una reacción en camino, de cualquier conversación.
+    const inFlight = useRef(new Set<string>());
 
     // Nunca mutar la caché: cada página y el mensaje que cambia, objetos nuevos.
-    const patch = (messageId: string, update: (msg: Message) => Message) =>
-        queryClient.setQueryData<InfiniteData<MessagesPage>>(key, old => old && {
+    const patch = (chatId: string, messageId: string, update: (msg: Message) => Message) =>
+        queryClient.setQueryData<InfiniteData<MessagesPage>>(["conversation", chatId], old => old && {
             ...old,
             pages: old.pages.map(page => ({ ...page, items: page.items.map(msg => (msg.id === messageId ? update(msg) : msg)) })),
         });
 
-    const setOwn = (messageId: string, me: OwnReaction | null) =>
-        patch(messageId, msg => ({ ...msg, reactions: { them: msg.reactions?.them ?? null, me } }));
+    const withOwn = (msg: Message, me: OwnReaction | null): Message =>
+        ({ ...msg, reactions: { them: msg.reactions?.them ?? null, me } });
+
+    type Variables = { chatId: string; message: Message; emoji: string };
 
     const mutation = useMutation({
-        mutationFn: ({ message, emoji }: { message: Message; emoji: string }) =>
-            setReactionService(conversationId, message.id, emoji),
+        mutationFn: ({ chatId, message, emoji }: Variables) => setReactionService(chatId, message.id, emoji),
 
-        onMutate: async ({ message, emoji }) => {
-            await queryClient.cancelQueries({ queryKey: key });
+        onMutate: async ({ chatId, message, emoji }) => {
+            await queryClient.cancelQueries({ queryKey: ["conversation", chatId] });
             const previous = message.reactions?.me ?? null;
-            setOwn(message.id, emoji ? {
+            const optimistic: OwnReaction | null = emoji ? {
                 emoji,
                 previousEmoji: previous?.emoji ?? null,
                 at: new Date().toISOString(),
@@ -59,25 +69,34 @@ export const useMessageReaction = (conversationId: string, onRejected: (reason: 
                 sentBy: user ? { id: user.id, name: user.name } : null,
                 origin: "chat",
                 pending: true,
-            } : null);
-            return { previous };
+            } : null;
+            patch(chatId, message.id, msg => withOwn(msg, optimistic));
+            return { previous, version: message.changeVersion ?? 0 };
         },
 
-        onError: (error, { message }, context) => {
-            setOwn(message.id, context?.previous ?? null);
-            onRejected(reasonOf(error));
+        // Se deshace solo si nada lo cambió entretanto: una reacción que
+        // llegó por el SSE es más nueva que la de antes (revisión de Codex del PR #117).
+        onError: (error, { chatId, message }, context) => {
+            if (context) {
+                patch(chatId, message.id, msg =>
+                    (msg.changeVersion ?? 0) === context.version ? withOwn(msg, context.previous) : msg);
+            }
+            if (current.current === chatId) onRejected(reasonOf(error));
         },
 
         // Lo del servidor, salvo que el SSE ya haya traído algo más nuevo.
-        onSuccess: (server) => patch(server.id, msg =>
+        onSuccess: (server, { chatId }) => patch(chatId, server.id, msg =>
             (server.changeVersion ?? 0) >= (msg.changeVersion ?? 0) ? { ...msg, ...server } : msg),
+
+        onSettled: (_data, _error, { message }) => { inFlight.current.delete(message.id); },
     });
 
     const react = (message: Message, emoji: string) => {
+        if (!conversationId || inFlight.current.has(message.id)) return;
         const mine = message.reactions?.me;
-        if (mine?.pending) return;
         const sameAsNow = mine && mine.status !== "failed" && mine.emoji === emoji;
-        mutation.mutate({ message, emoji: sameAsNow ? "" : emoji });
+        inFlight.current.add(message.id);
+        mutation.mutate({ chatId: conversationId, message, emoji: sameAsNow ? "" : emoji });
     };
 
     return { react };
