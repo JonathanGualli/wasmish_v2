@@ -25,6 +25,7 @@ SSE y sus eventos, no leídos, y la UI del chat: hilo, bandeja, conversación nu
   - [Enviar archivos en la UI (`components/Chat/Composer/`)](#enviar-archivos-en-la-ui-componentschatcomposer)
   - [Mensajes que no son texto](#mensajes-que-no-son-texto)
   - [Mensajes eliminados y editados en la UI](#mensajes-eliminados-y-editados-en-la-ui)
+  - [Citas y reacciones en la UI](#citas-y-reacciones-en-la-ui)
   - [`temporalId`](#temporalid)
 
 ---
@@ -175,6 +176,18 @@ Dónde:
 - Lo abierto es un `Set` de ids en `ChatThread`: no se guarda ni se comparte entre pestañas, y al recargar sale cerrado.
 - **En vivo:** `useConversationMessages` aplica `message_updated` en su sitio en todas las páginas, **solo si su `changeVersion` es mayor** que el del mensaje en la caché (uno viejo que llega tarde se descarta). Si el hilo se está cargando, o aún no hay caché, no lo mezcla: cancela la petición en curso (`cancelQueries`) y lo vuelve a pedir, porque esa respuesta se leyó antes del cambio y lo pisaría. Solo `invalidateQueries` no basta: en la primera carga se une a la petición en curso. La bandeja cambia con `conversation_updated` (arriba).
 - La línea de la hora es `flex-wrap` con `whitespace-nowrap`: en el teléfono cada pieza («Desde la app de WhatsApp», «Editado», la hora, el acuse, el ojo) baja entera en vez de partir la hora en dos.
+
+### Citas y reacciones en la UI
+
+Desde 2026-10-20, siguiendo el diseño de Claude Design `Design/Wasmish Chat - Citas y reacciones.html` (spec `docs/superpowers/specs/2026-10-20-citas-reacciones-design.md`; el backend, en [webhook-adjuntos.md](webhook-adjuntos.md#citas-reenvíos-y-reacciones-applyreaction) y [whatsapp-envio.md](whatsapp-envio.md#responder-citando-y-reaccionar-replytomessageid-sendreaction)).
+
+- **Las acciones de un mensaje** salen solo si el backend dice que se puede (`canReply`, `canReact`): en lo nuestro, solo Responder. En la computadora, al pasar el ratón, fuera de la burbuja y del lado libre (`HoverActions`, con un relleno que hace de puente para que no se escondan al cruzar el hueco). En el teléfono, **manteniendo pulsado** 450 ms (`pressHandlers` en `ChatThread`): oscurece el resto y abre la barra encima de la burbuja y «Responder» debajo, en posición fija calculada desde la burbuja (`MessageMenu`; si abajo no caben, suben los dos). El toque que termina una pulsación larga se anula: tocar sigue abriendo la foto o el ojo de un eliminado.
+- **Reaccionar** (`components/Chat/Emoji/`): la barra de seis (`ReactionBar`, `QUICK_REACTIONS`) y el «+» que abre el selector completo (`EmojiPicker`, con `lazy`: abajo a la derecha del hilo en la computadora y una hoja en el teléfono). Los nombres de los emojis, en español, salen de `emojibase-data` (`loadEmojis`, su propio archivo de 80 KB comprimidos, pedido la primera vez); se busca sin tildes y los últimos elegidos se recuerdan en `localStorage` (`wasmish.emojis.recent`, solo una comodidad). Tocar el emoji que ya está lo quita. `useMessageReaction` lo pinta al momento (atenuado, `pending`) y, si el servidor lo rechaza, vuelve el de antes con un aviso **dentro del hilo** (el diseño: «No se pudo reaccionar.»; el 131009 de una reacción, en palabras con `reactionErrorText`). Mientras una va en camino, ese mensaje no admite otra.
+- **Las reacciones** (`MessageReactions`) cuelgan del borde inferior de la burbuja, del lado opuesto a la hora: la del contacto en blanco, la nuestra en menta claro con quién y cuándo en el tooltip. La que WhatsApp rechazó después llega por `message_updated` con «!» rojo y, al tocarla, el motivo con Reintentar y Quitar (sin ellos si ya no se puede reaccionar); si lo que falló fue quitarla o cambiarla, se enseña la que sigue viendo el contacto (`previousEmoji`). El tooltip y el detalle se abren hacia el lado libre del hilo. Con reacciones, la burbuja crece lo justo y la hora baja.
+- **La cita** (`QuotedMessage`), dentro de la burbuja y encima del contenido: el autor por su nombre (`quoteAuthor`: el contacto, la persona, «Bot», «Desde el celular», «Campaña», «API»; «Tú» solo en una cuenta de una persona), el texto o el tipo con su icono, y la miniatura si es una foto. «Mensaje eliminado» con su autor; «Mensaje no disponible» sin autor ni enlace. **Tocarla** (`useJumpToMessage`) lleva al original y lo resalta 1,5 s con un halo menta; si no está cargado, pide páginas más antiguas (hasta 10, 200 mensajes) con «Buscando el mensaje en el historial…» y Cancelar, y si no aparece: «Este mensaje es muy antiguo.».
+- **Responder** pone la barra «Respondiendo a …» sobre el campo (`Composer/ReplyBar`), antes del archivo si lo hay; el envío lleva `replyToMessageId` (texto) o `X-Reply-To` (archivo), y el optimista ya enseña la cita (`quoteFromMessage`). La cita vive en `ChatThread` con su conversación: cambiar de chat la descarta. Con la ventana cerrada se quita sola, con una línea que lo dice: las plantillas no llevan cita.
+- **Escape**, de dentro hacia fuera: la barra o el selector, luego la cita y, sin nada de eso, la conversación (`ChatPage`). El hilo lo escucha en captura y lo frena; con un diálogo abierto, el Escape es del diálogo.
+- **«Reenviado»** (`ForwardedLabel`) va en la burbuja, sobre la cita; «muchas veces», en negrita y con doble flecha.
 
 ### `temporalId`
 
