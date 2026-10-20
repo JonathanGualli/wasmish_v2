@@ -56,3 +56,13 @@ export const whatsappErrorLabel = (code: string | null | undefined) =>
 /** El motivo de un fallo en una frase: el conocido, o el detalle que mandaron. */
 export const whatsappErrorText = (code: string | null | undefined, detail: string | null | undefined) =>
     whatsappErrorLabel(code) || detail || 'Error desconocido';
+
+/**
+ * El motivo de una reacción que WhatsApp rechazó. El 131009 de una reacción
+ * dice algo concreto (Meta, «reaction messages»): el mensaje es de hace más de
+ * 30 días, se borró o no está en el chat.
+ */
+export const reactionErrorText = (code: string | null | undefined, detail: string | null | undefined) =>
+    code === '131009'
+        ? 'WhatsApp no la aceptó: el mensaje es de hace más de 30 días, se borró o ya no está en el chat.'
+        : whatsappErrorText(code, detail);

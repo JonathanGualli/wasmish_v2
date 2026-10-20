@@ -93,12 +93,14 @@ export const getConversationsMessagesService = async (conversationId: string, co
  */
 export const sendMediaMessageService = async (
     conversationId: string,
-    { file, mimeType, caption, temporalId, asDocument }: {
+    { file, mimeType, caption, temporalId, asDocument, replyToMessageId }: {
         file: File;
         mimeType: string;
         caption: string;
         temporalId: string;
         asDocument: boolean;
+        /** Responde citando ese mensaje (de esta conversación). */
+        replyToMessageId?: string;
     },
     { onProgress, signal }: { onProgress?: (loadedBytes: number) => void; signal?: AbortSignal } = {},
 ): Promise<Message> => {
@@ -109,6 +111,7 @@ export const sendMediaMessageService = async (
     };
     if (caption) headers['X-Caption'] = encodeURIComponent(caption);
     if (asDocument) headers['X-Send-As'] = 'document';
+    if (replyToMessageId) headers['X-Reply-To'] = replyToMessageId;
 
     const { data } = await axios.post(`${API_URL}/chats/${conversationId}/media`, file, {
         withCredentials: true,
@@ -124,13 +127,21 @@ export const sendMessageService = async (
     conversationId?: string,
     temporalId?: string,
     contactName?: string,
-    destinationNumber?: string) => {
+    destinationNumber?: string,
+    /** Responde citando ese mensaje: solo con `conversationId`. */
+    replyToMessageId?: string) => {
 
     let url = `${API_URL}/chats/messages`;;
     if (conversationId) {
         url = `${API_URL}/chats/${conversationId}/messages`;
     }
-    const { data } = await axios.post(url, { text, temporalId, contactName, destinationNumber }, { withCredentials: true });
+    const { data } = await axios.post(url, { text, temporalId, contactName, destinationNumber, replyToMessageId }, { withCredentials: true });
+    return data;
+}
+
+/** Reaccionar a un mensaje del contacto; `''` quita la reacción. Devuelve el mensaje. */
+export const setReactionService = async (conversationId: string, messageId: string, emoji: string): Promise<Message> => {
+    const { data } = await axios.put(`${API_URL}/chats/${conversationId}/messages/${messageId}/reaction`, { emoji }, { withCredentials: true });
     return data;
 }
 

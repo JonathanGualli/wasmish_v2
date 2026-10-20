@@ -9,9 +9,9 @@ export interface SSEEventMap {
     message_status: Pick<Message, "id" | "conversationId" | "status">
         & Partial<Pick<Message, "waMessageId" | "deliveredAt" | "readAt" | "failedAt" | "errorCode" | "errorDetail">>
         & { campaignId?: string };
-    // Borrado o editado (coexistencia): el estado entero, con su changeVersion
+    // Borrado, editado (coexistencia) o una reacción: el estado entero, con su changeVersion
     message_updated: Pick<Message, "id" | "conversationId" | "text">
-        & Pick<Message, "caption" | "deletedAt" | "editedAt" | "previousVersions">
+        & Pick<Message, "caption" | "deletedAt" | "editedAt" | "previousVersions" | "reactions" | "canReact" | "canReply">
         & { changeVersion: number };
     // Solo los campos que cambiaron: no leídos, o la vista previa tras un borrado o una edición
     conversation_updated: { id: string; unreadCount?: number; lastMessage?: string };
