@@ -4,29 +4,35 @@
 // Spec: docs/superpowers/specs/2026-10-16-coexistencia-design.md.
 
 import { describeInboundMessage } from './inbound.message.js';
-
-// Ediciones y eliminaciones hechas desde la app: esta versión no las aplica.
-export const ECHO_IGNORED_TYPES = ['edit', 'revoke'];
+import { isMessageChange } from './message.change.js';
 
 /**
- * Un eco listo para guardar, o null si se descarta: sin `id` o sin destinatario,
- * una edición o eliminación, o anterior a la conexión de la línea
- * (`connectedAt`: un número que pasó a otra cuenta no recibe ahí ecos viejos de
- * la anterior). `timestamp` es la hora del webhook según Meta, la mejor que da.
- *
- * El destinatario llega como en los entrantes, de dos formas: `toPhone`, el
- * teléfono solo con dígitos (`to`), y `toUserId`, su BSUID (`to_user_id`). Meta
- * **omite `to`** si la persona tiene nombre de usuario y no puede compartir su
- * teléfono: antes ese eco se descartaba en silencio, y con solo el teléfono el
- * eco no reconocía al contacto que solo tenía BSUID (2026-10-19).
+ * A quién va un eco: `{ phone, waUserId }`, como la identidad de un entrante.
+ * `phone` es el teléfono solo con dígitos (`to`) y `waUserId`, su BSUID
+ * (`to_user_id`). Meta **omite `to`** si la persona tiene nombre de usuario y no
+ * puede compartir su teléfono: antes ese eco se descartaba en silencio, y con
+ * solo el teléfono el eco no reconocía al contacto que solo tenía BSUID
+ * (2026-10-19).
  */
-export const describeEcho = (echoData, { connectedAt = null } = {}) => {
-    if (!echoData?.id || ECHO_IGNORED_TYPES.includes(echoData.type)) return null;
+export const describeEchoRecipient = (echoData) => {
     // Un `to` con letras no es un teléfono (p. ej. un BSUID): quitarle las
     // letras inventaría un número (diagnóstico de Codex, 2026-10-19).
-    const rawTo = String(echoData.to ?? '').trim();
-    const toPhone = /^\+?[\d\s().-]+$/.test(rawTo) ? rawTo.replace(/\D/g, '') || null : null;
-    const toUserId = typeof echoData.to_user_id === 'string' ? echoData.to_user_id.trim() || null : null;
+    const rawTo = String(echoData?.to ?? '').trim();
+    const phone = /^\+?[\d\s().-]+$/.test(rawTo) ? rawTo.replace(/\D/g, '') || null : null;
+    const waUserId = typeof echoData?.to_user_id === 'string' ? echoData.to_user_id.trim() || null : null;
+    return { phone, waUserId };
+};
+
+/**
+ * Un eco listo para guardar, o null si se descarta: sin `id` o sin destinatario
+ * (`describeEchoRecipient`), un borrado o una edición (los aplica
+ * `applyMessageChange` sobre el original), o anterior a la conexión de la línea
+ * (`connectedAt`: un número que pasó a otra cuenta no recibe ahí ecos viejos de
+ * la anterior). `timestamp` es la hora del webhook según Meta, la mejor que da.
+ */
+export const describeEcho = (echoData, { connectedAt = null } = {}) => {
+    if (!echoData?.id || isMessageChange(echoData)) return null;
+    const { phone: toPhone, waUserId: toUserId } = describeEchoRecipient(echoData);
     if (!toPhone && !toUserId) return null;
 
     const seconds = Number.parseInt(echoData.timestamp, 10);

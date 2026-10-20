@@ -164,7 +164,35 @@ const messageSchema = new mongoose.Schema({
         type: autoReplyJobSchema,
         default: undefined,
     },
-}, { 
+    // Coexistencia: el contacto o el negocio (desde la app) lo borró o lo editó
+    // (`applyMessageChange`). Al borrarlo se conserva lo que decía: el chat lo
+    // enseña con el ojito. Spec: 2026-10-19-mensajes-eliminados-editados-design.md.
+    deletedAt: {
+        type: Date,
+        default: null,
+    },
+    // La hora de la última edición aplicada: una más vieja no la pisa.
+    editedAt: {
+        type: Date,
+        default: null,
+    },
+    // Lo que decía antes de cada edición, en orden de llegada; `editedAt` es
+    // desde cuándo decía eso. Sin default: no se guarda un array vacío en cada mensaje.
+    previousVersions: {
+        type: [new mongoose.Schema({
+            text: { type: String, required: true },
+            caption: { type: String, default: null },
+            editedAt: { type: Date, required: true },
+        }, { _id: false })],
+        default: undefined,
+    },
+    // Sube en 1 con cada borrado o edición aplicada: ordena los cambios de un
+    // mensaje (la UI descarta un `message_updated` más viejo que el que tiene).
+    changeVersion: {
+        type: Number,
+        default: undefined,
+    },
+}, {
     timestamps: true,
 });
 

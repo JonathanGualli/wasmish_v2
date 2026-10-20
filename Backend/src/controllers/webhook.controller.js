@@ -20,7 +20,9 @@ import { notifyInbound } from '../services/push.service.js';
 import { buildAutoReplyJob } from '../services/auto.reply.service.js';
 import { wakeAutoReplyWorker } from '../workers/auto.reply.worker.js';
 import { markHumanReply } from '../services/auto.reply.service.js';
-import { describeEcho, parsePartnerRemoved, ECHO_IGNORED_TYPES } from '../utils/business.app.js';
+import { describeEcho, describeEchoRecipient, parsePartnerRemoved } from '../utils/business.app.js';
+import { isMessageChange, describeMessageChange } from '../utils/message.change.js';
+import { applyMessageChange } from '../services/message.change.service.js';
 import { serializeMessage } from './chat.controller.js';
 
 // Baja el adjunto y lo deja en disco. Devuelve SIEMPRE un objeto: si algo falla
@@ -78,6 +80,19 @@ export const verifyWebhook = (req, res) => {
     return res.sendStatus(403);
 }
 
+// Un borrado o una edición (coexistencia), del contacto o del negocio desde la
+// app: se aplica sobre el original y nada más (`applyMessageChange`). Uno mal
+// formado se descarta aquí: nunca sigue el camino de un mensaje nuevo, que lo
+// guardaría como «Mensaje no compatible», sumaría un no leído y avisaría.
+const procesarCambio = async (inbound, messageData, { direction, identity }) => {
+    const change = describeMessageChange(messageData);
+    if (!change) {
+        console.warn('Cambio de mensaje mal formado; se descarta:', { waMessageId: messageData?.id, type: messageData?.type });
+        return;
+    }
+    await applyMessageChange({ line: inbound, change, direction, identity });
+};
+
 // Procesa UN mensaje entrante: lo guarda, actualiza la conversación y avisa por
 // SSE. Vive fuera de handleWebhook para poder envolver cada mensaje en su
 // propio try/catch — ver el comentario del bucle.
@@ -86,6 +101,13 @@ export const verifyWebhook = (req, res) => {
 // y el token de su WABA. `contacts` es el `value.contacts` del mismo lote: el
 // perfil del remitente.
 const procesarEntrante = async (inbound, messageData, contacts) => {
+    // Lo primero: un borrado o una edición del contacto no es un mensaje nuevo.
+    if (isMessageChange(messageData)) {
+        return procesarCambio(inbound, messageData, {
+            direction: 'inbound', identity: describeInboundContact(contacts, messageData),
+        });
+    }
+
     // Traduce la forma que manda Meta (image.caption, button.text…)
     // a { type, text, mediaId, mimeType }. Devuelve null en los que
     // no son mensajes de la conversación, como los 'system'.
@@ -245,11 +267,17 @@ const procesarEntrante = async (inbound, messageData, contacts) => {
 // quien la gana pausa al bot, baja el archivo, toca la conversación y avisa por
 // SSE. Sin aviso push: lo escribió el propio negocio.
 const procesarEco = async (inbound, echoData) => {
+    // Lo que el negocio borró o editó desde la app: se aplica sobre el saliente
+    // original, del destinatario del eco. No pausa al bot: no es una respuesta.
+    if (isMessageChange(echoData)) {
+        return procesarCambio(inbound, echoData, { direction: 'outbound', identity: describeEchoRecipient(echoData) });
+    }
+
     const eco = describeEcho(echoData, { connectedAt: inbound.connectedAt });
     if (!eco) {
         // Sin destinatario no hay conversación: que quede en el log (sin datos
         // de la persona), no como antes, que se perdía en silencio.
-        if (echoData?.id && !ECHO_IGNORED_TYPES.includes(echoData.type) && !echoData.to && !echoData.to_user_id) {
+        if (echoData?.id && !echoData.to && !echoData.to_user_id) {
             console.warn('Eco sin destinatario (ni to ni to_user_id); se descarta:', { waMessageId: echoData.id, type: echoData.type });
         }
         return;

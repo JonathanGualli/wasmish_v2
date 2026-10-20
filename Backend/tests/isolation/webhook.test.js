@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
     seedAccount, seedMember, connectWhatsapp, postWebhook, postWebhookBody, postEcho, openStream, recordQueries, onMeta,
-    FAKE_MEDIA_URL, Contact, Conversation, Line, Message, User,
+    FAKE_MEDIA_URL, request, pushCalls, Contact, Conversation, Line, Message, User,
 } from './helpers.js';
 
 const { disconnectLine } = await import('../../src/services/line.service.js');
@@ -453,4 +453,92 @@ test('eco con teléfono y BSUID: cae en el contacto del BSUID, que se queda con 
     assert.equal(String((await Conversation.findById(echo.conversationId).lean()).contactId), String(contact._id));
     assert.equal((await Contact.findById(contact._id).lean()).phone, phone);
     assert.equal(await Contact.countDocuments({ userId: a.accountId, phone }), 1);
+});
+
+// --- Mensajes eliminados y editados (coexistencia) --------------------------
+
+// Una cuenta con el bot encendido y un dispositivo con avisos: sin las dos cosas, comprobar que un cambio
+// no avisa ni despierta al bot no probaría nada (revisión de Codex del plan, 3).
+const changes = await seedAccount('MW', { seq: 64 });
+await connectWhatsapp(changes, { phoneNumberId: '764' });
+const MW_NUMBER = '764';
+const day = (ranges) => ({ closed: ranges.length === 0, ranges });
+const week = day([{ start: '00:00', end: '23:59' }]);
+assert.equal((await request(changes, 'PUT', '/auto-replies', {
+    enabled: true, timezone: 'America/Guayaquil', handoffHours: 12,
+    welcome: { enabled: true, text: '¡Hola!', returnAfterDays: 30 },
+    outOfHours: { enabled: false, text: '', schedule: { mon: week, tue: week, wed: week, thu: week, fri: week, sat: week, sun: week } },
+    keywordRules: [],
+})).status, 200);
+assert.equal((await request(changes, 'POST', '/push/subscriptions', {
+    endpoint: 'https://fcm.googleapis.com/fcm/send/prueba-cambios', keys: { p256dh: 'BPcl4Zx-clave-publica-de-pruebas', auth: 'secreto-auth' },
+})).status, 200);
+
+/** Espera (el push no se espera en el webhook) hasta que se cumple `predicate`, o `ms`. */
+const eventually = async (predicate, ms = 1000) => {
+    const deadline = Date.now() + ms;
+    while (Date.now() < deadline) {
+        if (await predicate()) return true;
+        await new Promise(resolve => setTimeout(resolve, 20));
+    }
+    return Boolean(await predicate());
+};
+const changeOf = (from, type, body, extra = {}) => ({
+    contacts: [{ profile: { name: 'Cliente de prueba' }, wa_id: from }],
+    messages: [{ from, id: `wamid.cambio.${Date.now()}.${++echoSeq}`, timestamp: String(nowSeconds()), type, [type]: body, ...extra }],
+});
+const botJobs = () => Message.countDocuments({ bot: { $exists: true } });
+
+test('un borrado y una edición del contacto marcan el original sin contar como mensaje nuevo', async () => {
+    const from = '593990006401';
+    // Control: un entrante normal sí despierta al bot y sí avisa.
+    const pushesBefore = pushCalls.length;
+    const jobsBefore = await botJobs();
+    await postWebhook(MW_NUMBER, textMessage(from, 'quiero el precio'));
+    assert.ok(await eventually(() => pushCalls.length > pushesBefore), 'el control no avisó por push');
+    assert.equal(await botJobs(), jobsBefore + 1, 'el control no creó trabajo del bot');
+
+    const original = await Message.findOne({ text: 'quiero el precio' }).lean();
+    const conversationBefore = await Conversation.findById(original.conversationId).lean();
+    const messagesBefore = await Message.countDocuments({ conversationId: original.conversationId });
+    const pushesAfterControl = pushCalls.length;
+
+    const editedRes = await postWebhook(MW_NUMBER, changeOf(from, 'edit', {
+        original_message_id: original.waMessageId, message: { type: 'text', text: { body: 'quiero el precio, por favor' } },
+    }));
+    assert.equal(editedRes.status, 200);
+    await postWebhook(MW_NUMBER, changeOf(from, 'revoke', { original_message_id: original.waMessageId }));
+    // Mal formados: tampoco son mensajes nuevos.
+    await postWebhook(MW_NUMBER, changeOf(from, 'edit', { original_message_id: original.waMessageId }));
+    await postWebhook(MW_NUMBER, changeOf(from, 'revoke', {}));
+
+    const saved = await Message.findById(original._id).lean();
+    assert.equal(saved.text, 'quiero el precio, por favor');
+    assert.ok(saved.deletedAt);
+    assert.equal(await Message.countDocuments({ conversationId: original.conversationId }), messagesBefore);
+    const conversation = await Conversation.findById(original.conversationId).lean();
+    assert.equal(conversation.unreadCount, conversationBefore.unreadCount);
+    assert.equal(conversation.lastInboundAt.getTime(), conversationBefore.lastInboundAt.getTime());
+    assert.equal(conversation.lastMessage, 'Mensaje eliminado');
+    assert.equal(await botJobs(), jobsBefore + 1, 'un cambio creó trabajo del bot');
+    assert.equal(await eventually(() => pushCalls.length > pushesAfterControl, 300), false, 'un cambio avisó por push');
+});
+
+test('un borrado y una edición desde la app (eco) marcan el saliente sin pausar al bot', async () => {
+    const to = '593990006402';
+    await postEcho(MW_NUMBER, [echoOf({ to, body: 'Cuesta $10' })]);
+    const original = await Message.findOne({ text: 'Cuesta $10', origin: 'businessApp' }).lean();
+    const messagesBefore = await Message.countDocuments({ conversationId: original.conversationId });
+
+    const log = await recordQueries(() => postEcho(MW_NUMBER, [
+        echoOf({ to, type: 'edit', text: undefined, edit: { original_message_id: original.waMessageId, message: { type: 'text', text: { body: 'Cuesta $12' } } } }),
+        echoOf({ to, type: 'revoke', text: undefined, revoke: { original_message_id: original.waMessageId } }),
+        echoOf({ to, type: 'edit', text: undefined, edit: { original_message_id: original.waMessageId } }),
+    ]));
+    assert.equal(pauseWrites(log), 0, 'un cambio desde la app pausó al bot');
+
+    const saved = await Message.findById(original._id).lean();
+    assert.equal(saved.text, 'Cuesta $12');
+    assert.ok(saved.deletedAt);
+    assert.equal(await Message.countDocuments({ conversationId: original.conversationId }), messagesBefore);
 });
