@@ -668,6 +668,7 @@ test('una cita del contacto: a qué responde, solo si es de su conversación', a
     const listed = list.body.items.find(item => item.id === String(reply._id));
     assert.deepEqual(listed.replyTo, {
         id: String(quoted._id), sender: 'me', type: 'text', text: 'Tarjetas: $20', hasMedia: false, deleted: true,
+        sentBy: null, origin: 'businessApp',
     });
     assert.equal(list.body.items.find(item => item.id === String(crossed._id)).replyTo.id, null);
 });

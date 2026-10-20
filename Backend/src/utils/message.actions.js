@@ -2,7 +2,7 @@
 // mensaje en la bandeja y lo que ve la UI de las reacciones y de la cita.
 // Spec: docs/superpowers/specs/2026-10-20-citas-reacciones-design.md.
 
-import { messageSender } from './message.origin.js';
+import { messageOrigin, messageSender } from './message.origin.js';
 
 // Meta no deja reaccionar a un mensaje de más de 30 días.
 export const REACTION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
@@ -78,7 +78,9 @@ export const serializeReactions = (msg) => {
 /**
  * La cita de un mensaje para la UI: null si no responde a nada; `{ id: null }`
  * si Wasmish no tiene el original; si no, su resumen. Se lee al servir, así
- * una edición o un borrado posterior del original se ve.
+ * una edición o un borrado posterior del original se ve. De un saliente van
+ * también quién lo envió y de dónde salió: la cita nombra al autor («Ana»,
+ * «Bot», «Desde el celular»), nunca «Tú», que cambia según quién mira (el diseño).
  */
 export const serializeQuoted = (replyTo, original) => {
     if (!replyTo) return null;
@@ -90,5 +92,7 @@ export const serializeQuoted = (replyTo, original) => {
         text: String(original.text ?? '').slice(0, 200),
         hasMedia: Boolean(original.mediaFile),
         deleted: Boolean(original.deletedAt),
+        sentBy: messageSender(original),
+        origin: messageOrigin(original)?.kind ?? null,
     };
 };

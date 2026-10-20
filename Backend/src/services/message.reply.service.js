@@ -5,7 +5,7 @@
 import Message from '../models/message.model.js';
 
 // Lo que necesita el resumen de la cita (`serializeQuoted`).
-const QUOTED_FIELDS = '_id sender type text mediaFile deletedAt';
+const QUOTED_FIELDS = '_id sender type text mediaFile deletedAt sentBy sentByName origin campaignId';
 
 /** El mensaje citado por un entrante o un eco (`context.id`), si es de esa conversación; si no, null. */
 export const findQuotedMessage = (conversationId, waMessageId) =>

@@ -13,22 +13,39 @@ import { reactionPreview } from '../utils/message.actions.js';
 // Los ids de reacción que recuerda cada mensaje para no reaplicar un reintento.
 const SEEN_LIMIT = 20;
 
+// Reescrituras de la bandeja cuando otra reacción se cruza, hasta aquí.
+const MAX_PREVIEW_ATTEMPTS = 3;
+
 /**
- * La bandeja con una reacción: su texto y su hora, solo si no hay algo más
- * nuevo (todo el que escribe la vista previa pone `lastMessageAt` = la hora de
- * lo suyo). La UI, con `lastMessage`, vuelve a pedir la bandeja y la reordena.
- *
- * @returns {Promise<boolean>} si la escribió.
+ * La bandeja con la reacción VIGENTE de un lado del mensaje (no la que llamó:
+ * otra del mismo segundo pudo ganarle). Se escribe con su hora, solo si no hay
+ * algo más nuevo (todo el que escribe la vista previa pone `lastMessageAt` = la
+ * hora de lo suyo), y después se relee: si otra reacción se cruzó entre medias,
+ * se reescribe desde ella, como `refreshPreview` con las ediciones (revisión de
+ * Codex del PR #115). Una reacción quitada no toca la bandeja. La UI, con
+ * `lastMessage`, vuelve a pedir la bandeja y la reordena.
  */
-export const writeReactionPreview = async ({ accountId, conversation, at, text }) => {
-    const result = await Conversation.updateOne(
-        { _id: conversation._id, $or: [{ lastMessageAt: null }, { lastMessageAt: { $lte: at } }] },
-        { $set: { lastMessage: text, lastMessageAt: at } },
-    );
-    if (result.matchedCount === 0) return false;
-    sendToAccount(String(accountId), 'conversation_updated', { id: String(conversation._id), lastMessage: text },
+export const syncReactionPreview = async ({ accountId, conversation, messageId, side }) => {
+    let written = null;
+    for (let attempt = 0; attempt < MAX_PREVIEW_ATTEMPTS; attempt++) {
+        const message = await Message.findById(messageId).lean();
+        const current = message?.reactions?.[side];
+        if (!current?.emoji) break;
+        if (written === current.waMessageId) break;
+
+        const text = reactionPreview({ side, emoji: current.emoji, original: message });
+        const result = await Conversation.updateOne(
+            { _id: conversation._id, $or: [{ lastMessageAt: null }, { lastMessageAt: { $lte: current.at } }] },
+            { $set: { lastMessage: text, lastMessageAt: current.at } },
+        );
+        if (result.matchedCount === 0) break;
+        written = current.waMessageId;
+    }
+    if (!written) return;
+
+    const { lastMessage = '' } = await Conversation.findById(conversation._id).select('lastMessage').lean() ?? {};
+    sendToAccount(String(accountId), 'conversation_updated', { id: String(conversation._id), lastMessage },
         { lineId: conversation.lineId ?? null });
-    return true;
 };
 
 /** Avisa por SSE del mensaje como queda, releído después de escribir. */
@@ -82,12 +99,8 @@ export const applyReaction = async ({ line, reaction, side, identity, origin = n
     );
     if (result.modifiedCount === 0) return 'unchanged';
 
-    const updated = await emitMessageUpdated(line.accountId, message._id, conversation);
-    if (updated && emoji) {
-        await writeReactionPreview({
-            accountId: line.accountId, conversation, at, text: reactionPreview({ side, emoji, original: updated }),
-        });
-    }
+    await emitMessageUpdated(line.accountId, message._id, conversation);
+    if (emoji) await syncReactionPreview({ accountId: line.accountId, conversation, messageId: message._id, side });
     return 'applied';
 };
 

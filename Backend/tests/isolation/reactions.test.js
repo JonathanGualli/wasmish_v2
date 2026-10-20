@@ -184,3 +184,33 @@ test('la nuestra desde la app (eco): reactions.me con su origen y la bandeja «R
     assert.equal(saved.reactions.them, undefined);
     assert.equal((await conversationOf(conversation)).lastMessage, 'Reaccionaste ❤️ a: «gracias»');
 });
+
+// Revisión de Codex del PR #115: con 👍 y ❤️ del mismo segundo, la bandeja de
+// la primera se escribía DESPUÉS de la segunda y se quedaba «Reaccionó 👍»
+// aunque el mensaje tuviera ❤️. Aquí la primera escritura de la bandeja espera
+// a que la segunda reacción se aplique entera.
+test('dos reacciones cruzadas: la bandeja queda con la vigente', async () => {
+    const { conversation, identity } = await chat();
+    const msg = await message(conversation, { text: 'Pedido' });
+    const original = Conversation.updateOne;
+    let intercepted = false;
+    Conversation.updateOne = function (...args) {
+        if (!intercepted && args[1]?.$set?.lastMessage?.startsWith('Reaccionó 👍')) {
+            intercepted = true;
+            Conversation.updateOne = original;
+            const query = original.apply(this, args);
+            const exec = query.exec.bind(query);
+            query.exec = async () => { await react(reactionTo(msg, '❤️', 60), identity); return exec(); };
+            return query;
+        }
+        return original.apply(this, args);
+    };
+    try {
+        assert.equal(await react(reactionTo(msg, '👍', 60), identity), 'applied');
+    } finally {
+        Conversation.updateOne = original;
+    }
+    assert.ok(intercepted, 'el test no forzó el cruce');
+    assert.equal((await reload(msg)).reactions.them.emoji, '❤️');
+    assert.equal((await conversationOf(conversation)).lastMessage, 'Reaccionó ❤️ a: «Pedido»');
+});

@@ -110,7 +110,11 @@ test('serializeQuoted: sin cita, sin original y con original', () => {
     assert.deepEqual(serializeQuoted(replyTo, null), { id: null });
     assert.deepEqual(
         serializeQuoted(replyTo, { _id: 'm1', sender: 'them', type: 'image', text: 'x'.repeat(300), mediaFile: 'a.jpg', deletedAt: null }),
-        { id: 'm1', sender: 'them', type: 'image', text: 'x'.repeat(200), hasMedia: true, deleted: false },
+        { id: 'm1', sender: 'them', type: 'image', text: 'x'.repeat(200), hasMedia: true, deleted: false, sentBy: null, origin: null },
     );
+    // De un saliente, quién y de dónde: la cita nombra al autor.
+    const ours = serializeQuoted(replyTo, { _id: 'm2', sender: 'me', text: 'ok', sentBy: 'u1', sentByName: 'Ana', origin: 'chat' });
+    assert.deepEqual([ours.sentBy, ours.origin], [{ id: 'u1', name: 'Ana' }, 'chat']);
+    assert.equal(serializeQuoted(replyTo, { _id: 'm3', sender: 'me', text: 'ok', origin: 'businessApp' }).origin, 'businessApp');
     assert.equal(serializeQuoted(replyTo, { _id: 'm1', sender: 'me', text: 'hola', deletedAt: NOW }).deleted, true);
 });
