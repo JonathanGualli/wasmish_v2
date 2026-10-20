@@ -542,3 +542,30 @@ test('un borrado y una edición desde la app (eco) marcan el saliente sin pausar
     assert.ok(saved.deletedAt);
     assert.equal(await Message.countDocuments({ conversationId: original.conversationId }), messagesBefore);
 });
+
+// Regresión que vigila: el 2026-10-20 un texto llegó como `unsupported` (coexistencia) y el motivo de Meta
+// no quedó en ningún sitio. Ahora va al log, con el subtipo, el código y el título; nunca el contenido.
+test('un entrante que Meta no entregó deja su motivo en el log, sin el contenido', async () => {
+    const warnings = [];
+    const originalWarn = console.warn;
+    console.warn = (...args) => { warnings.push(args); };
+    const id = `wamid.unsupported.${Date.now()}`;
+    try {
+        const res = await postWebhook(A_NUMBER, {
+            contacts: [{ profile: { name: 'Cliente de prueba' }, wa_id: '593990006501' }],
+            messages: [{
+                from: '593990006501', id, timestamp: String(nowSeconds()), type: 'unsupported',
+                errors: [{ code: 131060, title: 'This message is currently unavailable', message: 'secreto del cliente', error_data: { details: 'secreto del cliente' } }],
+                unsupported: { type: 'text' },
+            }],
+        });
+        assert.equal(res.status, 200);
+    } finally {
+        console.warn = originalWarn;
+    }
+    const logged = warnings.find(([label]) => String(label).includes('Meta no entregó'));
+    assert.ok(logged, 'no se registró el motivo');
+    assert.deepEqual(logged[1], { waMessageId: id, subtype: 'text', errors: [{ code: 131060, title: 'This message is currently unavailable' }] });
+    assert.ok(!JSON.stringify(warnings).includes('secreto del cliente'), 'el log trae el contenido');
+    assert.equal((await Message.findOne({ waMessageId: id }).lean()).text, 'Mensaje no compatible', 'el mensaje se guarda igual');
+});

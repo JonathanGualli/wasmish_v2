@@ -8,7 +8,7 @@ import {
 } from './contact.controller.js';
 import { resolveStatusTransition } from '../utils/message.status.js';
 import { getWindowExpiry } from '../utils/whatsapp.window.js';
-import { describeInboundMessage } from '../utils/inbound.message.js';
+import { describeInboundMessage, describeUnsupportedReason } from '../utils/inbound.message.js';
 import { describeInboundContact, hasContactIdentity, describeUserIdUpdate } from '../utils/contact.identity.js';
 import { describeUserPreference, isMarketingOptOutFailure } from '../utils/marketing.preference.js';
 import { TIPOS_CON_ARCHIVO, nombreDeArchivo, guardarArchivo } from '../utils/media.storage.js';
@@ -120,6 +120,12 @@ const procesarEntrante = async (inbound, messageData, contacts) => {
     // el reintento creaba un segundo Message y el cliente veía el mensaje dos
     // veces. Va ANTES de descargar nada, que es lo caro de todo el camino.
     if (messageData.id && await Message.exists({ waMessageId: messageData.id })) return;
+
+    // Lo que Meta no entregó: el motivo que da (subtipo, código y título), sin
+    // el contenido. Se guarda igual como «Mensaje no compatible»; con esto se
+    // sabe por qué y, si se repite, el subtipo pasa a `ETIQUETAS_NO_SOPORTADO`.
+    const unsupported = describeUnsupportedReason(messageData);
+    if (unsupported) console.warn('Entrante que Meta no entregó:', { waMessageId: messageData.id, ...unsupported });
 
     // Quién escribe. Puede llegar SIN teléfono: si la persona usa nombre de
     // usuario y no ha hablado con el negocio en 30 días, Meta solo manda su
