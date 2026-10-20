@@ -207,6 +207,11 @@ if (limpiar) {
     process.exit(0);
 }
 
+// El tipo del mensaje que se edita (texto si no está en la BD local).
+const TIPO_ORIGINAL = ORIGINAL
+    ? (await Message.findOne({ waMessageId: ORIGINAL }).select('type').lean())?.type ?? 'text'
+    : 'text';
+
 console.log(`Enviando a ${URL_BASE}/api/webhook  ·  de ${senderLabel}  ·  a la cuenta ${dueno.email} (${phoneNumberId})\n`);
 
 // El `value` de un mensaje, de un aviso de preferencia de marketing o de un
@@ -247,11 +252,15 @@ const valorDe = (nombre) => {
     };
 };
 
-// El contenido de un borrado o una edición, como en la referencia de Meta.
+// El contenido de un borrado o una edición, como en la referencia de Meta. Una
+// edición es del tipo del original: un texto cambia el texto; una foto, un video
+// o un documento, su pie (Meta no deja editar nada más).
 function cambio(nombre) {
-    return nombre === 'revoke'
-        ? { type: 'revoke', revoke: { original_message_id: ORIGINAL } }
-        : { type: 'edit', edit: { original_message_id: ORIGINAL, message: { type: 'text', text: { body: EDITED_TEXT } } } };
+    if (nombre === 'revoke') return { type: 'revoke', revoke: { original_message_id: ORIGINAL } };
+    const message = TIPO_ORIGINAL === 'text'
+        ? { type: 'text', text: { body: EDITED_TEXT } }
+        : { type: TIPO_ORIGINAL, [TIPO_ORIGINAL]: { id: 'MEDIA_EDITADO', caption: EDITED_TEXT } };
+    return { type: 'edit', edit: { original_message_id: ORIGINAL, message } };
 }
 
 // El aviso de que Meta retiró el acceso: con la forma del ejemplo de Meta, en
