@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { describeEcho, ECHO_IGNORED_TYPES } from '../src/utils/business.app.js';
+import { describeEcho, describeEchoRecipient } from '../src/utils/business.app.js';
 
 // Un eco de `smb_message_echoes`, con la forma de la referencia de Meta.
 const echo = (overrides = {}) => ({
@@ -31,9 +31,19 @@ test('un video y un documento, con su etiqueta o su nombre', () => {
     assert.equal(doc.entrante.filename, 'Temario.pdf');
 });
 
-test('las ediciones y eliminaciones desde la app no se guardan en esta versión', () => {
-    assert.deepEqual(ECHO_IGNORED_TYPES, ['edit', 'revoke']);
-    for (const type of ECHO_IGNORED_TYPES) assert.equal(describeEcho(echo({ type, text: undefined, [type]: {} })), null, type);
+// Las aplica `applyMessageChange` sobre el original: nunca son un eco nuevo, bien o mal formadas.
+test('las ediciones y eliminaciones desde la app no son un eco nuevo', () => {
+    for (const type of ['edit', 'revoke']) {
+        assert.equal(describeEcho(echo({ type, text: undefined, [type]: {} })), null, `${type} mal formado`);
+        assert.equal(describeEcho(echo({ type, text: undefined, [type]: { original_message_id: 'wamid.x' } })), null, type);
+    }
+});
+
+test('describeEchoRecipient: el teléfono solo con dígitos y el BSUID', () => {
+    assert.deepEqual(describeEchoRecipient(echo({ to: '+593 99 000 1111', to_user_id: 'CO.1' })), { phone: '593990001111', waUserId: 'CO.1' });
+    assert.deepEqual(describeEchoRecipient(echo({ to: 'CO.1830780421280372' })), { phone: null, waUserId: null });
+    assert.deepEqual(describeEchoRecipient(echo({ to: undefined, to_user_id: ' CO.2 ' })), { phone: null, waUserId: 'CO.2' });
+    assert.deepEqual(describeEchoRecipient(null), { phone: null, waUserId: null });
 });
 
 test('sin id o sin destinatario (ni teléfono ni BSUID), se descarta', () => {

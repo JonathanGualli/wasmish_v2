@@ -20,7 +20,8 @@ import { notifyInbound } from '../services/push.service.js';
 import { buildAutoReplyJob } from '../services/auto.reply.service.js';
 import { wakeAutoReplyWorker } from '../workers/auto.reply.worker.js';
 import { markHumanReply } from '../services/auto.reply.service.js';
-import { describeEcho, parsePartnerRemoved, ECHO_IGNORED_TYPES } from '../utils/business.app.js';
+import { describeEcho, parsePartnerRemoved } from '../utils/business.app.js';
+import { isMessageChange } from '../utils/message.change.js';
 import { serializeMessage } from './chat.controller.js';
 
 // Baja el adjunto y lo deja en disco. Devuelve SIEMPRE un objeto: si algo falla
@@ -249,7 +250,7 @@ const procesarEco = async (inbound, echoData) => {
     if (!eco) {
         // Sin destinatario no hay conversación: que quede en el log (sin datos
         // de la persona), no como antes, que se perdía en silencio.
-        if (echoData?.id && !ECHO_IGNORED_TYPES.includes(echoData.type) && !echoData.to && !echoData.to_user_id) {
+        if (echoData?.id && !isMessageChange(echoData) && !echoData.to && !echoData.to_user_id) {
             console.warn('Eco sin destinatario (ni to ni to_user_id); se descarta:', { waMessageId: echoData.id, type: echoData.type });
         }
         return;
