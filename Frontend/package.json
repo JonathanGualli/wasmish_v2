@@ -17,6 +17,7 @@
     "@tanstack/react-query-devtools": "^5.91.1",
     "@tanstack/react-table": "^8.21.3",
     "axios": "^1.10.0",
+    "emojibase-data": "17.0.0",
     "libphonenumber-js": "^1.13.14",
     "lucide-react": "^0.541.0",
     "papaparse": "^5.7.0",

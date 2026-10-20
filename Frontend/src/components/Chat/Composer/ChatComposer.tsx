@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type FormEvent, type KeyboardEvent } from "react";
+import type { Message } from "../../../models/message.mode";
 import { Clock, Download, Info, LayoutTemplate, Paperclip, SendHorizonal, Unplug, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { AxiosError } from "axios";
@@ -20,6 +21,7 @@ import { CustomButton } from "../../Button/Button";
 import { useNoticeContext } from "../../Notice/context/UseNoticeContext";
 import { SendTemplateDialog } from "../SendTemplateDialog";
 import { AttachmentPreview } from "./AttachmentPreview";
+import { ReplyBar } from "./ReplyBar";
 
 interface Props {
     conversationId: string;
@@ -28,6 +30,11 @@ interface Props {
     title: string;
     /** Escribirle desde otra línea: abre la conversación nueva con el contacto ya puesto. */
     onStartConversation: (request: NewConversationRequest) => void;
+    /** El mensaje al que se responde citándolo (lo elige el hilo), y quitarlo. */
+    replyTo: Message | null;
+    onCancelReply: () => void;
+    /** Con equipo, la cita nombra a quien escribió lo nuestro (nunca «Tú»). */
+    team: boolean;
 }
 
 /** Hasta 6 líneas de 21 px; luego, scroll. */
@@ -57,7 +64,7 @@ const namePasted = (file: File) => {
  * El aviso al arrastrar se pinta sobre toda la conversación: su contenedor
  * tiene que ser `relative`.
  */
-export const ChatComposer = ({ conversationId, conversation, title, onStartConversation }: Props) => {
+export const ChatComposer = ({ conversationId, conversation, title, onStartConversation, replyTo, onCancelReply, team }: Props) => {
     const sendText = useConversationSendMessages();
     const media = useSendMediaMessage();
     const attachment = useOutgoingAttachment();
@@ -88,6 +95,21 @@ export const ChatComposer = ({ conversationId, conversation, title, onStartConve
         textareaRef.current?.focus();
     }, []);
 
+    // Al elegir «Responder», el foco va al campo (diseño, 1g).
+    useEffect(() => {
+        if (replyTo) textareaRef.current?.focus();
+    }, [replyTo]);
+
+    // Con la ventana cerrada solo salen plantillas, que no llevan cita: la de a
+    // medias se descarta y se dice por qué, en una línea (diseño, 1j). Si la
+    // ventana se vuelve a abrir, se cita otra vez desde el mensaje.
+    const [replyDropped, setReplyDropped] = useState(false);
+    useEffect(() => {
+        if (!replyTo || (!windowBlocked && !lineBlock)) return;
+        if (windowBlocked) setReplyDropped(true);
+        onCancelReply();
+    }, [replyTo, windowBlocked, lineBlock, onCancelReply]);
+
     const { file, kind, issue } = attachment;
     const noCaption = kind === 'audio';
     const canSend = file ? !issue : Boolean(text.trim());
@@ -113,8 +135,10 @@ export const ChatComposer = ({ conversationId, conversation, title, onStartConve
                 file,
                 caption: noCaption ? '' : text.trim(),
                 asDocument: attachment.asDocument,
+                replyTo,
             });
             attachment.clear();
+            onCancelReply();
             // El audio no lleva texto: lo escrito se queda para después.
             if (!noCaption) setText("");
             return;
@@ -122,7 +146,8 @@ export const ChatComposer = ({ conversationId, conversation, title, onStartConve
 
         const message = text;
         setText("");
-        sendText.mutate({ conversationId, message, temporalId: crypto.randomUUID() }, { onError: showTextError });
+        sendText.mutate({ conversationId, message, temporalId: crypto.randomUUID(), replyTo }, { onError: showTextError });
+        onCancelReply();
     };
 
     const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -175,6 +200,12 @@ export const ChatComposer = ({ conversationId, conversation, title, onStartConve
                             : undefined} />
                 ) : windowBlocked ? (
                     <>
+                        {replyDropped && (
+                            <p className="flex gap-2 items-start text-[13px] leading-[1.5] text-brand-gray-600">
+                                <Info size={15} className="flex-none mt-0.5 text-brand-muted" />
+                                Se quitó la cita de tu respuesta: las plantillas no la llevan.
+                            </p>
+                        )}
                         {file && <AttachmentPreview attachment={attachment} onChange={picker.open} disabled withText={Boolean(text.trim())} />}
                         <WindowClosedNotice hasWindow={hasWindow} interrupted={hasDraft} title={title}
                             lineName={showLines && line ? lineLabel(line) : null}
@@ -207,6 +238,8 @@ export const ChatComposer = ({ conversationId, conversation, title, onStartConve
                                 Preparamos el primero; cuando lo envíes, adjunta el siguiente.
                             </Callout>
                         )}
+                        {/* Primero a qué respondes, después qué envías (diseño, 1i). */}
+                        {replyTo && <ReplyBar message={replyTo} contactName={title} team={team} onCancel={onCancelReply} />}
                         <AttachmentPreview attachment={attachment} onChange={picker.open} />
 
                         <form onSubmit={handleSend} className="flex gap-1.5 md:gap-2.5 items-end">
