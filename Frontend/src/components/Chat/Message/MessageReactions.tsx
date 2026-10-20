@@ -9,6 +9,8 @@ interface Props {
     mine: boolean;
     /** Quitar la nuestra (tocarla) o reintentar/quitar la que falló. */
     onReact: (emoji: string) => void;
+    /** En el celular, tocar la nuestra dice quién la puso antes de quitarla (diseño, m6). */
+    phone: boolean;
 }
 
 const formatTime = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -24,11 +26,12 @@ const ownLabel = (me: OwnReaction) => {
  * Las reacciones del mensaje, colgadas del borde inferior de la burbuja, del
  * lado opuesto a la hora (diseño, 1f): la del contacto en blanco y la nuestra
  * en menta claro, que se distinguen sin pasar el ratón. La nuestra dice quién y
- * cuándo (tooltip en la computadora, al tocarla en el celular); enviándose va
+ * cuándo (tooltip en la computadora; en el celular, al tocarla, con «Quitar»:
+ * un toque no la quita sin más); enviándose va
  * atenuada; si WhatsApp la rechazó más tarde, va con «!» rojo y, al tocarla,
  * el motivo con Reintentar y Quitar.
  */
-export const MessageReactions = ({ msg, mine, onReact }: Props) => {
+export const MessageReactions = ({ msg, mine, onReact, phone }: Props) => {
     const them = msg.reactions?.them;
     const me = msg.reactions?.me;
     const [open, setOpen] = useState(false);
@@ -57,8 +60,9 @@ export const MessageReactions = ({ msg, mine, onReact }: Props) => {
     const ownChip = me && shownEmoji && (
         <span className="relative group/own">
             <button type="button"
-                onClick={() => (failed ? setOpen(value => !value) : me.pending ? undefined : onReact(shownEmoji))}
-                aria-label={failed ? "Tu reacción no se envió" : `Tu reacción ${shownEmoji}. Tocar para quitarla`}
+                onClick={() => (failed || (phone && !me.pending) ? setOpen(value => !value) : me.pending ? undefined : onReact(shownEmoji))}
+                aria-label={failed ? "Tu reacción no se envió"
+                    : phone ? `Tu reacción ${shownEmoji}: quién la puso` : `Tu reacción ${shownEmoji}. Tocar para quitarla`}
                 className={`flex items-center gap-[3px] h-6 px-[7px] rounded-full border text-sm leading-none text-brand-text
                     shadow-[0_1px_3px_rgba(14,17,22,0.1)] cursor-pointer
                     ${failed ? "bg-brand-danger-soft border-brand-danger-border" : "bg-brand-accent-soft border-brand-green-200"}`}>
@@ -79,6 +83,10 @@ export const MessageReactions = ({ msg, mine, onReact }: Props) => {
                     onRetry={() => { setOpen(false); onReact(me.emoji ?? ""); }}
                     onRemove={() => { setOpen(false); onReact(""); }} />
             )}
+            {open && !failed && (
+                <OwnDetail label={ownLabel(me)} canRemove={Boolean(msg.canReact)} side={tipSide}
+                    onRemove={() => { setOpen(false); onReact(shownEmoji); }} />
+            )}
         </span>
     );
 
@@ -97,6 +105,28 @@ export const MessageReactions = ({ msg, mine, onReact }: Props) => {
     );
 };
 
+const DETAIL = `absolute bottom-[calc(100%+8px)] grid gap-2.5 z-10 cursor-default text-left
+    bg-brand-surface border border-brand-border rounded-xl shadow-[0_12px_32px_rgba(14,17,22,0.16)] px-3.5 py-3`;
+
+/** En el celular, al tocar la nuestra: quién la puso y cuándo, y quitarla. */
+const OwnDetail = ({ label, canRemove, side, onRemove }: {
+    label: string;
+    /** Pasados los 30 días ya no se puede quitar (WhatsApp no deja). */
+    canRemove: boolean;
+    side: string;
+    onRemove: () => void;
+}) => (
+    <span className={`${DETAIL} ${side} w-max max-w-[calc(100vw-48px)]`}>
+        <span className="text-[13px] leading-[1.5] text-brand-strong whitespace-nowrap">{label}</span>
+        {canRemove && (
+            <button type="button" onClick={onRemove}
+                className="justify-self-start h-[30px] px-3 rounded-lg border border-brand-border-strong text-[13px] font-semibold text-brand-gray-600 hover:bg-brand-bg cursor-pointer">
+                Quitar
+            </button>
+        )}
+    </span>
+);
+
 /** El motivo de una reacción nuestra que WhatsApp rechazó, y qué hacer. */
 const FailedDetail = ({ me, canRetry, side, onRetry, onRemove }: {
     me: OwnReaction;
@@ -108,8 +138,7 @@ const FailedDetail = ({ me, canRetry, side, onRetry, onRemove }: {
 }) => {
     const removing = me.emoji === null;
     return (
-        <span className={`absolute bottom-[calc(100%+8px)] ${side} w-[270px] max-w-[calc(100vw-48px)] grid gap-2.5 z-10 cursor-default
-            bg-brand-surface border border-brand-border rounded-xl shadow-[0_12px_32px_rgba(14,17,22,0.16)] px-3.5 py-3 text-left`}>
+        <span className={`${DETAIL} ${side} w-[270px] max-w-[calc(100vw-48px)]`}>
             <span className="flex gap-2 items-start text-[13px] leading-[1.5] text-brand-strong whitespace-normal">
                 <CircleAlert size={15} strokeWidth={2.2} className="flex-none mt-0.5 text-brand-danger" />
                 <span>

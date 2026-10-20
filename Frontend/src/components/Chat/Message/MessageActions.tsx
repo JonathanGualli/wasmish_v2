@@ -8,6 +8,11 @@ import { currentOwnEmoji } from "../../../utils/messageActions";
  * ratón, Reaccionar y Responder fuera de la burbuja, del lado libre. Solo las
  * que se pueden usar: en lo nuestro, solo Responder. El relleno del lado de la
  * burbuja es un puente: el ratón cruza el hueco sin que se escondan.
+ *
+ * Con el teclado, aparecen al llegar a ellas con Tab: por eso se esconden con
+ * opacidad y no con `display: none`, que las sacaba del orden del Tab (al
+ * mover el foco, Chrome las volvía a mirar ya escondidas; revisión de Codex
+ * del PR #117). Un clic con el ratón no las deja fijas (`:focus-visible`).
  */
 export const HoverActions = ({ msg, mine, barOpen, onToggleBar, onReply }: {
     msg: Message;
@@ -16,8 +21,9 @@ export const HoverActions = ({ msg, mine, barOpen, onToggleBar, onReply }: {
     onToggleBar: () => void;
     onReply: () => void;
 }) => (
-    <div className={`absolute top-0 z-10 ${mine ? "right-full pr-1.5" : "left-full pl-1.5"}
-        hidden ${barOpen ? "md:flex" : "md:group-hover/msg:flex md:group-focus-within/msg:flex"}`}>
+    <div className={`absolute top-0 z-10 ${mine ? "right-full pr-1.5" : "left-full pl-1.5"} flex max-md:hidden
+        ${barOpen ? "" : `opacity-0 pointer-events-none group-hover/msg:opacity-100 group-hover/msg:pointer-events-auto
+            group-has-[:focus-visible]/msg:opacity-100 group-has-[:focus-visible]/msg:pointer-events-auto`}`}>
         <div className="flex gap-0.5 p-[3px] bg-brand-surface border border-brand-border rounded-[9px] shadow-[0_4px_12px_rgba(14,17,22,0.1)]">
             {msg.canReact && (
                 <ActionButton title="Reaccionar" active={barOpen} onClick={onToggleBar}><Smile size={17} /></ActionButton>

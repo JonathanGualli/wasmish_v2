@@ -10,7 +10,7 @@ import { MessageTypeIcon } from "./MessageTypeIcon.tsx";
 import { MessageMedia } from "./MessageMedia.tsx";
 import { MessageChangeDetails, MessageChangeToggle } from "./MessageChange.tsx";
 import { formatDayLabel, dayKey } from "../../utils/formatChatTime.ts";
-import type { Message, MessageStatus } from "../../models/message.mode.ts";
+import type { Message, MessageQuote, MessageStatus } from "../../models/message.mode.ts";
 import { TemplateButtons } from "./TemplatePreview.tsx";
 import type { Template } from "../../models/template.model.ts";
 import type { NewConversationRequest } from "../../models/conversation.mode.ts";
@@ -34,6 +34,7 @@ import { ForwardedLabel } from "./Message/ForwardedLabel";
 import { MessageReactions } from "./Message/MessageReactions";
 import { HoverActions, MessageMenu, type MenuAnchor } from "./Message/MessageActions";
 import { currentOwnEmoji } from "../../utils/messageActions";
+import { quoteFromMessage } from "../../utils/messageQuote";
 
 // El selector completo: él y sus datos solo se cargan al abrirlo.
 const EmojiPicker = lazy(() => import("./Emoji/EmojiPicker"));
@@ -177,19 +178,27 @@ export const ChatThread = ({
     const showAuthor = hasTeam(useAuthContext().user);
     const phone = useMediaQuery(PHONE_QUERY);
 
-    // Citas y reacciones (diseño «Wasmish Chat - Citas y reacciones»). Cada
-    // estado recuerda su conversación: al cambiar de chat, se ignora sin tener
-    // que borrarlo.
-    const [reply, setReply] = useState<{ conversationId: string; message: Message } | null>(null);
-    const replyTo = reply && reply.conversationId === conversationId ? reply.message : null;
-    const cancelReply = useCallback(() => setReply(null), []);
+    // Citas y reacciones (diseño «Wasmish Chat - Citas y reacciones»).
+    const [replyTo, setReplyTo] = useState<Message | null>(null);
+    const cancelReply = useCallback(() => setReplyTo(null), []);
     // El menú de un mensaje: la barra de reacciones (y en el celular, Responder).
-    const [menu, setMenu] = useState<{ conversationId: string; id: string; below: boolean; anchor: MenuAnchor } | null>(null);
-    const menuId = menu && menu.conversationId === conversationId ? menu.id : null;
-    const [picker, setPicker] = useState<{ conversationId: string; message: Message } | null>(null);
-    const pickerFor = picker && picker.conversationId === conversationId ? picker.message : null;
+    const [menu, setMenu] = useState<{ id: string; below: boolean; anchor: MenuAnchor } | null>(null);
+    const menuId = menu?.id ?? null;
+    const [pickerFor, setPickerFor] = useState<Message | null>(null);
     // Los avisos dentro del hilo (el diseño): una reacción rechazada, una cita demasiado vieja.
     const [toast, setToast] = useState<{ title: string; detail: string } | null>(null);
+    // Cambiar de conversación descarta todo eso, como el borrador del
+    // composer: volver no trae de vuelta una cita a medias (revisión de Codex
+    // del PR #117). Durante el render, como recomienda React, para no pintar
+    // ni un fotograma con lo del otro chat.
+    const [shownConversation, setShownConversation] = useState(conversationId);
+    if (shownConversation !== conversationId) {
+        setShownConversation(conversationId);
+        setReplyTo(null);
+        setMenu(null);
+        setPickerFor(null);
+        setToast(null);
+    }
     const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const showToast = useCallback((title: string, detail: string) => {
         setToast({ title, detail });
@@ -206,7 +215,7 @@ export const ChatThread = ({
     });
 
     const scrollerRef = useRef<HTMLDivElement>(null);
-    const closeMenus = useCallback(() => { setMenu(null); setPicker(null); }, []);
+    const closeMenus = useCallback(() => { setMenu(null); setPickerFor(null); }, []);
     // Escape cierra lo de dentro antes que la conversación (que la cierra
     // `ChatPage`, también con Escape): primero la barra o el selector, luego la
     // cita. En captura y frenado, para que no llegue a cerrar el chat. Con un
@@ -228,16 +237,15 @@ export const ChatThread = ({
         if (!conversationId) return;
         const rect = anchor.getBoundingClientRect();
         const top = rect.top - (scrollerRef.current?.getBoundingClientRect().top ?? 0);
-        setPicker(null);
+        setPickerFor(null);
         setMenu({
-            conversationId, id: msg.id, below: top < 64,
+            id: msg.id, below: top < 64,
             anchor: { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right },
         });
     };
     const startReply = (msg: Message) => {
-        if (!conversationId) return;
         closeMenus();
-        setReply({ conversationId, message: msg });
+        setReplyTo(msg);
     };
     const reactTo = (msg: Message, emoji: string) => {
         closeMenus();
@@ -272,6 +280,16 @@ export const ChatThread = ({
         () => conversations?.find(c => c.id === conversationId),
         [conversations, conversationId]
     );
+
+    // La cita se pinta desde el original si está cargado: así sigue sus
+    // ediciones y su eliminación por el SSE. La que trae el mensaje (de cuando
+    // se sirvió) queda para el original que no está en pantalla (spec § 6;
+    // revisión de Codex del PR #117).
+    const loadedById = useMemo(() => new Map((messages ?? []).map(msg => [msg.id, msg])), [messages]);
+    const quoteOf = (msg: Message): MessageQuote | null => {
+        const original = msg.replyTo?.id ? loadedById.get(msg.replyTo.id) : undefined;
+        return original ? quoteFromMessage(original) : msg.replyTo ?? null;
+    };
 
     useEffect(() => {
         if (inView && hasNextPage) void fetchNextPage();
@@ -353,6 +371,7 @@ export const ChatThread = ({
             const hasReactions = Boolean(msg.reactions?.them || msg.reactions?.me);
             const menuOpen = menuId === msg.id;
             const highlighted = jump.highlightedId === msg.id;
+            const quote = quoteOf(msg);
 
             nodes.push(
                 <div
@@ -382,9 +401,9 @@ export const ChatThread = ({
                                 : "bg-brand-surface text-brand-text border border-brand-border rounded-[12px_12px_12px_3px]"}`}
                     >
                         {msg.forwarded && <ForwardedLabel forwarded={msg.forwarded} onDeep={mine} />}
-                        {msg.replyTo && (
-                            <QuotedMessage quote={msg.replyTo} onDeep={mine} contactName={title} team={showAuthor}
-                                onOpen={msg.replyTo.id ? () => void jump.jumpTo(msg.replyTo!.id!) : undefined} />
+                        {quote && (
+                            <QuotedMessage quote={quote} onDeep={mine} contactName={title} team={showAuthor}
+                                onOpen={quote.id ? () => void jump.jumpTo(quote.id!) : undefined} />
                         )}
                         {deleted ? (
                             <span className={`flex items-center gap-1.5 italic ${mine ? "text-brand-on-deep" : "text-brand-muted"}`}>
@@ -393,7 +412,7 @@ export const ChatThread = ({
                             </span>
                         ) : renderBody(msg, mine)}
                     </div>
-                    <MessageReactions msg={msg} mine={mine} onReact={(emoji) => react(msg, emoji)} />
+                    <MessageReactions msg={msg} mine={mine} phone={phone} onReact={(emoji) => react(msg, emoji)} />
                     {!phone && (
                         <HoverActions msg={msg} mine={mine} barOpen={menuOpen}
                             onToggleBar={() => (menuOpen ? setMenu(null) : openMenu(msg, document.querySelector(`[data-message-id="${CSS.escape(msg.id)}"]`) as HTMLElement))}
@@ -402,7 +421,7 @@ export const ChatThread = ({
                     {menuOpen && (
                         <MessageMenu msg={msg} mine={mine} phone={phone} below={menu?.below ?? false} anchor={menu?.anchor ?? null}
                             onReact={(emoji) => reactTo(msg, emoji)}
-                            onMore={() => { setMenu(null); if (conversationId) setPicker({ conversationId, message: msg }); }}
+                            onMore={() => { setMenu(null); setPickerFor(msg); }}
                             onReply={() => startReply(msg)} />
                     )}
                     </div>
@@ -516,7 +535,7 @@ export const ChatThread = ({
                                     target={pickerFor.text.length > 60 ? `${pickerFor.text.slice(0, 60)}…` : pickerFor.text}
                                     current={currentOwnEmoji(pickerFor)}
                                     onPick={(emoji) => reactTo(pickerFor, emoji)}
-                                    onClose={() => setPicker(null)} />
+                                    onClose={() => setPickerFor(null)} />
                             </Suspense>
                         </div>
                     )}
