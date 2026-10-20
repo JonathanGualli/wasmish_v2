@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { describeInboundMessage, describeUnsupportedReason } from '../src/utils/inbound.message.js';
+import { describeInboundMessage, describeUnsupportedReason, describeReaction, describeMessageContext } from '../src/utils/inbound.message.js';
 
 // EL test que importa: Message.text es required, así que un texto vacío hace
 // throw dentro del webhook, Meta reintenta y el mensaje del cliente se pierde.
@@ -213,4 +213,46 @@ test('describeUnsupportedReason: nada del contenido, aunque Meta lo meta en los 
 test('describeUnsupportedReason: un mensaje que no es un no soportado → null', () => {
     assert.equal(describeUnsupportedReason({ type: 'text', text: { body: 'hola' } }), null);
     assert.equal(describeUnsupportedReason(null), null);
+});
+
+// Citas y reacciones (spec 2026-10-20-citas-reacciones-design.md).
+
+// La forma de la referencia del webhook `reaction` de Meta.
+const reaccion = (reaction, extra = {}) => ({
+    from: '593999000111', id: 'wamid.REACCION', timestamp: '1750090702', type: 'reaction', reaction, ...extra,
+});
+
+test('describeReaction: la reacción con su emoji y el mensaje al que va', () => {
+    assert.deepEqual(describeReaction(reaccion({ message_id: 'wamid.X', emoji: '👍' })), {
+        waMessageId: 'wamid.REACCION',
+        targetWaMessageId: 'wamid.X',
+        emoji: '👍',
+        timestamp: new Date(1750090702000),
+    });
+});
+
+test('describeReaction: sin emoji (o vacío) es que la quitó', () => {
+    assert.equal(describeReaction(reaccion({ message_id: 'wamid.X' })).emoji, null);
+    assert.equal(describeReaction(reaccion({ message_id: 'wamid.X', emoji: '' })).emoji, null);
+});
+
+test('describeReaction: mal formada o de otro tipo → null', () => {
+    assert.equal(describeReaction(reaccion({ emoji: '👍' })), null);
+    assert.equal(describeReaction(reaccion({ message_id: 'wamid.X', emoji: '👍' }, { id: undefined })), null);
+    assert.equal(describeReaction({ type: 'text', id: 'wamid.T', text: { body: 'hola' } }), null);
+    assert.equal(describeReaction(null), null);
+});
+
+test('describeMessageContext: la cita y el reenvío', () => {
+    assert.deepEqual(
+        describeMessageContext({ type: 'text', context: { from: '15550000000', id: 'wamid.Q' } }),
+        { replyToWaMessageId: 'wamid.Q', forwarded: null },
+    );
+    assert.deepEqual(describeMessageContext({ type: 'text', context: { forwarded: true } }), { replyToWaMessageId: null, forwarded: 'once' });
+    assert.deepEqual(
+        describeMessageContext({ type: 'text', context: { forwarded: true, frequently_forwarded: true } }),
+        { replyToWaMessageId: null, forwarded: 'many' },
+    );
+    assert.deepEqual(describeMessageContext({ type: 'text' }), { replyToWaMessageId: null, forwarded: null });
+    assert.deepEqual(describeMessageContext(null), { replyToWaMessageId: null, forwarded: null });
 });
