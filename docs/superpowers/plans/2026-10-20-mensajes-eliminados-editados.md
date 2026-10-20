@@ -17,6 +17,7 @@
 - El original se toca solo si es **de la cuenta y la línea** del webhook (`conversationLineFilter(line)`), de **la misma dirección** (entrante → `inbound`; eco → `outbound`) y de **la conversación del contacto del webhook** (remitente en un entrante; destinatario `to` / `to_user_id` en un eco), buscado **sin crearlo** con `findContactByIdentity`.
 - Ediciones válidas: `text` con `body` no vacío, o `image` / `video` / `document` (los tipos con pie). Y del **mismo tipo que el original**. Cualquier otra cosa se descarta.
 - Una edición solo avanza: `timestamp <= editedAt` actual no hace nada. Escritura condicionada a `editedAt` leído, **3 intentos** como mucho.
+- Cada borrado o edición aplicada sube `changeVersion` en 1; la UI ignora un `message_updated` con un `changeVersion` que no sea mayor que el que tiene.
 - Borrado: `deletedAt = timestamp` solo si era `null`. `text`, `caption` y el archivo **se conservan**.
 - La vista previa: «Mensaje eliminado» si el último mensaje tiene `deletedAt` (aunque llegue una edición después); si no, su `text`.
 - `edit.message.context` (el `"M0"` del ejemplo de Meta) se ignora: no es una respuesta citada.
@@ -46,7 +47,7 @@
 **Interfaces:**
 - Produce: `isMessageChange(messageData)` → `boolean`: `type` es `'revoke'` o `'edit'`.
 - Produce: `describeMessageChange(messageData)` → `null` si está mal formado, o `{ kind: 'revoke' | 'edit', waMessageId, originalWaMessageId, timestamp: Date, content }`. `content` es `null` en `revoke` y `{ type, text, caption }` en `edit`. `timestamp` como en `describeEcho` (segundos de Meta, o ahora si falta). Mal formado: sin `id`, sin `original_message_id` (en `revoke.` o `edit.`), o un `edit` sin contenido válido (ver «Restricciones»). El contenido se describe con `describeInboundMessage(edit.message)` **después** de validar el tipo y, en `text`, que `text.body` no esté vacío.
-- Produce: `serializeMessageChange(msg)` → `{ deletedAt, editedAt, previousVersions }`, con las fechas en ISO o `null` y `previousVersions` como `[{ text, caption, editedAt }]` (`[]` si no hay).
+- Produce: `serializeMessageChange(msg)` → `{ deletedAt, editedAt, previousVersions, changeVersion }`, con las fechas en ISO o `null`, `previousVersions` como `[{ text, caption, editedAt }]` (`[]` si no hay) y `changeVersion` como número (`0` si no hay).
 - Produce: `DELETED_PREVIEW = 'Mensaje eliminado'`.
 - Produce (en `business.app.js`): `describeEchoRecipient(echoData)` → `{ phone, waUserId }` con las reglas de hoy de `describeEcho` (un `to` con letras no es teléfono). `describeEcho` la usa y devuelve `null` si `isMessageChange(echoData)`.
 
@@ -57,7 +58,7 @@
   - `edit` de foto con pie (el ejemplo de eco de Meta, con `context: { id: 'M0' }`) → `{ type: 'image', text: 'Updated image caption', caption: 'Updated image caption' }`; sin pie → `{ type: 'image', text: 'Imagen', caption: null }`.
   - `edit` de documento con `filename` y sin pie → `text` es el `filename`.
   - `null` para: sin `original_message_id` (los dos tipos); `edit` sin `message`; `text` con `body` vacío o solo espacios; `edit.message.type` `'sticker'`, `'audio'`, `'location'` y `'foo'`.
-  - `serializeMessageChange`: un mensaje sin los campos → `{ deletedAt: null, editedAt: null, previousVersions: [] }`; uno con dos versiones → fechas en ISO y el orden de llegada.
+  - `serializeMessageChange`: un mensaje sin los campos → `{ deletedAt: null, editedAt: null, previousVersions: [], changeVersion: 0 }`; uno con dos versiones → fechas en ISO, el orden de llegada y su `changeVersion`.
   - En `business.app.test.js`: el test de `ECHO_IGNORED_TYPES` pasa a «`describeEcho` devuelve `null` para `edit` y `revoke`, bien y mal formados»; `describeEchoRecipient` con `to` numérico, con `to` con letras (→ `phone: null`) y solo con `to_user_id`.
 - [ ] **Paso 2:** `cd Backend && node --test tests/message.change.test.js tests/business.app.test.js` → FALLA.
 - [ ] **Paso 3:** implementar. `ECHO_IGNORED_TYPES` desaparece (de `business.app.js` y del `import` y el aviso de `procesarEco`, que pasa a mirar `isMessageChange`).
@@ -73,9 +74,13 @@
 
 **Interfaces:**
 - Consume: `describeMessageChange`, `serializeMessageChange`, `DELETED_PREVIEW` (tarea 1); `findContactByIdentity`, `conversationLineFilter` (`contact.controller.js`); `sendToAccount`.
-- Produce: `Message` con `deletedAt: { type: Date, default: null }`, `editedAt: { type: Date, default: null }` y `previousVersions: { type: [{ text, caption, editedAt }] (sin _id), default: undefined }`.
+- Produce: `Message` con `deletedAt: { type: Date, default: null }`, `editedAt: { type: Date, default: null }`, `previousVersions: { type: [{ text, caption, editedAt }] (sin _id), default: undefined }` y `changeVersion: { type: Number, default: undefined }`. **Toda** escritura del servicio (borrado y edición) lleva `$inc: { changeVersion: 1 }`: es el orden de los cambios de un mensaje, y con él la UI descarta un `message_updated` que llega después de uno más nuevo (revisión de Codex del plan, 1).
 - Produce: `applyMessageChange({ line, change, direction, identity })` → `Promise<'applied' | 'unchanged' | 'not_found' | 'rejected'>`. `line` = `{ accountId, lineId, phoneNumberId }` (el `inbound` del webhook); `direction` = `'inbound' | 'outbound'`; `identity` = `{ phone, waUserId }`. `not_found`: no existe el original o no es de esa cuenta y línea; `rejected`: otra dirección, otro contacto, sin identidad, otro tipo de contenido o intentos agotados; `unchanged`: reintento o edición vieja. Solo `'applied'` emite SSE.
-- SSE: `message_updated` con `{ id, conversationId, text, caption, ...serializeMessageChange(msg) }` y `meta = { lineId }`; y, si el mensaje es el último de la conversación (`Message.findOne({ conversationId }).sort({ timestamp: -1, _id: -1 })`), `Conversation.lastMessage` = `DELETED_PREVIEW` si tiene `deletedAt` o su `text`, y `conversation_updated` con `{ id, lastMessage }`. Las dos cosas desde el mensaje **releído después de escribir**.
+- SSE: `message_updated` con `{ id, conversationId, text, caption, ...serializeMessageChange(msg) }` y `meta = { lineId }`, desde el mensaje **releído después de escribir**.
+- La bandeja (revisión de Codex del plan, 1 y 2), solo si el mensaje es el último de la conversación (`Message.findOne({ conversationId }).sort({ timestamp: -1, _id: -1 })`):
+  1. `Conversation.updateOne({ _id, lastMessageAt: { $lte: msg.timestamp } }, { $set: { lastMessage } })`, con `lastMessage` = `DELETED_PREVIEW` si tiene `deletedAt` o su `text`. La condición deja sin efecto la escritura si entretanto llegó un mensaje más nuevo (los tres caminos que escriben la vista previa ponen `lastMessageAt` = el `timestamp` de su mensaje).
+  2. Releer el mensaje: si su `changeVersion` ya no es el de la vista previa escrita (otro cambio escribió entre medias), volver al paso 1 con el estado nuevo, como mucho 3 veces. Así la última escritura de la bandeja es siempre la del estado final.
+  3. `conversation_updated` con `{ id, lastMessage }` solo si el paso 1 encontró la conversación (`matchedCount > 0`), con la vista previa que quedó escrita.
 - Edición, con el original leído (`actual`): si `actual.editedAt && timestamp <= actual.editedAt` → `'unchanged'`. Si no, `updateOne({ _id, editedAt: actual.editedAt ?? null }, { $push: { previousVersions: { text: actual.text, caption: actual.caption, editedAt: actual.editedAt ?? actual.timestamp } }, $set: { text, caption, editedAt: timestamp } })`; con `modifiedCount === 0`, releer y repetir, como mucho 3 veces. El `text` de un documento sin pie: `content.caption ?? actual.mediaFilename ?? content.text`. `mediaFile` no se toca.
 
 - [ ] **Paso 1: Tests que fallan** (Mongo en memoria, con `seedAccount` y `connectWhatsapp`; el servicio se llama directo, sin webhook):
@@ -86,8 +91,10 @@
   - edita un documento sin pie → `text` es su `mediaFilename`.
   - edición de texto sobre una foto → `'rejected'`, nada cambia.
   - original de **otra cuenta**, de **otra línea** de la misma cuenta, de **otra dirección**, de **otro contacto** (entrante) y de **otro destinatario** (eco, también con un destinatario solo con BSUID), e identidad vacía → nada cambia; inexistente → `'not_found'`.
-  - `lastMessage`: no cambia si el mensaje no es el último; pasa a «Mensaje eliminado» si lo es, y se queda así en los dos órdenes (borrado → edición y edición → borrado); una edición del último sin borrar → su texto nuevo.
-  - SSE con `openStream`: `message_updated` llega a la cuenta y no a otra; `conversation_updated` sin `unreadCount` solo cuando era el último.
+  - `lastMessage`: no cambia si el mensaje no es el último; pasa a «Mensaje eliminado» si lo es, y se queda así en los dos órdenes (borrado → edición y edición → borrado) y con los dos a la vez (`Promise.all`); una edición del último sin borrar → su texto nuevo.
+  - un mensaje más nuevo que se adelanta: con M1 como último en `Message` pero la conversación ya con `lastMessageAt` posterior y `lastMessage: 'M2'` (el estado entre que el otro camino escribe la conversación y el servicio escribe la suya), borrar M1 deja `lastMessage: 'M2'` y no emite `conversation_updated`.
+  - `changeVersion`: 1 tras un borrado, 2 tras una edición encima; un reintento (`'unchanged'`) no lo sube.
+  - SSE con `openStream`: `message_updated` llega a la cuenta y no a otra, con el `changeVersion` guardado; `conversation_updated` sin `unreadCount` solo cuando era el último.
 - [ ] **Paso 2:** `cd Backend && node --test tests/isolation/message-change.test.js` → FALLA.
 - [ ] **Paso 3:** implementar el modelo y el servicio. Aviso en el log (sin contenido) en `not_found`, `rejected` y al agotar los intentos.
 - [ ] **Paso 4:** el mismo comando → PASA; `npm run test:isolation` en verde.
@@ -109,7 +116,11 @@
 - `webhook:simulate`: `revoke --original <wamid>` y `edit --original <wamid> --text "texto"`, entrantes por defecto y como eco con `--eco`. El `wamid` sale de la lista «Guardado» que ya imprime (se añade `waMessageId` a esa línea).
 
 - [ ] **Paso 1: Tests que fallan:**
-  - `webhook.test.js`: un `revoke` y un `edit` entrantes, bien y mal formados, sobre un entrante de A → no crean `Message`, `unreadCount` y `lastInboundAt` no cambian, no hay llamada de push (`pushCalls`), ningún `Message` con `bot` nuevo; el bueno marca el original. Lo mismo como eco sobre un saliente → sin escritura de `bot.humanRepliedAt` (`pauseWrites`). El test «ediciones y eliminaciones desde la app: nada guardado» se queda (cambios mal formados: ni contacto ni mensaje).
+  - `webhook.test.js`, en una cuenta nueva **con el bot encendido** (`AutoReplySettings` con `enabled: true` y una bienvenida, como en `auto-replies.test.js`) y **un dispositivo con avisos** (`POST /push/subscriptions`, como en `push.test.js`) (revisión de Codex del plan, 3):
+    - control: un entrante normal crea su `Message` con `bot` y produce una llamada en `pushCalls` (esperada con un `waitFor` como el de `push.test.js`). Sin esto, los negativos de abajo no prueban nada.
+    - un `revoke` y un `edit` entrantes, bien y mal formados, sobre ese entrante → no crean `Message`, `unreadCount` y `lastInboundAt` no cambian, ningún `Message` con `bot` nuevo, y `pushCalls` no crece tras esperar lo mismo que en el control; el bueno marca el original.
+    - lo mismo como eco sobre un saliente → sin escritura de `bot.humanRepliedAt` (`pauseWrites`).
+    - el test «ediciones y eliminaciones desde la app: nada guardado» se queda (cambios mal formados: ni contacto ni mensaje).
   - `chats.test.js`: `GET /api/chats/:id/messages` devuelve `deletedAt`, `editedAt` y `previousVersions` de un mensaje cambiado, y `null`/`null`/`[]` en uno normal.
 - [ ] **Paso 2:** `cd Backend && node --test tests/isolation/webhook.test.js tests/isolation/chats.test.js` → FALLA.
 - [ ] **Paso 3:** implementar los dos caminos, `serializeMessage` y `webhook:simulate`.
@@ -127,10 +138,10 @@ Antes de tocar nada visual: la skill `brand-guidelines`.
 - Modificar: `Frontend/src/models/message.mode.ts`, `Frontend/src/context/sse.context.ts`, `Frontend/src/context/sse.provider.tsx`, `Frontend/src/services/api.service.ts` (`SSEHandlers` y `createSSEConnection`), `Frontend/src/hooks/useConversationMessages.ts`, `Frontend/src/hooks/useConversations.ts`
 
 **Interfaces:**
-- `Message` gana `deletedAt?: string | null`, `editedAt?: string | null` y `previousVersions?: MessageVersion[]`, con `MessageVersion = { text: string; caption: string | null; editedAt: string }`.
-- `SSEEventMap.message_updated: Pick<Message, 'id' | 'conversationId' | 'text'> & Pick<Message, 'caption' | 'deletedAt' | 'editedAt' | 'previousVersions'>`; `conversation_updated: { id: string; unreadCount?: number; lastMessage?: string }`.
+- `Message` gana `deletedAt?: string | null`, `editedAt?: string | null`, `previousVersions?: MessageVersion[]` y `changeVersion?: number`, con `MessageVersion = { text: string; caption: string | null; editedAt: string }`.
+- `SSEEventMap.message_updated: Pick<Message, 'id' | 'conversationId' | 'text'> & Pick<Message, 'caption' | 'deletedAt' | 'editedAt' | 'previousVersions'> & { changeVersion: number }`; `conversation_updated: { id: string; unreadCount?: number; lastMessage?: string }`.
 - `onMessageUpdated` en `SSEHandlers`, su `addEventListener` y su `Set` y `dispatch` en el provider.
-- `useConversationMessages`: `message_updated` se mezcla en su sitio en todas las páginas, como `message_status` (copias, nunca mutar la caché).
+- `useConversationMessages`: `message_updated` se mezcla en su sitio en todas las páginas, como `message_status` (copias, nunca mutar la caché), **solo si `payload.changeVersion > (msg.changeVersion ?? 0)`**: uno que llega después de otro más nuevo se descarta (revisión de Codex del plan, 1).
 - `useConversations`: el handler de `conversation_updated` copia solo los campos presentes (`'unreadCount' in payload`, `'lastMessage' in payload`).
 
 - [ ] **Paso 1:** implementar.

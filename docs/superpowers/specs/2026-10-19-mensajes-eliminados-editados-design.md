@@ -73,9 +73,9 @@ Si se editó el pie de una foto **no se vuelve a bajar el archivo**: `mediaFile`
 
 **Lo que NO hace:** crear un `Message`, sumar `unreadCount`, mover `lastInboundAt`, mandar push, crear trabajo del bot ni `markHumanReply` (un borrado desde la app no es una respuesta).
 
-**La bandeja:** si el mensaje cambiado es **el último de la conversación** (el más reciente por `timestamp`), `Conversation.lastMessage` se recalcula **desde el estado final del mensaje**: si tiene `deletedAt`, «Mensaje eliminado» (aunque después llegue una edición); si no, su `text`. `lastMessageAt` no cambia. Se emite `conversation_updated` con `{ id, lastMessage }`. Si no es el último, la bandeja no cambia.
+**La bandeja:** si el mensaje cambiado es **el último de la conversación** (el más reciente por `timestamp`), `Conversation.lastMessage` se recalcula **desde el estado final del mensaje**: si tiene `deletedAt`, «Mensaje eliminado» (aunque después llegue una edición); si no, su `text`. `lastMessageAt` no cambia, y la escritura va condicionada a que no haya llegado un mensaje más nuevo (`lastMessageAt <= timestamp` del mensaje). Se emite `conversation_updated` con `{ id, lastMessage }`. Si no es el último, la bandeja no cambia.
 
-**Tiempo real:** un evento SSE nuevo, `message_updated`, con `{ id, conversationId, text, caption, deletedAt, editedAt, previousVersions }` y `meta = { lineId }` (llega a quien ve esa línea, igual que `message_status`). Solo se emite si el `updateOne` modificó algo.
+**Tiempo real:** un evento SSE nuevo, `message_updated`, con `{ id, conversationId, text, caption, deletedAt, editedAt, previousVersions, changeVersion }` y `meta = { lineId }` (llega a quien ve esa línea, igual que `message_status`). Solo se emite si el `updateOne` modificó algo.
 
 ### Lo que llega al navegador
 
@@ -103,6 +103,7 @@ Cualquiera que vea la conversación: no hay permiso nuevo. La API pública no ex
 - `deletedAt: Date | null` (default `null`): cuándo avisó Meta del borrado.
 - `editedAt: Date | null` (default `null`): la hora de la última edición aplicada.
 - `previousVersions: [{ text, caption, editedAt }]` (default `undefined`, como `templateParams`, para no guardar un array vacío en cada mensaje): lo que decía antes de cada edición, en orden de llegada. `editedAt` de cada versión es desde cuándo decía eso (el `timestamp` del mensaje para la primera).
+- `changeVersion: Number` (default `undefined`): sube en 1 con cada borrado o edición aplicada. Ordena los cambios de un mensaje: la UI descarta un `message_updated` más viejo que el que ya tiene, y el servicio reescribe la vista previa si otro cambio se le cruzó (revisión de Codex del plan, 2026-10-20).
 
 Ningún índice nuevo: la búsqueda por `waMessageId` ya usa `waMessageId_busqueda`.
 
