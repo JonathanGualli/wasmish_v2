@@ -34,13 +34,15 @@ const recipientFields = (recipient) => {
     return fields;
 };
 
-export const sendTextMessage = async ({ token, phoneNumberId, recipient, text }) => { 
+// `context` (opcional) = `{ message_id }`: responde citando ese mensaje.
+export const sendTextMessage = async ({ token, phoneNumberId, recipient, text, context = null }) => { 
     return whatsappApi.post(
         `/${phoneNumberId}/messages`,
         {
             messaging_product: "whatsapp",
             recipient_type: "individual",
             ...recipientFields(recipient),
+            ...(context && { context }),
             type: "text",
             text: {
                 body: text
@@ -56,16 +58,35 @@ export const sendTextMessage = async ({ token, phoneNumberId, recipient, text })
 
 // Un archivo ya subido a Meta (`uploadMedia`). `kind` es el tipo de mensaje
 // ('image', 'video', 'audio', 'document') y `media`, su objeto: el id y, si
-// van, el texto y el nombre del documento (`buildMediaObject`).
-export const sendMediaMessage = async ({ token, phoneNumberId, recipient, kind, media }) => {
+// van, el texto y el nombre del documento (`buildMediaObject`). `context`,
+// como en `sendTextMessage`.
+export const sendMediaMessage = async ({ token, phoneNumberId, recipient, kind, media, context = null }) => {
     return whatsappApi.post(
         `/${phoneNumberId}/messages`,
         {
             messaging_product: "whatsapp",
             recipient_type: "individual",
             ...recipientFields(recipient),
+            ...(context && { context }),
             type: kind,
             [kind]: media,
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+    );
+};
+
+// Una reacción con emoji a un mensaje del contacto; `emoji: ''` la quita. Meta
+// solo deja reaccionar a lo recibido, de menos de 30 días, y si falla lo dice
+// por el webhook (131009), no aquí: `applyReactionStatus`.
+export const sendReactionMessage = async ({ token, phoneNumberId, recipient, targetWaMessageId, emoji }) => {
+    return whatsappApi.post(
+        `/${phoneNumberId}/messages`,
+        {
+            messaging_product: "whatsapp",
+            recipient_type: "individual",
+            ...recipientFields(recipient),
+            type: "reaction",
+            reaction: { message_id: targetWaMessageId, emoji },
         },
         { headers: { Authorization: `Bearer ${token}` } }
     );

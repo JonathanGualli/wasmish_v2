@@ -43,7 +43,8 @@ const ownReactionSchema = new mongoose.Schema({
     // La que había antes: la que sigue viendo el contacto si esta falla.
     previousEmoji: { type: String, default: null },
     at: { type: Date, required: true },
-    waMessageId: { type: String, required: true },
+    // null si Meta la aceptó sin devolver id (entonces no llega su acuse).
+    waMessageId: { type: String, default: null },
     // Meta avisa del fallo por el webhook (131009), no al enviar.
     status: { type: String, enum: ['sent', 'failed'], default: 'sent' },
     errorCode: { type: String, default: null },
