@@ -114,7 +114,10 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
 
 ## En curso
 
-- **Citas y reacciones** (2026-10-20): responder citando y reaccionar con emoji, en los dos sentidos y en los ecos, más «Reenviado». Spec `docs/superpowers/specs/2026-10-20-citas-reacciones-design.md`, brief `docs/superpowers/specs/2026-10-20-citas-reacciones-brief-ui.md` y plan `docs/superpowers/plans/2026-10-20-citas-reacciones.md` (PR #114). **Backend de lo que entra:** PR #115 (rama `citas-reacciones-backend`), con su revisión de Codex. **Backend de lo que sale** (responder citando y reaccionar desde Wasmish): rama `citas-reacciones-envio`, que sale de la del #115 y se rebasa sobre `master` cuando se una. Probados con los tests; falta con Meta de verdad (spec § 8). Falta: la UI con el diseño de Claude Design (`Design/Wasmish Chat - Citas y reacciones.html`).
+- **Citas y reacciones** (2026-10-20): responder citando y reaccionar con emoji, en los dos sentidos y en los ecos, más «Reenviado». Spec `docs/superpowers/specs/2026-10-20-citas-reacciones-design.md`, brief y plan (PR #114), diseño `Design/Wasmish Chat - Citas y reacciones.html`. **Backend de lo que entra:** PR #115. **Backend de lo que sale:** PR #116. **UI:** PR #117. Los tres, con su revisión de Codex, unidos en `master` el 2026-10-21 y **sin desplegar**. Probados con los tests y la UI en Chromium (computadora y teléfono emulado, contra un backend aparte con Meta falso). Lo que falta:
+  - probar con Meta de verdad, con el número de prueba (spec § 8): que el contacto vea la cita y la reacción, y el 131009 real;
+  - sin comprobar en el navegador: una reacción que llega por SSE justo cuando falla la nuestra (el código lo cubre con `changeVersion`);
+  - el PR de versión, cuando Jonathan lo pida.
 - **Lo que queda de la página pública:**
   - Jonathan conecta el chip del botón (`+593 98 415 2777`) a Wasmish con la coexistencia (2026-10-20) y prueba el botón desde otro celular;
   - Jonathan confirma en el panel de GTHost el país del servidor: Privacidad dice Estados Unidos, sacado del registro de la IP;

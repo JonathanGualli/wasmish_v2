@@ -46,7 +46,9 @@ Lógica no obvia del `AuthProvider`, los errores de WhatsApp en palabras y la li
 - `useLogin`, `useSignUp`, `useLogOut`, `useVerifyLogin` — auth
 - `useConversations` — lista de conversaciones (query + suscripción SSE)
 - `useConversationMessages(conversationId)` — mensajes paginados + suscripción SSE
-- `useConversationSendMessages` — envío de mensajes (UI optimista; marca `failed` en error)
+- `useConversationSendMessages` — envío de mensajes (UI optimista; marca `failed` en error); con `replyTo`, responde citando
+- `useMessageReaction(conversationId, onRejected)` — reaccionar (`react(message, emoji)`; el mismo emoji la quita), con UI optimista y vuelta atrás si el servidor la rechaza. Ver [chat.md § Citas y reacciones en la UI](chat.md#citas-y-reacciones-en-la-ui)
+- `useJumpToMessage(conversationId, { fetchNextPage, onTooOld })` — ir al original de una cita: `jumpTo`, `searching`, `cancel`, `highlightedId`
 - `useSendMediaMessage` — envío de archivos (`send`, `retry`, `discard`), con progreso y UI optimista; `useOutgoingAttachment` (el archivo que se prepara) y `useWindowFileDrag` (se arrastra un archivo sobre la página)
 - `useUpdateWhatsappToken` — carga manual de credenciales de WhatsApp (conecta, renueva o reemplaza una línea; vuelve a pedir las líneas)
 - `useConnectWhatsapp` — Embedded Signup (SDK de Facebook → `/api/whatsapp/connect`); `isConnecting` cubre también el rato con la ventana de Facebook abierta

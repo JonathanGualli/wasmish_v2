@@ -30,6 +30,52 @@ export interface MessageVersion {
   editedAt: string;
 }
 
+/**
+ * El mensaje que cita otro (responder citando), leído al servir: una edición o
+ * un borrado posterior del original se ve. `{ id: null }` si Wasmish no lo tiene
+ * (es de antes de conectar el número): «Mensaje no disponible».
+ */
+export interface QuotedMessage {
+  id: string;
+  sender: Sender;
+  type: MessageType;
+  /** Recortado a 200 caracteres. */
+  text: string;
+  hasMedia: boolean;
+  deleted: boolean;
+  /** De un saliente: quién lo envió desde el chat y de dónde salió, para nombrar al autor. */
+  sentBy: { id: string; name: string | null } | null;
+  origin: 'chat' | 'api' | 'bot' | 'businessApp' | 'campaign' | null;
+}
+export type MessageQuote = QuotedMessage | { id: null };
+
+/** La reacción del contacto. */
+export interface ContactReaction {
+  emoji: string;
+  at: string;
+}
+
+/** La nuestra (una por mensaje: para el contacto, el negocio es uno solo). */
+export interface OwnReaction {
+  /** `null` solo si falló al quitarla: el contacto sigue viendo `previousEmoji`. */
+  emoji: string | null;
+  previousEmoji: string | null;
+  at: string;
+  /** Meta avisa del fallo por el webhook, un rato después. */
+  status: 'sent' | 'failed';
+  errorCode: string | null;
+  errorDetail: string | null;
+  sentBy: { id: string; name: string | null } | null;
+  origin: 'chat' | 'businessApp' | null;
+  /** Solo en el navegador: enviándose (UI optimista). */
+  pending?: boolean;
+}
+
+export interface MessageReactions {
+  them: ContactReaction | null;
+  me: OwnReaction | null;
+}
+
 export interface Message {
   id: string;
   conversationId: string;
@@ -70,6 +116,14 @@ export interface Message {
   editedAt?: string | null;
   /** Lo que decía antes de cada edición, en orden de llegada. */
   previousVersions?: MessageVersion[];
-  /** Sube con cada borrado o edición: un `message_updated` que no lo supere es viejo. */
+  /** Sube con cada borrado, edición o reacción: un `message_updated` que no lo supere es viejo. */
   changeVersion?: number;
+  /** A qué mensaje responde (la cita de WhatsApp). */
+  replyTo?: MessageQuote | null;
+  /** Un reenvío; `many`, una cadena. */
+  forwarded?: 'once' | 'many' | null;
+  reactions?: MessageReactions;
+  /** Qué acciones enseña la UI: lo decide el backend, con las mismas reglas que al enviar. */
+  canReact?: boolean;
+  canReply?: boolean;
 }

@@ -2,14 +2,17 @@ import { useMutation, useQueryClient, type InfiniteData } from "@tanstack/react-
 import { sendMessageService } from "../services/api.service";
 import type { Message } from "../models/message.mode.ts";
 import { AxiosError } from "axios";
+import { quoteFromMessage } from "../utils/messageQuote";
 
 export const useConversationSendMessages = () => {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: ({ message, conversationId, temporalId,  }: { message: string, conversationId: string, temporalId?: string }) => sendMessageService(message,conversationId, temporalId),
+        // `replyTo`: el mensaje al que responde citándolo, si lo hay.
+        mutationFn: ({ message, conversationId, temporalId, replyTo }: { message: string, conversationId: string, temporalId?: string, replyTo?: Message | null }) =>
+            sendMessageService(message, conversationId, temporalId, undefined, undefined, replyTo?.id),
 
-        onMutate: async ({ conversationId, message, temporalId }) => {
+        onMutate: async ({ conversationId, message, temporalId, replyTo }) => {
             await queryClient.cancelQueries({ queryKey: ["conversation", conversationId] });
 
             const previousMessages = queryClient.getQueryData(["conversation", conversationId]);
@@ -29,6 +32,8 @@ export const useConversationSendMessages = () => {
                 readAt: undefined,
                 waMessageId: undefined,
                 temporalId: temporalId || undefined,
+                // La cita se ve al momento; la del servidor la sustituye al volver.
+                replyTo: replyTo ? quoteFromMessage(replyTo) : null,
             };
             queryClient.setQueryData<InfiniteData<{ items: Message[], nextCursor: string | undefined }>>(
                 ["conversation", conversationId],

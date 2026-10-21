@@ -4,6 +4,7 @@ import axios, { type AxiosError } from "axios";
 import { sendMediaMessageService } from "../services/api.service";
 import type { Message } from "../models/message.mode";
 import { OUTBOUND_KIND_LABEL, outboundMediaKind, outboundMimeType } from "../utils/outboundMedia";
+import { quoteFromMessage } from "../utils/messageQuote";
 
 export interface MediaSendInput {
     conversationId: string;
@@ -12,6 +13,8 @@ export interface MediaSendInput {
     caption: string;
     /** Una imagen como documento: sin comprimir y hasta 16 MB. */
     asDocument: boolean;
+    /** El mensaje al que responde citándolo, si lo hay. */
+    replyTo?: Message | null;
 }
 
 type MessagesPage = { items: Message[]; nextCursor: string | undefined };
@@ -66,6 +69,7 @@ const optimisticMessage = (input: MediaSendInput, temporalId: string, localUrl: 
         timestamp: new Date().toISOString(),
         status: "sent",
         pending: { localUrl, loadedBytes: 0, totalBytes: input.file.size },
+        replyTo: input.replyTo ? quoteFromMessage(input.replyTo) : null,
     };
 };
 
@@ -97,6 +101,7 @@ export const useSendMediaMessage = () => {
                 caption: input.caption,
                 temporalId,
                 asDocument: input.asDocument,
+                replyToMessageId: input.replyTo?.id,
             }, {
                 signal: controller.signal,
                 onProgress: loadedBytes => patchMessage(queryClient, input.conversationId, temporalId, msg =>

@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useInView } from "react-intersection-observer";
 import { Transition } from "@headlessui/react";
-import { Ban, Bot, CircleAlert, Code2, Send, Smartphone } from "lucide-react";
+import { Ban, Bot, CircleAlert, Code2, LoaderCircle, Send, Smartphone } from "lucide-react";
 import { useConversationMessages } from "../../hooks/useConversationMessages";
 import { useConversations } from "../../hooks/useConversations.ts";
 import { useTemplates } from "../../hooks/useTemplates.ts";
@@ -10,7 +10,7 @@ import { MessageTypeIcon } from "./MessageTypeIcon.tsx";
 import { MessageMedia } from "./MessageMedia.tsx";
 import { MessageChangeDetails, MessageChangeToggle } from "./MessageChange.tsx";
 import { formatDayLabel, dayKey } from "../../utils/formatChatTime.ts";
-import type { Message, MessageStatus } from "../../models/message.mode.ts";
+import type { Message, MessageQuote, MessageStatus } from "../../models/message.mode.ts";
 import { TemplateButtons } from "./TemplatePreview.tsx";
 import type { Template } from "../../models/template.model.ts";
 import type { NewConversationRequest } from "../../models/conversation.mode.ts";
@@ -26,6 +26,23 @@ import type { AxiosError } from "axios";
 import { hasTeam } from "../../utils/roleDisplay";
 import { showsUploadStatus, uploadPercent } from "../../utils/outboundMedia.ts";
 import { ProgressBar } from "../ProgressBar/ProgressBar.tsx";
+import { useMessageReaction } from "../../hooks/useMessageReaction";
+import { useJumpToMessage } from "../../hooks/useJumpToMessage";
+import { PHONE_QUERY, useMediaQuery } from "../../hooks/useMediaQuery";
+import { QuotedMessage } from "./Message/QuotedMessage";
+import { ForwardedLabel } from "./Message/ForwardedLabel";
+import { MessageReactions } from "./Message/MessageReactions";
+import { HoverActions, MessageMenu, type MenuAnchor } from "./Message/MessageActions";
+import { currentOwnEmoji } from "../../utils/messageActions";
+import { quoteFromMessage } from "../../utils/messageQuote";
+
+// El selector completo: él y sus datos solo se cargan al abrirlo.
+const EmojiPicker = lazy(() => import("./Emoji/EmojiPicker"));
+
+/** Mantener pulsado un mensaje en el celular abre su menú (diseño, m2). */
+const LONG_PRESS_MS = 450;
+/** Lo que dura un aviso dentro del hilo. */
+const TOAST_MS = 3200;
 
 interface Props {
     conversationId: string | null;
@@ -159,11 +176,120 @@ export const ChatThread = ({
     const { ref, inView } = useInView();
     // Con una sola persona en la cuenta, la línea de la hora queda como siempre.
     const showAuthor = hasTeam(useAuthContext().user);
+    const phone = useMediaQuery(PHONE_QUERY);
+
+    // Citas y reacciones (diseño «Wasmish Chat - Citas y reacciones»).
+    const [replyTo, setReplyTo] = useState<Message | null>(null);
+    const cancelReply = useCallback(() => setReplyTo(null), []);
+    // El menú de un mensaje: la barra de reacciones (y en el celular, Responder).
+    const [menu, setMenu] = useState<{ id: string; below: boolean; anchor: MenuAnchor } | null>(null);
+    const menuId = menu?.id ?? null;
+    const [pickerFor, setPickerFor] = useState<Message | null>(null);
+    // Los avisos dentro del hilo (el diseño): una reacción rechazada, una cita demasiado vieja.
+    const [toast, setToast] = useState<{ title: string; detail: string } | null>(null);
+    // Cambiar de conversación descarta todo eso, como el borrador del
+    // composer: volver no trae de vuelta una cita a medias (revisión de Codex
+    // del PR #117). Durante el render, como recomienda React, para no pintar
+    // ni un fotograma con lo del otro chat.
+    const [shownConversation, setShownConversation] = useState(conversationId);
+    if (shownConversation !== conversationId) {
+        setShownConversation(conversationId);
+        setReplyTo(null);
+        setMenu(null);
+        setPickerFor(null);
+        setToast(null);
+    }
+    const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const showToast = useCallback((title: string, detail: string) => {
+        setToast({ title, detail });
+        if (toastTimer.current) clearTimeout(toastTimer.current);
+        toastTimer.current = setTimeout(() => setToast(null), TOAST_MS);
+    }, []);
+    useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
+
+    const { react } = useMessageReaction(conversationId || "", useCallback(
+        (reason: string) => showToast("No se pudo reaccionar.", `${reason} El mensaje quedó como estaba.`), [showToast]));
+    const jump = useJumpToMessage(conversationId || "", {
+        fetchNextPage,
+        onTooOld: useCallback(() => showToast("Este mensaje es muy antiguo.", "Wasmish no puede ir hasta él."), [showToast]),
+    });
+
+    const scrollerRef = useRef<HTMLDivElement>(null);
+    const closeMenus = useCallback(() => { setMenu(null); setPickerFor(null); }, []);
+    // Escape cierra lo de dentro antes que la conversación (que la cierra
+    // `ChatPage`, también con Escape): primero la barra o el selector, luego la
+    // cita. En captura y frenado, para que no llegue a cerrar el chat. Con un
+    // diálogo abierto (enviar plantilla), el Escape es suyo.
+    useEffect(() => {
+        if (!menuId && !pickerFor && !replyTo) return;
+        const onKey = (event: KeyboardEvent) => {
+            if (event.key !== "Escape" || document.querySelector('[aria-modal="true"]')) return;
+            event.stopPropagation();
+            if (menuId || pickerFor) closeMenus();
+            else cancelReply();
+        };
+        window.addEventListener("keydown", onKey, true);
+        return () => window.removeEventListener("keydown", onKey, true);
+    }, [menuId, pickerFor, replyTo, closeMenus, cancelReply]);
+
+    // Abrir el menú de un mensaje: la barra va encima, salvo que arriba no quepa.
+    const openMenu = (msg: Message, anchor: HTMLElement) => {
+        if (!conversationId) return;
+        const rect = anchor.getBoundingClientRect();
+        const top = rect.top - (scrollerRef.current?.getBoundingClientRect().top ?? 0);
+        setPickerFor(null);
+        setMenu({
+            id: msg.id, below: top < 64,
+            anchor: { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right },
+        });
+    };
+    const startReply = (msg: Message) => {
+        closeMenus();
+        setReplyTo(msg);
+    };
+    const reactTo = (msg: Message, emoji: string) => {
+        closeMenus();
+        react(msg, emoji);
+    };
+
+    // Mantener pulsado en el celular. Tocar sigue haciendo lo de siempre (abrir
+    // una foto, el ojo de un eliminado): el toque que termina una pulsación larga se anula.
+    const press = useRef<{ timer: ReturnType<typeof setTimeout> | null; fired: boolean }>({ timer: null, fired: false });
+    const pressHandlers = (msg: Message) => (phone && (msg.canReact || msg.canReply)) ? {
+        onTouchStart: (event: React.TouchEvent<HTMLElement>) => {
+            const anchor = event.currentTarget;
+            press.current.fired = false;
+            press.current.timer = setTimeout(() => {
+                press.current.fired = true;
+                navigator.vibrate?.(10);
+                openMenu(msg, anchor);
+            }, LONG_PRESS_MS);
+        },
+        onTouchMove: () => { if (press.current.timer) clearTimeout(press.current.timer); },
+        onTouchEnd: () => { if (press.current.timer) clearTimeout(press.current.timer); },
+        onClickCapture: (event: React.MouseEvent) => {
+            if (!press.current.fired) return;
+            press.current.fired = false;
+            event.preventDefault();
+            event.stopPropagation();
+        },
+        onContextMenu: (event: React.MouseEvent) => event.preventDefault(),
+    } : {};
 
     const conversation = useMemo(
         () => conversations?.find(c => c.id === conversationId),
         [conversations, conversationId]
     );
+
+    // La cita se pinta desde el original si está cargado: así sigue sus
+    // ediciones y su eliminación por el SSE. La que trae el mensaje (de cuando
+    // se sirvió) queda para el original que no está en pantalla (spec § 6;
+    // revisión de Codex del PR #117).
+    const loadedById = useMemo(() => new Map((messages ?? []).map(msg => [msg.id, msg])), [messages]);
+    const quoteOf = (msg: Message): MessageQuote | null => {
+        const original = msg.replyTo?.id ? loadedById.get(msg.replyTo.id) : undefined;
+        return original ? quoteFromMessage(original) : msg.replyTo ?? null;
+    };
 
     useEffect(() => {
         if (inView && hasNextPage) void fetchNextPage();
@@ -242,25 +368,43 @@ export const ChatThread = ({
             const plantilla = msg.templateName
                 ? (templates as Template[]).find(t => t.name === msg.templateName)
                 : undefined;
+            const hasReactions = Boolean(msg.reactions?.them || msg.reactions?.me);
+            const menuOpen = menuId === msg.id;
+            const highlighted = jump.highlightedId === msg.id;
+            const quote = quoteOf(msg);
 
             nodes.push(
                 <div
                     // Por `temporalId` primero: el optimista y el que vuelve del
                     // servidor son el mismo, y la imagen no se vuelve a montar.
                     key={msg.temporalId ?? msg.id ?? i}
-                    className={`max-w-[85%] md:max-w-[62%] ${mine ? "self-end" : "self-start"}`}
+                    data-message-id={msg.id}
+                    className={`relative group/msg max-w-[85%] md:max-w-[62%] ${mine ? "self-end" : "self-start"}
+                        ${menuOpen ? "z-30" : ""}`}
                 >
                     {msg.templateName && (
                         <div className={`font-mono text-[11px] text-brand-subtle mb-1 ${mine ? "text-right" : ""}`}>
                             Plantilla · {msg.templateName}
                         </div>
                     )}
+                    <div className="relative" {...pressHandlers(msg)}>
                     <div
+                        // Con reacciones, la burbuja crece lo justo para sostenerlas
+                        // (diseño, «Dónde cuelgan»). El halo menta: el original al que se fue desde una cita.
+                        style={hasReactions ? { minWidth: (msg.reactions?.them && msg.reactions?.me ? 2 : 1) * 40 + 30 } : undefined}
                         className={`px-3.5 py-2.5 text-sm max-md:text-[15px] leading-[1.5] whitespace-pre-line [overflow-wrap:anywhere]
+                            transition-shadow duration-500 ${hasReactions ? "pb-[22px]" : ""}
+                            ${highlighted ? "shadow-[0_0_0_3px_var(--color-brand-accent),0_0_0_9px_var(--color-brand-accent-soft)]" : ""}
+                            ${phone && (msg.canReact || msg.canReply) ? "select-none [-webkit-touch-callout:none]" : ""}
                             ${mine
                                 ? "bg-brand-deep text-white rounded-[12px_12px_3px_12px]"
                                 : "bg-brand-surface text-brand-text border border-brand-border rounded-[12px_12px_12px_3px]"}`}
                     >
+                        {msg.forwarded && <ForwardedLabel forwarded={msg.forwarded} onDeep={mine} />}
+                        {quote && (
+                            <QuotedMessage quote={quote} onDeep={mine} contactName={title} team={showAuthor}
+                                onOpen={quote.id ? () => void jump.jumpTo(quote.id!) : undefined} />
+                        )}
                         {deleted ? (
                             <span className={`flex items-center gap-1.5 italic ${mine ? "text-brand-on-deep" : "text-brand-muted"}`}>
                                 <Ban size={14} className="flex-none" />
@@ -268,12 +412,25 @@ export const ChatThread = ({
                             </span>
                         ) : renderBody(msg, mine)}
                     </div>
+                    <MessageReactions msg={msg} mine={mine} phone={phone} onReact={(emoji) => react(msg, emoji)} />
+                    {!phone && (
+                        <HoverActions msg={msg} mine={mine} barOpen={menuOpen}
+                            onToggleBar={() => (menuOpen ? setMenu(null) : openMenu(msg, document.querySelector(`[data-message-id="${CSS.escape(msg.id)}"]`) as HTMLElement))}
+                            onReply={() => startReply(msg)} />
+                    )}
+                    {menuOpen && (
+                        <MessageMenu msg={msg} mine={mine} phone={phone} below={menu?.below ?? false} anchor={menu?.anchor ?? null}
+                            onReact={(emoji) => reactTo(msg, emoji)}
+                            onMore={() => { setMenu(null); setPickerFor(msg); }}
+                            onReply={() => startReply(msg)} />
+                    )}
+                    </div>
                     {!deleted && <TemplateButtons buttons={plantilla?.buttons} />}
 
                     {/* Cada pieza baja entera si no cabe: en el teléfono, «Desde la app
                         de WhatsApp», «Editado», la hora y el ojo partían la hora en dos. */}
-                    <div className={`flex flex-wrap items-center gap-x-[5px] gap-y-0.5 whitespace-nowrap text-[11px] mt-1 text-brand-subtle
-                        ${mine ? "justify-end" : ""}`}>
+                    <div className={`flex flex-wrap items-center gap-x-[5px] gap-y-0.5 whitespace-nowrap text-[11px] text-brand-subtle
+                        ${hasReactions ? "mt-[17px]" : "mt-1"} ${mine ? "justify-end" : ""}`}>
                         {/* «Bot» y «Desde la app de WhatsApp» siempre: sin equipo también hay que saber
                             qué contestó la máquina y qué se respondió desde el celular. */}
                         {mine && (showAuthor || msg.origin?.kind === 'bot' || msg.origin?.kind === 'businessApp') && <MessageAuthor msg={msg} />}
@@ -336,14 +493,58 @@ export const ChatThread = ({
                     />
                 )}
 
-                {/* Lienzo */}
-                <div className="flex-1 overflow-y-auto min-h-0 px-6 max-md:px-4 py-[22px] max-md:py-4 flex flex-col-reverse gap-3">
-                    {renderContent()}
+                {/* Lienzo, con lo que flota sobre él: buscar el original, los avisos y el selector. */}
+                <div className="relative flex-1 min-h-0 flex flex-col">
+                    <div ref={scrollerRef}
+                        className="flex-1 overflow-y-auto min-h-0 px-6 max-md:px-4 py-[22px] max-md:py-4 flex flex-col-reverse gap-3">
+                        {renderContent()}
+                    </div>
+
+                    {/* Con la barra o el selector abiertos: tocar fuera los cierra. En el celular, oscurece (m2). */}
+                    {(menuId || pickerFor) && (
+                        <div onClick={closeMenus} aria-hidden="true"
+                            className={`fixed inset-0 z-20 ${phone ? "bg-brand-ink/50" : ""}`} />
+                    )}
+
+                    {jump.searching && (
+                        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2.5 whitespace-nowrap
+                            bg-brand-surface border border-brand-border rounded-full shadow-[0_6px_18px_rgba(14,17,22,0.12)]
+                            py-[7px] pr-2 pl-3.5 text-[13px] font-semibold text-brand-strong">
+                            <LoaderCircle size={14} strokeWidth={2.8} className="text-brand-accent-strong motion-safe:animate-spin" />
+                            Buscando el mensaje en el historial…
+                            <button type="button" onClick={jump.cancel}
+                                className="h-[26px] px-2.5 rounded-full text-[12.5px] text-brand-gray-600 hover:bg-brand-bg cursor-pointer">
+                                Cancelar
+                            </button>
+                        </div>
+                    )}
+
+                    {toast && (
+                        <div role="status"
+                            className="absolute bottom-3.5 left-1/2 -translate-x-1/2 z-10 w-max max-w-[86%] bg-brand-text text-white rounded-[10px]
+                                shadow-[0_10px_28px_rgba(14,17,22,0.25)] px-3.5 py-2.5 text-[13.5px] leading-[1.45]">
+                            <span className="font-semibold">{toast.title}</span>{" "}
+                            <span className="text-brand-border-strong">{toast.detail}</span>
+                        </div>
+                    )}
+
+                    {pickerFor && (
+                        <div className={phone ? "fixed inset-x-0 bottom-0 z-40" : "absolute right-4 bottom-3 z-40"}>
+                            <Suspense fallback={null}>
+                                <EmojiPicker mobile={phone}
+                                    target={pickerFor.text.length > 60 ? `${pickerFor.text.slice(0, 60)}…` : pickerFor.text}
+                                    current={currentOwnEmoji(pickerFor)}
+                                    onPick={(emoji) => reactTo(pickerFor, emoji)}
+                                    onClose={() => setPickerFor(null)} />
+                            </Suspense>
+                        </div>
+                    )}
                 </div>
 
                 {conversationId && (
                     <ChatComposer key={conversationId} conversationId={conversationId} conversation={conversation} title={title}
-                        onStartConversation={onStartConversation} />
+                        onStartConversation={onStartConversation}
+                        replyTo={replyTo} onCancelReply={cancelReply} team={showAuthor} />
                 )}
             </div>
 

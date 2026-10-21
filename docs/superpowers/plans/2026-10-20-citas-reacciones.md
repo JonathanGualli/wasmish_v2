@@ -6,7 +6,7 @@
 
 **Arquitectura:** las formas de Meta se leen en `utils/inbound.message.js` (`describeReaction`, `describeMessageContext`); las reglas de qué se puede citar o reaccionar y cómo se serializa, en un `utils/message.actions.js` puro. Una reacción **no crea mensaje**: `services/reaction.service.js` la aplica sobre el original (`reactions.them` / `reactions.me`) con una escritura condicionada que solo avanza, como los eliminados y editados, y avisa con `message_updated`. Una cita se guarda en el mensaje (`replyTo`) y el resumen del citado se lee **al servir** (`services/message.reply.service.js`). Enviar reutiliza `processMessageSending` (un `context` más) y una ruta nueva `PUT …/reaction`.
 
-**Stack:** Express 5 + Mongoose; `node:test` y los tests de aislamiento (Mongo en memoria, Meta falso con `onMeta`). React 19 + React Query + Tailwind v4; `emoji-picker-react` 5.x cargado con `lazy`.
+**Stack:** Express 5 + Mongoose; `node:test` y los tests de aislamiento (Mongo en memoria, Meta falso con `onMeta`). React 19 + React Query + Tailwind v4; un selector de emojis propio con `emojibase-data` (en español), cargado con `lazy` (al implementarlo se cambió `emoji-picker-react` por este: sigue la marca y pesa menos; ver el PR #117).
 
 **Spec:** [docs/superpowers/specs/2026-10-20-citas-reacciones-design.md](../specs/2026-10-20-citas-reacciones-design.md). Brief de UI: [2026-10-20-citas-reacciones-brief-ui.md](../specs/2026-10-20-citas-reacciones-brief-ui.md) (lo diseña Claude Design; el PR 4 sigue su diseño).
 
@@ -218,7 +218,7 @@ El aspecto sale del diseño (`Design/*.html`) y de la skill de marca, que se con
 
 **Archivos** (los nombres pueden ajustarse al diseño): `Frontend/src/components/Chat/MessageActions.tsx` (el menú: hover en la computadora, pulsación larga en el celular), `ReactionPicker.tsx` (los 6 rápidos y el «+» que carga `EmojiPicker` con `lazy` + `Suspense`), `MessageReactions.tsx`, `QuotedMessage.tsx` (en la burbuja y en la barra del composer), `Composer/ReplyBar.tsx`; y `ChatThread.tsx` (`data-message-id`, la marca «Reenviado» / «Reenviado muchas veces», el resaltado), `Composer/ChatComposer.tsx` (la barra; Escape y cambiar de conversación la descartan; con la ventana cerrada la cita no aplica).
 
-- `emoji-picker-react` (5.x) con `emojiStyle="native"` y los textos en español; **solo** dentro del `lazy`. Comprobar en `npm run build` que va en su propio chunk y que el principal no crece por él.
+- *(Cambiado al implementarlo: selector propio con `emojibase-data`, ver el PR #117.)* `emoji-picker-react` (5.x) con `emojiStyle="native"` y los textos en español; **solo** dentro del `lazy`. Comprobar en `npm run build` que va en su propio chunk y que el principal no crece por él.
 - «Responder» solo con `canReply`; «Reaccionar» solo con `canReact`.
 
 - [ ] **Paso 1:** implementar siguiendo el diseño; `npm run lint` y `npm run build`.
