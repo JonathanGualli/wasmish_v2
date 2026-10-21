@@ -114,8 +114,7 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
 
 ## En curso
 
-- **Citas y reacciones** (2026-10-20): responder citando y reaccionar con emoji, en los dos sentidos y en los ecos, más «Reenviado». Spec `docs/superpowers/specs/2026-10-20-citas-reacciones-design.md`, brief y plan (PR #114), diseño `Design/Wasmish Chat - Citas y reacciones.html`. **Backend de lo que entra:** PR #115. **Backend de lo que sale:** PR #116, encima del #115. **UI:** PR #117, encima del #116. Los tres tienen su revisión de Codex respondida y esperan que Jonathan los una, en orden. Probados con los tests y la UI en Chromium (computadora y teléfono emulado, contra un backend aparte con Meta falso). Lo que falta:
-  - al unir uno (squash), rebasar el siguiente sobre `master` (`git rebase --onto master <rama anterior>`) y cambiar la base de su PR;
+- **Citas y reacciones** (2026-10-20): responder citando y reaccionar con emoji, en los dos sentidos y en los ecos, más «Reenviado». Spec `docs/superpowers/specs/2026-10-20-citas-reacciones-design.md`, brief y plan (PR #114), diseño `Design/Wasmish Chat - Citas y reacciones.html`. **Backend de lo que entra:** PR #115. **Backend de lo que sale:** PR #116. **UI:** PR #117. Los tres, con su revisión de Codex, unidos en `master` el 2026-10-21 y **sin desplegar**. Probados con los tests y la UI en Chromium (computadora y teléfono emulado, contra un backend aparte con Meta falso). Lo que falta:
   - probar con Meta de verdad, con el número de prueba (spec § 8): que el contacto vea la cita y la reacción, y el 131009 real;
   - sin comprobar en el navegador: una reacción que llega por SSE justo cuando falla la nuestra (el código lo cubre con `changeVersion`);
   - el PR de versión, cuando Jonathan lo pida.
