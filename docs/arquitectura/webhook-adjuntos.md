@@ -13,6 +13,7 @@ Lo que entra desde Meta: firma, estados de los mensajes, tipos de mensaje, adjun
 - [Webhook entrante (`webhook.controller.js`)](#webhook-entrante-webhookcontrollerjs)
 - [Lo que se responde desde la app de WhatsApp Business (`procesarEco`)](#lo-que-se-responde-desde-la-app-de-whatsapp-business-procesareco)
 - [Mensajes eliminados y editados (`applyMessageChange`)](#mensajes-eliminados-y-editados-applymessagechange)
+- [Citas, reenvíos y reacciones (`applyReaction`)](#citas-reenvíos-y-reacciones-applyreaction)
 - [Meta retira el acceso a un WABA (`PARTNER_REMOVED`)](#meta-retira-el-acceso-a-un-waba-partner_removed)
 
 ---
@@ -76,6 +77,21 @@ Con la coexistencia (2026-10-20; spec `docs/superpowers/specs/2026-10-19-mensaje
 - **SSE:** `message_updated` y, si cambió la bandeja, `conversation_updated` con `{ id, lastMessage }` ([chat.md](chat.md#eventos-sse-y-sus-payloads)). La lista de mensajes devuelve lo mismo (`serializeMessageChange` en `serializeMessage`).
 - Los «Mensaje no compatible» que se guardaron antes por un borrado o una edición se quedan: no guardan el `original_message_id`.
 - En local: `npm run webhook:simulate -- revoke --original <wamid>` y `edit --original <wamid> --text "…"`, con `--eco` para el negocio ([pruebas-y-scripts.md](pruebas-y-scripts.md)).
+
+### Citas, reenvíos y reacciones (`applyReaction`)
+
+Desde 2026-10-20 (spec `docs/superpowers/specs/2026-10-20-citas-reacciones-design.md`). Antes, una reacción entraba como un mensaje más «Reaccionó con 👍» (con su no leído, su push y sin decir a qué mensaje), y la cita (`context`) no se leía.
+
+- **Leer** (`utils/inbound.message.js`): `describeReaction` da `{ waMessageId, targetWaMessageId, emoji, timestamp }` (`emoji: null` si la quitó: Meta la manda **sin** `emoji`) o `null` si viene sin `id` o sin `reaction.message_id`. `describeMessageContext` da `{ replyToWaMessageId, forwarded }` (`'many'` con `frequently_forwarded`, `'once'` con `forwarded`). Las reglas de qué se puede citar o reaccionar y lo que ve la UI viven en `utils/message.actions.js` (`canReplyTo`, `canReactTo`, `serializeReactions`, `serializeQuoted`, `reactionPreview`).
+- **Una reacción del contacto** (`procesarEntrante`, antes del camino de un mensaje nuevo, después de los cambios): `applyReaction` (`services/reaction.service.js`) busca el original con `findWebhookTarget` (de `message.change.service.js`, la misma comprobación de cuenta, línea y contacto que un borrado, **sin** exigir la dirección: WhatsApp deja reaccionar a los propios mensajes) y lo guarda en `Message.reactions.them`. **Solo avanza**, con una escritura condicionada: aplica si no había o si la guardada es igual de vieja o más, y nunca si su id está en `reactions.seen` (los ids de las últimas 20 reacciones aplicadas): un reintento de Meta no se reaplica aunque después llegara otra del mismo segundo (revisión de Codex del plan, 3). Quitarla guarda `emoji: null` con su hora. Cada reacción aplicada sube `changeVersion` y emite `message_updated` (`serializeMessageUpdate`).
+  - **La bandeja**, solo al poner un emoji: «Reaccionó 👍 a: «resumen»» (40 caracteres) con `lastMessageAt` = la hora de la reacción, si no hay algo más nuevo (`syncReactionPreview`: escribe desde la reacción **vigente** y relee; si otra del mismo segundo se cruzó, reescribe, revisión de Codex del PR #115). La conversación sube aunque el original sea viejo. Quitarla no toca la bandeja.
+  - **Lo que NO hace:** crear un `Message`, sumar `unreadCount`, mover `lastInboundAt`, mandar push, crear trabajo del bot ni pausarlo.
+  - **Sin original** (anterior a la conexión, un «no compatible», de otra conversación): con emoji sigue el camino de siempre y queda como mensaje suelto «Reaccionó con 👍», **sin** no leído, sin push y sin mover `lastInboundAt`; tampoco cuenta para la ventana cuando falta `lastInboundAt` (`lastInboundOf` y `backfill-last-inbound.js` excluyen `type: 'reaction'`: revisión de Codex del plan, 1). Quitar una reacción a un mensaje que no está solo deja un aviso.
+- **Una cita o un reenvío** (entrantes y ecos): se guarda `replyTo: { waMessageId, messageId }` y `forwarded`. El citado se busca **solo en la misma conversación** (`findQuotedMessage`, `services/message.reply.service.js`); si no está, `messageId: null`. La lista (`loadQuotedMessages`, una consulta por página) y el SSE dan el resumen del citado **leído al servir**: una edición o un borrado posterior se ve. El `message_created` de un entrante sale ahora de `serializeMessage`, el mismo objeto que la lista, más `unreadCount` y `windowExpiresAt`.
+- **Desde la app (ecos):** una reacción va a `reactions.me` con `origin: 'businessApp'`, sin pausar al bot (reaccionar no es responder); sin original, se descarta con un aviso. `describeEcho` ya no la guarda como un saliente. **Sin confirmar con Meta** que estos ecos lleguen (spec § 3 y § 8).
+- **El acuse de una reacción nuestra:** si `procesarEstado` no encuentra un `Message` con ese `waMessageId`, `applyReactionStatus` busca `reactions.me.waMessageId` (con el predicado del índice parcial `reaction_me_waMessageId`, que si no Mongo no lo usa) en la cuenta del número. Un `failed` (131009) marca `reactions.me.status`, `errorCode` y `errorDetail` (rutas `reactions.me.*`: nunca el estado del mensaje, revisión de Codex del plan, 2), solo si sigue siendo esa reacción. **Limitación aceptada:** un `failed` que llegue antes de que se guarde la reacción enviada se pierde, como con los mensajes.
+- Las reacciones que se guardaron antes como mensajes sueltos se quedan como están.
+- En local: `npm run webhook:simulate -- reaction --original <wamid> --emoji 👍`, `--reply-to <wamid>` y `--forwarded` ([pruebas-y-scripts.md](pruebas-y-scripts.md)).
 
 ### Meta retira el acceso a un WABA (`PARTNER_REMOVED`)
 

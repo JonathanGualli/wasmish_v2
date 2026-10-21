@@ -3,7 +3,7 @@
 // avisa cuando retira el acceso (`account_update` con `PARTNER_REMOVED`).
 // Spec: docs/superpowers/specs/2026-10-16-coexistencia-design.md.
 
-import { describeInboundMessage } from './inbound.message.js';
+import { describeInboundMessage, describeMessageContext } from './inbound.message.js';
 import { isMessageChange } from './message.change.js';
 
 /**
@@ -26,12 +26,14 @@ export const describeEchoRecipient = (echoData) => {
 /**
  * Un eco listo para guardar, o null si se descarta: sin `id` o sin destinatario
  * (`describeEchoRecipient`), un borrado o una edición (los aplica
- * `applyMessageChange` sobre el original), o anterior a la conexión de la línea
- * (`connectedAt`: un número que pasó a otra cuenta no recibe ahí ecos viejos de
- * la anterior). `timestamp` es la hora del webhook según Meta, la mejor que da.
+ * `applyMessageChange` sobre el original), una reacción (la pega `applyReaction`
+ * a su original) o anterior a la conexión de la línea (`connectedAt`: un número
+ * que pasó a otra cuenta no recibe ahí ecos viejos de la anterior). `timestamp`
+ * es la hora del webhook según Meta, la mejor que da. `context`: la cita y el
+ * reenvío (`describeMessageContext`).
  */
 export const describeEcho = (echoData, { connectedAt = null } = {}) => {
-    if (!echoData?.id || isMessageChange(echoData)) return null;
+    if (!echoData?.id || isMessageChange(echoData) || echoData.type === 'reaction') return null;
     const { phone: toPhone, waUserId: toUserId } = describeEchoRecipient(echoData);
     if (!toPhone && !toUserId) return null;
 
@@ -44,7 +46,7 @@ export const describeEcho = (echoData, { connectedAt = null } = {}) => {
 
     const entrante = describeInboundMessage(echoData);
     if (!entrante) return null;
-    return { waMessageId: echoData.id, toPhone, toUserId, timestamp, entrante };
+    return { waMessageId: echoData.id, toPhone, toUserId, timestamp, entrante, context: describeMessageContext(echoData) };
 };
 
 // El motivo que se guarda cuando Meta retira el acceso sin decir por qué (sin

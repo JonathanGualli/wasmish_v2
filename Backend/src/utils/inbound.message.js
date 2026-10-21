@@ -189,3 +189,42 @@ export const describeInboundMessage = (messageData) => {
             return salida(ETIQUETA_DESCONOCIDO);
     }
 };
+
+/**
+ * Una reacción del contacto (o del negocio, en un eco): a qué mensaje va y con
+ * qué emoji. No es un mensaje de la conversación: `applyReaction` la pega a su
+ * original. Meta manda la reacción SIN `emoji` cuando se quita: `emoji: null`.
+ * `timestamp` es cuándo reaccionó (segundos de Meta; sin ella, ahora).
+ *
+ * @returns {{ waMessageId: string, targetWaMessageId: string, emoji: string|null, timestamp: Date }|null}
+ *          null si no es una reacción o viene sin `id` o sin `reaction.message_id`.
+ */
+export const describeReaction = (messageData) => {
+    if (messageData?.type !== 'reaction') return null;
+    const waMessageId = conTexto(messageData.id);
+    const targetWaMessageId = conTexto(messageData.reaction?.message_id);
+    if (!waMessageId || !targetWaMessageId) return null;
+
+    const seconds = Number.parseInt(messageData.timestamp, 10);
+    return {
+        waMessageId,
+        targetWaMessageId,
+        emoji: conTexto(messageData.reaction?.emoji),
+        timestamp: Number.isFinite(seconds) ? new Date(seconds * 1000) : new Date(),
+    };
+};
+
+/**
+ * El `context` de un mensaje: a qué mensaje responde (la cita, `context.id`) y
+ * si es un reenvío. `frequently_forwarded` (una cadena) gana a `forwarded`.
+ * Lo usan los entrantes y los ecos.
+ *
+ * @returns {{ replyToWaMessageId: string|null, forwarded: 'once'|'many'|null }}
+ */
+export const describeMessageContext = (messageData) => {
+    const context = messageData?.context;
+    let forwarded = null;
+    if (context?.frequently_forwarded === true) forwarded = 'many';
+    else if (context?.forwarded === true) forwarded = 'once';
+    return { replyToWaMessageId: conTexto(context?.id), forwarded };
+};

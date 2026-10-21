@@ -8,7 +8,7 @@ import {
 } from './contact.controller.js';
 import { resolveStatusTransition } from '../utils/message.status.js';
 import { getWindowExpiry } from '../utils/whatsapp.window.js';
-import { describeInboundMessage, describeUnsupportedReason } from '../utils/inbound.message.js';
+import { describeInboundMessage, describeUnsupportedReason, describeReaction, describeMessageContext } from '../utils/inbound.message.js';
 import { describeInboundContact, hasContactIdentity, describeUserIdUpdate } from '../utils/contact.identity.js';
 import { describeUserPreference, isMarketingOptOutFailure } from '../utils/marketing.preference.js';
 import { TIPOS_CON_ARCHIVO, nombreDeArchivo, guardarArchivo } from '../utils/media.storage.js';
@@ -23,6 +23,8 @@ import { markHumanReply } from '../services/auto.reply.service.js';
 import { describeEcho, describeEchoRecipient, parsePartnerRemoved } from '../utils/business.app.js';
 import { isMessageChange, describeMessageChange } from '../utils/message.change.js';
 import { applyMessageChange } from '../services/message.change.service.js';
+import { applyReaction, applyReactionStatus } from '../services/reaction.service.js';
+import { findQuotedMessage, quotedMapOf } from '../services/message.reply.service.js';
 import { serializeMessage } from './chat.controller.js';
 
 // Baja el adjunto y lo deja en disco. Devuelve SIEMPRE un objeto: si algo falla
@@ -93,6 +95,27 @@ const procesarCambio = async (inbound, messageData, { direction, identity }) => 
     await applyMessageChange({ line: inbound, change, direction, identity });
 };
 
+// Una reacción del contacto: se pega a su original (`applyReaction`) y nada más.
+// Devuelve true si ya está tratada; false si hay que guardarla como mensaje
+// suelto, como antes (el original no está o no es de esta conversación), sin
+// no leído ni push (spec de citas y reacciones, § 4).
+const procesarReaccion = async (inbound, messageData, contacts) => {
+    const reaction = describeReaction(messageData);
+    if (!reaction) {
+        console.warn('Reacción mal formada; se descarta:', { waMessageId: messageData?.id });
+        return true;
+    }
+    const identity = describeInboundContact(contacts, messageData);
+    const status = await applyReaction({ line: inbound, reaction, side: 'them', identity });
+    if (status === 'applied' || status === 'unchanged') return true;
+    // Quitar una reacción a un mensaje que no tenemos no dice nada: no se guarda.
+    if (!reaction.emoji) {
+        console.warn('Reacción quitada a un mensaje que no está; se descarta:', { waMessageId: reaction.waMessageId, status });
+        return true;
+    }
+    return false;
+};
+
 // Procesa UN mensaje entrante: lo guarda, actualiza la conversación y avisa por
 // SSE. Vive fuera de handleWebhook para poder envolver cada mensaje en su
 // propio try/catch — ver el comentario del bucle.
@@ -108,11 +131,18 @@ const procesarEntrante = async (inbound, messageData, contacts) => {
         });
     }
 
+    // Una reacción no es un mensaje nuevo: va a su original. Solo sigue si no
+    // lo encontró, y entonces se guarda suelta, sin pedir atención.
+    if (messageData?.type === 'reaction' && await procesarReaccion(inbound, messageData, contacts)) return;
+
     // Traduce la forma que manda Meta (image.caption, button.text…)
     // a { type, text, mediaId, mimeType }. Devuelve null en los que
     // no son mensajes de la conversación, como los 'system'.
     const entrante = describeInboundMessage(messageData);
     if(!entrante) return;
+    // Una reacción que llega aquí es suelta (su original no está): queda en el
+    // chat, pero no suma no leído, no avisa ni cuenta para la ventana de 24 h.
+    const isLooseReaction = entrante.type === 'reaction';
 
     // Idempotencia. Meta reintenta el lote entero cuando no recibe el 200 a
     // tiempo, y este handler baja los adjuntos antes de responder: un archivo
@@ -150,9 +180,13 @@ const procesarEntrante = async (inbound, messageData, contacts) => {
     // La ventana nunca retrocede: Meta no garantiza el orden de los
     // webhooks, y un entrante viejo que llegue tarde la cerraría antes
     // de tiempo. Mismo criterio que resolveStatusTransition.
-    if(!conversation.lastInboundAt || timestamp > conversation.lastInboundAt) {
+    if (!isLooseReaction && (!conversation.lastInboundAt || timestamp > conversation.lastInboundAt)) {
         conversation.lastInboundAt = timestamp;
     }
+
+    // A qué responde (la cita) y si es un reenvío. El citado, solo de esta conversación.
+    const context = describeMessageContext(messageData);
+    const quoted = await findQuotedMessage(conversation._id, context.replyToWaMessageId);
 
     // El archivo se baja ANTES de crear el mensaje para que, cuando este llegue
     // por SSE, la foto ya se pueda pintar. Añade unos cientos de ms al webhook; a
@@ -183,6 +217,8 @@ const procesarEntrante = async (inbound, messageData, contacts) => {
             timestamp,
             status: 'delivered',
             deliveredAt: timestamp,
+            ...(context.replyToWaMessageId && { replyTo: { waMessageId: context.replyToWaMessageId, messageId: quoted?._id ?? null } }),
+            ...(context.forwarded && { forwarded: context.forwarded }),
             ...(botJob && { bot: botJob }),
         });
     } catch (error) {
@@ -198,23 +234,15 @@ const procesarEntrante = async (inbound, messageData, contacts) => {
     // Update conversation
     conversation.lastMessage = entrante.text;
     conversation.lastMessageAt = timestamp;
-    conversation.unreadCount = (conversation.unreadCount || 0) + 1;
+    if (!isLooseReaction) conversation.unreadCount = (conversation.unreadCount || 0) + 1;
     await conversation.save();
 
+    // El mismo mensaje que da la lista (`serializeMessage`), con la cita
+    // resuelta, más el contador y la ventana de la conversación.
     sendToAccount(
         String(inbound.accountId),
         'message_created', {
-            id: String(messageCreated._id),
-            conversationId: String(conversation._id),
-            sender: 'them',
-            type: entrante.type,
-            text: entrante.text, 
-            hasMedia: Boolean(adjunto.mediaFile),
-            caption: entrante.caption,
-            mediaFilename: adjunto.mediaFilename,
-            mediaSize: adjunto.mediaSize,
-            timestamp: timestamp.toISOString(),
-            status: 'delivered',
+            ...serializeMessage(messageCreated, { quoted: quotedMapOf(quoted) }),
             unreadCount: conversation.unreadCount,
             windowExpiresAt: getWindowExpiry(conversation.lastInboundAt)?.toISOString() ?? null,
         },
@@ -234,8 +262,9 @@ const procesarEntrante = async (inbound, messageData, contacts) => {
     }
 
     // El aviso push a los dispositivos de quien ve esa línea (app móvil). Sin
-    // esperar: un servicio de push lento o caído no puede frenar ni tumbar el webhook.
-    void notifyInbound({
+    // esperar: un servicio de push lento o caído no puede frenar ni tumbar el
+    // webhook. Una reacción suelta no avisa.
+    if (!isLooseReaction) void notifyInbound({
         accountId: inbound.accountId,
         lineId: conversation.lineId ?? null,
         conversationId: conversation._id,
@@ -279,6 +308,19 @@ const procesarEco = async (inbound, echoData) => {
         return procesarCambio(inbound, echoData, { direction: 'outbound', identity: describeEchoRecipient(echoData) });
     }
 
+    // Una reacción desde la app: a su original, como nuestra. No pausa al bot
+    // (reaccionar no es responder). Sin original no hay nada que guardar.
+    if (echoData?.type === 'reaction') {
+        const reaction = describeReaction(echoData);
+        const status = reaction
+            ? await applyReaction({ line: inbound, reaction, side: 'me', identity: describeEchoRecipient(echoData), origin: 'businessApp' })
+            : 'malformed';
+        if (status !== 'applied' && status !== 'unchanged') {
+            console.warn('Reacción desde la app no aplicada; se descarta:', { waMessageId: echoData?.id, status });
+        }
+        return;
+    }
+
     const eco = describeEcho(echoData, { connectedAt: inbound.connectedAt });
     if (!eco) {
         // Sin destinatario no hay conversación: que quede en el log (sin datos
@@ -288,7 +330,7 @@ const procesarEco = async (inbound, echoData) => {
         }
         return;
     }
-    const { waMessageId, toPhone, toUserId, timestamp, entrante } = eco;
+    const { waMessageId, toPhone, toUserId, timestamp, entrante, context } = eco;
 
     // El `exists` ahorra el trabajo de un reintento; la garantía es el índice único.
     if (await Message.exists({ waMessageId })) return;
@@ -298,6 +340,8 @@ const procesarEco = async (inbound, echoData) => {
     // quien tenía nombre de usuario creaba otro contacto o se perdía).
     const contact = await resolveContact(inbound.accountId, { phone: toPhone, waUserId: toUserId }, { source: 'inbound' });
     const conversation = await findOrCreateConversation({ userId: inbound.accountId, contact, line: inbound });
+    // A qué responde, solo de esta conversación.
+    const quoted = await findQuotedMessage(conversation._id, context.replyToWaMessageId);
 
     let message;
     try {
@@ -314,6 +358,8 @@ const procesarEco = async (inbound, echoData) => {
             caption: entrante.caption,
             timestamp,
             status: 'sent',
+            ...(context.replyToWaMessageId && { replyTo: { waMessageId: context.replyToWaMessageId, messageId: quoted?._id ?? null } }),
+            ...(context.forwarded && { forwarded: context.forwarded }),
         });
     } catch (error) {
         // Otra entrega del mismo eco ya lo guardó: ella hace el resto.
@@ -351,7 +397,7 @@ const procesarEco = async (inbound, echoData) => {
     const { unreadCount = 0 } = await Conversation.findById(conversation._id).select('unreadCount').lean() ?? {};
 
     const meta = { lineId: conversation.lineId ?? null };
-    sendToAccount(String(inbound.accountId), 'message_created', serializeMessage(message), meta);
+    sendToAccount(String(inbound.accountId), 'message_created', serializeMessage(message, { quoted: quotedMapOf(quoted) }), meta);
     sendToAccount(String(inbound.accountId), 'conversation_updated', { id: String(conversation._id), unreadCount }, meta);
 
     // Sin el texto, como los entrantes.
@@ -436,7 +482,11 @@ const procesarEstado = async (inbound, statusData) => {
     if(!waMessageId) return;
 
     const message = await Message.findOne({ waMessageId });
-    if(!message) return;
+    // Si no es un mensaje, puede ser el acuse de una reacción nuestra.
+    if (!message) {
+        await applyReactionStatus({ line: inbound, statusData });
+        return;
+    }
     // El mensaje tiene que ser de la cuenta del número por el que llega el
     // acuse: si el número pasó de A a B, un acuse tardío de un mensaje de A no
     // lo toca ni se avisa a B (revisión de Codex del PR #35). De aquí sale

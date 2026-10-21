@@ -28,6 +28,43 @@ const autoReplyJobSchema = new mongoose.Schema({
     skipReason: { type: String, default: null },
 }, { _id: false });
 
+// Citas y reacciones (spec 2026-10-20-citas-reacciones-design.md). Una
+// reacción no es un mensaje: va en el original, una por lado (para el
+// contacto, el negocio es uno solo aunque sean varias personas).
+const contactReactionSchema = new mongoose.Schema({
+    // null = la quitó: se guarda con su hora, para que una vieja no la resucite.
+    emoji: { type: String, default: null },
+    at: { type: Date, required: true },
+    waMessageId: { type: String, required: true },
+}, { _id: false });
+
+const ownReactionSchema = new mongoose.Schema({
+    emoji: { type: String, default: null },
+    // La que había antes: la que sigue viendo el contacto si esta falla.
+    previousEmoji: { type: String, default: null },
+    at: { type: Date, required: true },
+    waMessageId: { type: String, required: true },
+    // Meta avisa del fallo por el webhook (131009), no al enviar.
+    status: { type: String, enum: ['sent', 'failed'], default: 'sent' },
+    errorCode: { type: String, default: null },
+    errorDetail: { type: String, default: null },
+    sentBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    sentByName: { type: String, default: null },
+    // 'businessApp': desde la app de WhatsApp Business (coexistencia).
+    origin: { type: String, enum: ['chat', 'businessApp'], default: 'chat' },
+}, { _id: false });
+
+const reactionsSchema = new mongoose.Schema({
+    them: { type: contactReactionSchema, default: undefined },
+    me: { type: ownReactionSchema, default: undefined },
+    // Los ids de las últimas 20 reacciones aplicadas, de los dos lados: un
+    // reintento de Meta nunca se reaplica (revisión de Codex del plan, 3).
+    seen: { type: [String], default: undefined },
+    // Una reacción nuestra en curso: hasta aquí no sale otra a este mensaje
+    // (revisión de Codex del plan, 4).
+    sendingUntil: { type: Date, default: undefined },
+}, { _id: false });
+
 const messageSchema = new mongoose.Schema({
     conversationId: {
         type: mongoose.Schema.Types.ObjectId, 
@@ -192,6 +229,26 @@ const messageSchema = new mongoose.Schema({
         type: Number,
         default: undefined,
     },
+    // A qué mensaje responde (la cita de WhatsApp): su `waMessageId` y, si
+    // Wasmish lo tiene EN ESTA CONVERSACIÓN, su id. La UI lee el resumen del
+    // citado al servir (`serializeQuoted`).
+    replyTo: {
+        type: new mongoose.Schema({
+            waMessageId: { type: String, required: true },
+            messageId: { type: mongoose.Schema.Types.ObjectId, ref: 'Message', default: null },
+        }, { _id: false }),
+        default: undefined,
+    },
+    // Un reenvío: 'many' es una cadena (`frequently_forwarded`).
+    forwarded: {
+        type: String,
+        enum: ['once', 'many'],
+        default: undefined,
+    },
+    reactions: {
+        type: reactionsSchema,
+        default: undefined,
+    },
 }, {
     timestamps: true,
 });
@@ -234,5 +291,12 @@ messageSchema.index(
     { name: 'waMessageId_unico', unique: true, partialFilterExpression: { waMessageId: { $type: 'string' } } },
 );
 messageSchema.index({ waMessageId: 1 }, { name: 'waMessageId_busqueda' });
+// El acuse de una reacción enviada (`applyReactionStatus`). Parcial: casi ningún
+// mensaje lleva una reacción nuestra. La consulta repite el predicado, que si
+// no Mongo no lo usa (el mismo caso que `waMessageId_busqueda`).
+messageSchema.index(
+    { 'reactions.me.waMessageId': 1 },
+    { name: 'reaction_me_waMessageId', partialFilterExpression: { 'reactions.me.waMessageId': { $type: 'string' } } },
+);
 
 export default mongoose.model('Message', messageSchema);

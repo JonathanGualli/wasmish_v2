@@ -9,7 +9,7 @@ import Conversation from '../models/conversation.model.js';
 import { findContactByIdentity, conversationLineFilter } from '../controllers/contact.controller.js';
 import { sendToAccount } from '../controllers/stream.controller.js';
 import { hasContactIdentity } from '../utils/contact.identity.js';
-import { DELETED_PREVIEW, serializeMessageChange } from '../utils/message.change.js';
+import { DELETED_PREVIEW, serializeMessageUpdate } from '../utils/message.change.js';
 
 // Escrituras condicionadas que pierden contra otra entrega a la vez: se relee y
 // se vuelve a intentar, hasta aquí.
@@ -20,11 +20,17 @@ const warn = (reason, change) => console.warn('Cambio de mensaje no aplicado:', 
     reason, kind: change.kind, waMessageId: change.waMessageId, originalWaMessageId: change.originalWaMessageId,
 });
 
-// El original, solo si es de la cuenta y la línea del webhook, de la misma
-// dirección y de la conversación del contacto del webhook (el remitente en un
-// entrante, el destinatario en un eco). El contacto se busca sin crearlo.
-const findOriginal = async ({ line, change, direction, identity }) => {
-    const message = await Message.findOne({ waMessageId: change.originalWaMessageId }).lean();
+/**
+ * El mensaje al que apunta un aviso de Meta (un borrado, una edición, una
+ * reacción), solo si es de la cuenta y la línea del webhook y de la
+ * conversación del contacto del webhook (el remitente en un entrante, el
+ * destinatario en un eco). El contacto se busca sin crearlo. Con `direction`,
+ * además, de esa dirección; con null, de cualquiera (una reacción).
+ *
+ * @returns {Promise<{ status: 'found', message, conversation }|{ status: 'not_found' }|{ status: 'rejected', reason: string }>}
+ */
+export const findWebhookTarget = async ({ line, waMessageId, identity, direction = null }) => {
+    const message = await Message.findOne({ waMessageId }).lean();
     if (!message) return { status: 'not_found' };
 
     const conversation = await Conversation.findOne({
@@ -32,7 +38,7 @@ const findOriginal = async ({ line, change, direction, identity }) => {
     }).select('_id lineId contactId').lean();
     if (!conversation) return { status: 'not_found' };
 
-    if (message.direction !== direction) return { status: 'rejected', reason: 'direction' };
+    if (direction && message.direction !== direction) return { status: 'rejected', reason: 'direction' };
     if (!hasContactIdentity(identity)) return { status: 'rejected', reason: 'no_identity' };
     const contact = await findContactByIdentity(line.accountId, identity);
     if (!contact || String(contact._id) !== String(conversation.contactId)) return { status: 'rejected', reason: 'contact' };
@@ -143,7 +149,7 @@ const refreshPreview = async ({ accountId, conversation, message }) => {
  *          otra dirección, otro contacto, otro tipo de contenido o intentos agotados.
  */
 export const applyMessageChange = async ({ line, change, direction, identity }) => {
-    const found = await findOriginal({ line, change, direction, identity });
+    const found = await findWebhookTarget({ line, waMessageId: change.originalWaMessageId, identity, direction });
     if (found.status !== 'found') {
         warn(found.reason ?? found.status, change);
         return found.status;
@@ -163,13 +169,7 @@ export const applyMessageChange = async ({ line, change, direction, identity }) 
     if (!updated) return 'not_found';
 
     const accountId = String(line.accountId);
-    sendToAccount(accountId, 'message_updated', {
-        id: String(updated._id),
-        conversationId: String(updated.conversationId),
-        text: updated.text,
-        caption: updated.caption ?? null,
-        ...serializeMessageChange(updated),
-    }, { lineId: conversation.lineId ?? null });
+    sendToAccount(accountId, 'message_updated', serializeMessageUpdate(updated), { lineId: conversation.lineId ?? null });
 
     await refreshPreview({ accountId, conversation, message: updated });
     return 'applied';

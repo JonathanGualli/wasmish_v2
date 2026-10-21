@@ -2,7 +2,7 @@
 // ni les quita el archivo, no sube archivos a su nombre ni descarga los suyos.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { seedAccount, request, assertNoLeak, assertHasOwn, connectWhatsapp, onMeta, Line, Template, TemplateMedia, PNG } from './helpers.js';
+import { seedAccount, request, assertNoLeak, assertHasOwn, connectWhatsapp, onMeta, openStream, Line, Template, TemplateMedia, PNG } from './helpers.js';
 
 const a = await seedAccount('A', { seq: 1 });
 const b = await seedAccount('B', { seq: 2 });
@@ -29,6 +29,10 @@ await Template.create({
     language: 'es', category: 'MARKETING', status: 'APPROVED', bodyText: 'w3', header: null, buttons: [],
 });
 const namesOf = (res) => res.body.map(template => template.name).sort();
+
+// Una cuenta con WhatsApp conectado, para enviar una plantilla desde el chat.
+const tr = await seedAccount('TR', { seq: 8 });
+await connectWhatsapp(tr);
 
 test('GET /templates: B no ve las plantillas de A', async () => {
     assertNoLeak(await request(b, 'GET', '/templates'), a);
@@ -159,4 +163,21 @@ test('GET /templates sin lineId: las de los WABA con línea activa, cada una con
     assert.ok(!names.includes('de_un_waba_sin_linea'));
     assert.equal(res.body.find(template => template.name === 'del_segundo_waba').waBusinessId, 'waba-W2');
     assert.ok(await Line.exists({ _id: wSecond, status: 'active' }));
+});
+
+// Revisión de Codex del plan de citas y reacciones, 9: el `message_created` de
+// una plantilla se arma a mano y no traía `canReply`: «Responder» no salía hasta recargar.
+test('el message_created de una plantilla enviada trae canReply', async () => {
+    onMeta(async (config) => (config.method === 'post' && config.url === `/99${tr.seq}/messages`
+        ? { data: { messages: [{ id: `wamid.plantilla.${Date.now()}` }] } } : undefined));
+    const stream = await openStream(tr);
+    try {
+        const res = await request(tr, 'POST', '/chats/template', { templateName: tr.templateName, destinationNumber: '593990001235' });
+        assert.equal(res.status, 200, res.text);
+        assert.ok(await stream.waitFor('"canReply":true', 2000), 'el message_created de la plantilla no trae canReply');
+        assert.ok(await stream.waitFor('"canReact":false', 0));
+    } finally {
+        onMeta(null);
+        await stream.close();
+    }
 });

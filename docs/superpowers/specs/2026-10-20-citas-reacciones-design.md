@@ -126,7 +126,7 @@ reactions: {
 
 **Lo que ve la UI** (`serializeMessage`, la lista y el SSE):
 
-- `replyTo`: `null`, o `{ id, sender, type, text, hasMedia, deleted }` del citado (`text` recortado a 200 caracteres), o `{ id: null }` si Wasmish no lo tiene. Se lee **al servir**: `listMessages` busca de una vez los citados de la página (con `conversationId` en el filtro), y un mensaje nuevo lo busca al emitirlo. Una edición o un borrado posterior del citado se ve al recargar; la UI prefiere el original si lo tiene cargado.
+- `replyTo`: `null`, o `{ id, sender, type, text, hasMedia, deleted, sentBy, origin }` del citado (de un saliente, quién y de dónde: el diseño nombra al autor, «Ana», «Bot» o «Desde el celular», nunca «Tú») (`text` recortado a 200 caracteres), o `{ id: null }` si Wasmish no lo tiene. Se lee **al servir**: `listMessages` busca de una vez los citados de la página (con `conversationId` en el filtro), y un mensaje nuevo lo busca al emitirlo. Una edición o un borrado posterior del citado se ve al recargar; la UI prefiere el original si lo tiene cargado.
 - `forwarded`: `'once' | 'many' | null`.
 - `reactions`: `{ them: { emoji, at } | null, me: { emoji, previousEmoji, at, status, errorCode, errorDetail, sentBy, origin } | null }`. Una reacción quitada (`emoji: null`) sale como `null`, **salvo** la nuestra con `status: 'failed'`: sale entera, para que la UI diga que no se pudo quitar o cambiar y qué sigue viendo el contacto (`previousEmoji`; revisión de Codex del plan, 6).
 - `canReact` y `canReply`: `boolean` (§ 5). La UI enseña las acciones solo si son `true`.

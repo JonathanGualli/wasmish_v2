@@ -23,12 +23,22 @@
 //   npm run webhook:simulate -- edit --original <wamid> --text "otro texto"
 //                                                ← el contacto edita ese mensaje
 //   (con --eco, lo borra o lo edita el negocio desde la app: el original es un eco)
+//   npm run webhook:simulate -- reaction --original <wamid> --emoji 👍
+//                                                ← el contacto reacciona a ese mensaje
+//                                                  (sin --emoji, quita su reacción; con
+//                                                  --eco, reacciona el negocio desde la app)
+//   npm run webhook:simulate -- texto --reply-to <wamid>
+//                                                ← el contacto responde citando ese mensaje
+//   npm run webhook:simulate -- texto --forwarded        (o --forwarded-many)
+//                                                ← un reenvío (muchas veces: una cadena)
+//   (--reply-to y --forwarded valen para cualquier tipo y para eco)
 //
 // Opciones: --from <numero>  --url <http://...>  --phone-number-id <id>
 //           --name <nombre de perfil>  --username <usuario>  --new-from <numero>
 //           --display-number <numero visible de la línea, como lo manda Meta>
 //           --reason <motivo de retiro-acceso>
-//           --original <wamid del mensaje que se borra o se edita>  --text <texto editado>  --eco
+//           --original <wamid del mensaje que se borra, se edita o al que se reacciona>
+//           --text <texto editado>  --emoji <emoji>  --reply-to <wamid>  --forwarded  --forwarded-many  --eco
 //
 // El wamid de cada mensaje sale en la lista «Guardado» del final.
 //
@@ -94,6 +104,11 @@ const RETIRO = 'retiro-acceso';
 // original con `original_message_id`. Del contacto o, con --eco, del negocio.
 const CAMBIOS = ['revoke', 'edit'];
 
+// Citas y reacciones (spec 2026-10-20): una reacción apunta al original con
+// `reaction.message_id`; sin emoji, la quita. La muestra `reaccion` de arriba
+// va a un mensaje que no existe (queda suelta).
+const REACCION = 'reaction';
+
 // --- argumentos -------------------------------------------------------------
 const argv = process.argv.slice(2);
 const opcion = (nombre, porDefecto) => {
@@ -114,6 +129,9 @@ const REASON = opcion('reason', 'PRIMARY_INACTIVITY');
 const ORIGINAL = opcion('original', null);
 const EDITED_TEXT = opcion('text', 'Texto editado (simulado)');
 const COMO_ECO = argv.includes('--eco');
+const EMOJI = opcion('emoji', null);
+const REPLY_TO = opcion('reply-to', null);
+const FORWARDED = argv.includes('--forwarded-many') ? 'many' : argv.includes('--forwarded') ? 'once' : null;
 
 // El BSUID que Meta generaría: país + id. Se deriva del número o del usuario
 // para que el mismo contacto de prueba tenga siempre el mismo.
@@ -123,7 +141,7 @@ const PHONE = USERNAME ? null : FROM;
 // Tras el cambio de número, el BSUID es el que tendría --from <número nuevo>.
 const NEW_USER_ID = NEW_FROM && simulatedUserId(NEW_FROM);
 
-const valoresDeOpciones = [FROM, URL_BASE, phoneNumberIdArg, PROFILE_NAME, USERNAME, NEW_FROM, DISPLAY_NUMBER, REASON, ORIGINAL, EDITED_TEXT];
+const valoresDeOpciones = [FROM, URL_BASE, phoneNumberIdArg, PROFILE_NAME, USERNAME, NEW_FROM, DISPLAY_NUMBER, REASON, ORIGINAL, EDITED_TEXT, EMOJI, REPLY_TO];
 const nombres = argv.filter(a => !a.startsWith('--') && !valoresDeOpciones.includes(a));
 const todos = argv.includes('--all');
 const listar = argv.includes('--list');
@@ -136,6 +154,8 @@ if (listar) {
     console.log('\nPreferencias de marketing:\n  ' + Object.keys(PREFERENCIAS).join('\n  '));
     console.log(`\nOtros avisos:\n  ${CAMBIO_NUMERO}   (con --new-from <número>)\n  ${ECO}             (respuesta desde la app de WhatsApp Business)\n  ${RETIRO}   (Meta retira el acceso al WABA; --reason <motivo> o ninguno)`);
     console.log('\nBorrar o editar un mensaje (con --original <wamid>; --eco si lo hace el negocio):\n  revoke\n  edit            (--text <texto nuevo>)');
+    console.log(`\nReaccionar (con --original <wamid>; --eco si lo hace el negocio):\n  ${REACCION}        (--emoji <emoji>; sin él, la quita)`);
+    console.log('\nEn cualquier mensaje: --reply-to <wamid> (cita), --forwarded o --forwarded-many (reenvío)');
     process.exit(0);
 }
 
@@ -147,10 +167,10 @@ if (!limpiar && elegidos.length === 0) {
     morir('Dime qué mandar.  Ej: npm run webhook:simulate -- audio boton   (o --all, o --list)');
 }
 
-const desconocidos = elegidos.filter(n => !MUESTRAS[n] && !PREFERENCIAS[n] && ![CAMBIO_NUMERO, ECO, RETIRO, ...CAMBIOS].includes(n));
+const desconocidos = elegidos.filter(n => !MUESTRAS[n] && !PREFERENCIAS[n] && ![CAMBIO_NUMERO, ECO, RETIRO, REACCION, ...CAMBIOS].includes(n));
 if (desconocidos.length > 0) morir(`No conozco: ${desconocidos.join(', ')}.  Usa --list para ver los tipos.`);
 if (elegidos.includes(CAMBIO_NUMERO) && !NEW_FROM) morir(`${CAMBIO_NUMERO} necesita el número nuevo:  --new-from 593000000001`);
-if (elegidos.some(n => CAMBIOS.includes(n)) && !ORIGINAL) morir('revoke y edit necesitan el mensaje:  --original <wamid>  (sale en la lista «Guardado»)');
+if (elegidos.some(n => CAMBIOS.includes(n) || n === REACCION) && !ORIGINAL) morir('revoke, edit y reaction necesitan el mensaje:  --original <wamid>  (sale en la lista «Guardado»)');
 
 // --- ejecución --------------------------------------------------------------
 await mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/wasmish');
@@ -247,7 +267,7 @@ const valorDe = (nombre) => {
             from_user_id: USER_ID,
             id: `wamid.sim.${Date.now()}.${Math.random().toString(36).slice(2)}`,
             timestamp: String(ahora),
-            ...(CAMBIOS.includes(nombre) ? cambio(nombre) : MUESTRAS[nombre]),
+            ...(CAMBIOS.includes(nombre) ? cambio(nombre) : nombre === REACCION ? reaccion() : { ...MUESTRAS[nombre], ...contexto() }),
         }],
     };
 };
@@ -261,6 +281,21 @@ function cambio(nombre) {
         ? { type: 'text', text: { body: EDITED_TEXT } }
         : { type: TIPO_ORIGINAL, [TIPO_ORIGINAL]: { id: 'MEDIA_EDITADO', caption: EDITED_TEXT } };
     return { type: 'edit', edit: { original_message_id: ORIGINAL, message } };
+}
+
+// Una reacción al original, como en la referencia de Meta: sin `emoji` es que se quita.
+function reaccion() {
+    return { type: 'reaction', reaction: { message_id: ORIGINAL, ...(EMOJI && { emoji: EMOJI }) } };
+}
+
+// La cita (`context.id`) y el reenvío, si se pidieron.
+function contexto() {
+    if (!REPLY_TO && !FORWARDED) return {};
+    return { context: {
+        ...(REPLY_TO && { from: DISPLAY_NUMBER, id: REPLY_TO }),
+        ...(FORWARDED && { forwarded: true }),
+        ...(FORWARDED === 'many' && { frequently_forwarded: true }),
+    } };
 }
 
 // El aviso de que Meta retiró el acceso: con la forma del ejemplo de Meta, en
@@ -284,7 +319,7 @@ const retiroDeAcceso = async () => {
 // lleva siempre su BSUID (`to_user_id`) y el teléfono (`to`) solo si no usa
 // nombre de usuario: con --username, `to` no va (el caso del 2026-10-19).
 // `contenido`: un texto, o un borrado o una edición desde la app (con --eco).
-const eco = (contenido = { type: 'text', text: { body: 'Respondido desde la app de WhatsApp Business (simulado)' } }) => ({
+const eco = (contenido = { type: 'text', text: { body: 'Respondido desde la app de WhatsApp Business (simulado)' }, ...contexto() }) => ({
     field: 'smb_message_echoes',
     value: {
         messaging_product: 'whatsapp',
@@ -302,6 +337,7 @@ for (const nombre of elegidos) {
     const body = nombre === RETIRO ? JSON.stringify(await retiroDeAcceso())
         : nombre === ECO ? JSON.stringify({ entry: [{ changes: [eco()] }] })
         : CAMBIOS.includes(nombre) && COMO_ECO ? JSON.stringify({ entry: [{ changes: [eco(cambio(nombre))] }] })
+        : nombre === REACCION && COMO_ECO ? JSON.stringify({ entry: [{ changes: [eco(reaccion())] }] })
         : JSON.stringify({
         entry: [{ changes: [{ value: {
             metadata: { display_phone_number: DISPLAY_NUMBER, phone_number_id: phoneNumberId },
@@ -342,7 +378,9 @@ if (contact) {
 if (conv) {
     const msgs = await Message.find({ conversationId: conv._id }).sort({ createdAt: -1 }).limit(elegidos.length).lean();
     console.log('\nGuardado (lo más nuevo arriba):');
-    const marcas = (m) => `${m.deletedAt ? '  [eliminado]' : ''}${m.editedAt ? `  [editado ×${m.previousVersions?.length ?? 0}]` : ''}`;
+    const marcas = (m) => `${m.deletedAt ? '  [eliminado]' : ''}${m.editedAt ? `  [editado ×${m.previousVersions?.length ?? 0}]` : ''}`
+        + `${m.reactions?.them?.emoji ? `  [contacto: ${m.reactions.them.emoji}]` : ''}${m.reactions?.me?.emoji ? `  [negocio: ${m.reactions.me.emoji}]` : ''}`
+        + `${m.replyTo ? `  [cita a ${m.replyTo.messageId ? m.replyTo.waMessageId : 'uno que no está'}]` : ''}${m.forwarded ? `  [reenviado${m.forwarded === 'many' ? ' muchas veces' : ''}]` : ''}`;
     for (const m of msgs) {
         console.log(`  ${String(m.type).padEnd(12)} ${JSON.stringify(m.text)}${marcas(m)}  ·  ${m.waMessageId ?? '—'}`);
     }
