@@ -82,7 +82,15 @@ const emitMessageUpdated = async (accountId, messageId, conversation) => {
  */
 export const applyReaction = async ({ line, reaction, side, identity, origin = null }) => {
     const found = await findWebhookTarget({ line, waMessageId: reaction.targetWaMessageId, identity });
-    if (found.status !== 'found') return found.status;
+    if (found.status !== 'found') {
+        // Sin el id del original no se puede saber después por qué no se pegó
+        // (2026-10-22: tres reacciones a ecos quedaron sueltas sin rastro).
+        console.warn('Reacción sin su original:', {
+            side, status: found.status, reason: found.reason ?? null,
+            waMessageId: reaction.waMessageId, targetWaMessageId: reaction.targetWaMessageId,
+        });
+        return found.status;
+    }
     const { message, conversation } = found;
 
     const { waMessageId, emoji, timestamp: at } = reaction;

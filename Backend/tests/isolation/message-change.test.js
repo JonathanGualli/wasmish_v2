@@ -36,10 +36,10 @@ const chat = async ({ account = a, line = LINE_A1, phone = nextPhone(), waUserId
 };
 
 /** Un mensaje de la conversación; si es el más nuevo, pasa a su vista previa (como el webhook y los envíos). */
-const message = async (conversation, { direction = 'inbound', type = 'text', text = 'original', caption = null, mediaFilename = null, ts = at(0) } = {}) => {
+const message = async (conversation, { direction = 'inbound', type = 'text', text = 'original', caption = null, mediaFilename = null, ts = at(0), waMessageId = `wamid.mc.${++seq}` } = {}) => {
     const msg = await Message.create({
         conversationId: conversation._id, direction, sender: direction === 'inbound' ? 'them' : 'me',
-        waMessageId: `wamid.mc.${++seq}`, type, text, caption, mediaFilename, timestamp: ts,
+        waMessageId, type, text, caption, mediaFilename, timestamp: ts,
     });
     await Conversation.updateOne(
         { _id: conversation._id, $or: [{ lastMessageAt: null }, { lastMessageAt: { $lte: ts } }] },
@@ -198,6 +198,27 @@ test('un eco solo toca un saliente de su destinatario, también buscado solo por
     assert.equal((await reload(msg)).deletedAt, null);
 
     assert.equal(await apply(revokeOf(msg), { phone: null, waUserId: recipient.identity.waUserId }, { direction: 'outbound' }), 'applied');
+});
+
+// Lo que pasó con las reacciones el 2026-10-22: Meta puede nombrar el original
+// con otro wamid (el del teléfono, no el del BSUID). Un borrado lo encuentra
+// igual, por la clave, y solo en la conversación de su contacto.
+test('un borrado que nombra el original con otro wamid del mismo mensaje se aplica', async () => {
+    const key = '3EB0000000000000000071';
+    const wamid = (recipient) => 'wamid.' + Buffer.concat([
+        Buffer.from([0x1c, 0x18, recipient.length]), Buffer.from(recipient, 'latin1'),
+        Buffer.from([0x15, 0x02, 0x00, 0x11, 0x18, key.length]), Buffer.from(key, 'latin1'), Buffer.from([0x00]),
+    ]).toString('base64');
+    const { conversation, identity } = await chat();
+    const msg = await message(conversation, { direction: 'outbound', ts: new Date(), waMessageId: wamid('PE.1000000000000000') });
+    const change = { ...revokeOf(msg), originalWaMessageId: wamid('593990000000'), timestamp: new Date() };
+
+    const stranger = await chat();
+    assert.equal(await apply(change, stranger.identity, { direction: 'outbound' }), 'not_found', 'otro contacto');
+    assert.equal((await reload(msg)).deletedAt ?? null, null);
+
+    assert.equal(await apply(change, identity, { direction: 'outbound' }), 'applied');
+    assert.ok((await reload(msg)).deletedAt);
 });
 
 test('la bandeja: solo cambia si era el último, y eliminado manda en los dos órdenes', async () => {
