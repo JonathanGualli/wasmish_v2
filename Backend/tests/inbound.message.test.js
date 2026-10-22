@@ -167,6 +167,32 @@ test('un no-soportado que no conocemos cae al genérico, no al nombre en inglés
     assert.equal(salida.text, 'Mensaje no compatible');
 });
 
+// Regresión que vigila: del 2026-10-20 al 22 los primeros mensajes a la línea con coexistencia
+// (saludos automáticos de negocios a los que se escribió en frío) salían como «Mensaje no compatible»,
+// como si se hubieran perdido, cuando se pueden ver en la app de WhatsApp Business. Payload real.
+test('un 131060 dice que no está disponible y dónde verlo', () => {
+    const salida = describeInboundMessage({
+        type: 'unsupported',
+        errors: [{ code: 131060, title: 'This message is unavailable.' }],
+        unsupported: { type: 'unknown' },
+    });
+
+    assert.equal(salida.type, 'unsupported');
+    assert.equal(salida.text, 'Mensaje no disponible: míralo en tu celular');
+    assert.equal(describeInboundMessage({ type: 'unknown', errors: [{ code: '131060' }], unknown: {} }).text,
+        'Mensaje no disponible: míralo en tu celular');
+});
+
+test('un 131051 sin subtipo conocido sigue siendo no compatible', () => {
+    const salida = describeInboundMessage({
+        type: 'unsupported',
+        errors: [{ code: 131051, title: 'Message type unknown' }],
+        unsupported: { type: 'unknown' },
+    });
+
+    assert.equal(salida.text, 'Mensaje no compatible');
+});
+
 // Meta añade tipos nuevos sin avisar. Que aparezca algo en el chat es mejor que
 // un hueco silencioso, aunque no sepamos pintarlo.
 test('un tipo desconocido se guarda como no compatible', () => {

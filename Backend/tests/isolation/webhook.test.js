@@ -567,7 +567,8 @@ test('un entrante que Meta no entregó deja su motivo en el log, sin el contenid
     assert.ok(logged, 'no se registró el motivo');
     assert.deepEqual(logged[1], { waMessageId: id, subtype: 'text', errors: [{ code: 131060, title: 'This message is currently unavailable' }] });
     assert.ok(!JSON.stringify(warnings).includes('secreto del cliente'), 'el log trae el contenido');
-    assert.equal((await Message.findOne({ waMessageId: id }).lean()).text, 'Mensaje no compatible', 'el mensaje se guarda igual');
+    // Un 131060 se guarda con la etiqueta que dice dónde verlo (2026-10-22).
+    assert.equal((await Message.findOne({ waMessageId: id }).lean()).text, 'Mensaje no disponible: míralo en tu celular', 'el mensaje se guarda igual');
 });
 
 // --- Citas, reenvíos y reacciones (spec 2026-10-20-citas-reacciones) --------

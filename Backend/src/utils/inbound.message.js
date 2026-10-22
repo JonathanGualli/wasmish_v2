@@ -74,11 +74,22 @@ const describirReaccion = (reaction) => {
     return emoji ? `Reaccionó con ${emoji}` : 'Quitó su reacción';
 };
 
+// 131060 «This message is currently unavailable»: Meta lo manda cuando alguien
+// escribe por primera vez a un número con coexistencia (visto en producción el
+// 2026-10-21 con el saludo automático de un negocio, a los 2 s de escribirle).
+// El contenido no llega por la API, pero sí está en la app de WhatsApp Business.
+const ERROR_NO_DISPONIBLE = 131060;
+const ETIQUETA_NO_DISPONIBLE = 'Mensaje no disponible: míralo en tu celular';
+
+const traeError = (errores, codigo) =>
+    Array.isArray(errores) && errores.some(error => Number(error?.code) === codigo);
+
 // Un tipo que Meta no entrega. Si sabemos qué era, lo decimos; si no, genérico
 // antes que enseñarle al agente el nombre en inglés que manda Meta.
-const describirNoSoportado = (contenido) => {
+const describirNoSoportado = (contenido, errores) => {
     const subtipo = conTexto(contenido?.type) ?? conTexto(contenido?.raw_type);
-    return ETIQUETAS_NO_SOPORTADO[subtipo] ?? ETIQUETA_DESCONOCIDO;
+    if (ETIQUETAS_NO_SOPORTADO[subtipo]) return ETIQUETAS_NO_SOPORTADO[subtipo];
+    return traeError(errores, ERROR_NO_DISPONIBLE) ? ETIQUETA_NO_DISPONIBLE : ETIQUETA_DESCONOCIDO;
 };
 
 /**
@@ -183,7 +194,7 @@ export const describeInboundMessage = (messageData) => {
         // { type:'unsupported', errors:[…], unsupported:{ type:'poll_creation' } }.
         case 'unsupported':
         case 'unknown':
-            return salida(describirNoSoportado(contenido));
+            return salida(describirNoSoportado(contenido, messageData.errors));
 
         default:
             return salida(ETIQUETA_DESCONOCIDO);
