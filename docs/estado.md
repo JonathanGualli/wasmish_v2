@@ -123,6 +123,7 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
 
 ## En curso
 
+- **Reacciones a lo respondido desde la app** (rama `fix-reaccion-a-eco`): en la 1.0.29 quedaban como burbujas sueltas «Reaccionó con 👍», porque Meta nombra el original con otro wamid que el del eco guardado. `findWebhookTarget` lo busca también por la clave del wamid, y una reacción sin original deja en el log el wamid que buscaba. Probado con los tests (unitarios y de aislamiento). **Tras desplegar:** reaccionar desde otro celular a algo respondido desde la app, y mirar en el log «Original encontrado por la clave del wamid» (o «Reacción sin su original» con el wamid, si la hipótesis falla). Las 3 reacciones que quedaron sueltas desde el 2026-10-21 se quedan como están.
 - **Citas y reacciones, la prueba con Meta de verdad** (en la 1.0.29): lo que dice «Falta probarlo» en su entrada de «En producción». Además, sin comprobar en el navegador: una reacción que llega por SSE justo cuando falla la nuestra (el código lo cubre con `changeVersion`).
 - **Lo que queda de la página pública:**
   - Jonathan conecta el chip del botón (`+593 98 415 2777`) a Wasmish con la coexistencia (2026-10-20) y prueba el botón desde otro celular;

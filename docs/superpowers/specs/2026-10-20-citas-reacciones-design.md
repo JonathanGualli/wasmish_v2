@@ -148,6 +148,7 @@ reactions: {
 - **`webhook:simulate`:** `reaction --original <wamid> --emoji 👍` (sin `--emoji`, la quita), `--reply-to <wamid>` y `--forwarded [many]` en `text`, y `--eco` en los dos.
 - **Navegador:** Chromium contra el backend local, en la computadora y en el teléfono emulado: reaccionar, quitar, responder con texto y con archivo, tocar una cita vieja (más de 20 mensajes atrás), en vivo con dos pestañas.
 - **Con Meta de verdad**, antes de dar la funcionalidad por cerrada: una línea con coexistencia y otro celular. Reaccionar desde el celular del contacto y desde Wasmish; quitar la reacción desde Wasmish (`emoji: ""`); reaccionar fuera de la ventana de 24 h; responder citando en los dos sentidos; y desde la app del negocio, responder citando y reaccionar (si llegan los ecos). Lo que salga distinto de este spec se corrige en el spec y en `webhook-adjuntos.md`.
+- **Visto con Meta (2026-10-22, en la 1.0.29):** las reacciones del contacto a lo respondido **desde la app** quedaban como burbujas sueltas «Reaccionó con 👍». El eco se guarda con un wamid que lleva el BSUID del contacto, y la reacción nombraba el original con otro wamid de la misma clave (lo más probable, el del teléfono; el log lo confirma tras desplegar el arreglo). La cita a ese mismo eco sí llegó con el wamid guardado. Arreglo: `findWebhookTarget` busca también por la clave del wamid ([webhook-adjuntos.md](../../arquitectura/webhook-adjuntos.md#citas-reenvíos-y-reacciones-applyreaction)).
 
 ## 9. Orden de trabajo
 
