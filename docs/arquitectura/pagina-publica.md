@@ -102,7 +102,8 @@ Conectado al repo desde el panel de Cloudflare: no hay claves en GitHub.
   - `wasmish.com` es un dominio propio del proyecto de Pages (un CNAME a `wasmish-site.pages.dev`, «Proxied»);
   - `www` es «Proxied» y una *Redirect Rule* («www a wasmish.com»: `https://www.*` → `https://${1}`, 301, conservando los parámetros) lo manda a `wasmish.com`. Sin el proxy, la regla no actúa;
   - `app` sigue en «DNS only», al servidor: ver [deploy/README.md § Dominios](../../deploy/README.md#dominios);
-  - `hola@wasmish.com` se reenvía con Email Routing.
+  - `hola@wasmish.com` **recibe** con Email Routing (los tres MX `route*.mx.cloudflare.net` y el SPF de Cloudflare en `wasmish.com`), que lo reenvía al Gmail de Jonathan;
+  - y **envía** desde el 2026-10-22 por **Resend** (región São Paulo): Gmail la tiene en «Enviar como», con el SMTP `smtp.resend.com:587` (TLS, usuario `resend`, una API key de solo envío para `wasmish.com`). En Cloudflare, solo los registros de envío: el DKIM `resend._domainkey` (TXT) y los CNAME `send` y `rsend`, más el DMARC `_dmarc` (`v=DMARC1; p=none;`). **En Resend, «Enable Receiving» va apagado:** pide un MX en `wasmish.com` que le quitaría el correo a Email Routing.
 
 ### Comandos y pruebas
 
