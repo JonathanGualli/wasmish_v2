@@ -309,15 +309,15 @@ const procesarEco = async (inbound, echoData) => {
     }
 
     // Una reacción desde la app: a su original, como nuestra. No pausa al bot
-    // (reaccionar no es responder). Sin original no hay nada que guardar.
+    // (reaccionar no es responder). Sin original no hay nada que guardar:
+    // `applyReaction` deja el motivo en el log.
     if (echoData?.type === 'reaction') {
         const reaction = describeReaction(echoData);
-        const status = reaction
-            ? await applyReaction({ line: inbound, reaction, side: 'me', identity: describeEchoRecipient(echoData), origin: 'businessApp' })
-            : 'malformed';
-        if (status !== 'applied' && status !== 'unchanged') {
-            console.warn('Reacción desde la app no aplicada; se descarta:', { waMessageId: echoData?.id, status });
+        if (!reaction) {
+            console.warn('Reacción desde la app mal formada; se descarta:', { waMessageId: echoData?.id });
+            return;
         }
+        await applyReaction({ line: inbound, reaction, side: 'me', identity: describeEchoRecipient(echoData), origin: 'businessApp' });
         return;
     }
 

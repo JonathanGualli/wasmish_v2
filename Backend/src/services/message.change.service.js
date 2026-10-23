@@ -10,10 +10,14 @@ import { findContactByIdentity, conversationLineFilter } from '../controllers/co
 import { sendToAccount } from '../controllers/stream.controller.js';
 import { hasContactIdentity } from '../utils/contact.identity.js';
 import { DELETED_PREVIEW, serializeMessageUpdate } from '../utils/message.change.js';
+import { wamidMessageKey } from '../utils/wamid.js';
 
 // Escrituras condicionadas que pierden contra otra entrega a la vez: se relee y
 // se vuelve a intentar, hasta aquí.
 const MAX_ATTEMPTS = 3;
+
+// Hasta dónde busca el original por la clave del wamid (`findByMessageKey`).
+const KEY_LOOKUP_DAYS = 30;
 
 // Sin texto ni teléfonos, como el resto del webhook.
 const warn = (reason, change) => console.warn('Cambio de mensaje no aplicado:', {
@@ -21,22 +25,55 @@ const warn = (reason, change) => console.warn('Cambio de mensaje no aplicado:', 
 });
 
 /**
+ * El original por la clave de su wamid (`wamidMessageKey`), cuando Meta lo
+ * nombra con otro wamid que el guardado: la reacción del contacto a un eco de
+ * la coexistencia (2026-10-22). Solo en la conversación del contacto del
+ * webhook en esa línea, entre los mensajes de los últimos 30 días (lo que Meta
+ * deja reaccionar), y solo si uno y nada más que uno tiene esa clave.
+ */
+const findByMessageKey = async ({ line, waMessageId, identity }) => {
+    const key = wamidMessageKey(waMessageId);
+    if (!key || !hasContactIdentity(identity)) return null;
+    const contact = await findContactByIdentity(line.accountId, identity);
+    if (!contact) return null;
+    const conversation = await Conversation.findOne({
+        userId: line.accountId, ...conversationLineFilter(line), contactId: contact._id,
+    }).select('_id').lean();
+    if (!conversation) return null;
+
+    const since = new Date(Date.now() - KEY_LOOKUP_DAYS * 24 * 60 * 60 * 1000);
+    const candidates = await Message.find({
+        conversationId: conversation._id, timestamp: { $gte: since }, waMessageId: { $type: 'string' },
+    }).select('_id waMessageId').lean();
+    const matches = candidates.filter(msg => wamidMessageKey(msg.waMessageId) === key);
+    if (matches.length !== 1) return null;
+
+    // Confirma en producción que Meta usó otro wamid (solo ids, como el resto del webhook).
+    console.warn('Original encontrado por la clave del wamid:', {
+        waMessageId, savedWaMessageId: matches[0].waMessageId, messageId: String(matches[0]._id),
+    });
+    return Message.findById(matches[0]._id).lean();
+};
+
+/**
  * El mensaje al que apunta un aviso de Meta (un borrado, una edición, una
  * reacción), solo si es de la cuenta y la línea del webhook y de la
  * conversación del contacto del webhook (el remitente en un entrante, el
  * destinatario en un eco). El contacto se busca sin crearlo. Con `direction`,
- * además, de esa dirección; con null, de cualquiera (una reacción).
+ * además, de esa dirección; con null, de cualquiera (una reacción). Si el
+ * wamid no está tal cual, lo busca por su clave (`findByMessageKey`).
  *
- * @returns {Promise<{ status: 'found', message, conversation }|{ status: 'not_found' }|{ status: 'rejected', reason: string }>}
+ * @returns {Promise<{ status: 'found', message, conversation }|{ status: 'not_found'|'rejected', reason: string }>}
  */
 export const findWebhookTarget = async ({ line, waMessageId, identity, direction = null }) => {
-    const message = await Message.findOne({ waMessageId }).lean();
-    if (!message) return { status: 'not_found' };
+    const message = await Message.findOne({ waMessageId }).lean()
+        ?? await findByMessageKey({ line, waMessageId, identity });
+    if (!message) return { status: 'not_found', reason: 'message' };
 
     const conversation = await Conversation.findOne({
         _id: message.conversationId, userId: line.accountId, ...conversationLineFilter(line),
     }).select('_id lineId contactId').lean();
-    if (!conversation) return { status: 'not_found' };
+    if (!conversation) return { status: 'not_found', reason: 'conversation' };
 
     if (direction && message.direction !== direction) return { status: 'rejected', reason: 'direction' };
     if (!hasContactIdentity(identity)) return { status: 'rejected', reason: 'no_identity' };

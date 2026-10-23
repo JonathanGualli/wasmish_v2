@@ -603,6 +603,27 @@ test('una reacción del contacto se pega a su mensaje: sin mensaje nuevo, sin no
     assert.equal(await eventually(() => pushCalls.length > pushesBefore, 300), false, 'una reacción avisó por push');
 });
 
+// Regresión que vigila: el 2026-10-22, en producción, la reacción del contacto
+// a lo respondido desde la app quedó como burbuja suelta «Reaccionó con 👍»: el
+// eco llega con el wamid del BSUID y la reacción lo nombra con el del teléfono
+// (la misma clave). El test de arriba usa el wamid exacto y no lo veía.
+test('una reacción al eco con el otro wamid del mismo mensaje se pega, sin burbuja suelta', async () => {
+    const from = '593990006604';
+    const key = '3EB0753E62177D79E00893';
+    const wamid = (recipient) => 'wamid.' + Buffer.concat([
+        Buffer.from([0x1c, 0x18, recipient.length]), Buffer.from(recipient, 'latin1'),
+        Buffer.from([0x15, 0x02, 0x00, 0x11, 0x18, key.length]), Buffer.from(key, 'latin1'), Buffer.from([0x00]),
+    ]).toString('base64');
+    await postEcho(MW_NUMBER, [echoOf({ to: from, body: 'Las piezas del gato', id: wamid('PE.1000000000000000') })]);
+    const original = await Message.findOne({ text: 'Las piezas del gato', origin: 'businessApp' }).lean();
+    const messagesBefore = await Message.countDocuments({ conversationId: original.conversationId });
+
+    assert.equal((await postWebhook(MW_NUMBER, reactionOf(from, wamid(from), '❤️'))).status, 200);
+
+    assert.equal((await Message.findById(original._id).lean()).reactions.them.emoji, '❤️');
+    assert.equal(await Message.countDocuments({ conversationId: original.conversationId }), messagesBefore, 'quedó una burbuja suelta');
+});
+
 test('una reacción a un mensaje que no está: mensaje suelto sin no leído ni push; quitarla no guarda nada', async () => {
     const from = '593990006602';
     const pushesBefore = pushCalls.length;

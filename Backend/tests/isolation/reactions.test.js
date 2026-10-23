@@ -35,10 +35,10 @@ const chat = async ({ account = a, line = LINE_A1 } = {}) => {
 };
 
 /** Un mensaje de la conversación; si es el más nuevo, pasa a su vista previa (como el webhook). */
-const message = async (conversation, { direction = 'outbound', text = 'Te paso la cotización', ts = at(0) } = {}) => {
+const message = async (conversation, { direction = 'outbound', text = 'Te paso la cotización', ts = at(0), waMessageId = `wamid.rx.${++seq}` } = {}) => {
     const msg = await Message.create({
         conversationId: conversation._id, direction, sender: direction === 'inbound' ? 'them' : 'me',
-        waMessageId: `wamid.rx.${++seq}`, type: 'text', text, timestamp: ts,
+        waMessageId, type: 'text', text, timestamp: ts,
     });
     await Conversation.updateOne(
         { _id: conversation._id, $or: [{ lastMessageAt: null }, { lastMessageAt: { $lte: ts } }] },
@@ -213,4 +213,79 @@ test('dos reacciones cruzadas: la bandeja queda con la vigente', async () => {
     assert.ok(intercepted, 'el test no forzó el cruce');
     assert.equal((await reload(msg)).reactions.them.emoji, '❤️');
     assert.equal((await conversationOf(conversation)).lastMessage, 'Reaccionó ❤️ a: «Pedido»');
+});
+
+// --- El original con otro wamid (2026-10-22) ---------------------------------
+
+/** Un wamid de Meta: `1C 18 <largo> <destinatario> 15 ?? 00 ?? 18 <largo> <clave> 00`. */
+const wamid = (recipient, key) => 'wamid.' + Buffer.concat([
+    Buffer.from([0x1c, 0x18, recipient.length]), Buffer.from(recipient, 'latin1'),
+    Buffer.from([0x15, 0x02, 0x00, 0x11, 0x18, key.length]), Buffer.from(key, 'latin1'), Buffer.from([0x00]),
+]).toString('base64');
+let keySeq = 0;
+const nextKey = () => `3EB0${String(++keySeq).padStart(18, '0')}`;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Un eco guardado con el wamid del BSUID, como los de la coexistencia; `alias`, el del teléfono. */
+const echoWithAlias = async (conversation, { ts = new Date(), text = 'Te paso la cotización' } = {}) => {
+    const key = nextKey();
+    const msg = await message(conversation, { ts, text, waMessageId: wamid('PE.1000000000000000', key) });
+    return { msg, key, alias: { waMessageId: wamid('593990000000', key) } };
+};
+const reactionNow = (target, emoji) => ({ waMessageId: `wamid.re.${++seq}`, targetWaMessageId: target.waMessageId, emoji, timestamp: new Date() });
+
+// Regresión que vigila: el 2026-10-22, en producción, las reacciones del
+// contacto a lo respondido desde la app quedaron sueltas («Reaccionó con 👍»):
+// el eco se guardó con el wamid del BSUID y la reacción lo nombró con otro.
+test('reacción con otro wamid del mismo mensaje (eco de la coexistencia): se pega', async () => {
+    const { conversation, identity } = await chat();
+    const { msg, alias } = await echoWithAlias(conversation);
+    const before = await countMessages(conversation);
+
+    assert.equal(await react(reactionNow(alias, '👍'), identity), 'applied');
+    assert.equal((await reload(msg)).reactions.them.emoji, '👍');
+    assert.equal(await countMessages(conversation), before);
+    assert.equal((await conversationOf(conversation)).lastMessage, 'Reaccionó 👍 a: «Te paso la cotización»');
+});
+
+test('por la clave, solo en la conversación del contacto, de esa línea y esa cuenta', async () => {
+    const mine = await chat();
+    const { msg, alias } = await echoWithAlias(mine.conversation);
+
+    const stranger = await chat();
+    assert.equal(await react(reactionNow(alias, '👍'), stranger.identity), 'not_found', 'otro contacto');
+    assert.equal(await react(reactionNow(alias, '👍'), mine.identity, { line: LINE_A2 }), 'not_found', 'la otra línea');
+    const other = await chat({ account: b, line: LINE_B });
+    assert.equal(await react(reactionNow(alias, '👍'), { ...other.identity, phone: mine.identity.phone }, { line: LINE_B }), 'not_found', 'otra cuenta');
+
+    assert.equal((await reload(msg)).reactions, undefined);
+});
+
+test('por la clave: dos mensajes con la misma clave o uno de hace más de 30 días no se tocan', async () => {
+    const { conversation, identity } = await chat();
+    const { msg, key, alias } = await echoWithAlias(conversation);
+    const twin = await message(conversation, { ts: new Date(), waMessageId: wamid('PE.2000000000000000', key) });
+    assert.equal(await react(reactionNow(alias, '👍'), identity), 'not_found', 'ambiguo');
+    for (const m of [msg, twin]) assert.equal((await reload(m)).reactions, undefined);
+
+    const old = await echoWithAlias(conversation, { ts: new Date(Date.now() - 31 * DAY_MS) });
+    assert.equal(await react(reactionNow(old.alias, '👍'), identity), 'not_found', 'más de 30 días');
+    assert.equal((await reload(old.msg)).reactions, undefined);
+});
+
+test('sin original, el log dice cuál buscaba y por qué', async () => {
+    const { identity } = await chat();
+    const warnings = [];
+    const originalWarn = console.warn;
+    console.warn = (...args) => { warnings.push(args); };
+    try {
+        assert.equal(await react(reactionNow({ waMessageId: 'wamid.no.esta' }, '👍'), identity), 'not_found');
+    } finally {
+        console.warn = originalWarn;
+    }
+    const logged = warnings.find(([label]) => String(label).includes('Reacción sin su original'));
+    assert.ok(logged, 'no quedó en el log');
+    assert.equal(logged[1].targetWaMessageId, 'wamid.no.esta');
+    assert.equal(logged[1].reason, 'message');
+    assert.equal(logged[1].side, 'them');
 });
