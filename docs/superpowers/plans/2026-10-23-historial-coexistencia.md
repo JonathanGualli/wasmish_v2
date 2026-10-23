@@ -51,12 +51,14 @@ Sin el PR 5, Meta no manda nada: es seguro desplegarlo solo.
 **Interfaces:**
 - Consume: `wamidMessageKey(waMessageId)` de `utils/wamid.js`.
 - Produce: `Message.waMessageKey: String | null` (default `null`), escrito por un `pre('validate')` del esquema con `wamidMessageKey(this.waMessageId)` cuando cambia `waMessageId`. Como los cuatro sitios que crean mensajes (`webhook.controller.js` dos veces, `chat.controller.js`, `template.controller.js`) usan `Message.create` con el `waMessageId` ya puesto, ninguno cambia. El worker (Tarea 6) también usa `Message.create`.
-- Produce: índice `message_conversation_waMessageKey_unique` `{ conversationId: 1, waMessageKey: 1 }`, único, parcial con `waMessageKey: { $type: 'string' }`. Un E11000 por este índice lo tratan como «ya guardado» los mismos `catch` que hoy atrapan `waMessageId_unico` (`if (error.code === 11000) return;`).
+- Produce: `Message.fromHistory: Boolean` (default `undefined`: solo lo traído del historial lo lleva, `true`).
+- Produce: índice `message_conversation_waMessageKey_unique` `{ conversationId: 1, waMessageKey: 1 }`, único, parcial con `waMessageKey: { $type: 'string' }`; y `message_waMessageKey` `{ waMessageKey: 1 }`, normal, para buscar el mensaje de un archivo de 14 días sin saber su conversación (Tarea 6; el único no sirve, empieza por `conversationId`). Un E11000 por este índice lo tratan como «ya guardado» los mismos `catch` que hoy atrapan `waMessageId_unico` (`if (error.code === 11000) return;`).
 
 - [ ] **Paso 1: Tests que fallan** (en `webhook.test.js`):
   - `un eco con otro wamid de la misma clave que un mensaje ya guardado no crea otro`: crear en la conversación un `Message` con el wamid del teléfono (el formato de `tests/wamid.test.js`), mandar un eco con el wamid del BSUID de la misma clave → sigue habiendo **un** mensaje.
   - `dos mensajes de claves distintas en la misma conversación conviven` y `la misma clave en otra conversación no choca`.
   - `un wamid sin la forma conocida guarda waMessageKey null` (y dos así conviven).
+  - `fromHistory se guarda`: crear un `Message` con `fromHistory: true` y leerlo de Mongo (`Message.collection.findOne`).
 - [ ] **Paso 2:** `cd Backend && node --test tests/isolation/webhook.test.js` → FALLA.
 - [ ] **Paso 3:** el campo, el hook y el índice. Comentario en el modelo con el porqué (el #121 y el historial).
 - [ ] **Paso 4:** el mismo comando → PASA; `npm test` y `npm run test:isolation` en verde.
@@ -76,13 +78,13 @@ Sin el PR 5, Meta no manda nada: es seguro desplegarlo solo.
 - Produce: `describeHistoryMessage(messageData, contactPhone)` → `null` si no tiene `id` o si es `edit`/`revoke` (`isMessageChange`); si no, `{ waMessageId, direction: 'inbound' | 'outbound', timestamp: Date, status, isPlaceholder, isReaction }`. `direction`: `inbound` si `normalizeWaPhone(from) === contactPhone`. `status` (solo salientes; los entrantes, `'delivered'`): `READ`/`PLAYED` → `read`, `DELIVERED` → `delivered`, `SENT`/`PENDING` → `sent`, `ERROR` → `failed`, otro → `sent`. `timestamp`: los segundos en texto de Meta.
 - Produce: `historySyncView(sync, now = new Date())` → `null` sin `sync`; si no, `{ status, progress, failedThreads, canRetry, retryUntil }` con:
   - `status`: `declined` si `sync.declined`; `partial`/`done` si `sync.finishedAt` (según `failedThreads`); `receiving` si `sync.firstChunkAt`; `failed` si `sync.requests.history.state === 'rejected'`; `pending` si está `pending` o `requesting`; `none` si pasaron 24 h desde `connectionAt`; si no, `requested`.
-  - `canRetry`: dentro de las 24 h, sin `firstChunkAt` ni `declined`, y algún pedido `rejected` o `uncertain` con `claimedAt` de hace más de 30 minutos. `retryUntil` = `connectionAt` + 24 h (ISO).
+  - `retryable`: los pedidos (`'contacts'`, `'history'`) que se pueden reintentar, **cada uno por su cuenta**, dentro de las 24 h: uno `rejected` siempre; uno `uncertain` si su `claimedAt` es de hace más de 30 minutos y, si es el del historial, sin `firstChunkAt` ni `declined` (si llegaron trozos, Meta lo aceptó). `canRetry` = `retryable.length > 0`. `retryUntil` = `connectionAt` + 24 h (ISO).
 
 - [ ] **Paso 1: Tests que fallan** (con los ejemplos de la referencia de Meta: `from: '15550783881'`, hilo `16505551234`, `timestamp: '1739230970'`):
   - `describeHistoryChunk`: un trozo con dos hilos → los dos con su teléfono; con `errors: [{ code: 2593109 }]` → `{ declined: true }`; un hilo con `id: 'abc'` se descarta; `phase: '1'` → `1`.
   - `splitThreadMessages`: 1200 mensajes → piezas de 500, 500 y 200; 10 mensajes de 1 MB con `maxBytes` de 4 MB → piezas de como mucho 4 MB; `[]` → `[]`.
   - `describeHistoryMessage`: `from` del contacto → `inbound` con `status: 'delivered'`; del negocio con `PLAYED` → `outbound` y `read`; `from: '+1 650-555-1234'` del contacto → `inbound` (Review Focus 2); `type: 'media_placeholder'` → `isPlaceholder: true`; `type: 'reaction'` → `isReaction: true`; `type: 'revoke'` → `null`; sin `id` → `null`.
-  - `historySyncView`: un caso por cada `status`; `canRetry` con `rejected` dentro del plazo → `true`, fuera → `false`; con `uncertain` a los 10 minutos → `false` y a los 31 → `true`; con `firstChunkAt` → `false`.
+  - `historySyncView`: un caso por cada `status`; `canRetry` con `rejected` dentro del plazo → `true`, fuera → `false`; con `uncertain` a los 10 minutos → `false` y a los 31 → `true`; el historial `uncertain` con `firstChunkAt` → no se reintenta; **contactos `rejected` y historial recibiendo → `retryable: ['contacts']`**.
 - [ ] **Paso 2:** `cd Backend && node --test tests/history.sync.test.js` → FALLA.
 - [ ] **Paso 3:** implementar.
 - [ ] **Paso 4:** el mismo comando → PASA; `npm test` en verde.
@@ -91,13 +93,13 @@ Sin el PR 5, Meta no manda nada: es seguro desplegarlo solo.
 ### Tarea 3: Los modelos (`historySync`, `HistoryThread`, `HistoryMedia`)
 
 **Archivos:**
-- Modificar: `Backend/src/models/line.model.js`, `Backend/tests/isolation/helpers.js` (exportar los modelos nuevos)
+- Modificar: `Backend/src/models/line.model.js`, `Backend/src/models/contact.model.js` (`source` admite `'businessApp'`: lo usa el worker del PR 3), `Frontend/src/models/contact.model.ts` y `Frontend/src/utils/contactDisplay.ts` (`SOURCE_LABEL.businessApp = 'De la app de WhatsApp Business'`), `Backend/tests/isolation/helpers.js` (exportar los modelos nuevos)
 - Crear: `Backend/src/models/history.thread.model.js`, `Backend/src/models/history.media.model.js`
 
 **Interfaces:**
 - Produce: `Line.historySync` (default `undefined`): `{ connectionAt: Date, requests: { contacts: requestSchema, history: requestSchema }, declined: Boolean, progress: Number, firstChunkAt, lastChunkAt, historyComplete: Boolean, finishedAt, failedThreads: Number }`, con `requestSchema = { state: enum ['pending', 'requesting', 'accepted', 'uncertain', 'rejected'], requestId, claimedAt, error: { code, detail } }`.
 - Produce: `HistoryThread`: `{ userId, lineId, connectionAt, contactPhone, phase, chunkOrder, part, messages: [Mixed], status: enum ['pending', 'processing', 'done', 'failed'], attempts, leaseUntil, claimToken, error }`, timestamps. Índices: `history_thread_piece_unique` `{ lineId, connectionAt, phase, chunkOrder, contactPhone, part }` único; `history_thread_queue` `{ status, createdAt }`.
-- Produce: `HistoryMedia`: `{ userId, lineId, connectionAt, waMessageId, messageData: Mixed, applied: Boolean }`, timestamps. Índice `history_media_unique` `{ lineId, connectionAt, waMessageId }` único.
+- Produce: `HistoryMedia`: `{ userId, lineId, connectionAt, mediaKey, waMessageId, waMessageKey, messageData: Mixed, applied: Boolean }`, timestamps. `mediaKey` = `waMessageKey ?? 'id:' + waMessageId` (la identidad del spec, con el wamid literal de reserva). Índice `history_media_unique` `{ lineId, connectionAt, mediaKey }` único.
 
 - [ ] **Paso 1:** los tres modelos, con un comentario que remite al spec.
 - [ ] **Paso 2:** `npm run test:isolation` en verde (los índices se crean sin chocar).
@@ -114,7 +116,7 @@ Sin el PR 5, Meta no manda nada: es seguro desplegarlo solo.
 **Interfaces:**
 - Consume: `describeHistoryChunk`, `splitThreadMessages` (Tarea 2); los modelos (Tarea 3); `findInboundLine`.
 - Produce (`history.intake.service.js`): `storeHistoryChunks(inbound, value)` → `{ stored: number, declined: boolean, ignored: boolean }`. Sin `historySync` de la conexión actual → `ignored`. `declined` → `$set: { 'historySync.declined': true }`. Si no, `insertMany(..., { ordered: false })` de las piezas (un E11000 de una reentrega no es error) y `$max: { 'historySync.progress' }`, `$min: { firstChunkAt }`, `$set: { lastChunkAt, historyComplete: true si progress 100 }`, `$unset: { finishedAt }`.
-- Produce: `storeHistoryMedia(inbound, value)` → guarda cada `value.messages[]` con `id` en `HistoryMedia` (`upsert`, sin pisar `applied`). Lo aplica la Tarea 6.
+- Produce: `storeHistoryMedia(inbound, value)` → guarda cada `value.messages[]` con `id` en `HistoryMedia` por `mediaKey` (`upsert`, sin pisar `applied`). Lo aplica la Tarea 6.
 - Modifica `handleWebhook`: `change.field === 'history'` va **antes** de procesar `value.messages`: llama a `storeHistoryChunks` y a `storeHistoryMedia` y hace `continue` (los `messages[]` de un `history` nunca pasan por `procesarEntrante`). Un error → `retryBatch = true`. Un cuerpo **sin `entry`** pero con `history` y `metadata.phone_number_id` (la forma del error 2593109 en la referencia) se trata como un solo cambio `history`.
 - Modifica `app.js`: `app.use('/api/webhook', express.json({ limit: '20mb', verify }))` antes del parser general, con la **misma** función `verify` (sacarla a una constante para no duplicarla).
 
@@ -124,7 +126,7 @@ Sin el PR 5, Meta no manda nada: es seguro desplegarlo solo.
   - `el error 2593109 marca la línea declined`, también `sin entry`.
   - `una línea sin historySync, o con otro connectionAt, no guarda nada`; `el trozo de un número de otra cuenta no toca la línea de esta`.
   - `progress 100 marca historyComplete`; `un trozo nuevo borra finishedAt`.
-  - **Review Focus 5:** `un messages[] bajo field history no crea un mensaje en vivo`: se guarda en `HistoryMedia`, no hay `Message`, ni no leídos, ni push (`pushCalls` vacío).
+  - **Review Focus 5:** `un messages[] bajo field history no crea un mensaje en vivo`: se guarda en `HistoryMedia`, no hay `Message`, ni no leídos, ni push ni trabajo del bot. Con la misma preparación y el mismo control positivo que el test de la Tarea 6 (sin ellos, `pushCalls` vacío no prueba nada).
   - **Review Focus 3:** `un cuerpo de 1 MB a otra ruta de la API sigue dando 413`, y `uno de 5 MB al webhook con mala firma da 401`.
 - [ ] **Paso 2:** `cd Backend && node --test tests/isolation/history.test.js` → FALLA.
 - [ ] **Paso 3:** implementar.
@@ -166,19 +168,20 @@ Sin el PR 5, Meta no manda nada: es seguro desplegarlo solo.
   1. La línea (con su token de WABA, como `findInboundLine` pero por `lineId`, también si ya no está activa: lo ya recibido se termina de importar).
   2. `resolveContact(piece.userId, { phone: piece.contactPhone }, { source: 'businessApp' })` y `findOrCreateConversation`.
   3. Por cada mensaje en orden de `timestamp`: placeholder → `type: 'unsupported'` (el tipo que ya usan los «no compatible»), `text: HISTORY_PLACEHOLDER_TEXT`; reacción → `applyReaction` con el lado según `direction`, y si no encuentra el original, nada; si no, `describeInboundMessage` + `describeMessageContext`. Un saliente lleva `origin: 'businessApp'`, `sender: 'me'` y el `status` de `describeHistoryMessage`; un entrante, `sender: 'them'`, `status: 'delivered'`. Los dos, `fromHistory: true`. **Nunca** `bot`, ni tocar la conversación salvo la vista previa.
-  4. Duplicado: `Message.create` con E11000 → `skipped`. Antes de crear, si `wamidMessageKey` da una clave, `Message.exists({ conversationId, waMessageKey })` **o** un mensaje viejo sin `waMessageKey` cuyo `waMessageId` tenga esa clave (búsqueda por la conversación, sin límite de días) → `skipped`.
-  5. Después de crear cada mensaje: `applyHistoryMedia(line, message)` (abajo).
-  6. Al final, `advanceConversationPreview` con el último mensaje creado; si la vista previa cambió, el mismo `conversation_updated` que emite `procesarEco`.
-- Produce: `applyHistoryMedia(line, message)` → busca `HistoryMedia` `{ lineId, connectionAt, waMessageId, applied: false }`; si está, `describeInboundMessage(media.messageData)` da tipo, `caption` y `mediaId`; `descargarAdjunto`; `$set` en el mensaje y `applied: true`; `message_updated` por SSE.
-- Modifica `storeHistoryMedia` (Tarea 4): **después** de guardar, busca el mensaje por `waMessageId` en conversaciones de esa línea y, si existe, `applyHistoryMedia`. Los dos lados escriben antes de buscar.
+  4. Duplicado: antes de crear, se busca el que ya está (por `{ conversationId, waMessageKey }` o, en un mensaje viejo sin `waMessageKey`, un `waMessageId` de esa clave en la conversación, sin límite de días); `Message.create` con E11000 también lo busca. Un duplicado → `skipped`, pero **se sigue con el que ya está** (pasos 5 y 6): una pieza que se cortó a medias y se reintenta tiene que terminar lo que quedó pendiente.
+  5. Por cada mensaje de la pieza, creado o ya existente: `applyHistoryMedia(line, message)` (abajo).
+  6. Al final, `advanceConversationPreview` con el más nuevo **de los mensajes de la pieza que están en Mongo** (creados o ya existentes), no solo con el último creado; si la vista previa cambió, el mismo `conversation_updated` que emite `procesarEco`.
+- Produce: `applyHistoryMedia(line, message)` → busca `HistoryMedia` `{ lineId, connectionAt, mediaKey: message.waMessageKey ?? 'id:' + message.waMessageId, applied: false }`; si está, `describeInboundMessage(media.messageData)` da tipo, `caption` y `mediaId`; `descargarAdjunto`; `$set` en el mensaje y `applied: true` (condicionado a `applied: false`, para no aplicarlo dos veces); `message_updated` por SSE. Idempotente.
+- Modifica `storeHistoryMedia` (Tarea 4): **después** de guardar, busca el mensaje por `waMessageKey` (índice `message_waMessageKey`) o, sin clave, por `waMessageId`, y se queda con el que esté en una conversación **de esa línea**; si existe, `applyHistoryMedia`. Los dos lados escriben antes de buscar.
 
 - [ ] **Paso 1: Tests que fallan:**
   - `un hilo crea el contacto, la conversación y sus mensajes en los dos sentidos`, con `fromHistory`, `origin: 'businessApp'` en los salientes y el estado de Meta.
-  - `nada de lo traído suma no leídos, mueve lastInboundAt, manda push ni crea trabajo del bot`.
+  - `nada de lo traído suma no leídos, mueve lastInboundAt, manda push ni crea trabajo del bot`, con la preparación de `webhook.test.js` (respuestas automáticas encendidas y una suscripción push en la cuenta), **un entrante de control** que sí avisa y crea trabajo, y después esperar (`eventually`) antes de comprobar que el historial no sumó push, trabajos ni la pausa del bot (`markHumanReply`).
   - `una conversación nueva queda con la vista previa y la fecha de su último mensaje`; **Review Focus 1:** `en una conversación con un entrante en vivo más nuevo, la vista previa y los no leídos no cambian`.
   - `una pieza importada dos veces no duplica`; `un mensaje que ya estaba con otro wamid de la misma clave no se duplica`, también si es de hace 40 días y no tiene `waMessageKey`.
   - `el placeholder se guarda con su etiqueta y nunca con text vacío`.
-  - `el archivo llega antes que el hilo`, `durante` (después de reclamar la pieza y antes de crear el mensaje: con un gancho del test) y `después`: en los tres el mensaje termina con su tipo, `caption` y archivo, y `applied: true`.
+  - `el archivo llega antes que el hilo`, `durante` (después de reclamar la pieza y antes de crear el mensaje: con un gancho del test) y `después`: en los tres el mensaje termina con su tipo, `caption` y archivo, y `applied: true`. Los dos órdenes también **con wamids distintos de la misma clave** en el placeholder y en el archivo.
+  - `una pieza que se cortó después de crear sus mensajes, al reintentarse, aplica el archivo y la vista previa`: con un gancho que lanza después del último `Message.create`, y otro antes de `advanceConversationPreview`; tras recuperar la pieza, el archivo está aplicado y la conversación tiene la vista previa de su último mensaje.
   - `una reacción del historial se pega a su original; sin original, no crea nada`.
   - `el historial de la línea de una cuenta no crea nada en otra`.
 - [ ] **Paso 2:** → FALLA. **Paso 3:** implementar. **Paso 4:** → PASA, todo en verde.
@@ -190,7 +193,7 @@ Sin el PR 5, Meta no manda nada: es seguro desplegarlo solo.
 
 **Archivos:**
 - Crear: `Backend/src/utils/agenda.js`, `Backend/src/models/agenda.entry.model.js`, `Backend/src/services/agenda.service.js`
-- Modificar: `Backend/src/models/contact.model.js` (`agendaName`, `agendaSyncedAt`, `source` con `'businessApp'`), `Backend/src/utils/contact.identity.js` (`contactDisplayName`), `Backend/src/utils/contact.query.js` (`SEARCH_FIELDS` con `agendaName`), `Backend/src/controllers/contact.controller.js` (`resolveContact`, `createContact`, `serializeContact`), `Backend/src/controllers/contact.import.controller.js`, `Backend/src/controllers/webhook.controller.js`, `Frontend/src/models/contact.model.ts` (`agendaName`, el `source` nuevo), `Frontend/src/utils/contactDisplay.ts` (`SOURCE_LABEL.businessApp = 'De la app de WhatsApp Business'`)
+- Modificar: `Backend/src/models/contact.model.js` (`agendaName`, `agendaSyncedAt`, `source` con `'businessApp'`), `Backend/src/utils/contact.identity.js` (`contactDisplayName`), `Backend/src/utils/contact.query.js` (`SEARCH_FIELDS` con `agendaName`), `Backend/src/controllers/contact.controller.js` (`resolveContact`, `createContact`, `serializeContact`), `Backend/src/controllers/contact.import.controller.js`, `Backend/src/controllers/webhook.controller.js`, `Frontend/src/models/contact.model.ts` (`agendaName`), `Frontend/src/utils/contactDisplay.ts` (`onlyPhone` y `avatarName` cuentan `agendaName`: hoy un contacto con solo teléfono y nombre de la agenda saldría con su teléfono de título)
 - Test: `Backend/tests/agenda.test.js`, `Backend/tests/contact.identity.test.js`, `Backend/tests/isolation/agenda.test.js` (nuevo)
 
 **Interfaces:**
@@ -203,8 +206,8 @@ Sin el PR 5, Meta no manda nada: es seguro desplegarlo solo.
 
 - [ ] **Paso 1: Tests que fallan:**
   - Unitarios: `describeAgendaChange` con el ejemplo de Meta (`phone_number: '16505551234'`, `timestamp: '1739321024'`), con `remove` sin nombres, con `+1 650…`, sin teléfono → `null`, con `timestamp` número; `contactDisplayName` con `agendaName` y sin `name` → el de la agenda, con `name` → `name`.
-  - Aislamiento: `la agenda nombra a un contacto que ya existe`; `un contacto que escribe después nace con agendaName`; `uno creado a mano, por la API o al importar toma agendaName`; `la agenda que llega mientras se crea el contacto queda aplicada` (con un gancho entre crear y aplicar, en los dos órdenes); `un remove vacía agendaName`; `una entrada vieja no pisa una nueva`; `name nunca cambia`; `la agenda de una cuenta no nombra al contacto de otra con el mismo teléfono`; `los de la agenda sin chat no salen en GET /api/contacts`; `buscar por el nombre de la agenda lo encuentra`; `un fallo de la BD al guardar responde 500`.
-- [ ] **Paso 2:** → FALLA. **Paso 3:** implementar. **Paso 4:** → PASA; `npm test`, `npm run test:isolation`, y en `Frontend/` `npm run lint` y `npm run build`.
+  - Aislamiento: `la agenda nombra a un contacto que ya existe`; `un contacto que escribe después nace con agendaName`; `uno creado a mano, por la API o al importar toma agendaName`; `la agenda que llega mientras se crea el contacto queda aplicada` (con un gancho entre crear y aplicar, en los dos órdenes); `un remove vacía agendaName`; `una entrada vieja no pisa una nueva`; `name nunca cambia`; `la agenda de una cuenta no nombra al contacto de otra con el mismo teléfono`; `los de la agenda sin chat no salen en GET /api/contacts`; `buscar por el nombre de la agenda lo encuentra`; `GET /api/contacts devuelve agendaName y displayName con el de la agenda`; `un fallo de la BD al guardar responde 500`.
+- [ ] **Paso 2:** → FALLA. **Paso 3:** implementar. **Paso 4:** → PASA; `npm test`, `npm run test:isolation`, y en `Frontend/` `npm run lint` y `npm run build`. En Chromium, un contacto con solo teléfono y nombre de la agenda: título, subtítulo y avatar en Contactos, la bandeja y la ficha.
 - [ ] **Paso 5:** `webhook:simulate -- agenda --phone <n> --name <nombre>` (`--remove`). `contactos.md` (sección «Agenda del celular»), `pruebas-y-scripts.md`, `Backend/AGENTS.md`. Commit «Historial: la agenda del celular y agendaName».
 
 ## PR 5 · Encender el pedido (rama `historial-pedido`, desde `master` con el PR 4 unido)
@@ -220,7 +223,7 @@ Sin el PR 5, Meta no manda nada: es seguro desplegarlo solo.
 - Produce (`libs/whatsapp.js`): `requestSmbAppData({ token, phoneNumberId, syncType })` → `POST /{phoneNumberId}/smb_app_data` con `{ messaging_product: 'whatsapp', sync_type: syncType }`; devuelve `data.request_id`.
 - Modifica `applyConnection`: en la misma escritura de la línea, si `plan.action !== 'renew'` **y** `businessApp`, `$set: { historySync: { connectionAt: <el mismo connectedAt>, requests: { contacts: { state: 'pending' }, history: { state: 'pending' } } } }`; si `businessApp` es falso en una conexión nueva, `$unset: { historySync }`. `renew` no toca `historySync`. Después del candado, `wakeHistoryWorker()`.
 - Produce (`history.request.service.js`): `processPendingHistoryRequests(now)`: por cada línea activa con un pedido `pending` dentro de las 24 h, en orden (`contacts` y después `history`), `claimHistoryRequest(lineId, connectionAt, kind)` (`findOneAndUpdate` condicionado a `state: 'pending'` → `requesting`, `claimedAt: now`) y `requestSmbAppData`: con `request_id` → `accepted`; con `err.waErrorCode` → `rejected` y el error; sin respuesta (timeout o red) → `uncertain`. `recoverHistoryRequests()` al arrancar: `requesting` → `uncertain`. El worker los llama en cada vuelta, antes de las piezas.
-- Produce: `retryHistorySync(accountId, lineId, now)` → 404 si no es de la cuenta (`findAccountLine`); 409 `history_sync_unavailable` si `historySyncView(...).canRetry` es falso; si no, pasa a `pending` los pedidos `rejected` y los `uncertain` de más de 30 minutos, y `wakeHistoryWorker()`.
+- Produce: `retryHistorySync(accountId, lineId, now)` → 404 si no es de la cuenta (`findAccountLine`); 409 `history_sync_unavailable` si `historySyncView(...).canRetry` es falso; si no, pasa a `pending` **solo** los pedidos de `retryable` (con escrituras condicionadas a su estado de ese momento), y `wakeHistoryWorker()`.
 - Produce: `POST /api/lines/:id/history-sync` con `authRequired`, `requirePermission('lines.manage')` → 204.
 - Modifica `serializeLine`: `historySync: historySyncView(line.historySync)`.
 
@@ -228,7 +231,7 @@ Sin el PR 5, Meta no manda nada: es seguro desplegarlo solo.
   - `conectar un número de la app deja los dos pedidos pending`; `renovar el token no toca historySync`; `reconectar una línea desconectada lo reinicia`; `un número que no es de la app no tiene historySync`.
   - `el worker pide primero los contactos y después el historial` (`metaCalls`); `dos procesos a la vez piden una sola vez`; `un error de Meta deja rejected` y la vista `failed` con `canRetry`; `un timeout deja uncertain y no se repite`.
   - **Review Focus 4:** `un requesting al arrancar pasa a uncertain`, `canRetry` falso a los 10 minutos y verdadero a los 31.
-  - Ruta: `reintentar la línea de otra cuenta da 404`; `un agente sin lines.manage, 403`; `fuera de las 24 h, o sin nada que reintentar, 409`; `reintentar un rejected lo vuelve a pedir`.
+  - Ruta: `reintentar la línea de otra cuenta da 404`; `un agente sin lines.manage, 403`; `fuera de las 24 h, o sin nada que reintentar, 409`; `reintentar un rejected lo vuelve a pedir`; `con los contactos rejected y el historial ya recibiendo, reintentar pide solo los contactos`.
 - [ ] **Paso 2:** → FALLA. **Paso 3:** implementar. **Paso 4:** → PASA, todo en verde.
 - [ ] **Paso 5:** `whatsapp-envio.md` (el pedido), `api.md` (la ruta), `docs/estado.md`. Commit «Historial: pedirlo al conectar y reintentar».
 
