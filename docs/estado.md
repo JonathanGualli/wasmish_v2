@@ -131,6 +131,7 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
 
 ## En curso
 
+- **El historial y los contactos de la app de WhatsApp Business** (rama `historial-coexistencia`, 2026-10-23): al conectar un número de la app, traer sus chats de los últimos 6 meses y su agenda. Spec `docs/superpowers/specs/2026-10-23-historial-coexistencia-design.md` y brief de UI `docs/superpowers/specs/2026-10-23-historial-coexistencia-brief-ui.md`, en revisión de Codex; falta el plan. **Tiene que estar desplegado antes de conectar el chip del botón de la página**, que es la prueba con Meta de verdad (spec § 9).
 - **Reacciones a lo respondido desde la app, la prueba con Meta de verdad** (en la 1.0.30): reaccionar desde otro celular a algo respondido desde la app, y mirar en el log «Original encontrado por la clave del wamid» (o «Reacción sin su original» con el wamid, si la hipótesis falla).
 - **Citas y reacciones, la prueba con Meta de verdad** (en la 1.0.29): lo que dice «Falta probarlo» en su entrada de «En producción». Además, sin comprobar en el navegador: una reacción que llega por SSE justo cuando falla la nuestra (el código lo cubre con `changeVersion`).
 - **Lo que queda de la página pública:**
