@@ -34,7 +34,8 @@ Cada línea conectada con la app muestra **cómo van sus chats de la app**, en p
 
 - **Pedido, esperando a WhatsApp:** acaba de conectar y todavía no llegó nada (puede tardar unos minutos).
 - **Trayendo tus chats:** con el avance en porcentaje, que sube solo. Los chats van apareciendo en la bandeja mientras tanto.
-- **Listo:** los chats y los contactos ya están en Wasmish.
+- **Listo:** los chats ya están en Wasmish. Habla solo de los chats: los contactos del celular no tienen un «terminado» (siguen llegando cada vez que el negocio cambia su agenda) y las fotos recientes pueden terminar de llegar un poco después.
+- **Listo, con algunos chats que no se pudieron traer:** cuántos. No hay acción para recuperarlos (Meta no los vuelve a mandar); es informativo.
 - **No los compartiste desde la app:** el negocio no lo aceptó en la app. Para traerlos, desconectar y volver a conectar el número (y aceptarlo esta vez). Es informativo, no un error grave.
 - **No llegó nada:** pasaron 24 horas sin que WhatsApp mandara chats (por ejemplo, el celular no tenía). Informativo.
 - **No se pudo pedir:** algo falló al pedirlo. Con **«Reintentar»**, y cuánto tiempo queda para hacerlo (son 24 horas desde que se conectó). Pasado ese plazo, el mismo texto que «No los compartiste»: desconectar y volver a conectar.
