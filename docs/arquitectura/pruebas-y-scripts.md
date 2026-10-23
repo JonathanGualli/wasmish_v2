@@ -10,6 +10,7 @@ Cómo probar sin tocar producción (webhook simulado, contactos de prueba), los 
 - [Probar el webhook en local](#probar-el-webhook-en-local)
 - [Probar las campañas en local](#probar-las-campañas-en-local)
 - [Avisos push en local](#avisos-push-en-local)
+- [Cuentas de demostración](#cuentas-de-demostración)
 - [Scripts de mantenimiento](#scripts-de-mantenimiento)
 - [Versión de la app](#versión-de-la-app)
 - [Tests de aislamiento](#tests-de-aislamiento)
@@ -60,6 +61,30 @@ cd Backend && npm run seed:contacts -- --clean      # borra contactos, conversac
 3. **El aviso de verdad necesita el service worker y la UI de activar** (Tareas 4 a 6 del plan `docs/superpowers/plans/2026-10-14-app-movil.md`). Con ellas: activar los avisos desde la app en `http://localhost:5173` (`localhost` cuenta como seguro, no hace falta HTTPS; en el celular sí: el frontend por ngrok, **sin tocar el webhook de Meta**) y `npm run webhook:simulate` con la pestaña en segundo plano.
 
 **Las claves no se cambian:** cambiarlas invalida todas las suscripciones, y cada persona tendría que volver a activar los avisos. En los tests de aislamiento, `helpers.js` genera unas de usar y tirar y reemplaza el envío (`pushCalls`, `onPush`).
+
+### Cuentas de demostración
+
+**Cuentas de demostración** (`seed:demo`, 2026-10-23): dos cuentas **en producción**, con datos inventados, para enseñar Wasmish a un prospecto de la venta en frío sin abrir conversaciones de clientes reales. Una por nicho: **«Gráfica Andina»** (imprenta, `demo.imprenta@wasmish.com`) y **«Academia Horizonte»** (capacitación, `demo.capacitacion@wasmish.com`), cada una con un agente (`asesor.imprenta@…`, `asesora.capacitacion@…`) y la misma contraseña, que se le da al script y no está en el repo.
+
+```bash
+cd Backend && DEMO_PASSWORD=… npm run seed:demo -- --reset   # crea las dos, o las rehace
+cd Backend && DEMO_PASSWORD=… npm run seed:demo -- --reset --only imprenta
+cd Backend && npm run seed:demo -- --clean                   # las borra, con sus archivos
+```
+
+**En producción**, dentro del contenedor de la api (escribe en la BD: lo corre Jonathan). `read -rs` deja la contraseña fuera del historial, y `-e DEMO_PASSWORD` sin valor la pasa sin que salga en la lista de procesos:
+
+```bash
+cd /opt/docker-projects/prod-wasmish-main
+read -rs DEMO_PASSWORD && export DEMO_PASSWORD
+docker compose exec -e DEMO_PASSWORD wasmish-api npm run seed:demo -- --reset
+```
+
+- **Antes de cada demo, `--reset`:** las fechas se cuentan desde que se corre («hace 2 h», «ayer a las 21:34»), y deshace lo que se tocó en la demo anterior.
+- **Qué enseña cada una:** quien vuelve por una cotización (o por un curso) y lo atiende otra persona, con el historial, el PDF y la nota firmada de quien lo atendió primero; lo respondido «Desde la app de WhatsApp»; las respuestas automáticas encendidas, con respuestas «Bot» fuera de horario y por palabra clave; una conversación con la ventana de 24 h cerrada; y una campaña terminada con sus estadísticas (entregados, leídos, un fallido y respuestas).
+- **Nada sale a WhatsApp, y en la demo no se envía:** el número (`990000000000901` y `…911`, «Junto con la app») y el token son falsos, así que enviar desde el chat da error; los teléfonos de los contactos son `59300077xxxx`. Ningún webhook trae ese número, y la campaña nace terminada, sin nadie en cola.
+- **Solo toca lo suyo:** borra o rehace una cuenta solo si lleva la marca (`Account.plan = 'Demostración'`). Si el correo de un escenario es de otra cuenta, para sin escribir nada (`demoSeedAction`, en `utils/demo.js`, con su test; el borrado y la siembra, en `services/demo.service.js`, con su test de aislamiento).
+- **Los datos** de las dos cuentas (conversaciones, notas, plantillas, la campaña y las respuestas automáticas) están en `Backend/scripts/fixtures/demo.scenarios.js`, y los PDF en `demo-cotizacion.pdf` y `demo-curso.pdf`, en la misma carpeta.
 
 ### Scripts de mantenimiento
 
