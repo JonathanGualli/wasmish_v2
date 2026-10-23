@@ -113,6 +113,23 @@ test('nunca toca una cuenta que no lleva la marca, aunque tenga el correo del es
     assert.deepEqual(await countsOf(real.accountId), realBefore);
 });
 
+test('rehacerla no borra un archivo enviado que también es de otra cuenta', async () => {
+    // Regresión (revisión de Codex del PR #124): lo enviado desde el chat se
+    // guarda por su contenido (`outbound/<sha256>`), compartido entre cuentas.
+    const shared = 'outbound/compartido-demo.pdf';
+    fs.mkdirSync(path.join(mediaDir, 'outbound'), { recursive: true });
+    fs.writeFileSync(path.join(mediaDir, shared), '%PDF-1.4 compartido');
+    const realConversation = await Conversation.findOne({ userId: real.accountId }).lean();
+    await Message.create({ conversationId: realConversation._id, direction: 'outbound', sender: 'me', text: 'precios.pdf', type: 'document', mediaFile: shared, mimeType: 'application/pdf' });
+    // El mismo PDF, enviado durante una demo.
+    const owner = await User.findOne({ email: imprenta.owner.email }).lean();
+    const demoConversation = await Conversation.findOne({ userId: owner.accountId }).lean();
+    await Message.create({ conversationId: demoConversation._id, direction: 'outbound', sender: 'me', text: 'precios.pdf', type: 'document', mediaFile: shared, mimeType: 'application/pdf', status: 'failed' });
+
+    await seed(imprenta, { reset: true });
+    assert.ok(fs.existsSync(path.join(mediaDir, shared)));
+});
+
 test('--clean borra las dos con sus archivos, y la cuenta real sigue entera', async () => {
     const files = await Message.distinct('mediaFile', { mediaFile: /^9900000000009/ });
     assert.ok(files.length >= 2);

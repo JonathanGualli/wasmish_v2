@@ -26,7 +26,7 @@ import { defaultAutoReplySettings } from '../utils/auto.reply.js';
 import { guardarArchivo, nombreDeArchivo, rutaDeArchivo } from '../utils/media.storage.js';
 import {
     DEMO_PLAN, demoPhone, demoTime, firstNameOf, renderDemoBody, demoBulkContacts,
-    demoCampaignResults, demoCampaignRecipients, demoSeedAction,
+    demoCampaignResults, demoCampaignRecipients, demoSeedAction, demoMediaId, isDemoSeededFile,
 } from '../utils/demo.js';
 
 // Las cuentas de demostración (`npm run seed:demo`): una por nicho, con datos
@@ -40,12 +40,17 @@ import {
 const later = (date, minutes) => new Date(date.getTime() + minutes * 60e3);
 const wamid = () => `wamid.demo.${new mongoose.Types.ObjectId()}`;
 
-// Todo lo de una cuenta, también los archivos de sus mensajes. Solo se llama
-// con una cuenta de demostración (`cleanDemoAccount`, `seedDemoAccount`).
+// Todo lo de una cuenta. Solo se llama con una cuenta de demostración
+// (`cleanDemoAccount`, `seedDemoAccount`). Del disco borra solo los PDF que
+// sembró: un archivo enviado desde el chat se guarda por su contenido
+// (`outbound/<sha256>`) y puede ser también de un cliente real que mandó el
+// mismo (revisión de Codex del PR #124). Lo enviado durante una demo queda en
+// el disco, sin mensaje que lo nombre.
 const deleteAccountData = async (accountId, mediaDir) => {
     const conversationIds = await Conversation.distinct('_id', { userId: accountId });
+    const phoneNumberIds = await Line.distinct('phoneNumberId', { accountId });
     const files = await Message.distinct('mediaFile', { conversationId: { $in: conversationIds }, mediaFile: { $type: 'string' } });
-    for (const file of files) {
+    for (const file of files.filter(f => isDemoSeededFile(f, phoneNumberIds))) {
         const ruta = rutaDeArchivo(mediaDir, file);
         if (ruta) await fs.rm(ruta, { force: true });
     }
@@ -171,7 +176,7 @@ export const seedDemoAccount = async (scenario, { passwordHash, now = new Date()
     let mediaSeq = 0;
     const documentFields = async ({ file, filename }) => {
         const contenido = await fs.readFile(path.join(fixturesDir, file));
-        const mediaId = `${line.phoneNumberId}${String(++mediaSeq).padStart(3, '0')}`;
+        const mediaId = demoMediaId(line.phoneNumberId, ++mediaSeq);
         const mediaFile = nombreDeArchivo(mediaId, 'application/pdf');
         await guardarArchivo(mediaDir, mediaFile, contenido);
         return { type: 'document', mediaId, mimeType: 'application/pdf', mediaFile, mediaFilename: filename, mediaSize: contenido.length };

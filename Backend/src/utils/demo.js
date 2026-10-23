@@ -31,6 +31,18 @@ export const demoTime = (spec, now) => {
     return new Date(now.getTime() - Number(relative[1]) * UNIT_MS[relative[2]]);
 };
 
+// Los PDF que siembra la demostración: el `mediaId` es el número de su línea y
+// tres cifras, y el archivo, `<mediaId>.pdf` (`nombreDeArchivo`).
+export const demoMediaId = (phoneNumberId, n) => `${phoneNumberId}${String(n).padStart(3, '0')}`;
+
+/**
+ * Si `file` es un PDF sembrado por la demostración de esas líneas: lo único
+ * que se borra del disco al rehacerla. Lo enviado desde el chat se guarda por
+ * su contenido (`outbound/<sha256>.<ext>`) y lo puede compartir otra cuenta.
+ */
+export const isDemoSeededFile = (file, phoneNumberIds) =>
+    phoneNumberIds.some(id => /^\d+$/.test(id) && new RegExp(`^${id}\\d{3}\\.pdf$`).test(file));
+
 export const firstNameOf = (contact) => (contact.name ?? contact.profileName ?? '').split(' ')[0] || 'cliente';
 
 /** El texto de una plantilla con sus valores: `{{1}}` → `values[0]`. */

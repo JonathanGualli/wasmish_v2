@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
     DEMO_PLAN, demoPhone, demoTime, firstNameOf, renderDemoBody, demoBulkContacts,
-    demoCampaignResults, demoCampaignRecipients, demoSeedAction,
+    demoCampaignResults, demoCampaignRecipients, demoSeedAction, demoMediaId, isDemoSeededFile,
 } from '../src/utils/demo.js';
 
 // 2026-10-23 15:00 UTC = 10:00 en Ecuador.
@@ -85,4 +85,16 @@ test('demoSeedAction: nunca toca una cuenta sin la marca, ni con --reset', () =>
     assert.equal(demoSeedAction(real).action, 'refuse');
     assert.equal(demoSeedAction({ ...real, account: null }).action, 'refuse');
     assert.equal(demoSeedAction({ owner: null, account: null, agentTaken: true, reset: true }).action, 'refuse');
+});
+
+test('isDemoSeededFile: solo los PDF sembrados de esas líneas, nunca lo enviado desde el chat', () => {
+    // Regresión (revisión de Codex del PR #124): `--reset` borraba todos los
+    // archivos de la demo, también `outbound/<sha256>`, que comparte otra
+    // cuenta que envió el mismo archivo.
+    const lines = ['990000000000901'];
+    assert.equal(isDemoSeededFile(`${demoMediaId('990000000000901', 1)}.pdf`, lines), true);
+    assert.equal(isDemoSeededFile('outbound/3f2a9c.pdf', lines), false);
+    assert.equal(isDemoSeededFile('990000000000911001.pdf', lines), false);
+    assert.equal(isDemoSeededFile('990000000000901001.pdf.exe', lines), false);
+    assert.equal(isDemoSeededFile('990000000000901001.pdf', []), false);
 });
