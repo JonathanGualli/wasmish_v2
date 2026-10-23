@@ -32,7 +32,7 @@ El resto de la lista no cambia.
 
 Cada línea conectada con la app muestra **cómo van sus chats de la app**, en pocas palabras. Los estados posibles:
 
-- **Pedido, esperando a WhatsApp:** acaba de conectar y todavía no llegó nada (puede tardar unos minutos). Si a veces Wasmish no sabe si el pedido llegó a WhatsApp, pasada media hora sin nada también ofrece «Reintentar».
+- **Pedido, esperando a WhatsApp:** acaba de conectar y todavía no llegó nada (puede tardar unos minutos). Si pasa media hora sin que llegue nada, también ofrece «Reintentar», por si el pedido no llegó a WhatsApp.
 - **Trayendo tus chats:** con el avance en porcentaje, que sube solo. Los chats van apareciendo en la bandeja mientras tanto.
 - **Listo:** los chats ya están en Wasmish. Habla solo de los chats: los contactos del celular no tienen un «terminado» (siguen llegando cada vez que el negocio cambia su agenda) y las fotos recientes pueden terminar de llegar un poco después.
 - **Listo, con algunos chats que no se pudieron traer:** cuántos. No hay acción para recuperarlos (Meta no los vuelve a mandar); es informativo.
