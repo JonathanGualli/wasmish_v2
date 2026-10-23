@@ -17,7 +17,8 @@
     "migrate:notes": "node scripts/migrate-notes.js",
     "version:bump": "node scripts/bump-version.js",
     "webhook:simulate": "node scripts/simulate-webhook.js",
-    "seed:contacts": "node scripts/seed-test-contacts.js"
+    "seed:contacts": "node scripts/seed-test-contacts.js",
+    "seed:demo": "node scripts/seed-demo.js"
   },
   "config": {
     "mongodbMemoryServer": {
