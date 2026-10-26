@@ -111,6 +111,13 @@ test('el nombre prefiere el que puso el negocio al de WhatsApp', () => {
     assert.equal(resolveVariableValue({ source: 'firstName', fallback: 'cliente' }, ANA).value, 'Ana');
 });
 
+test('sin nombre en Wasmish, el de la agenda del celular va antes que el de WhatsApp', () => {
+    const fromAgenda = { agendaName: 'Ana Pérez (tienda)', profileName: 'Anita' };
+    assert.equal(resolveVariableValue({ source: 'name', fallback: 'cliente' }, fromAgenda).value, 'Ana Pérez (tienda)');
+    assert.equal(resolveVariableValue({ source: 'firstName', fallback: 'cliente' }, fromAgenda).value, 'Ana');
+    assert.equal(resolveVariableValue({ source: 'name', fallback: 'cliente' }, { ...ANA, agendaName: 'Otra' }).value, 'Ana Pérez');
+});
+
 test('el teléfono va con + y un dato que falta cae en la reserva', () => {
     assert.equal(resolveVariableValue({ source: 'phone', fallback: '-' }, ANA).value, '+593991112223');
     assert.deepEqual(

@@ -12,11 +12,27 @@ import { sendToAccount } from "./stream.controller.js";
 import ContactNote from "../models/contact.note.model.js";
 import { cleanNoteText } from "../utils/contact.notes.js";
 import { createContactNote, listContactNotes } from "../services/contact.note.service.js";
+import { applyAgendaName } from "../services/agenda.service.js";
 
 // ---------------------------------------------------------------------------
 // Contactos y su conversación. Lo usan los sitios por donde entra un número o
 // un BSUID: el webhook, los dos envíos (texto y plantilla) y el alta manual.
 // ---------------------------------------------------------------------------
+
+/**
+ * Un contacto recién creado (o que acaba de recibir su teléfono), con el nombre
+ * de la agenda del celular si ya llegó (ver services/agenda.service.js). Un
+ * fallo no impide crearlo: se registra y el siguiente cambio de la agenda lo arregla.
+ */
+const withAgendaName = async (contact) => {
+    if (!contact.phone) return contact;
+    try {
+        return (await applyAgendaName(contact.userId, contact.phone)) ?? contact;
+    } catch (error) {
+        console.warn('No se pudo poner el nombre de la agenda al contacto:', { contactId: String(contact._id), error: error.message });
+        return contact;
+    }
+};
 
 // El BSUID primero: identifica a la persona aunque Meta no mande el teléfono.
 export const findContactByIdentity = async (userId, { phone, waUserId }) => {
@@ -33,7 +49,10 @@ const applyContactUpdates = async (contact, incoming) => {
 
     try {
         Object.assign(contact, changes);
-        return await contact.save();
+        const saved = await contact.save();
+        // Nació solo con BSUID y Meta acaba de revelar su teléfono: la agenda
+        // pudo llegar antes (revisión de Codex del PR #131).
+        return changes.phone ? withAgendaName(saved) : saved;
     } catch (error) {
         // El teléfono o el BSUID ya son de OTRO contacto de la cuenta (uno se creó
         // solo con teléfono y otro solo con BSUID). Fusionarlos no es algo que deba
@@ -44,9 +63,11 @@ const applyContactUpdates = async (contact, incoming) => {
     }
 };
 
+
 /**
  * Devuelve el contacto de esa identidad, creándolo si no existe, y le pone al
- * día lo que sabe WhatsApp de él (ver `mergeContactUpdates`).
+ * día lo que sabe WhatsApp de él (ver `mergeContactUpdates`). Al crearlo, el
+ * nombre de la agenda del celular (`withAgendaName`).
  *
  * `name`, `source` y `referral` solo cuentan al crearlo, salvo `name`, que
  * además rellena el de un contacto que no tenga ninguno.
@@ -62,8 +83,9 @@ export const resolveContact = async (userId, identity, { name = null, source = n
     const existing = await findContactByIdentity(userId, identity);
     if (existing) return applyContactUpdates(existing, incoming);
 
+    let created;
     try {
-        return await Contact.create({
+        created = await Contact.create({
             userId,
             phone: identity.phone ?? null,
             waUserId: identity.waUserId ?? null,
@@ -75,12 +97,13 @@ export const resolveContact = async (userId, identity, { name = null, source = n
         });
     } catch (error) {
         // Dos webhooks del mismo número nuevo a la vez: el índice único deja crear
-        // solo a uno, y el otro usa el que ganó.
+        // solo a uno, y el otro usa el que ganó (que le pone el de la agenda).
         if (error.code !== 11000) throw error;
-        const created = await findContactByIdentity(userId, identity);
-        if (!created) throw error;
-        return applyContactUpdates(created, incoming);
+        const winner = await findContactByIdentity(userId, identity);
+        if (!winner) throw error;
+        return applyContactUpdates(winner, incoming);
     }
+    return withAgendaName(created);
 };
 
 // Las conversaciones anteriores a los contactos no tienen contactId. Al tocarlas
@@ -305,6 +328,8 @@ const serializeContact = (contact, conversations = []) => {
         id: String(contact._id),
         displayName: contactDisplayName(contact),
         name: contact.name ?? null,
+        // El de la agenda del celular (app de WhatsApp Business); no se edita.
+        agendaName: contact.agendaName ?? null,
         profileName: contact.profileName ?? null,
         phone: contact.phone ?? null,
         username: contact.username ?? null,
@@ -493,7 +518,7 @@ export const createContact = async (req, res) => {
         const tags = await resolveOwnedTagIds(userId, req.body.tagIds ?? []);
         if (!tags) return sendUnknownTags(res);
 
-        const contact = await Contact.create({ userId, ...fields, tags, source: 'manual' });
+        const contact = await withAgendaName(await Contact.create({ userId, ...fields, tags, source: 'manual' }));
         // «Notas» del formulario de crear: la primera nota, a nombre de quien lo crea.
         const firstNote = cleanNoteText(req.body.notes);
         if (firstNote) {

@@ -29,7 +29,7 @@ export const CONTACT_FILTERS = ['all', 'with_conversation', 'without_conversatio
 // regular: «+593» rompería la consulta y un patrón malicioso podría colgarla.
 export const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-const SEARCH_FIELDS = ['name', 'profileName', 'username', 'email', 'company'];
+const SEARCH_FIELDS = ['name', 'agendaName', 'profileName', 'username', 'email', 'company'];
 
 // Lo que se busca, como expresiones: el texto en los campos de SEARCH_FIELDS
 // y, si trae dígitos, el teléfono. null si no hay nada que buscar.
@@ -41,8 +41,8 @@ const searchPatterns = (search) => {
 };
 
 /**
- * Condición de búsqueda por nombre, nombre de WhatsApp, usuario, email,
- * empresa o teléfono. Devuelve null si no hay nada que buscar.
+ * Condición de búsqueda por nombre, nombre de la agenda, nombre de WhatsApp,
+ * usuario, email, empresa o teléfono. Devuelve null si no hay nada que buscar.
  *
  * El teléfono se busca solo por sus dígitos: en pantalla se ve como
  * «+593 99 123 4567», pero se guarda como «593991234567».

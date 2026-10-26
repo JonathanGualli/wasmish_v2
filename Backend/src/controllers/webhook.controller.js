@@ -4,7 +4,7 @@ import { sendToAccount } from './stream.controller.js';
 import Conversation from "../models/conversation.model.js";
 import {
     resolveContact, findOrCreateConversation, findContactByIdentity, getConversationContact, applyMarketingPreference,
-    applyUserIdUpdate,
+    applyUserIdUpdate, notifyContactsChanged,
 } from './contact.controller.js';
 import { resolveStatusTransition } from '../utils/message.status.js';
 import { getWindowExpiry } from '../utils/whatsapp.window.js';
@@ -27,6 +27,7 @@ import { applyReaction, applyReactionStatus } from '../services/reaction.service
 import { findQuotedMessage, quotedMapOf } from '../services/message.reply.service.js';
 import { serializeMessage } from './chat.controller.js';
 import { storeHistoryChunks, storeHistoryMedia } from '../services/history.intake.service.js';
+import { storeAgendaSync } from '../services/agenda.service.js';
 
 // Baja el adjunto y lo deja en disco. Devuelve SIEMPRE un objeto: si algo falla
 // —token caducado, archivo enorme, Meta caída— sale con mediaFile en null y el
@@ -639,6 +640,22 @@ export const handleWebhook = async (req, res) => {
                         // Un fallo de la BD no puede perder el trozo: Meta lo reentrega.
                         retryBatch = true;
                         console.error('Historial no guardado, se pide a Meta que lo reentregue:', { lineId: inbound.lineId ? String(inbound.lineId) : null, error: error.message });
+                    }
+                    continue;
+                }
+
+                // La agenda del celular de la app: cada contacto se guarda y
+                // después nombra al contacto de Wasmish con ese teléfono, si lo hay.
+                // Toda la agenda puede llegar de una vez: un solo aviso a la UI,
+                // también si algún contacto falló y se pide la reentrega.
+                if (change.field === 'smb_app_state_sync') {
+                    try {
+                        const { renamed, failed } = await storeAgendaSync(inbound, value);
+                        if (renamed > 0) notifyContactsChanged(inbound.accountId);
+                        if (failed > 0) retryBatch = true;
+                    } catch (error) {
+                        retryBatch = true;
+                        console.error('Agenda no guardada, se pide a Meta que la reentregue:', { lineId: inbound.lineId ? String(inbound.lineId) : null, error: error.message });
                     }
                     continue;
                 }

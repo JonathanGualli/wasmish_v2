@@ -114,8 +114,9 @@ export const cleanValue = (value) => {
 };
 
 const FIELD_READERS = {
-    name: (c) => c.name || c.profileName,
-    firstName: (c) => cleanValue(c.name || c.profileName).split(' ')[0],
+    // El mismo orden que el nombre que se enseña (`contactDisplayName`).
+    name: (c) => c.name || c.agendaName || c.profileName,
+    firstName: (c) => cleanValue(c.name || c.agendaName || c.profileName).split(' ')[0],
     company: (c) => c.company,
     phone: (c) => (c.phone ? `+${c.phone}` : null),
     email: (c) => c.email,

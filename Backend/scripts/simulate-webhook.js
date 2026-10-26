@@ -41,6 +41,10 @@
 //                                                ← el archivo de 14 días de ese mensaje del historial
 //   (la línea tiene que haber pedido el historial en su conexión actual: si no,
 //    el simulador se lo pone, solo en la BD local)
+//   npm run webhook:simulate -- agenda --from 593000000000 --name "Ana de la tienda"
+//                                                ← el negocio guarda (o edita) ese número en la
+//                                                  agenda de su celular (`smb_app_state_sync`);
+//                                                  --remove: lo borra de la agenda
 //
 // Opciones: --from <numero>  --url <http://...>  --phone-number-id <id>
 //           --name <nombre de perfil>  --username <usuario>  --new-from <numero>
@@ -49,6 +53,7 @@
 //           --original <wamid del mensaje que se borra, se edita o al que se reacciona>
 //           --text <texto editado>  --emoji <emoji>  --reply-to <wamid>  --forwarded  --forwarded-many  --eco
 //           --threads <n>  --messages <n por hilo>  --phase <0|1|2>  --progress <0-100>  --chunk-order <n>  --declined
+//           --remove (agenda)
 //
 // El wamid de cada mensaje sale en la lista «Guardado» del final.
 //
@@ -72,6 +77,7 @@ import Message from '../src/models/message.model.js';
 import Waba from '../src/models/waba.model.js';
 import HistoryThread from '../src/models/history.thread.model.js';
 import HistoryMedia from '../src/models/history.media.model.js';
+import AgendaEntry from '../src/models/agenda.entry.model.js';
 import { historySyncView } from '../src/utils/history.sync.js';
 
 // Formas reales del webhook de Meta, una por tipo. Si alguna no cuadra con lo
@@ -126,6 +132,8 @@ const REACCION = 'reaction';
 // campo `history` y el archivo de 14 días de uno de sus mensajes.
 const HISTORIAL = 'history';
 const HISTORIAL_ARCHIVO = 'history-media';
+// La agenda del celular de la app: un contacto guardado (o borrado) en ella.
+const AGENDA = 'agenda';
 
 // --- argumentos -------------------------------------------------------------
 const argv = process.argv.slice(2);
@@ -156,6 +164,7 @@ const PHASE = opcion('phase', '0');
 const PROGRESS = opcion('progress', '100');
 const CHUNK_ORDER = opcion('chunk-order', '1');
 const DECLINED = argv.includes('--declined');
+const QUITAR_DE_AGENDA = argv.includes('--remove');
 
 // El BSUID que Meta generaría: país + id. Se deriva del número o del usuario
 // para que el mismo contacto de prueba tenga siempre el mismo.
@@ -180,7 +189,7 @@ if (listar) {
     console.log('\nBorrar o editar un mensaje (con --original <wamid>; --eco si lo hace el negocio):\n  revoke\n  edit            (--text <texto nuevo>)');
     console.log(`\nReaccionar (con --original <wamid>; --eco si lo hace el negocio):\n  ${REACCION}        (--emoji <emoji>; sin él, la quita)`);
     console.log('\nEn cualquier mensaje: --reply-to <wamid> (cita), --forwarded o --forwarded-many (reenvío)');
-    console.log(`\nHistorial de la app de WhatsApp Business:\n  ${HISTORIAL}         (--threads --messages --phase --progress --chunk-order; --declined: no lo compartió)\n  ${HISTORIAL_ARCHIVO}   (con --original <wamid>: el archivo de 14 días)`);
+    console.log(`\nHistorial de la app de WhatsApp Business:\n  ${HISTORIAL}         (--threads --messages --phase --progress --chunk-order; --declined: no lo compartió)\n  ${HISTORIAL_ARCHIVO}   (con --original <wamid>: el archivo de 14 días)\n  ${AGENDA}          (--from <número> --name <nombre en la agenda>; --remove: lo borra)`);
     process.exit(0);
 }
 
@@ -192,7 +201,7 @@ if (!limpiar && elegidos.length === 0) {
     morir('Dime qué mandar.  Ej: npm run webhook:simulate -- audio boton   (o --all, o --list)');
 }
 
-const desconocidos = elegidos.filter(n => !MUESTRAS[n] && !PREFERENCIAS[n] && ![CAMBIO_NUMERO, ECO, RETIRO, REACCION, HISTORIAL, HISTORIAL_ARCHIVO, ...CAMBIOS].includes(n));
+const desconocidos = elegidos.filter(n => !MUESTRAS[n] && !PREFERENCIAS[n] && ![CAMBIO_NUMERO, ECO, RETIRO, REACCION, HISTORIAL, HISTORIAL_ARCHIVO, AGENDA, ...CAMBIOS].includes(n));
 if (desconocidos.length > 0) morir(`No conozco: ${desconocidos.join(', ')}.  Usa --list para ver los tipos.`);
 if (elegidos.includes(CAMBIO_NUMERO) && !NEW_FROM) morir(`${CAMBIO_NUMERO} necesita el número nuevo:  --new-from 593000000001`);
 if (elegidos.some(n => CAMBIOS.includes(n) || n === REACCION) && !ORIGINAL) morir('revoke, edit y reaction necesitan el mensaje:  --original <wamid>  (sale en la lista «Guardado»)');
@@ -398,6 +407,21 @@ const archivoDelHistorial = () => ({ field: 'history', value: {
     }],
 } });
 
+// Un contacto de la agenda, con la forma del ejemplo de Meta. La hora va en
+// segundos: dos cambios del mismo número en el mismo segundo, solo cuenta el primero.
+const cambioDeAgenda = () => ({ field: 'smb_app_state_sync', value: {
+    messaging_product: 'whatsapp',
+    metadata: { display_phone_number: DISPLAY_NUMBER, phone_number_id: phoneNumberId },
+    state_sync: [{
+        type: 'contact',
+        contact: QUITAR_DE_AGENDA
+            ? { phone_number: FROM }
+            : { full_name: PROFILE_NAME, first_name: PROFILE_NAME.split(' ')[0], phone_number: FROM },
+        action: QUITAR_DE_AGENDA ? 'remove' : 'add',
+        metadata: { timestamp: String(Math.floor(Date.now() / 1000)) },
+    }],
+} });
+
 const conHistorial = elegidos.some(n => n === HISTORIAL || n === HISTORIAL_ARCHIVO);
 if (conHistorial) {
     if (!lineaActiva) morir(`${HISTORIAL} necesita una línea activa (Fase 2c).`);
@@ -416,6 +440,7 @@ for (const nombre of elegidos) {
     const body = nombre === RETIRO ? JSON.stringify(await retiroDeAcceso())
         : nombre === HISTORIAL ? JSON.stringify({ entry: [{ changes: [historial()] }] })
         : nombre === HISTORIAL_ARCHIVO ? JSON.stringify({ entry: [{ changes: [archivoDelHistorial()] }] })
+        : nombre === AGENDA ? JSON.stringify({ entry: [{ changes: [cambioDeAgenda()] }] })
         : nombre === ECO ? JSON.stringify({ entry: [{ changes: [eco()] }] })
         : CAMBIOS.includes(nombre) && COMO_ECO ? JSON.stringify({ entry: [{ changes: [eco(cambio(nombre))] }] })
         : nombre === REACCION && COMO_ECO ? JSON.stringify({ entry: [{ changes: [eco(reaccion())] }] })
@@ -459,10 +484,17 @@ if (conHistorial) {
     console.log(`Estado de la línea: ${JSON.stringify(historySyncView(linea.historySync))}`);
     console.log('Los mensajes los crea el worker del historial: con el backend levantado con `npm run dev`, aparecen en la bandeja en unos segundos.');
 }
+if (elegidos.includes(AGENDA)) {
+    const entrada = await AgendaEntry.findOne({ userId: dueno.accountId, phone: FROM }).lean();
+    console.log(`\nEn la agenda: ${entrada ? (entrada.removed ? 'borrado' : JSON.stringify(entrada.fullName ?? entrada.firstName)) : 'no está'}`
+        + `${entrada ? `  ·  cambio de ${entrada.syncedAt.toISOString()}` : ''}`);
+    if (!await findTestContact()) console.log('Sin contacto en Wasmish con ese número: el nombre se le pone cuando escriba o se cree.');
+}
 const contact = await findTestContact();
 const conv = await findTestConversation(contact);
 if (contact) {
     console.log(`\nContacto: ${JSON.stringify(contact.profileName)}  ·  teléfono ${contact.phone ?? '—'}  ·  BSUID ${contact.waUserId ?? '—'}`);
+    console.log(`Nombre en Wasmish: ${JSON.stringify(contact.name)}  ·  en la agenda: ${JSON.stringify(contact.agendaName ?? null)}`);
     console.log(`Publicidad: ${contact.marketingOptOut ? `dado de baja desde ${contact.marketingOptOutAt?.toISOString()}` : 'la acepta'}`);
 }
 if (conv) {

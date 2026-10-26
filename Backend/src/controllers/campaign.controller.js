@@ -28,7 +28,7 @@ const MAX_PAGE_SIZE = 50;
 const SAMPLE_SIZE = 5;
 
 // Lo único del contacto que hace falta para decidir y rellenar el mensaje.
-const CONTACT_FIELDS = { name: 1, profileName: 1, username: 1, phone: 1, waUserId: 1, email: 1, company: 1, marketingOptOut: 1 };
+const CONTACT_FIELDS = { name: 1, agendaName: 1, profileName: 1, username: 1, phone: 1, waUserId: 1, email: 1, company: 1, marketingOptOut: 1 };
 
 const sendError = (res, status, message, extra = {}) => res.status(status).json([{ message, ...extra }]);
 

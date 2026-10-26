@@ -7,6 +7,7 @@ import { findOrCreateTags } from "../services/tag.service.js";
 import { notifyContactsChanged } from "./contact.controller.js";
 import ContactNote from "../models/contact.note.model.js";
 import { importKeyFor } from "../utils/contact.notes.js";
+import { applyAgendaNames } from "../services/agenda.service.js";
 
 // ---------------------------------------------------------------------------
 // Importar contactos. El navegador lee el archivo y empareja las columnas; aquí
@@ -136,6 +137,21 @@ const runUpserts = async (operations) => {
 };
 
 /**
+ * El nombre de la agenda del celular a los contactos de la tanda que estén en
+ * ella (ver services/agenda.service.js). Un fallo no deshace la importación: se
+ * registra y el siguiente cambio de la agenda lo arregla.
+ * @returns {Promise<number>} cuántos cambiaron.
+ */
+const applyImportAgendaNames = async (userId, phones) => {
+    try {
+        return await applyAgendaNames(userId, phones);
+    } catch (error) {
+        console.warn('No se pudo poner el nombre de la agenda a los importados:', { contactos: phones.length, error: error.message });
+        return 0;
+    }
+};
+
+/**
  * POST /contacts/import/preview — qué pasaría con el archivo entero, sin
  * escribir nada: conteos, errores y avisos por fila, y una muestra.
  *
@@ -174,6 +190,7 @@ export const importContacts = async (req, res) => {
         const tagByKey = await findOrCreateTags(userId, toWrite.flatMap(entry => entry.tagNames));
         const result = await runUpserts(toWrite.map(entry =>
             importUpsert(userId, entry, entry.tagNames.map(name => tagByKey.get(tagKey(name))._id))));
+        const named = await applyImportAgendaNames(userId, toWrite.map(entry => entry.phone));
 
         const contacts = await Contact.find({ userId, phone: { $in: plan.entries.map(entry => entry.phone) } }).select('_id phone').lean();
         const contactIdByPhone = new Map(contacts.map(contact => [contact.phone, contact._id]));
@@ -183,7 +200,7 @@ export const importContacts = async (req, res) => {
         const created = result.upsertedCount;
         // Uno que solo gana una nota también cuenta: su upsert le pone `updatedAt`.
         const updated = result.modifiedCount;
-        if (created + updated > 0) notifyContactsChanged(userId);
+        if (created + updated + named > 0) notifyContactsChanged(userId);
         return res.json({
             summary: { ...plan.summary, created, updated, unchanged: plan.entries.length - created - updated },
             issues: plan.issues,

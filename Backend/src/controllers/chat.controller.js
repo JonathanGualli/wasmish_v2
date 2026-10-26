@@ -453,7 +453,7 @@ export const listConversations = async (req, res) => {
     try{
         const items = await Conversation.find({ userId, ...conversationScope(req.auth) })
             .sort({ lastMessageAt: -1 })
-            .populate('contactId', 'name profileName username phone')
+            .populate('contactId', 'name agendaName profileName username phone')
             .lean();
 
         const result = items.map((item) => {

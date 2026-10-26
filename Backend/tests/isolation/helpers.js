@@ -120,6 +120,7 @@ export const AutoReplySettings = await load('auto.reply.settings.model.js');
 export const ContactNote = await load('contact.note.model.js');
 export const HistoryThread = await load('history.thread.model.js');
 export const HistoryMedia = await load('history.media.model.js');
+export const AgendaEntry = await load('agenda.entry.model.js');
 
 const server = app.listen(0);
 const baseUrl = `http://127.0.0.1:${server.address().port}/api`;
@@ -326,6 +327,12 @@ export const postWebhookRaw = async (raw, signature = 'sha256=' + crypto.createH
 export const postHistory = (phoneNumberId, history, extra = {}) =>
     postWebhookBody({ entry: [{ changes: [{ field: 'history', value: {
         messaging_product: 'whatsapp', metadata: { phone_number_id: phoneNumberId }, history, ...extra,
+    } }] }] });
+
+/** Cambios de la agenda del celular de la app de WhatsApp Business (`smb_app_state_sync`). */
+export const postAgenda = (phoneNumberId, stateSync) =>
+    postWebhookBody({ entry: [{ changes: [{ field: 'smb_app_state_sync', value: {
+        messaging_product: 'whatsapp', metadata: { phone_number_id: phoneNumberId }, state_sync: stateSync,
     } }] }] });
 
 /** Lo que el negocio respondió desde la app de WhatsApp Business (`smb_message_echoes`). */

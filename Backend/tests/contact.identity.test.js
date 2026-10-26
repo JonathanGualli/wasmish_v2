@@ -106,6 +106,12 @@ test('el nombre a mostrar sigue el orden nombre, perfil, usuario, teléfono', ()
     assert.equal(contactDisplayName({}), 'Contacto de WhatsApp');
 });
 
+test('el nombre de la agenda del celular va después del de Wasmish y antes del de perfil', () => {
+    assert.equal(contactDisplayName({ agendaName: 'Ana de la tienda', profileName: 'Ana 🌸', phone: PHONE }), 'Ana de la tienda');
+    assert.equal(contactDisplayName({ name: 'Ana', agendaName: 'Ana de la tienda', profileName: 'Ana 🌸' }), 'Ana');
+    assert.equal(contactDisplayName({ agendaName: '  ', profileName: 'Ana 🌸' }), 'Ana 🌸');
+});
+
 // --- Cambio de número y BSUID (webhook user_id_update) ----------------------
 
 test('lee el BSUID viejo, el nuevo y el teléfono actual', () => {
