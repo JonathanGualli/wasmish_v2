@@ -126,7 +126,7 @@ export const storeHistoryChunks = async (inbound, value) => {
  */
 const findMediaTarget = async (lineId, waMessageId, waMessageKey) => {
     const candidates = await Message.find(waMessageKey ? { $or: [{ waMessageKey }, { waMessageId }] } : { waMessageId })
-        .select('_id conversationId waMessageId').lean();
+        .select('_id conversationId waMessageId timestamp').lean();
     for (const message of candidates) {
         if (await Conversation.exists({ _id: message.conversationId, lineId })) return message;
     }

@@ -22,6 +22,8 @@ export interface SSEEventMap {
     // Las etiquetas de la cuenta (nueva, renombrada o borrada)
     tags_updated: Record<string, never>;
     campaign_progress: Campaign;
+    // Se importaron mensajes del historial de la app de WhatsApp Business en esa conversación
+    messages_imported: { conversationId: string };
 }
 
 export type SSEEventType = keyof SSEEventMap;

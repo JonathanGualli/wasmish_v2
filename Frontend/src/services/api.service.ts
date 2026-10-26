@@ -23,6 +23,7 @@ interface SSEHandlers {
     onContactsUpdated?: (event: MessageEvent) => void;
     onTagsUpdated?: (event: MessageEvent) => void;
     onCampaignProgress?: (event: MessageEvent) => void;
+    onMessagesImported?: (event: MessageEvent) => void;
     /** Le cambiaron el acceso (rol, líneas, estado): el servidor cierra justo después (Fase 3). */
     onAccessChanged?: () => void;
     onError?: (err: ErrorEvent) => void;
@@ -180,6 +181,9 @@ export const createSSEConnection = (
     }
     if (handlers.onCampaignProgress) {
         source.addEventListener("campaign_progress", handlers.onCampaignProgress);
+    }
+    if (handlers.onMessagesImported) {
+        source.addEventListener("messages_imported", handlers.onMessagesImported);
     }
     if (handlers.onAccessChanged) {
         const onAccessChanged = handlers.onAccessChanged;

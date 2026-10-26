@@ -228,10 +228,20 @@ export const useConversationMessages = (conversationId: string) => {
         });
     });
 
+    // Se importaron mensajes viejos del historial de la app de WhatsApp Business:
+    // no van al final, así que se vuelve a pedir el hilo (como arriba, cancelando
+    // primero una petición en curso, que leería la BD de antes).
+    const unsubImported = subscribe("messages_imported", ({ conversationId: importedId }) => {
+      if (importedId !== conversationId) return;
+      const key = ["conversation", conversationId];
+      void queryClient.cancelQueries({ queryKey: key }).then(() => queryClient.invalidateQueries({ queryKey: key }));
+    });
+
     return () => {
       unsubCreated();
       unsubStatus();
       unsubUpdated();
+      unsubImported();
     };
   }, [subscribe, queryClient, conversationId]);
 

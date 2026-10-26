@@ -7,6 +7,7 @@
 import Line from '../models/line.model.js';
 import Waba from '../models/waba.model.js';
 import Message from '../models/message.model.js';
+import Conversation from '../models/conversation.model.js';
 import HistoryMedia from '../models/history.media.model.js';
 import { resolveContact, findOrCreateConversation } from '../controllers/contact.controller.js';
 import { descargarAdjunto, advanceConversationPreview } from '../controllers/webhook.controller.js';
@@ -66,10 +67,14 @@ const findExisting = async (conversationId, waMessageId, legacyKeys) => {
  * Aplica a su mensaje el archivo de 14 días que llegó aparte (`HistoryMedia`):
  * el tipo, el pie y el archivo descargado. Solo sobre el placeholder del
  * historial; otro mensaje con esa identidad ya tiene su contenido. Idempotente:
- * lo pueden llamar el worker (después de crear el mensaje) y el webhook (después
- * de guardar el archivo); el primero que lo marca `applied` avisa por SSE.
+ * lo pueden llamar a la vez el worker (después de crear el mensaje) y el webhook
+ * (después de guardar el archivo). Avisa por SSE **quien cambia el mensaje** (la
+ * escritura condicionada al placeholder solo la gana uno), sea o no quien marca
+ * `applied` (revisión de Codex del PR #130). Si la vista previa de la
+ * conversación era ese placeholder, pasa a decir lo del archivo.
  *
- * @param {{ line: { accountId, lineId, tokenWhatsapp }, connectionAt: Date, message: object, media?: object }} args
+ * @param {{ line: { accountId, lineId, tokenWhatsapp }, connectionAt: Date,
+ *           message: { _id, conversationId, waMessageId, timestamp }, media?: object }} args
  * @returns {Promise<boolean>} si había un archivo pendiente para el mensaje.
  */
 export const applyHistoryMedia = async ({ line, connectionAt, message, media = null }) => {
@@ -95,12 +100,20 @@ export const applyHistoryMedia = async ({ line, connectionAt, message, media = n
         );
         changed = result.modifiedCount > 0;
     }
-    const claimed = await HistoryMedia.updateOne({ _id: pending._id, applied: false }, { $set: { applied: true } });
-    if (changed && claimed.modifiedCount > 0) {
-        const updated = await Message.findById(message._id).lean();
-        // El mensaje entero (con su archivo) y lo de un cambio: la UI lo funde en su sitio.
-        sendToAccount(String(line.accountId), 'message_updated', { ...serializeMessage(updated), ...serializeMessageUpdate(updated) },
-            { lineId: String(line.lineId) });
+    await HistoryMedia.updateOne({ _id: pending._id, applied: false }, { $set: { applied: true } });
+    if (!changed) return true;
+
+    const updated = await Message.findById(message._id).lean();
+    const meta = { lineId: String(line.lineId) };
+    // El mensaje entero (con su archivo) y lo de un cambio: la UI lo funde en su sitio.
+    sendToAccount(String(line.accountId), 'message_updated', { ...serializeMessage(updated), ...serializeMessageUpdate(updated) }, meta);
+    // La vista previa, solo si sigue siendo este placeholder: no pisa nada posterior.
+    const preview = await Conversation.updateOne(
+        { _id: updated.conversationId, lastMessage: HISTORY_PLACEHOLDER_TEXT, lastMessageAt: updated.timestamp },
+        { $set: { lastMessage: updated.text } },
+    );
+    if (preview.modifiedCount > 0) {
+        sendToAccount(String(line.accountId), 'conversation_updated', { id: String(updated.conversationId), lastMessage: updated.text }, meta);
     }
     return true;
 };
@@ -207,6 +220,13 @@ export const importHistoryPiece = async (piece, { hooks = {} } = {}) => {
         await applyHistoryMedia({ line, connectionAt: piece.connectionAt, message: byMediaKey.get(media.mediaKey), media });
     }
     await hooks.beforePreview?.();
+
+    // El hilo abierto no se entera de lo creado por otro camino: que lo vuelva a
+    // pedir. Sin tocar los no leídos (revisión de Codex del PR #130).
+    if (created > 0) {
+        sendToAccount(String(line.accountId), 'messages_imported', { conversationId: String(conversation._id) },
+            { lineId: String(line.lineId) });
+    }
 
     // La vista previa con el más nuevo de la pieza que está en Mongo (creado o
     // ya existente), releído: su archivo pudo cambiarle el texto.

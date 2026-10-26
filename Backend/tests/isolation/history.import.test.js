@@ -5,13 +5,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    seedAccount, connectWhatsapp, postWebhook, postWebhookBody, postHistory, request, onMeta, pushCalls, FAKE_MEDIA_URL,
+    seedAccount, connectWhatsapp, openStream, postWebhook, postWebhookBody, postHistory, request, onMeta, pushCalls, FAKE_MEDIA_URL,
     Contact, Conversation, HistoryMedia, HistoryThread, Line, Message,
 } from './helpers.js';
 import { HISTORY_PLACEHOLDER_TEXT } from '../../src/utils/history.sync.js';
 
 const { processNextHistoryThread } = await import('../../src/workers/history.worker.js');
-const { importHistoryPiece } = await import('../../src/services/history.import.service.js');
+const { importHistoryPiece, applyHistoryMedia } = await import('../../src/services/history.import.service.js');
 
 const BUSINESS = '15550783881';
 const HOUR = 60 * 60;
@@ -335,4 +335,82 @@ test('el historial de la línea de una cuenta no crea nada en otra', async () =>
     const inK = await messagesOf(k, phone);
     assert.deepEqual(inK.map(m => m.text), ['Solo de K']);
     assert.deepEqual((await messagesOf(h, phone)).map(m => m.text), ['Solo de H']);
+});
+
+// --- Revisión de Codex del PR #130 ------------------------------------------
+
+// Regresión que vigila: con una conversación abierta y un mensaje en vivo más
+// nuevo, lo importado no avisaba de nada y el hilo abierto no lo enseñaba.
+test('lo importado avisa al hilo abierto (messages_imported), también con un mensaje en vivo más nuevo', async () => {
+    const phone = '593990071017';
+    await postWebhook(H_NUMBER, liveInbound(phone, 'En vivo, más nuevo'));
+    const conversation = await conversationOf(h, phone);
+    const stream = await openStream(h);
+    try {
+        await postThread(phone, [historyMessage(phone, { body: 'De hace un mes', ts: nowSeconds() - 30 * 24 * HOUR })]);
+        await drain();
+        assert.ok(await stream.waitFor('event: messages_imported', 2000), 'no avisó al hilo');
+        assert.ok(await stream.waitFor(`"conversationId":"${conversation._id}"`, 0));
+        assert.equal(stream.count('event: conversation_updated'), 0, 'la vista previa no tenía que cambiar');
+    } finally {
+        await stream.close();
+    }
+    assert.equal((await conversationOf(h, phone)).unreadCount, 1);
+});
+
+// Regresión que vigila: el último mensaje era el placeholder, llegaba la foto
+// después y la bandeja seguía diciendo «Archivo: míralo en tu celular».
+test('un archivo que llega después cambia también la vista previa si era su placeholder', async () => {
+    const phone = '593990071018';
+    const id = keyedWamid(phone, nextKey());
+    await postThread(phone, [historyMessage(phone, { body: 'Antes', ts: nowSeconds() - 4 * HOUR }), historyMessage(phone, { type: 'media_placeholder', id, ts: nowSeconds() - 3 * HOUR })]);
+    await drain();
+    assert.equal((await conversationOf(h, phone)).lastMessage, HISTORY_PLACEHOLDER_TEXT);
+    const stream = await openStream(h);
+    try {
+        await postMedia(phone, id);
+        assert.equal((await conversationOf(h, phone)).lastMessage, 'La foto');
+        assert.ok(await stream.waitFor('event: conversation_updated', 2000), 'la bandeja no se enteró');
+    } finally {
+        await stream.close();
+    }
+});
+
+test('un archivo que llega después no pisa una vista previa más nueva', async () => {
+    const phone = '593990071019';
+    const id = keyedWamid(phone, nextKey());
+    await postThread(phone, [historyMessage(phone, { type: 'media_placeholder', id, ts: nowSeconds() - 3 * HOUR })]);
+    await drain();
+    await postWebhook(H_NUMBER, liveInbound(phone, 'Escrito después'));
+    await postMedia(phone, id);
+    assert.equal((await conversationOf(h, phone)).lastMessage, 'Escrito después');
+    await assertMediaApplied(phone, (await HistoryMedia.findOne({ lineId: hLine, waMessageKey: { $ne: null } }).sort({ createdAt: -1 }).lean()).waMessageId);
+});
+
+// Regresión que vigila: el worker y el webhook se cruzan; el que cambia el
+// mensaje no es el que marca `applied`, y nadie avisaba de la foto.
+test('quien cambia el mensaje avisa aunque otro haya marcado applied antes', async () => {
+    const phone = '593990071020';
+    const id = keyedWamid(phone, nextKey());
+    await postThread(phone, [historyMessage(phone, { type: 'media_placeholder', id })]);
+    await drain();
+    // El archivo, leído como pendiente por este lado...
+    await HistoryMedia.create({
+        userId: h.accountId, lineId: hLine, connectionAt: (await Line.findById(hLine).lean()).historySync.connectionAt,
+        mediaKey: (await import('../../src/utils/wamid.js')).wamidMessageKey(id), waMessageId: id, waMessageKey: null,
+        messageData: { from: phone, id, type: 'image', image: { id: String(77100000 + ++seq), mime_type: 'image/jpeg', caption: 'La foto' } },
+    });
+    const media = await HistoryMedia.findOne({ waMessageId: id }).lean();
+    // ...y marcado `applied` por el otro antes de que este escriba.
+    await HistoryMedia.updateOne({ _id: media._id }, { $set: { applied: true } });
+    const [message] = await messagesOf(h, phone);
+    const line = { accountId: h.accountId, lineId: hLine, tokenWhatsapp: null };
+    const stream = await openStream(h);
+    try {
+        await applyHistoryMedia({ line, connectionAt: media.connectionAt, message, media });
+        assert.equal((await Message.findById(message._id).lean()).type, 'image');
+        assert.ok(await stream.waitFor('event: message_updated', 2000), 'nadie avisó de la foto');
+    } finally {
+        await stream.close();
+    }
 });
