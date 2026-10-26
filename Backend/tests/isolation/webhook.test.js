@@ -750,3 +750,60 @@ test('el acuse failed de una reacción nuestra la marca a ella, nunca al mensaje
     await postWebhook(MW_NUMBER, failed(reactionId));
     assert.equal((await Message.findById(inbound._id).lean()).reactions.me.status, 'sent');
 });
+
+// --- La identidad de un mensaje entre caminos (spec 2026-10-23-historial-coexistencia) ---
+// Un mensaje puede llegar con dos wamid (el del teléfono y el del BSUID, ver el
+// #121) y, con el historial, por dos caminos: lo que decide si ya está es su clave.
+
+const keyedWamid = (recipient, key) => 'wamid.' + Buffer.concat([
+    Buffer.from([0x1c, 0x18, recipient.length]), Buffer.from(recipient, 'latin1'),
+    Buffer.from([0x15, 0x02, 0x00, 0x11, 0x18, key.length]), Buffer.from(key, 'latin1'), Buffer.from([0x00]),
+]).toString('base64');
+const conversationFor = async (phone) => {
+    await postEcho(A_NUMBER, [echoOf({ to: phone, body: 'Para abrir la conversación' })]);
+    return conversationOf(a, phone);
+};
+
+test('un eco con otro wamid de la misma clave que un mensaje ya guardado no crea otro', async () => {
+    const phone = '593990011001';
+    const key = '3EB0A1B2C3D4E5F60718293A';
+    const conversation = await conversationFor(phone);
+    await Message.create({ conversationId: conversation._id, direction: 'outbound', sender: 'me', waMessageId: keyedWamid(phone, key), text: 'Por el teléfono', origin: 'businessApp' });
+    const before = await Message.countDocuments({ conversationId: conversation._id });
+
+    assert.equal((await postEcho(A_NUMBER, [echoOf({ to: phone, body: 'Por el BSUID', id: keyedWamid('PE.1000000000000000', key) })])).status, 200);
+
+    assert.equal(await Message.countDocuments({ conversationId: conversation._id }), before, 'el mismo mensaje quedó dos veces');
+    assert.equal(await Message.countDocuments({ conversationId: conversation._id, waMessageKey: key }), 1);
+});
+
+test('waMessageKey: dos claves distintas en la misma conversación conviven, y la misma clave en otra conversación no choca', async () => {
+    const key = '3EB0B1B2C3D4E5F60718293B';
+    const first = await conversationFor('593990011002');
+    const second = await conversationFor('593990011003');
+    const base = { direction: 'inbound', sender: 'them', text: 'Hola', status: 'delivered' };
+    await Message.create({ ...base, conversationId: first._id, waMessageId: keyedWamid('593990011002', key) });
+    await Message.create({ ...base, conversationId: first._id, waMessageId: keyedWamid('593990011002', '3EB0B1B2C3D4E5F60718293C') });
+    await Message.create({ ...base, conversationId: second._id, waMessageId: keyedWamid('593990011003', key) });
+    assert.equal(await Message.countDocuments({ waMessageKey: key }), 2);
+    assert.equal(await Message.countDocuments({ conversationId: first._id, waMessageKey: { $type: 'string' } }), 2);
+});
+
+test('waMessageKey: un wamid sin la forma conocida guarda null, y dos así conviven', async () => {
+    const conversation = await conversationFor('593990011004');
+    const base = { conversationId: conversation._id, direction: 'outbound', sender: 'me', text: 'Sin clave', origin: 'chat' };
+    const one = await Message.create({ ...base, waMessageId: 'wamid.sin.forma.1' });
+    await Message.create({ ...base, waMessageId: 'wamid.sin.forma.2' });
+    await Message.create({ ...base, waMessageId: null, status: 'failed' });
+    assert.equal((await Message.collection.findOne({ _id: one._id })).waMessageKey, null);
+    assert.equal(await Message.countDocuments({ conversationId: conversation._id, text: 'Sin clave', waMessageKey: null }), 3);
+});
+
+test('fromHistory se guarda, y solo en lo que lo lleva', async () => {
+    const conversation = await conversationFor('593990011005');
+    const base = { conversationId: conversation._id, direction: 'inbound', sender: 'them', text: 'De hace un mes', status: 'delivered' };
+    const imported = await Message.create({ ...base, waMessageId: 'wamid.historial.1', fromHistory: true });
+    const live = await Message.create({ ...base, waMessageId: 'wamid.en.vivo.1' });
+    assert.equal((await Message.collection.findOne({ _id: imported._id })).fromHistory, true);
+    assert.equal('fromHistory' in (await Message.collection.findOne({ _id: live._id })), false);
+});

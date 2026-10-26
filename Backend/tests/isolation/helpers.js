@@ -118,6 +118,8 @@ export const Invitation = await load('invitation.model.js');
 export const PushSubscription = await load('push.subscription.model.js');
 export const AutoReplySettings = await load('auto.reply.settings.model.js');
 export const ContactNote = await load('contact.note.model.js');
+export const HistoryThread = await load('history.thread.model.js');
+export const HistoryMedia = await load('history.media.model.js');
 
 const server = app.listen(0);
 const baseUrl = `http://127.0.0.1:${server.address().port}/api`;
@@ -309,6 +311,22 @@ export const postWebhookBody = async (body) => {
 
 export const postWebhook = (phoneNumberId, value) =>
     postWebhookBody({ entry: [{ changes: [{ value: { metadata: { phone_number_id: phoneNumberId }, ...value } }] }] });
+
+/** Un cuerpo ya serializado al webhook, con la firma que se le pase (por defecto, la buena). */
+export const postWebhookRaw = async (raw, signature = 'sha256=' + crypto.createHmac('sha256', process.env.META_APP_SECRET).update(raw).digest('hex')) => {
+    const response = await fetch(`${baseUrl}/webhook`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-hub-signature-256': signature },
+        body: raw,
+    });
+    return { status: response.status };
+};
+
+/** Un trozo del historial de la app de WhatsApp Business (campo `history`). `extra` va en el `value`. */
+export const postHistory = (phoneNumberId, history, extra = {}) =>
+    postWebhookBody({ entry: [{ changes: [{ field: 'history', value: {
+        messaging_product: 'whatsapp', metadata: { phone_number_id: phoneNumberId }, history, ...extra,
+    } }] }] });
 
 /** Lo que el negocio respondió desde la app de WhatsApp Business (`smb_message_echoes`). */
 export const postEcho = (phoneNumberId, echoes) =>

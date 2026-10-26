@@ -264,7 +264,11 @@ test('por la clave, solo en la conversación del contacto, de esa línea y esa c
 test('por la clave: dos mensajes con la misma clave o uno de hace más de 30 días no se tocan', async () => {
     const { conversation, identity } = await chat();
     const { msg, key, alias } = await echoWithAlias(conversation);
-    const twin = await message(conversation, { ts: new Date(), waMessageId: wamid('PE.2000000000000000', key) });
+    // Desde `waMessageKey` (el historial) dos con la misma clave no caben en una
+    // conversación; el gemelo es de antes del campo, sin clave guardada, como los
+    // de producción, que `findByMessageKey` sigue leyendo por su wamid.
+    const twin = await message(conversation, { ts: new Date() });
+    await Message.updateOne({ _id: twin._id }, { $set: { waMessageId: wamid('PE.2000000000000000', key) }, $unset: { waMessageKey: '' } });
     assert.equal(await react(reactionNow(alias, '👍'), identity), 'not_found', 'ambiguo');
     for (const m of [msg, twin]) assert.equal((await reload(m)).reactions, undefined);
 

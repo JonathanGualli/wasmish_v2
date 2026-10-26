@@ -75,7 +75,8 @@ const contactSchema = new mongoose.Schema({
     // Cómo llegó. null = anterior a que existieran los contactos: no se sabe.
     source: {
         type: String,
-        enum: ['inbound', 'manual', 'api', 'ad', 'import', null],
+        // 'businessApp': nació del historial o la agenda de la app de WhatsApp Business.
+        enum: ['inbound', 'manual', 'api', 'ad', 'import', 'businessApp', null],
         default: null,
     },
     referral: {

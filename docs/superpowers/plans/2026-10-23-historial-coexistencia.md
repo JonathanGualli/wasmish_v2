@@ -246,6 +246,6 @@ Sin el PR 5, Meta no manda nada: es seguro desplegarlo solo.
 
 ## Después de unir
 
-- **Versión** con los PRs 2 a 5 (el 6 puede ir después). Desplegarla **antes de conectar el chip del botón de la página**.
-- Con el chip: conectarlo, aceptar compartir en la app, y comprobar lo que el spec § 3 deja abierto (la forma del archivo de 14 días, citas o reacciones en el historial, el formato del teléfono de la agenda). Lo distinto se corrige en el spec y en `docs/arquitectura/`.
+- **Versión** con los PRs 2 a 5 (el 6 puede ir después). Desplegarla **antes de que se conecte un cliente nuevo con la app** (si no, su historial se pierde).
+- Con el número de trabajo de Jonathan (spec § 9, decisión del 2026-10-26): reconectarlo con la coexistencia en su cuenta de prueba, aceptar compartir en la app, y comprobar lo que el spec § 3 deja abierto (la forma del archivo de 14 días, citas o reacciones en el historial, el formato del teléfono de la agenda). Lo distinto se corrige en el spec y en `docs/arquitectura/`.
 - `/graphify --update`.
