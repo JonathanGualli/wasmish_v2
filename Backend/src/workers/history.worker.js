@@ -73,10 +73,16 @@ const notifyHistorySync = (accountId, lineId) => {
 // devolvió a la cola (su lease venció) y otro la tomó, ya no casa.
 const ownPiece = (piece) => ({ _id: piece._id, status: 'processing', claimToken: piece.claimToken });
 
-// Una pieza perdida cuenta en `failedThreads` de su conexión, no de otra.
-const countFailed = (piece) => Line.updateOne(
+// Las piezas perdidas de una conexión, contadas desde las propias piezas.
+const countFailedPieces = (lineId, connectionAt) => HistoryThread.countDocuments({ lineId, connectionAt, status: 'failed' });
+
+// `failedThreads` de la conexión de la pieza (no de otra), RECALCULADO y no
+// sumado: si el proceso muere entre marcar la pieza `failed` y esto, la próxima
+// cuenta (o el cierre, en `finishHistorySyncs`) la incluye, y contar dos veces
+// no la cuenta doble (revisión de Codex del PR #129).
+const recountFailed = async (piece) => Line.updateOne(
     { _id: piece.lineId, 'historySync.connectionAt': piece.connectionAt },
-    { $inc: { 'historySync.failedThreads': 1 } },
+    { $set: { 'historySync.failedThreads': await countFailedPieces(piece.lineId, piece.connectionAt) } },
 );
 
 // Sin textos ni teléfonos: son conversaciones de los clientes de nuestros clientes.
@@ -126,7 +132,7 @@ export const processNextHistoryThread = async ({ importPiece = importHistoryPiec
             return 'lost';
         }
         if (failed) {
-            await countFailed(piece);
+            await recountFailed(piece);
             notifyHistorySync(piece.userId, piece.lineId);
         }
         console.error('Historial: pieza con error', { pieceId: String(piece._id), attempts: piece.attempts, failed, error: error.message });
@@ -153,7 +159,7 @@ export const recoverHistoryThreads = async ({ startup = false } = {}) => {
         if (result.modifiedCount === 0) continue;
         if (failed) {
             summary.failed += 1;
-            await countFailed(piece);
+            await recountFailed(piece);
             notifyHistorySync(piece.userId, piece.lineId);
         } else {
             summary.requeued += 1;
@@ -180,10 +186,13 @@ export const finishHistorySyncs = async (now = new Date()) => {
     for (const line of candidates) {
         const { connectionAt, lastChunkAt } = line.historySync;
         if (await HistoryThread.exists({ lineId: line._id, connectionAt, status: { $in: ['pending', 'processing'] } })) continue;
-        // Condicionada a lo leído: un trozo que llegó entre medias la deja abierta.
+        // Sin nada pendiente, la cuenta de piezas perdidas ya no cambia: se deja
+        // definitiva al cerrar. Condicionada a lo leído: un trozo que llegó entre
+        // medias la deja abierta.
+        const failedThreads = await countFailedPieces(line._id, connectionAt);
         const result = await Line.updateOne(
             { _id: line._id, 'historySync.connectionAt': connectionAt, 'historySync.lastChunkAt': lastChunkAt, 'historySync.finishedAt': null },
-            { $set: { 'historySync.finishedAt': now } },
+            { $set: { 'historySync.finishedAt': now, 'historySync.failedThreads': failedThreads } },
         );
         if (result.modifiedCount === 0) continue;
         finished += 1;

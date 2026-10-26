@@ -178,3 +178,30 @@ test('history_sync llega a quien administra las líneas, no a un agente ni a otr
         await Promise.all([owner.close(), agent.close(), stranger.close()]);
     }
 });
+
+// Revisión de Codex del PR #129: si el proceso moría entre marcar la pieza
+// `failed` y sumar `failedThreads`, la pieza quedaba perdida sin contar y la
+// vista decía `done` en lugar de `partial`. Ahora el contador se recalcula
+// desde las piezas, y el cierre lo deja definitivo.
+test('una pieza failed sin contar (el proceso murió entre las dos escrituras) se cuenta al cerrar', async () => {
+    await clearQueue();
+    await piece({ status: 'failed', attempts: 3, error: 'fallo simulado' });
+    await piece({ status: 'done' });
+    await Line.updateOne({ _id: lineId }, { $set: {
+        'historySync.historyComplete': true, 'historySync.lastChunkAt': new Date(Date.now() - FINISH_QUIET_MS - MINUTE),
+        'historySync.finishedAt': null, 'historySync.failedThreads': 0, 'historySync.firstChunkAt': new Date(Date.now() - 20 * MINUTE),
+    } });
+    assert.equal(await finishHistorySyncs(), 1);
+    const finished = await sync();
+    assert.equal(finished.failedThreads, 1);
+    assert.equal(historySyncView(finished).status, 'partial');
+});
+
+test('contar dos veces la misma pieza perdida no la cuenta doble', async () => {
+    await clearQueue();
+    await Line.updateOne({ _id: lineId }, { $set: { 'historySync.failedThreads': 0 } });
+    await piece({ status: 'processing', attempts: 3, leaseUntil: new Date(Date.now() - MINUTE), claimToken: 'muerto' });
+    await recoverHistoryThreads();
+    await recoverHistoryThreads({ startup: true });
+    assert.equal((await sync()).failedThreads, 1);
+});
