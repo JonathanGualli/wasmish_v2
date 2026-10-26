@@ -3,6 +3,7 @@ import HistoryThread from '../models/history.thread.model.js';
 import HistoryMedia from '../models/history.media.model.js';
 import { describeHistoryChunk, splitThreadMessages } from '../utils/history.sync.js';
 import { wamidMessageKey } from '../utils/wamid.js';
+import { wakeHistoryWorker } from '../workers/history.worker.js';
 
 // Lo que llega por el webhook `history` (el historial de la app de WhatsApp
 // Business): aquí solo se GUARDA, en piezas, y el worker lo procesa después
@@ -101,6 +102,7 @@ export const storeHistoryChunks = async (inbound, value) => {
         })));
         const inserted = await insertPieces(pieces);
         stored += inserted;
+        if (inserted > 0) wakeHistoryWorker();
         await recordChunk(sync, chunk.progress, new Date());
         // Solo números: ni textos ni teléfonos.
         console.log('Historial: trozo guardado', {
