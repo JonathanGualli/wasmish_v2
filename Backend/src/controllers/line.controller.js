@@ -7,6 +7,9 @@ import { decrypt } from "../utils/crypto.js";
 import { cleanLineName, nextDefaultLine } from "../utils/line.js";
 import { inLineScope, lineScope } from "../utils/permissions.js";
 import { LINE_ERROR_CODES, LINE_NOT_FOUND_MESSAGE } from "../utils/whatsapp.line.js";
+import { historySyncView } from "../utils/history.sync.js";
+import { retryHistorySync } from "../services/history.request.service.js";
+import { wakeHistoryWorker } from "../workers/history.worker.js";
 
 // ---------------------------------------------------------------------------
 // Las líneas de la cuenta (Fase 2c de multi-línea): listarlas, ponerles
@@ -44,6 +47,9 @@ export const serializeLine = (line, { defaultLineId, waba }) => ({
     // lo desconectó Meta (el motivo tal cual; la UI lo dice en palabras).
     businessApp: Boolean(line.businessApp),
     disconnectionReason: line.disconnectionReason ?? null,
+    // El historial de la app ya resumido (`historySyncView`): null si la línea
+    // no lo pidió en su conexión.
+    historySync: historySyncView(line.historySync),
 });
 
 const serializeAccountLine = async (accountId, line) => {
@@ -135,6 +141,21 @@ export const getLinePin = async (req, res) => {
         const line = await findOwnedLine(req.auth, req.params.id);
         if (!line) return sendNotFound(res);
         return res.json({ pin: line.twoStepPin ? decrypt(line.twoStepPin) : null });
+    } catch (error) {
+        return sendError(res, error);
+    }
+};
+
+// POST /lines/:id/history-sync — volver a pedir a Meta la agenda o el historial
+// que no se pudo pedir (`retryHistorySync`); el worker lo pide en su vuelta.
+export const retryHistorySyncController = async (req, res) => {
+    try {
+        const line = await findOwnedLine(req.auth, req.params.id);
+        if (!line) return sendNotFound(res);
+
+        await retryHistorySync(line);
+        wakeHistoryWorker();
+        return res.sendStatus(204);
     } catch (error) {
         return sendError(res, error);
     }
