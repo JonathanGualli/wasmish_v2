@@ -50,11 +50,13 @@ SSE y sus eventos, no leídos, y la UI del chat: hilo, bandeja, conversación nu
 - `tags_updated`: `{}` — se creó, renombró o borró una etiqueta de la cuenta (`tag.controller.js`). Se refrescan `useTags`, la lista de contactos y las fichas abiertas (borrar la quita de los suyos: con el id viejo, la ficha daba 400 al etiquetar)
 - `campaign_progress`: la campaña serializada con `stats` — como mucho uno por segundo y campaña, y siempre en los cambios de estado
 - `message_created` y `message_status` llevan `campaignId` si el mensaje salió de una campaña. Una campaña grande dispara cientos seguidos: la bandeja y Contactos los agrupan con `useThrottledInvalidate`
+- `history_sync`: `{ lineId }` — cambió el estado del historial de la app de WhatsApp Business de esa línea (una pieza importada o perdida, la recepción terminada): Ajustes vuelve a leerlo. Como mucho uno cada 5 s por línea; el que cae dentro del plazo sale al final de él, para que llegue el último estado ([webhook-adjuntos.md § Historial](webhook-adjuntos.md#historial-de-la-app-de-whatsapp-business-storehistorychunks)).
 - `access_changed`: `{}` — a la persona a la que le cambiaron el rol, las líneas o el estado, justo antes de cerrarle la conexión (`disconnectUser`, Fase 3). El navegador reconecta solo; qué hace la UI con él llega con la UI de la Fase 3
 
 **A quién llega cada evento** (Fase 3, 2026-10-14). Cada conexión guarda la sesión con la que se abrió, y `sendToAccount(accountId, event, data, meta)` solo escribe en las que cumplen `canReceive(auth, meta)` (`utils/permissions.js`):
 - `message_created`, `message_status`, `message_updated` y `conversation_updated` llevan `{ lineId }` de su conversación: llegan a quien ve esa línea. Una conversación sin línea, solo a quien ve todas.
 - `campaign_progress` lleva `{ lineId, permission: 'campaigns.manage' }`: el agente no lo recibe.
+- `history_sync` lleva `{ lineId, permission: 'lines.manage' }`: solo quien administra las líneas.
 - `contact_updated`, `contacts_updated` y `tags_updated` no llevan `meta`: los contactos y las etiquetas son de toda la cuenta.
 - La conexión abierta conserva la sesión con la que se abrió: por eso, **cualquier** cambio de acceso la cierra (`disconnectUser(userId)`), no solo quitar una línea.
 
