@@ -18,7 +18,10 @@ export const UNCERTAIN_RETRY_AFTER_MS = 30 * 60 * 1000;
 
 const PHONE_CHARS = /^[0-9+\s().-]+$/;
 const HISTORY_STATUS = { READ: 'read', PLAYED: 'read', DELIVERED: 'delivered', SENT: 'sent', PENDING: 'sent', ERROR: 'failed' };
-const REQUEST_KINDS = ['contacts', 'history'];
+// Los dos pedidos a Meta, en el orden en que se hacen (la guía pide primero la
+// agenda), con el `sync_type` de cada uno.
+export const REQUEST_KINDS = ['contacts', 'history'];
+export const SYNC_TYPES = { contacts: 'smb_app_state_sync', history: 'history' };
 
 /**
  * Un teléfono de Meta (el `id` de un hilo, un `from`) en solo dígitos.

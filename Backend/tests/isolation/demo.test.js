@@ -43,6 +43,8 @@ test('crea las dos cuentas con la marca, su número falso «Junto con la app» y
         assert.equal(line.phoneNumberId, scenario.line.phoneNumberId);
         assert.equal(line.businessApp, true);
         assert.equal(line.status, 'active');
+        // El token es falso: el worker del historial no le puede pedir nada a Meta.
+        assert.equal(line.historySync, undefined);
         const agent = await User.findOne({ email: scenario.agent.email }).lean();
         assert.equal(agent.role, 'agent');
         assert.deepEqual(agent.lineIds.map(String), [String(line._id)]);

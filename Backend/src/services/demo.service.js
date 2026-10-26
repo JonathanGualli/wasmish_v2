@@ -116,7 +116,9 @@ export const seedDemoAccount = async (scenario, { passwordHash, now = new Date()
         details: { phoneNumberId: line.phoneNumberId, displayPhoneNumber: line.display, verifiedName: line.verifiedName },
     });
     await updateLineSettings(accountId, lineId, { name: line.name });
-    await Line.updateOne({ _id: lineId }, { $set: { connectedAt: at('90d') } });
+    // Sin `historySync`: el número y el token son falsos, y el worker del
+    // historial no le puede pedir nada a Meta.
+    await Line.updateOne({ _id: lineId }, { $set: { connectedAt: at('90d') }, $unset: { historySync: '' } });
 
     const agent = await User.create({
         name: scenario.agent.name, email: scenario.agent.email, password: passwordHash,

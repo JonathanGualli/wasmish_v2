@@ -86,6 +86,7 @@ export const LINE_ERROR_CODES = {
     registrationFailed: 'phone_number_registration_failed',
     businessAppNumberUnknown: 'business_app_number_unknown',
     chooseLine: 'choose_line',
+    historySyncUnavailable: 'history_sync_unavailable',
 };
 
 // Conectar otro número con la cuenta en el límite de su plan (Fase 2c).

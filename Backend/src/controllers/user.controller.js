@@ -4,6 +4,7 @@ import {
     readPhoneNumberPlatform,
 } from "../services/whatsapp.connection.service.js";
 import { applyConnection } from "../services/line.service.js";
+import { wakeHistoryWorker } from "../workers/history.worker.js";
 import { connectionErrorResponse, sendPhoneNumberTaken, sendWabaTaken } from "./whatsapp.controller.js";
 
 
@@ -35,6 +36,8 @@ export const updateUserTokenWhatsapp = async (req, res) => {
             accountId, waBusinessId, tokenWhatsapp: encrypt(tokenWhatsapp), phoneNumberId, details, twoStepPin,
             businessApp: onBusinessApp === true,
         });
+        // Un número de la app: que pida la agenda y el historial ya, sin esperar su vuelta.
+        wakeHistoryWorker();
 
         return res.json({ message: 'Token updated successfully', lineId: String(lineId) });
     } catch (error) {

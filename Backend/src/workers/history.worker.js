@@ -3,11 +3,13 @@ import HistoryThread from "../models/history.thread.model.js";
 import Line from "../models/line.model.js";
 import { sendToAccount } from "../controllers/stream.controller.js";
 import { importHistoryPiece } from "../services/history.import.service.js";
+import { processPendingHistoryRequests, recoverHistoryRequests } from "../services/history.request.service.js";
 
 // ---------------------------------------------------------------------------
 // Worker del historial de la app de WhatsApp Business. Corre dentro del proceso
-// de la API, como los de campañas y respuestas automáticas: la cola son las
-// piezas que guardó el webhook (`HistoryThread`). Una pieza a la vez: lo traído
+// de la API, como los de campañas y respuestas automáticas. En cada vuelta pide
+// a Meta lo pendiente de las líneas recién conectadas (`history.request.service.js`)
+// y después procesa la cola: las piezas que guardó el webhook (`HistoryThread`). Una pieza a la vez: lo traído
 // no tiene prisa y cada pieza puede tener cientos de mensajes. El flujo y el
 // porqué: docs/superpowers/specs/2026-10-23-historial-coexistencia-design.md (§ 6).
 //
@@ -211,6 +213,8 @@ const loop = async () => {
                 await recoverHistoryThreads();
                 await finishHistorySyncs();
             }
+            // Los pedidos a Meta primero: tienen un plazo de 24 h.
+            for (const { accountId, lineId } of await processPendingHistoryRequests()) notifyHistorySync(accountId, lineId);
             // Una pieza detrás de otra mientras haya; sin trabajo, se espera.
             if (await processNextHistoryThread() === 'idle' && running) await idle(IDLE_MS);
         } catch (error) {
@@ -226,6 +230,7 @@ export const startHistoryWorker = async () => {
     if (running) return;
     running = true;
     try {
+        await recoverHistoryRequests();
         await recoverHistoryThreads({ startup: true });
     } catch (error) {
         console.error('Historial: no se pudo recoger lo pendiente al arrancar:', error.message);
