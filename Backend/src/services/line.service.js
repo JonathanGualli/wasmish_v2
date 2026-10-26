@@ -293,7 +293,7 @@ export const finishPendingReplace = async (accountId) => {
  * `afterLock` es SOLO para los tests: se llama con el candado tomado.
  */
 export const applyConnection = async (
-    { accountId, waBusinessId, tokenWhatsapp, phoneNumberId, details = null, twoStepPin = null, businessApp = false },
+    { accountId, waBusinessId, tokenWhatsapp, phoneNumberId, details = null, twoStepPin = null, businessApp = false, requestHistory = true },
     { afterLock = null } = {},
 ) => withLineLock(accountId, async () => {
     await afterLock?.();
@@ -321,8 +321,9 @@ export const applyConnection = async (
     // anota en la misma escritura que hay que pedir la agenda y el historial (el
     // worker del historial los pide): si el proceso cae justo después, no se
     // pierde. Spec: docs/superpowers/specs/2026-10-23-historial-coexistencia-design.md (§ 4).
+    // `requestHistory: false` (las cuentas de demostración, con token falso): nunca.
     const connectedAt = plan.action === 'renew' ? null : new Date();
-    const historySync = connectedAt && businessApp
+    const historySync = connectedAt && businessApp && requestHistory
         ? { connectionAt: connectedAt, requests: { contacts: { state: 'pending' }, history: { state: 'pending' } } }
         : null;
     const line = await Line.findOneAndUpdate(
@@ -339,8 +340,8 @@ export const applyConnection = async (
             businessApp,
         },
         // Conectar de nuevo deja atrás una desconexión de Meta, y el historial
-        // de una conexión anterior si este ya no es un número de la app.
-        $unset: { disconnectionReason: '', ...(connectedAt && !businessApp && { historySync: '' }) } },
+        // de una conexión anterior si en esta no se pide.
+        $unset: { disconnectionReason: '', ...(connectedAt && !historySync && { historySync: '' }) } },
         { upsert: true, new: true },
     );
     await Waba.updateOne({ _id: waba._id }, {

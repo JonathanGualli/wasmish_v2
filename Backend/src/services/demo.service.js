@@ -112,13 +112,13 @@ export const seedDemoAccount = async (scenario, { passwordHash, now = new Date()
     const { line } = scenario;
     const { lineId } = await applyConnection({
         accountId, waBusinessId: line.waBusinessId, tokenWhatsapp: encrypt('TOKEN-FALSO-DEMOSTRACION'),
-        phoneNumberId: line.phoneNumberId, businessApp: true,
+        // Sin pedir el historial: el número y el token son falsos, y el worker
+        // le pediría a Meta en cuanto la línea lo tuviera (revisión de Codex del PR #132).
+        phoneNumberId: line.phoneNumberId, businessApp: true, requestHistory: false,
         details: { phoneNumberId: line.phoneNumberId, displayPhoneNumber: line.display, verifiedName: line.verifiedName },
     });
     await updateLineSettings(accountId, lineId, { name: line.name });
-    // Sin `historySync`: el número y el token son falsos, y el worker del
-    // historial no le puede pedir nada a Meta.
-    await Line.updateOne({ _id: lineId }, { $set: { connectedAt: at('90d') }, $unset: { historySync: '' } });
+    await Line.updateOne({ _id: lineId }, { $set: { connectedAt: at('90d') } });
 
     const agent = await User.create({
         name: scenario.agent.name, email: scenario.agent.email, password: passwordHash,

@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { seedAccount, seedMember, request, onMeta, Line } from './helpers.js';
 
 const { applyConnection, disconnectLine } = await import('../../src/services/line.service.js');
-const { processPendingHistoryRequests, recoverHistoryRequests } = await import('../../src/services/history.request.service.js');
+const { processPendingHistoryRequests, recoverHistoryRequests, retryHistorySync } = await import('../../src/services/history.request.service.js');
 const { historySyncView } = await import('../../src/utils/history.sync.js');
 const { encrypt } = await import('../../src/utils/crypto.js');
 
@@ -31,8 +31,8 @@ const metaError = (code) => Object.assign(new Error('Meta dijo que no'), {
 });
 const timeout = () => Object.assign(new Error('timeout of 30000ms exceeded'), { code: 'ECONNABORTED' });
 
-const connect = (account, phoneNumberId, { businessApp = true } = {}) => applyConnection({
-    accountId: account.accountId, waBusinessId: `waba-${account.label}`, tokenWhatsapp: encrypt('token-de-pruebas'), phoneNumberId, businessApp,
+const connect = (account, phoneNumberId, { businessApp = true, token = 'token-de-pruebas' } = {}) => applyConnection({
+    accountId: account.accountId, waBusinessId: `waba-${account.label}`, tokenWhatsapp: encrypt(token), phoneNumberId, businessApp,
 });
 const lineOf = (lineId) => Line.findById(lineId).lean();
 const requestsOf = async (lineId) => (await lineOf(lineId)).historySync.requests;
@@ -42,8 +42,8 @@ const ago = (ms) => new Date(Date.now() - ms);
 const HOUR = 60 * 60 * 1000;
 
 // Todo lo que se prepara con `await` va aquí arriba (ver pruebas-y-scripts.md).
-const [a, b, c, d, e, f, g, h] = await Promise.all(
-    ['PA', 'PB', 'PC', 'PD', 'PE', 'PF', 'PG', 'PH'].map((label, index) => seedAccount(label, { seq: 61 + index })));
+const [a, b, c, d, e, f, g, h, i, j] = await Promise.all(
+    ['PA', 'PB', 'PC', 'PD', 'PE', 'PF', 'PG', 'PH', 'PI', 'PJ'].map((label, index) => seedAccount(label, { seq: 61 + index })));
 const { lineId: retryLine } = await connect(a, '7611');
 const agent = await seedMember(a, { role: 'agent', lineIds: [retryLine], label: 'PAagente' });
 
@@ -257,4 +257,59 @@ test('409 si no hay nada que reintentar, si pasaron las 24 h o si la línea no e
 
     const { lineId: plain } = await connect(h, '7683', { businessApp: false });
     assert.equal((await request(h, 'POST', `/lines/${plain}/history-sync`)).status, 409);
+});
+
+// Regresión que vigila (revisión de Codex del PR #132): `applyConnection` escribe
+// la línea, con los pedidos, antes que el token del WABA. Un worker que pasara
+// por ese hueco los dejaba rechazados (sin token) o los pedía con el de antes.
+test('el worker no pide en el hueco entre la línea y el token, ni con el token de la conexión anterior', async () => {
+    const { lineId } = await connect(i, '7691', { token: 'token-viejo' });
+    await processPendingHistoryRequests();
+    await disconnectLine(i.accountId, lineId);
+
+    const original = Line.findOneAndUpdate;
+    let interleaved = null;
+    Line.findOneAndUpdate = function (filter, update, ...rest) {
+        const query = original.call(this, filter, update, ...rest);
+        if (!update?.$set?.historySync) return query;
+        return query.then(async (result) => {
+            interleaved = await processPendingHistoryRequests();
+            return result;
+        });
+    };
+    try {
+        await connect(i, '7691', { token: 'token-nuevo' });
+    } finally {
+        Line.findOneAndUpdate = original;
+    }
+    assert.ok(Array.isArray(interleaved));
+    assert.equal(interleaved.some(item => String(item.lineId) === String(lineId)), false);
+    const pending = await requestsOf(lineId);
+    assert.deepEqual([pending.contacts.state, pending.history.state], ['pending', 'pending']);
+
+    await processPendingHistoryRequests();
+    const calls = smbCalls.filter(call => call.phoneNumberId === '7691');
+    assert.deepEqual(calls.map(call => call.authorization),
+        ['Bearer token-viejo', 'Bearer token-viejo', 'Bearer token-nuevo', 'Bearer token-nuevo']);
+    assert.equal((await requestsOf(lineId)).history.state, 'accepted');
+});
+
+// Regresión que vigila (revisión de Codex del PR #132): el reintento comprobaba
+// el estado del pedido, pero no que siguiera sin llegar nada del historial.
+test('un trozo que llega mientras se reintenta un uncertain impide volver a pedir el historial', async () => {
+    const { lineId } = await connect(j, '76101');
+    behavior.set('76101', (call) => { if (call.syncType === 'history') throw timeout(); });
+    await processPendingHistoryRequests();
+    behavior.delete('76101');
+    await setSync(lineId, { 'requests.history.claimedAt': ago(31 * 60 * 1000) });
+
+    const read = await lineOf(lineId);
+    await setSync(lineId, { firstChunkAt: new Date(), lastChunkAt: new Date() });
+    await assert.rejects(retryHistorySync(read), { statusCode: 409, code: 'history_sync_unavailable' });
+    assert.equal((await requestsOf(lineId)).history.state, 'uncertain');
+
+    // Y al reclamarlo: un pedido pendiente del historial con trozos ya recibidos no se pide.
+    await setSync(lineId, { 'requests.history.state': 'pending' });
+    await processPendingHistoryRequests();
+    assert.deepEqual(callsFor('76101'), ['smb_app_state_sync', 'history']);
 });

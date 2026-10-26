@@ -13,6 +13,12 @@ import { LINE_ERROR_CODES } from '../utils/whatsapp.line.js';
 
 const statePath = (kind) => `historySync.requests.${kind}`;
 
+// El historial no se pide (ni se vuelve a pedir) si ya llegó algo de él o el
+// negocio dijo que no: Meta ya lo aceptó (revisión de Codex del PR #132).
+const notStarted = (kind) => (kind === 'history'
+    ? { 'historySync.firstChunkAt': null, 'historySync.declined': { $ne: true } }
+    : {});
+
 /**
  * Reclama un pedido `pending` de la conexión actual de la línea: `requesting`,
  * con la hora. Condicionado al estado, así que dos procesos (o el worker y un
@@ -20,7 +26,7 @@ const statePath = (kind) => `historySync.requests.${kind}`;
  * @returns {Promise<object|null>} la línea, o null si ya no estaba pendiente.
  */
 export const claimHistoryRequest = (lineId, connectionAt, kind, now = new Date()) => Line.findOneAndUpdate(
-    { _id: lineId, status: 'active', 'historySync.connectionAt': connectionAt, [`${statePath(kind)}.state`]: 'pending' },
+    { _id: lineId, status: 'active', 'historySync.connectionAt': connectionAt, [`${statePath(kind)}.state`]: 'pending', ...notStarted(kind) },
     { $set: { [`${statePath(kind)}.state`]: 'requesting', [`${statePath(kind)}.claimedAt`]: now }, $unset: { [`${statePath(kind)}.error`]: '' } },
     { new: true },
 ).lean();
@@ -39,16 +45,27 @@ const outcomeOf = (requestId, error) => {
     return { state: 'uncertain' };
 };
 
-const requestOne = async (line, kind, now) => {
+/**
+ * El token de esta conexión: `applyConnection` escribe la línea (con los pedidos)
+ * antes que el token del WABA, así que hasta que `authorizedAt` alcanza la
+ * conexión el token es el de antes, o ninguno. Mientras, no se pide nada: sin
+ * esto, el worker podía pedir en ese hueco y dejarlo rechazado, o pedirlo con
+ * un token viejo (revisión de Codex del PR #132).
+ */
+const connectionToken = async (line) => {
+    const waba = line.wabaId ? await Waba.findById(line.wabaId).select('tokenWhatsapp authorizedAt').lean() : null;
+    const ready = waba?.tokenWhatsapp && waba.authorizedAt && waba.authorizedAt >= line.historySync.connectionAt;
+    return ready ? decrypt(waba.tokenWhatsapp) : null;
+};
+
+const requestOne = async (line, kind, token, now) => {
     const claimed = await claimHistoryRequest(line._id, line.historySync.connectionAt, kind, now);
     if (!claimed) return false;
 
-    const waba = line.wabaId ? await Waba.findById(line.wabaId).select('tokenWhatsapp').lean() : null;
     let requestId = null;
     let error = null;
     try {
-        if (!waba?.tokenWhatsapp) throw Object.assign(new Error('La línea no tiene token'), { waErrorCode: 'no_token' });
-        requestId = await requestSmbAppData({ token: decrypt(waba.tokenWhatsapp), phoneNumberId: line.phoneNumberId, syncType: SYNC_TYPES[kind] });
+        requestId = await requestSmbAppData({ token, phoneNumberId: line.phoneNumberId, syncType: SYNC_TYPES[kind] });
     } catch (caught) {
         error = caught;
     }
@@ -82,10 +99,13 @@ export const processPendingHistoryRequests = async (now = new Date()) => {
     for (const line of lines) {
         // Un `historySync` de otra conexión no se pide (`applyConnection` lo reinicia al conectar).
         if (line.historySync.connectionAt.getTime() !== line.connectedAt?.getTime()) continue;
+        // La conexión aún no guardó su token: en la vuelta siguiente.
+        const token = await connectionToken(line);
+        if (!token) continue;
         let requested = false;
         for (const kind of REQUEST_KINDS) {
             if (line.historySync.requests?.[kind]?.state !== 'pending') continue;
-            if (await requestOne(line, kind, now)) requested = true;
+            if (await requestOne(line, kind, token, now)) requested = true;
         }
         if (requested) changed.push({ accountId: line.accountId, lineId: line._id });
     }
@@ -132,6 +152,9 @@ export const retryHistorySync = async (line, now = new Date()) => {
             {
                 _id: line._id, status: 'active', 'historySync.connectionAt': line.historySync.connectionAt,
                 [`${statePath(kind)}.state`]: request.state, [`${statePath(kind)}.claimedAt`]: request.claimedAt ?? null,
+                // Un `uncertain` del historial, solo si sigue sin llegar nada: un
+                // trozo pudo entrar después de leer la línea.
+                ...(request.state === 'uncertain' && notStarted(kind)),
             },
             { $set: { [`${statePath(kind)}.state`]: 'pending' } },
         );
