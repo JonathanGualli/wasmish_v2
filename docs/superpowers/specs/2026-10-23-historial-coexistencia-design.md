@@ -152,7 +152,7 @@ Un worker nuevo, `workers/history.worker.js`, con el patrón de `auto.reply.work
 - **El webhook con un cuerpo grande** (más de 100 KB y un hilo de más de 16 MB) se acepta, la firma se sigue comprobando y el hilo se guarda en piezas.
 - **`webhook:simulate`:** `history` (con `--threads`, `--messages` y `--phase`), `history --declined`, `history-media` y `agenda` (`--remove`).
 - **Navegador:** Ajustes → Líneas con cada estado; la bandeja llenándose en vivo; los nombres de la agenda en la bandeja, la ficha y Contactos; en la computadora y en el teléfono emulado.
-- **Con Meta de verdad**, con **el chip del botón de la página** (todavía sin conectar: es la única prueba posible sin desconectar un número). Conectarlo, compartir el historial desde la app y comprobar: que llegan los contactos y el historial, el orden, los estados, los archivos de 14 días y lo que § 3 deja abierto. Lo que salga distinto se corrige en este spec y en `docs/arquitectura/`.
+- **Con Meta de verdad**, con **el número de trabajo de Jonathan**, reconectándolo con la coexistencia en su cuenta de prueba, como el 2026-10-16 (decisión del 2026-10-26: el chip del botón de la página se conectó el 2026-10-20, antes que esto, y Meta solo comparte el historial al conectar). Conectarlo, compartir el historial desde la app y comprobar: que llegan los contactos y el historial, el orden, los estados, los archivos de 14 días y lo que § 3 deja abierto. Lo que salga distinto se corrige en este spec y en `docs/arquitectura/`.
 
 ## 10. Orden de trabajo
 
