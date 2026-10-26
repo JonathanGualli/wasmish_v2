@@ -293,7 +293,7 @@ export const finishPendingReplace = async (accountId) => {
  * `afterLock` es SOLO para los tests: se llama con el candado tomado.
  */
 export const applyConnection = async (
-    { accountId, waBusinessId, tokenWhatsapp, phoneNumberId, details = null, twoStepPin = null, businessApp = false },
+    { accountId, waBusinessId, tokenWhatsapp, phoneNumberId, details = null, twoStepPin = null, businessApp = false, requestHistory = true },
     { afterLock = null } = {},
 ) => withLineLock(accountId, async () => {
     await afterLock?.();
@@ -316,21 +316,32 @@ export const applyConnection = async (
         { upsert: true, new: true },
     );
     const freshDetails = details?.phoneNumberId === phoneNumberId ? details : null;
+    // Renovar el token no es conectar: la fecha se queda, y el historial también
+    // (Meta no da otra sincronización). Una conexión nueva de un número de la app
+    // anota en la misma escritura que hay que pedir la agenda y el historial (el
+    // worker del historial los pide): si el proceso cae justo después, no se
+    // pierde. Spec: docs/superpowers/specs/2026-10-23-historial-coexistencia-design.md (§ 4).
+    // `requestHistory: false` (las cuentas de demostración, con token falso): nunca.
+    const connectedAt = plan.action === 'renew' ? null : new Date();
+    const historySync = connectedAt && businessApp && requestHistory
+        ? { connectionAt: connectedAt, requests: { contacts: { state: 'pending' }, history: { state: 'pending' } } }
+        : null;
     const line = await Line.findOneAndUpdate(
         { accountId, phoneNumberId },
         { $set: {
             wabaId: waba._id,
             status: 'active',
-            // Renovar el token no es conectar: la fecha se queda.
-            ...(plan.action !== 'renew' && { connectedAt: new Date(), disconnectedAt: null }),
+            ...(connectedAt && { connectedAt, disconnectedAt: null }),
+            ...(historySync && { historySync }),
             ...(freshDetails && { displayPhoneNumber: freshDetails.displayPhoneNumber ?? null, verifiedName: freshDetails.verifiedName ?? null }),
             // El PIN del registro (`registerIfNeeded`); sin él, se queda el que hubiera.
             ...(twoStepPin && { twoStepPin }),
             // Lo que dijo Meta en esta conexión (también al renovar).
             businessApp,
         },
-        // Conectar de nuevo deja atrás una desconexión de Meta.
-        $unset: { disconnectionReason: '' } },
+        // Conectar de nuevo deja atrás una desconexión de Meta, y el historial
+        // de una conexión anterior si en esta no se pide.
+        $unset: { disconnectionReason: '', ...(connectedAt && !historySync && { historySync: '' }) } },
         { upsert: true, new: true },
     );
     await Waba.updateOne({ _id: waba._id }, {

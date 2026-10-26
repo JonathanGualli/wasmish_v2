@@ -5,6 +5,7 @@ import {
     readPhoneNumberPlatform, resolveBusinessAppPhoneNumber, PHONE_NUMBER_TAKEN_MESSAGE, WABA_TAKEN_MESSAGE,
 } from "../services/whatsapp.connection.service.js";
 import { applyConnection } from "../services/line.service.js";
+import { wakeHistoryWorker } from "../workers/history.worker.js";
 import { LINE_ERROR_CODES } from "../utils/whatsapp.line.js";
 
 // La respuesta de error de las dos formas de conectar (esta y el formulario
@@ -79,6 +80,8 @@ export const connectWhatsappEmbedded = async (req, res) => {
             accountId, waBusinessId, tokenWhatsapp: encrypt(accessToken), phoneNumberId, details, twoStepPin,
             businessApp: onBusinessApp === true,
         });
+        // Un número de la app: que pida la agenda y el historial ya, sin esperar su vuelta.
+        wakeHistoryWorker();
 
         return res.json({
             message: "WhatsApp conectado correctamente",

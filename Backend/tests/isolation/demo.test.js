@@ -33,8 +33,24 @@ const realBefore = await countsOf(real.accountId);
 const login = async (email) => sessionFrom(await request(ANONYMOUS, 'POST', '/login', { email, password: PASSWORD }));
 
 test('crea las dos cuentas con la marca, su número falso «Junto con la app» y el equipo', async () => {
-    for (const scenario of [imprenta, capacitacion]) {
-        const { action, accountId } = await seed(scenario);
+    // Regresión que vigila (revisión de Codex del PR #132): la línea nacía con los
+    // pedidos del historial y se borraban después; en ese hueco, el worker de
+    // producción le pedía a Meta con el token falso. Nunca se escriben.
+    const original = Line.findOneAndUpdate;
+    const historyWrites = [];
+    Line.findOneAndUpdate = function (filter, update, ...rest) {
+        if (update?.$set?.historySync) historyWrites.push(filter);
+        return original.call(this, filter, update, ...rest);
+    };
+    const seeded = [];
+    try {
+        for (const scenario of [imprenta, capacitacion]) seeded.push([scenario, await seed(scenario)]);
+    } finally {
+        Line.findOneAndUpdate = original;
+    }
+    assert.deepEqual(historyWrites, []);
+
+    for (const [scenario, { action, accountId }] of seeded) {
         assert.equal(action, 'create');
         const account = await Account.findById(accountId).lean();
         assert.equal(account.plan, DEMO_PLAN);
@@ -43,6 +59,8 @@ test('crea las dos cuentas con la marca, su número falso «Junto con la app» y
         assert.equal(line.phoneNumberId, scenario.line.phoneNumberId);
         assert.equal(line.businessApp, true);
         assert.equal(line.status, 'active');
+        // El token es falso: el worker del historial no le puede pedir nada a Meta.
+        assert.equal(line.historySync, undefined);
         const agent = await User.findOne({ email: scenario.agent.email }).lean();
         assert.equal(agent.role, 'agent');
         assert.deepEqual(agent.lineIds.map(String), [String(line._id)]);

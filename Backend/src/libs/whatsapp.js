@@ -188,6 +188,24 @@ export const registerPhoneNumber = async ({ token, phoneNumberId, pin }) => {
     );
 };
 
+// Cuánto se espera al pedido de la sincronización: sin respuesta, el pedido
+// queda incierto y no se repite solo (Meta lo da una sola vez), así que mejor
+// esperar de más que darlo por perdido.
+export const SMB_APP_DATA_TIMEOUT_MS = 30_000;
+
+// Pide a Meta la agenda (`smb_app_state_sync`) o el historial (`history`) de un
+// número que sigue en la app de WhatsApp Business. Solo dentro de las 24 h de
+// la conexión y una sola vez; lo que manda llega después por el webhook.
+// Devuelve el `request_id`, por si hay que escribir a su soporte.
+export const requestSmbAppData = async ({ token, phoneNumberId, syncType }) => {
+    const { data } = await whatsappApi.post(
+        `/${phoneNumberId}/smb_app_data`,
+        { messaging_product: 'whatsapp', sync_type: syncType },
+        { headers: { Authorization: `Bearer ${token}` }, timeout: SMB_APP_DATA_TIMEOUT_MS }
+    );
+    return data?.request_id ?? null;
+};
+
 // --- Medios ---------------------------------------------------------------
 // Meta no manda el archivo en el webhook, manda un id. `GET /{media-id}` da una
 // URL temporal, y esa URL exige el token igual que el resto de la API.
