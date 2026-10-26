@@ -31,8 +31,8 @@ export const contactIdentity = (c: Pick<Contact, 'phone' | 'username'>) =>
     c.phone ? formatPhone(c.phone) : c.username ? `@${c.username}` : '';
 
 /** Texto para las iniciales del avatar: solo nombres; un teléfono no tiene iniciales. */
-export const avatarName = (c: Pick<Contact, 'name' | 'profileName' | 'username'>) =>
-    c.name || c.profileName || c.username || '';
+export const avatarName = (c: Pick<Contact, 'name' | 'agendaName' | 'profileName' | 'username'>) =>
+    c.name || c.agendaName || c.profileName || c.username || '';
 
 /** El estado que resume la fila: lo que más importa a la hora de escribirle. */
 export const contactStatus = (c: Contact): { label: string; tone: PillTone } => {
@@ -45,7 +45,7 @@ export const contactStatus = (c: Contact): { label: string; tone: PillTone } => 
 };
 
 /** Sin nombre ni usuario, lo único que lo identifica es el teléfono. */
-const onlyPhone = (c: Contact) => !c.name && !c.profileName && !c.username && Boolean(c.phone);
+const onlyPhone = (c: Contact) => !c.name && !c.agendaName && !c.profileName && !c.username && Boolean(c.phone);
 
 /** El título del contacto. Si es su teléfono, con el formato de teléfono. */
 export const contactTitle = (c: Contact) => (onlyPhone(c) ? formatPhone(c.phone!) : c.displayName);

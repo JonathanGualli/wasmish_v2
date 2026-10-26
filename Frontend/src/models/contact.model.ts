@@ -16,10 +16,12 @@ export interface ContactReferral {
 
 export interface Contact {
     id: string;
-    /** El que se enseña: nombre → nombre de WhatsApp → @usuario → teléfono. */
+    /** El que se enseña: nombre → nombre de la agenda → nombre de WhatsApp → @usuario → teléfono. */
     displayName: string;
     /** El que pone quien usa Wasmish. */
     name: string | null;
+    /** El que el negocio le puso en la agenda de su celular (app de WhatsApp Business). No se edita. */
+    agendaName: string | null;
     /** El que la persona tiene en su WhatsApp. No se edita. */
     profileName: string | null;
     /** `null` si escribió con su nombre de usuario y WhatsApp no compartió su número. */

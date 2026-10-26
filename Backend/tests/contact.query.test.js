@@ -77,6 +77,11 @@ test('matchesContactSearch busca lo mismo que la consulta', () => {
     assert.equal(matchesContactSearch({ username: 'sin.telefono' }, '099'), false);
 });
 
+test('la búsqueda también encuentra por el nombre de la agenda del celular', () => {
+    assert.ok(buildContactSearch('pablo').$or.some(condition => condition.agendaName?.test('Pablo Morales')));
+    assert.equal(matchesContactSearch({ agendaName: 'Pablo Morales', phone: '16505551234' }, 'morales'), true);
+});
+
 test('la selección filtra por la cuenta, la búsqueda y la baja de publicidad', () => {
     const match = buildContactMatch({ userId: 'u1', search: 'ana', filter: 'opted_out' });
     assert.equal(match.userId, 'u1');

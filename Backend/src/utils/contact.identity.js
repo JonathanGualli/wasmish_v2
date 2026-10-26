@@ -104,9 +104,11 @@ export const whatsappRecipient = ({ phone, waUserId } = {}) => {
     return null;
 };
 
-// El nombre que se enseña en la bandeja y en la ficha.
-export const contactDisplayName = ({ name, profileName, username, phone } = {}) =>
+// El nombre que se enseña en la bandeja y en la ficha. `agendaName` es el de la
+// agenda del celular (app de WhatsApp Business, ver services/agenda.service.js).
+export const contactDisplayName = ({ name, agendaName, profileName, username, phone } = {}) =>
     cleanString(name)
+    ?? cleanString(agendaName)
     ?? cleanString(profileName)
     ?? (cleanString(username) ? `@${cleanString(username)}` : null)
     ?? cleanString(phone)
