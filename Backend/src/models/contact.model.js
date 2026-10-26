@@ -52,6 +52,17 @@ const contactSchema = new mongoose.Schema({
         type: String,
         default: null,
     },
+    // El que el negocio le puso en la agenda de su celular (app de WhatsApp
+    // Business), y la hora del cambio de la agenda que lo puso. Solo lo escribe
+    // `applyAgendaName` (services/agenda.service.js): sigue al celular y nunca toca `name`.
+    agendaName: {
+        type: String,
+        default: null,
+    },
+    agendaSyncedAt: {
+        type: Date,
+        default: null,
+    },
     email: {
         type: String,
         default: null,
