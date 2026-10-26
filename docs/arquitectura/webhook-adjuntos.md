@@ -15,6 +15,7 @@ Lo que entra desde Meta: firma, estados de los mensajes, tipos de mensaje, adjun
 - [Mensajes eliminados y editados (`applyMessageChange`)](#mensajes-eliminados-y-editados-applymessagechange)
 - [Citas, reenvíos y reacciones (`applyReaction`)](#citas-reenvíos-y-reacciones-applyreaction)
 - [Meta retira el acceso a un WABA (`PARTNER_REMOVED`)](#meta-retira-el-acceso-a-un-waba-partner_removed)
+- [Historial de la app de WhatsApp Business (`storeHistoryChunks`)](#historial-de-la-app-de-whatsapp-business-storehistorychunks)
 
 ---
 
@@ -104,3 +105,16 @@ Desde 2026-10-20 (spec `docs/superpowers/specs/2026-10-20-citas-reacciones-desig
 - **Con el candado ocupado** (alguien conecta o desconecta en ese momento) se reintenta 3 veces con 1 s de espera (`PARTNER_REMOVED_LOCK`); si sigue ocupado, **el resto del lote se procesa igual** y el webhook responde **500** para que Meta lo reentregue. Es seguro: en la reentrega, los mensajes ya guardados se saltan por `waMessageId` antes de cualquier efecto (sin repetir push, bot ni descargas) y los acuses son monótonos.
 - **Un error** al aplicarlo (la BD que falla) también responde **500** al final del lote, para que Meta lo reentregue: perder el aviso dejaría líneas activas sin acceso.
 - Un WABA que no está en ninguna cuenta: solo un aviso en el log. `ACCOUNT_OFFBOARDED` y `ACCOUNT_RECONNECTED` no se tratan en esta versión.
+
+### Historial de la app de WhatsApp Business (`storeHistoryChunks`)
+
+**Historial de la app de WhatsApp Business** (2026-10-26, en construcción; spec `docs/superpowers/specs/2026-10-23-historial-coexistencia-design.md`, plan `docs/superpowers/plans/2026-10-23-historial-coexistencia.md`). Al conectar un número que sigue en la app, Meta puede mandar sus chats de los últimos 6 meses por el campo `history`. Hoy el webhook **solo los guarda**: todavía no se piden (PR 5 del plan) ni se convierten en mensajes (el worker, PR 3).
+
+- **Solo `POST /api/webhook` acepta hasta 20 MB** (`app.js`, antes del parser general, con la misma `verify` que guarda `req.rawBody`): un trozo puede traer miles de mensajes. El resto de la API sigue en 100 KB. El nginx del frontend ya admite 20 MB en `/api/`.
+- **`change.field === 'history'` va antes que los `messages`** y hace `continue`: los `messages[]` que lleguen bajo `history` (los archivos de 14 días) **nunca** pasan por `procesarEntrante`, que les sumaría no leídos, avisaría por push y despertaría al bot. Un cuerpo **sin `entry`** pero con `history` y `metadata.phone_number_id` (la forma del error 2593109 en la referencia de Meta) se trata como un solo cambio `history`.
+- **Solo para la conexión que lo pidió:** `services/history.intake.service.js` guarda si la línea activa del número tiene `Line.historySync` y su `connectionAt` es su `connectedAt` actual. Si no (no lo pidió, o lo pidió en una conexión anterior), un aviso en el log y nada más.
+- **`storeHistoryChunks`:** cada `value.history[]` se lee con `describeHistoryChunk` (`utils/history.sync.js`). El error **2593109** pone `historySync.declined`. Si no, cada hilo se parte con `splitThreadMessages` (como mucho 500 mensajes y 4 MB de JSON, lejos de los 16 MB por documento de Mongo) y cada pieza va a `HistoryThread` con `status: 'pending'`. `history_thread_piece_unique` hace que una reentrega no cree otra pieza (`insertMany` con `ordered: false`; el E11000 no es error). Después, en una sola escritura: el mayor `progress` visto (los trozos llegan desordenados), `firstChunkAt` y `lastChunkAt`, `historyComplete` con `progress: 100` y `finishedAt` a `null`, porque un trozo tardío reabre la recepción.
+- **`storeHistoryMedia`:** cada `messages[]` con `id` se guarda en `HistoryMedia` por su `mediaKey` (la `waMessageKey` o `'id:' + waMessageId`), con `$setOnInsert`: una reentrega no deshace un `applied`. Lo aplica a su mensaje el worker (PR 3). La forma exacta de este webhook se confirma con Meta (spec § 3).
+- **Lo mal formado se salta con un aviso** (un trozo ilegible, un hilo sin teléfono, un archivo sin `id`) y el lote sigue. **Un fallo de la BD** responde **500** al final del lote para que Meta lo reentregue.
+- **El log, sin textos ni teléfonos:** `Historial: trozo guardado` con `lineId`, fase, `chunkOrder`, `progress` y cuántos hilos, mensajes y piezas.
+- Probar en local: `npm run webhook:simulate -- history` ([pruebas-y-scripts.md § Probar el webhook en local](pruebas-y-scripts.md#probar-el-webhook-en-local)).

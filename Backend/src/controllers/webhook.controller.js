@@ -26,6 +26,7 @@ import { applyMessageChange } from '../services/message.change.service.js';
 import { applyReaction, applyReactionStatus } from '../services/reaction.service.js';
 import { findQuotedMessage, quotedMapOf } from '../services/message.reply.service.js';
 import { serializeMessage } from './chat.controller.js';
+import { storeHistoryChunks, storeHistoryMedia } from '../services/history.intake.service.js';
 
 // Baja el adjunto y lo deja en disco. Devuelve SIEMPRE un objeto: si algo falla
 // —token caducado, archivo enorme, Meta caída— sale con mediaFile en null y el
@@ -559,8 +560,12 @@ const procesarEstado = async (inbound, statusData) => {
 export const handleWebhook = async (req, res) => {
     try {
         const body = req.body;
+        // El historial con el error 2593109 viene, en la referencia de Meta, sin
+        // `entry`: el `value` suelto. Se trata como un solo cambio `history`.
+        const entries = body.entry
+            ?? (body.history && body.metadata?.phone_number_id ? [{ changes: [{ field: 'history', value: body }] }] : null);
 
-        if(!body.entry) return res.sendStatus(200);
+        if(!entries) return res.sendStatus(200);
 
         // Un aviso de Meta que no se pudo aplicar porque el candado de líneas
         // estaba ocupado: el resto del lote se procesa igual y, al final, 500
@@ -569,7 +574,7 @@ export const handleWebhook = async (req, res) => {
         // monótonos.
         let retryBatch = false;
 
-        for(const entry of body.entry) {
+        for(const entry of entries) {
             for(const change of entry.changes ?? []){
                 const value = change.value;
 
@@ -611,6 +616,21 @@ export const handleWebhook = async (req, res) => {
                     await rememberDisplayPhoneNumber(inbound.lineId, value?.metadata?.display_phone_number);
                 } catch (error) {
                     console.error("No se pudo guardar el número visible de la línea:", { error: error.message });
+                }
+
+                // El historial de la app de WhatsApp Business: solo se guarda. Va
+                // ANTES de los `messages`: los de un `history` (los archivos de 14
+                // días) nunca son entrantes en vivo, que sumarían no leídos y avisarían.
+                if (change.field === 'history') {
+                    try {
+                        await storeHistoryChunks(inbound, value);
+                        await storeHistoryMedia(inbound, value);
+                    } catch (error) {
+                        // Un fallo de la BD no puede perder el trozo: Meta lo reentrega.
+                        retryBatch = true;
+                        console.error('Historial no guardado, se pide a Meta que lo reentregue:', { lineId: inbound.lineId ? String(inbound.lineId) : null, error: error.message });
+                    }
+                    continue;
                 }
 
                 const messages = value?.messages ?? [];

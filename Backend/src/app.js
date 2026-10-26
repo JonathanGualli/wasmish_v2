@@ -38,23 +38,25 @@ if (process.env.NODE_ENV !== 'test') app.use(morgan('dev'));
 // La vista previa de una importación trae el archivo entero (hasta 10 000
 // filas), que no cabe en los 100 KB por defecto. Va antes del parser general:
 // un cuerpo ya leído, aquel lo deja pasar.
+// El cuerpo crudo queda en `req.rawBody`: la firma del webhook se comprueba sobre él.
+const verifyJsonBody = (req, res, buf) => {
+    req.rawBody = buf;
+    // Un POST sin cuerpo (pausar una campaña, p. ej.) con Content-Type JSON no
+    // es un JSON inválido: JSON.parse('') fallaría y respondería un 400 HTML.
+    if (buf.length === 0) return;
+    try {
+        JSON.parse(buf);
+    } catch (err) {
+        err.statusCode = 400;
+        err.body = buf.toString();
+        throw err;
+    }   
+};
 app.use('/api/contacts/import', express.json({ limit: '3mb' }));
-app.use(express.json({
-    strict: true, 
-    verify: (req, res, buf) => {
-        req.rawBody = buf;
-        // Un POST sin cuerpo (pausar una campaña, p. ej.) con Content-Type JSON no
-        // es un JSON inválido: JSON.parse('') fallaría y respondería un 400 HTML.
-        if (buf.length === 0) return;
-        try {
-            JSON.parse(buf);
-        } catch (err) {
-            err.statusCode = 400;
-            err.body = buf.toString();
-            throw err;
-        }   
-    }
-}));
+// Un trozo del historial de la app de WhatsApp Business puede traer miles de
+// mensajes. Solo esta ruta: el resto de la API sigue en 100 KB.
+app.use('/api/webhook', express.json({ limit: '20mb', strict: true, verify: verifyJsonBody }));
+app.use(express.json({ strict: true, verify: verifyJsonBody }));
 
 app.use(cookieParser());
 

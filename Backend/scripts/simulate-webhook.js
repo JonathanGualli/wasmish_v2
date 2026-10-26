@@ -32,6 +32,15 @@
 //   npm run webhook:simulate -- texto --forwarded        (o --forwarded-many)
 //                                                ← un reenvío (muchas veces: una cadena)
 //   (--reply-to y --forwarded valen para cualquier tipo y para eco)
+//   npm run webhook:simulate -- history --threads 3 --messages 20 --phase 1 --progress 100
+//                                                ← un trozo del historial de la app de WhatsApp
+//                                                  Business (campo `history`); --chunk-order <n>
+//   npm run webhook:simulate -- history --declined
+//                                                ← el negocio no compartió el historial (2593109)
+//   npm run webhook:simulate -- history-media --original <wamid>
+//                                                ← el archivo de 14 días de ese mensaje del historial
+//   (la línea tiene que haber pedido el historial en su conexión actual: si no,
+//    el simulador se lo pone, solo en la BD local)
 //
 // Opciones: --from <numero>  --url <http://...>  --phone-number-id <id>
 //           --name <nombre de perfil>  --username <usuario>  --new-from <numero>
@@ -39,6 +48,7 @@
 //           --reason <motivo de retiro-acceso>
 //           --original <wamid del mensaje que se borra, se edita o al que se reacciona>
 //           --text <texto editado>  --emoji <emoji>  --reply-to <wamid>  --forwarded  --forwarded-many  --eco
+//           --threads <n>  --messages <n por hilo>  --phase <0|1|2>  --progress <0-100>  --chunk-order <n>  --declined
 //
 // El wamid de cada mensaje sale en la lista «Guardado» del final.
 //
@@ -60,6 +70,9 @@ import Contact from '../src/models/contact.model.js';
 import Conversation from '../src/models/conversation.model.js';
 import Message from '../src/models/message.model.js';
 import Waba from '../src/models/waba.model.js';
+import HistoryThread from '../src/models/history.thread.model.js';
+import HistoryMedia from '../src/models/history.media.model.js';
+import { historySyncView } from '../src/utils/history.sync.js';
 
 // Formas reales del webhook de Meta, una por tipo. Si alguna no cuadra con lo
 // que manda Meta de verdad, corregir AQUÍ y en utils/inbound.message.js.
@@ -109,6 +122,11 @@ const CAMBIOS = ['revoke', 'edit'];
 // va a un mensaje que no existe (queda suelta).
 const REACCION = 'reaction';
 
+// El historial de la app de WhatsApp Business (spec 2026-10-23): un trozo del
+// campo `history` y el archivo de 14 días de uno de sus mensajes.
+const HISTORIAL = 'history';
+const HISTORIAL_ARCHIVO = 'history-media';
+
 // --- argumentos -------------------------------------------------------------
 const argv = process.argv.slice(2);
 const opcion = (nombre, porDefecto) => {
@@ -132,6 +150,12 @@ const COMO_ECO = argv.includes('--eco');
 const EMOJI = opcion('emoji', null);
 const REPLY_TO = opcion('reply-to', null);
 const FORWARDED = argv.includes('--forwarded-many') ? 'many' : argv.includes('--forwarded') ? 'once' : null;
+const THREADS = opcion('threads', '2');
+const MESSAGES = opcion('messages', '5');
+const PHASE = opcion('phase', '0');
+const PROGRESS = opcion('progress', '100');
+const CHUNK_ORDER = opcion('chunk-order', '1');
+const DECLINED = argv.includes('--declined');
 
 // El BSUID que Meta generaría: país + id. Se deriva del número o del usuario
 // para que el mismo contacto de prueba tenga siempre el mismo.
@@ -141,7 +165,7 @@ const PHONE = USERNAME ? null : FROM;
 // Tras el cambio de número, el BSUID es el que tendría --from <número nuevo>.
 const NEW_USER_ID = NEW_FROM && simulatedUserId(NEW_FROM);
 
-const valoresDeOpciones = [FROM, URL_BASE, phoneNumberIdArg, PROFILE_NAME, USERNAME, NEW_FROM, DISPLAY_NUMBER, REASON, ORIGINAL, EDITED_TEXT, EMOJI, REPLY_TO];
+const valoresDeOpciones = [FROM, URL_BASE, phoneNumberIdArg, PROFILE_NAME, USERNAME, NEW_FROM, DISPLAY_NUMBER, REASON, ORIGINAL, EDITED_TEXT, EMOJI, REPLY_TO, THREADS, MESSAGES, PHASE, PROGRESS, CHUNK_ORDER];
 const nombres = argv.filter(a => !a.startsWith('--') && !valoresDeOpciones.includes(a));
 const todos = argv.includes('--all');
 const listar = argv.includes('--list');
@@ -156,6 +180,7 @@ if (listar) {
     console.log('\nBorrar o editar un mensaje (con --original <wamid>; --eco si lo hace el negocio):\n  revoke\n  edit            (--text <texto nuevo>)');
     console.log(`\nReaccionar (con --original <wamid>; --eco si lo hace el negocio):\n  ${REACCION}        (--emoji <emoji>; sin él, la quita)`);
     console.log('\nEn cualquier mensaje: --reply-to <wamid> (cita), --forwarded o --forwarded-many (reenvío)');
+    console.log(`\nHistorial de la app de WhatsApp Business:\n  ${HISTORIAL}         (--threads --messages --phase --progress --chunk-order; --declined: no lo compartió)\n  ${HISTORIAL_ARCHIVO}   (con --original <wamid>: el archivo de 14 días)`);
     process.exit(0);
 }
 
@@ -167,10 +192,11 @@ if (!limpiar && elegidos.length === 0) {
     morir('Dime qué mandar.  Ej: npm run webhook:simulate -- audio boton   (o --all, o --list)');
 }
 
-const desconocidos = elegidos.filter(n => !MUESTRAS[n] && !PREFERENCIAS[n] && ![CAMBIO_NUMERO, ECO, RETIRO, REACCION, ...CAMBIOS].includes(n));
+const desconocidos = elegidos.filter(n => !MUESTRAS[n] && !PREFERENCIAS[n] && ![CAMBIO_NUMERO, ECO, RETIRO, REACCION, HISTORIAL, HISTORIAL_ARCHIVO, ...CAMBIOS].includes(n));
 if (desconocidos.length > 0) morir(`No conozco: ${desconocidos.join(', ')}.  Usa --list para ver los tipos.`);
 if (elegidos.includes(CAMBIO_NUMERO) && !NEW_FROM) morir(`${CAMBIO_NUMERO} necesita el número nuevo:  --new-from 593000000001`);
 if (elegidos.some(n => CAMBIOS.includes(n) || n === REACCION) && !ORIGINAL) morir('revoke, edit y reaction necesitan el mensaje:  --original <wamid>  (sale en la lista «Guardado»)');
+if (elegidos.includes(HISTORIAL_ARCHIVO) && !ORIGINAL) morir(`${HISTORIAL_ARCHIVO} necesita el mensaje del historial:  --original <wamid>`);
 
 // --- ejecución --------------------------------------------------------------
 await mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/wasmish');
@@ -333,8 +359,63 @@ const eco = (contenido = { type: 'text', text: { body: 'Respondido desde la app 
     },
 });
 
+// Un trozo del historial: hilos con el contacto de prueba y los siguientes
+// números, alternando el contacto y el negocio, con un archivo sin contenido
+// (`media_placeholder`) de vez en cuando. Con --declined, el error de Meta.
+const historial = () => {
+    const ahora = Math.floor(Date.now() / 1000);
+    const item = DECLINED
+        ? { errors: [{ code: 2593109, title: 'History sync is turned off by the business from the WhatsApp Business App' }] }
+        : {
+            metadata: { phase: Number(PHASE), chunk_order: Number(CHUNK_ORDER), progress: Number(PROGRESS) },
+            threads: Array.from({ length: Number(THREADS) }, (_, t) => {
+                const telefono = String(BigInt(FROM) + BigInt(t));
+                return { id: telefono, messages: Array.from({ length: Number(MESSAGES) }, (_, i) => ({
+                    from: i % 2 === 0 ? telefono : DISPLAY_NUMBER,
+                    id: `wamid.hist.${Date.now()}.${t}.${i}`,
+                    timestamp: String(ahora - 86400 * (Number(PHASE) * 30 + 1) + i * 60),
+                    ...(i % 5 === 4
+                        ? { type: 'media_placeholder' }
+                        : { type: 'text', text: { body: `Mensaje ${i + 1} del historial (simulado)` } }),
+                    history_context: { status: i % 2 === 0 ? 'DELIVERED' : 'READ' },
+                })) };
+            }),
+        };
+    return { field: 'history', value: {
+        messaging_product: 'whatsapp',
+        metadata: { display_phone_number: DISPLAY_NUMBER, phone_number_id: phoneNumberId },
+        history: [item],
+    } };
+};
+
+// El archivo de 14 días: un mensaje con su contenido, bajo el mismo campo.
+const archivoDelHistorial = () => ({ field: 'history', value: {
+    messaging_product: 'whatsapp',
+    metadata: { display_phone_number: DISPLAY_NUMBER, phone_number_id: phoneNumberId },
+    messages: [{
+        from: FROM, id: ORIGINAL, timestamp: String(Math.floor(Date.now() / 1000) - 3600),
+        type: 'image', image: { id: 'MEDIA_IMG', mime_type: 'image/jpeg', sha256: 'simulado', caption: 'Foto del historial (simulada)' },
+    }],
+} });
+
+const conHistorial = elegidos.some(n => n === HISTORIAL || n === HISTORIAL_ARCHIVO);
+if (conHistorial) {
+    if (!lineaActiva) morir(`${HISTORIAL} necesita una línea activa (Fase 2c).`);
+    // Sin el pedido en esta conexión, el webhook lo ignora: aquí se pone a mano.
+    if (lineaActiva.historySync?.connectionAt?.getTime() !== lineaActiva.connectedAt?.getTime()) {
+        // Una línea anterior a `connectedAt` estrena uno: tienen que coincidir.
+        const connectionAt = lineaActiva.connectedAt ?? new Date();
+        await Line.updateOne({ _id: lineaActiva._id }, { $set: { connectedAt: connectionAt, historySync: {
+            connectionAt, requests: { contacts: { state: 'accepted' }, history: { state: 'accepted' } },
+        } } });
+        console.log('La línea no había pedido el historial en esta conexión: se lo puse (solo en la BD local).\n');
+    }
+}
+
 for (const nombre of elegidos) {
     const body = nombre === RETIRO ? JSON.stringify(await retiroDeAcceso())
+        : nombre === HISTORIAL ? JSON.stringify({ entry: [{ changes: [historial()] }] })
+        : nombre === HISTORIAL_ARCHIVO ? JSON.stringify({ entry: [{ changes: [archivoDelHistorial()] }] })
         : nombre === ECO ? JSON.stringify({ entry: [{ changes: [eco()] }] })
         : CAMBIOS.includes(nombre) && COMO_ECO ? JSON.stringify({ entry: [{ changes: [eco(cambio(nombre))] }] })
         : nombre === REACCION && COMO_ECO ? JSON.stringify({ entry: [{ changes: [eco(reaccion())] }] })
@@ -369,6 +450,15 @@ for (const nombre of elegidos) {
 }
 
 // Lo que quedó guardado, que es lo que de verdad se quiere comprobar.
+if (conHistorial) {
+    const linea = await Line.findById(lineaActiva._id).lean();
+    const conexion = { lineId: linea._id, connectionAt: linea.historySync?.connectionAt };
+    const piezas = await HistoryThread.aggregate([{ $match: conexion }, { $group: { _id: '$status', n: { $sum: 1 } } }]);
+    console.log(`\nPiezas del historial de esta conexión: ${piezas.map(p => `${p._id} ${p.n}`).join(', ') || 'ninguna'}`);
+    console.log(`Archivos de 14 días: ${await HistoryMedia.countDocuments(conexion)} (${await HistoryMedia.countDocuments({ ...conexion, applied: true })} aplicados)`);
+    console.log(`Estado de la línea: ${JSON.stringify(historySyncView(linea.historySync))}`);
+    console.log('Los mensajes los crea el worker del historial (PR 3): hasta entonces, solo se guardan las piezas.');
+}
 const contact = await findTestContact();
 const conv = await findTestConversation(contact);
 if (contact) {
