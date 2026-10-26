@@ -4,6 +4,9 @@ import HistoryMedia from '../models/history.media.model.js';
 import { describeHistoryChunk, splitThreadMessages } from '../utils/history.sync.js';
 import { wamidMessageKey } from '../utils/wamid.js';
 import { wakeHistoryWorker } from '../workers/history.worker.js';
+import { applyHistoryMedia } from './history.import.service.js';
+import Message from '../models/message.model.js';
+import Conversation from '../models/conversation.model.js';
 
 // Lo que llega por el webhook `history` (el historial de la app de WhatsApp
 // Business): aquí solo se GUARDA, en piezas, y el worker lo procesa después
@@ -118,9 +121,25 @@ export const storeHistoryChunks = async (inbound, value) => {
 };
 
 /**
+ * El mensaje del historial al que va un archivo, si ya está: por su clave
+ * (`message_waMessageKey`) o por su wamid, y solo en una conversación de esa línea.
+ */
+const findMediaTarget = async (lineId, waMessageId, waMessageKey) => {
+    const candidates = await Message.find(waMessageKey ? { $or: [{ waMessageKey }, { waMessageId }] } : { waMessageId })
+        .select('_id conversationId waMessageId timestamp').lean();
+    for (const message of candidates) {
+        if (await Conversation.exists({ _id: message.conversationId, lineId })) return message;
+    }
+    return null;
+};
+
+/**
  * El contenido de los archivos de 14 días: un `messages[]` que llega bajo el
  * campo `history`. Nunca es un mensaje en vivo (no pasa por `procesarEntrante`):
- * se guarda en `HistoryMedia` por su identidad y lo aplica el worker.
+ * se guarda en `HistoryMedia` por su identidad y, **después**, se busca su
+ * mensaje. El worker hace lo mismo al revés (crea el mensaje y busca el
+ * archivo): como cada lado escribe antes de buscar al otro, uno de los dos lo
+ * encuentra, llegue el archivo antes, durante o después del hilo.
  * @returns {Promise<{ stored: number, ignored: boolean }>}
  */
 export const storeHistoryMedia = async (inbound, value) => {
@@ -153,6 +172,8 @@ export const storeHistoryMedia = async (inbound, value) => {
             // Dos entregas a la vez: la otra ya lo guardó.
             if (error.code !== 11000) throw error;
         }
+        const message = await findMediaTarget(sync.lineId, waMessageId, waMessageKey);
+        if (message) await applyHistoryMedia({ line: inbound, connectionAt: sync.connectionAt, message });
     }
     console.log('Historial: archivos guardados', { lineId: String(sync.lineId), recibidos: messages.length, nuevos: stored });
     return { stored, ignored: false };
