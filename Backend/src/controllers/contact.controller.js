@@ -19,6 +19,21 @@ import { applyAgendaName } from "../services/agenda.service.js";
 // un BSUID: el webhook, los dos envíos (texto y plantilla) y el alta manual.
 // ---------------------------------------------------------------------------
 
+/**
+ * Un contacto recién creado (o que acaba de recibir su teléfono), con el nombre
+ * de la agenda del celular si ya llegó (ver services/agenda.service.js). Un
+ * fallo no impide crearlo: se registra y el siguiente cambio de la agenda lo arregla.
+ */
+const withAgendaName = async (contact) => {
+    if (!contact.phone) return contact;
+    try {
+        return (await applyAgendaName(contact.userId, contact.phone)) ?? contact;
+    } catch (error) {
+        console.warn('No se pudo poner el nombre de la agenda al contacto:', { contactId: String(contact._id), error: error.message });
+        return contact;
+    }
+};
+
 // El BSUID primero: identifica a la persona aunque Meta no mande el teléfono.
 export const findContactByIdentity = async (userId, { phone, waUserId }) => {
     if (waUserId) {
@@ -34,7 +49,10 @@ const applyContactUpdates = async (contact, incoming) => {
 
     try {
         Object.assign(contact, changes);
-        return await contact.save();
+        const saved = await contact.save();
+        // Nació solo con BSUID y Meta acaba de revelar su teléfono: la agenda
+        // pudo llegar antes (revisión de Codex del PR #131).
+        return changes.phone ? withAgendaName(saved) : saved;
     } catch (error) {
         // El teléfono o el BSUID ya son de OTRO contacto de la cuenta (uno se creó
         // solo con teléfono y otro solo con BSUID). Fusionarlos no es algo que deba
@@ -45,20 +63,6 @@ const applyContactUpdates = async (contact, incoming) => {
     }
 };
 
-/**
- * Un contacto recién creado, con el nombre de la agenda del celular si ya llegó
- * (ver services/agenda.service.js). Un fallo no impide crearlo: se registra y el
- * siguiente cambio de la agenda lo arregla.
- */
-const withAgendaName = async (contact) => {
-    if (!contact.phone) return contact;
-    try {
-        return (await applyAgendaName(contact.userId, contact.phone)) ?? contact;
-    } catch (error) {
-        console.warn('No se pudo poner el nombre de la agenda al contacto nuevo:', { contactId: String(contact._id), error: error.message });
-        return contact;
-    }
-};
 
 /**
  * Devuelve el contacto de esa identidad, creándolo si no existe, y le pone al

@@ -65,27 +65,37 @@ export const applyAgendaNames = async (accountId, phones) => {
 /**
  * Un webhook `smb_app_state_sync`: cada contacto de `value.state_sync[]` se
  * guarda y **después** se aplica. Lo mal formado se salta con un aviso (sin
- * nombres en el log) y el resto sigue; un fallo de la BD sube a `handleWebhook`,
- * que responde 500 para que Meta lo reentregue.
- * @returns {Promise<number>} cuántos contactos de Wasmish cambiaron de nombre.
+ * nombres en el log) y el resto sigue. Un fallo de la BD tampoco corta el lote:
+ * se cuenta, y `handleWebhook` responde 500 para que Meta lo reentregue, pero
+ * avisa de lo que sí cambió (en la reentrega ya no cambiaría: revisión de Codex
+ * del PR #131).
+ * @returns {Promise<{ renamed: number, failed: number }>} cuántos contactos de
+ *   Wasmish cambiaron de nombre y cuántos de la agenda no se pudieron guardar.
  */
 export const storeAgendaSync = async (inbound, value) => {
     const items = Array.isArray(value?.state_sync) ? value.state_sync : [];
+    const lineId = inbound.lineId ? String(inbound.lineId) : null;
     let malformed = 0;
     let renamed = 0;
+    let failed = 0;
     for (const item of items) {
         const change = describeAgendaChange(item);
         if (!change) {
             malformed += 1;
             continue;
         }
-        await storeAgendaChange(inbound.accountId, change);
-        // Aunque no se guardara (una reentrega): lo guardado la otra vez pudo
-        // quedarse sin aplicar si falló justo después.
-        if (await applyAgendaName(inbound.accountId, change.phone)) renamed += 1;
+        try {
+            await storeAgendaChange(inbound.accountId, change);
+            // Aunque no se guardara (una reentrega): lo guardado la otra vez pudo
+            // quedarse sin aplicar si falló justo después.
+            if (await applyAgendaName(inbound.accountId, change.phone)) renamed += 1;
+        } catch (error) {
+            failed += 1;
+            console.error('Contacto de la agenda no guardado:', { lineId, error: error.message });
+        }
     }
     if (malformed > 0) {
-        console.warn('Contactos de la agenda mal formados; se saltan:', { lineId: inbound.lineId ? String(inbound.lineId) : null, contactos: malformed });
+        console.warn('Contactos de la agenda mal formados; se saltan:', { lineId, contactos: malformed });
     }
-    return renamed;
+    return { renamed, failed };
 };

@@ -51,6 +51,8 @@ test('describeAgendaChange: null si no es un contacto o le falta el teléfono, l
         'hora vacía': itemOf({ metadata: { timestamp: '' } }),
         'hora que no es número': itemOf({ metadata: { timestamp: 'ayer' } }),
         'hora cero': itemOf({ metadata: { timestamp: 0 } }),
+        // Regresión que vigila: «1e20» es un número finito, pero no una fecha válida.
+        'hora fuera de rango': itemOf({ metadata: { timestamp: '1e20' } }),
     };
     for (const [label, item] of Object.entries(cases)) assert.equal(describeAgendaChange(item), null, label);
     for (const value of [null, undefined, 'contacto', 42]) assert.equal(describeAgendaChange(value), null, String(value));

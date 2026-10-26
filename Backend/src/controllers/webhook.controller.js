@@ -646,11 +646,13 @@ export const handleWebhook = async (req, res) => {
 
                 // La agenda del celular de la app: cada contacto se guarda y
                 // después nombra al contacto de Wasmish con ese teléfono, si lo hay.
-                // Toda la agenda puede llegar de una vez: un solo aviso a la UI.
+                // Toda la agenda puede llegar de una vez: un solo aviso a la UI,
+                // también si algún contacto falló y se pide la reentrega.
                 if (change.field === 'smb_app_state_sync') {
                     try {
-                        const renamed = await storeAgendaSync(inbound, value);
+                        const { renamed, failed } = await storeAgendaSync(inbound, value);
                         if (renamed > 0) notifyContactsChanged(inbound.accountId);
+                        if (failed > 0) retryBatch = true;
                     } catch (error) {
                         retryBatch = true;
                         console.error('Agenda no guardada, se pide a Meta que la reentregue:', { lineId: inbound.lineId ? String(inbound.lineId) : null, error: error.message });

@@ -212,6 +212,8 @@ test('lo mal formado se salta y el resto del lote se aplica', async () => {
         { type: 'contact', action: 'add', contact: { full_name: 'Sin teléfono' }, metadata: { timestamp: String(nowSeconds()) } },
         agendaItem('12345', { fullName: 'Teléfono corto' }),
         agendaItem(phone, { fullName: 'Después de los rotos', at: 'ayer' }),
+        // Regresión que vigila: «1e20» pasaba la validación y la BD cortaba el lote aquí.
+        agendaItem(phone, { fullName: 'Hora fuera de rango', at: '1e20' }),
         agendaItem(phone, { fullName: 'Bien formado' }),
     ]);
     assert.equal(res.status, 200);
@@ -234,4 +236,51 @@ test('un fallo de la BD al guardar la agenda responde 500, y la reentrega la apl
 
     assert.equal((await postAgenda(A_NUMBER, [item])).status, 200);
     assert.equal((await contactOf(a, phone)).agendaName, 'Tras el fallo');
+});
+
+// Regresión que vigila (revisión de Codex del PR #131): el aviso solo salía si
+// el lote entero iba bien, y en la reentrega lo ya aplicado no cambia: las
+// pantallas abiertas se quedaban con el nombre anterior.
+test('si un contacto del lote falla, el resto se aplica y se avisa, y el 500 pide reentregarlo', async () => {
+    const renamedPhone = '593990091011';
+    const failingPhone = '593990091012';
+    await Contact.create({ userId: a.accountId, phone: renamedPhone, source: 'manual' });
+    const items = [agendaItem(failingPhone, { fullName: 'Falla' }), agendaItem(renamedPhone, { fullName: 'Se aplica' })];
+    const original = AgendaEntry.updateOne;
+    AgendaEntry.updateOne = function (filter, ...rest) {
+        if (filter.phone === failingPhone) throw new Error('la BD no responde');
+        return original.call(this, filter, ...rest);
+    };
+    const stream = await openStream(a);
+    try {
+        assert.equal((await postAgenda(A_NUMBER, items)).status, 500);
+        assert.ok(await stream.waitFor('contacts_updated', 2000));
+    } finally {
+        AgendaEntry.updateOne = original;
+        await stream.close();
+    }
+    assert.equal((await contactOf(a, renamedPhone)).agendaName, 'Se aplica');
+    assert.equal((await postAgenda(A_NUMBER, items)).status, 200);
+    assert.ok(await AgendaEntry.exists({ userId: a.accountId, phone: failingPhone }));
+});
+
+// Regresión que vigila (revisión de Codex del PR #131): la agenda solo se
+// aplicaba al crear el contacto, no al rellenarle el teléfono.
+test('uno que escribió sin teléfono toma el nombre de la agenda cuando Meta revela su número', async () => {
+    const phone = '593990091013';
+    const waUserId = 'EC.13491208655302741913';
+    const message = (id, withPhone) => ({
+        ...(withPhone && { from: phone }), from_user_id: waUserId, id, timestamp: String(nowSeconds()), type: 'text', text: { body: 'Hola' },
+    });
+    assert.equal((await postWebhook(A_NUMBER, {
+        contacts: [{ user_id: waUserId, profile: { name: 'Lu', username: 'lu.tienda' } }], messages: [message('wamid.agenda.bsuid.1', false)],
+    })).status, 200);
+    assert.equal((await Contact.findOne({ userId: a.accountId, waUserId }).lean()).phone, null);
+
+    assert.equal((await postAgenda(A_NUMBER, [agendaItem(phone, { fullName: 'Lucía por BSUID' })])).status, 200);
+    assert.equal((await postWebhook(A_NUMBER, {
+        contacts: [{ wa_id: phone, user_id: waUserId, profile: { name: 'Lu' } }], messages: [message('wamid.agenda.bsuid.2', true)],
+    })).status, 200);
+    const contact = await Contact.findOne({ userId: a.accountId, waUserId }).lean();
+    assert.deepEqual([contact.phone, contact.agendaName], [phone, 'Lucía por BSUID']);
 });

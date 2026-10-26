@@ -23,13 +23,17 @@ export const describeAgendaChange = (item) => {
     const phone = normalizeWaPhone(item.contact?.phone_number);
     const seconds = Number(item.metadata?.timestamp);
     if (!phone || item.metadata?.timestamp === '' || !Number.isFinite(seconds) || seconds <= 0) return null;
+    // Un número enorme («1e20») es finito pero no es una fecha: Mongo la rechazaría
+    // y cortaría el lote en cada reentrega (revisión de Codex del PR #131).
+    const syncedAt = new Date(seconds * 1000);
+    if (Number.isNaN(syncedAt.getTime())) return null;
 
     return {
         phone,
         fullName: cleanString(item.contact?.full_name),
         firstName: cleanString(item.contact?.first_name),
         removed: item.action === 'remove',
-        syncedAt: new Date(seconds * 1000),
+        syncedAt,
     };
 };
 
