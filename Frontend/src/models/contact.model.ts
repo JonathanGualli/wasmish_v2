@@ -1,5 +1,5 @@
 /** Cómo llegó el contacto. `null` = anterior a que existieran los contactos. */
-export type ContactSource = 'inbound' | 'manual' | 'api' | 'ad' | 'import' | null;
+export type ContactSource = 'inbound' | 'manual' | 'api' | 'ad' | 'import' | 'businessApp' | null;
 
 export type ContactFilter = 'all' | 'with_conversation' | 'without_conversation' | 'opted_out';
 

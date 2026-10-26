@@ -118,6 +118,8 @@ export const Invitation = await load('invitation.model.js');
 export const PushSubscription = await load('push.subscription.model.js');
 export const AutoReplySettings = await load('auto.reply.settings.model.js');
 export const ContactNote = await load('contact.note.model.js');
+export const HistoryThread = await load('history.thread.model.js');
+export const HistoryMedia = await load('history.media.model.js');
 
 const server = app.listen(0);
 const baseUrl = `http://127.0.0.1:${server.address().port}/api`;

@@ -15,6 +15,7 @@ export const SOURCE_LABEL: Record<NonNullable<ContactSource> | 'legacy', string>
     api: 'Por la API',
     ad: 'Desde un anuncio',
     import: 'Importado',
+    businessApp: 'De la app de WhatsApp Business',
     legacy: 'Anterior',
 };
 

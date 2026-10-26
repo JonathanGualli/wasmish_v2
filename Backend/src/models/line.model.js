@@ -1,5 +1,22 @@
 import mongoose from 'mongoose';
 
+// Un pedido a Meta del historial o de los contactos (`smb_app_data`). `uncertain`:
+// se cortó a medias y no se sabe si llegó; no se repite solo (spec del historial, § 4).
+const historyRequestSchema = new mongoose.Schema({
+    state: {
+        type: String,
+        enum: ['pending', 'requesting', 'accepted', 'uncertain', 'rejected'],
+        default: 'pending',
+    },
+    // Lo que devuelve Meta, por si hay que escribir a su soporte.
+    requestId: { type: String, default: null },
+    claimedAt: { type: Date, default: null },
+    error: {
+        type: new mongoose.Schema({ code: String, detail: String }, { _id: false }),
+        default: undefined,
+    },
+}, { _id: false });
+
 // Una línea: un número de WhatsApp (`phoneNumberId`) de una cuenta. Las de
 // números anteriores se conservan `disconnected`, con su historial. Desde la
 // Fase 2c de multi-línea es la fuente de la conexión (la escribe solo
@@ -51,6 +68,30 @@ const lineSchema = new mongoose.Schema({
     // (`PRIMARY_INACTIVITY`…), o null si no lo dijo o se desconectó desde
     // Wasmish. Se borra al reconectar o renovar.
     disconnectionReason: { type: String, default: null },
+    // El historial y la agenda de la app de WhatsApp Business, de UNA conexión
+    // (`connectionAt` = el `connectedAt` de cuando se pidió): lo que llegue de
+    // otra se ignora. Sin default: solo lo llevan las líneas que lo pidieron.
+    // Spec: docs/superpowers/specs/2026-10-23-historial-coexistencia-design.md.
+    historySync: {
+        type: new mongoose.Schema({
+            connectionAt: { type: Date, required: true },
+            requests: {
+                contacts: { type: historyRequestSchema, default: () => ({}) },
+                history: { type: historyRequestSchema, default: () => ({}) },
+            },
+            // El negocio no compartió el historial (error 2593109).
+            declined: { type: Boolean, default: false },
+            // El mayor `progress` visto (0 a 100); los trozos llegan desordenados.
+            progress: { type: Number, default: null },
+            firstChunkAt: { type: Date, default: null },
+            lastChunkAt: { type: Date, default: null },
+            // Llegó un trozo con `progress: 100`.
+            historyComplete: { type: Boolean, default: false },
+            finishedAt: { type: Date, default: null },
+            failedThreads: { type: Number, default: 0 },
+        }, { _id: false }),
+        default: undefined,
+    },
 }, {
     timestamps: true,
 });
