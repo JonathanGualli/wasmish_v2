@@ -32,7 +32,7 @@ import { storeHistoryChunks, storeHistoryMedia } from '../services/history.intak
 // —token caducado, archivo enorme, Meta caída— sale con mediaFile en null y el
 // mensaje se guarda igual con su etiqueta. Perder la foto es un problema;
 // perder el mensaje entero sería mucho peor.
-const descargarAdjunto = async (inbound, entrante) => {
+export const descargarAdjunto = async (inbound, entrante) => {
     const vacio = { mediaFile: null, mediaFilename: null, mediaSize: null, mimeType: entrante.mimeType };
 
     if (!entrante.mediaId || !TIPOS_CON_ARCHIVO.has(entrante.type)) return vacio;
@@ -70,6 +70,21 @@ const descargarAdjunto = async (inbound, entrante) => {
         });
         return vacio;
     }
+};
+
+/**
+ * Adelanta la vista previa de la conversación con un mensaje que no es un
+ * entrante en vivo (un eco, lo traído del historial). Nunca retrocede, porque
+ * Meta no garantiza el orden: solo si el mensaje es más nuevo o si la
+ * conversación acaba de nacer (sin vista previa, con `lastMessageAt` = ahora).
+ * @returns {Promise<boolean>} si la cambió.
+ */
+export const advanceConversationPreview = async (conversationId, { text, timestamp }) => {
+    const result = await Conversation.updateOne(
+        { _id: conversationId, $or: [{ lastMessage: { $in: ['', null] } }, { lastMessageAt: { $lt: timestamp } }] },
+        { $set: { lastMessage: text, lastMessageAt: timestamp } },
+    );
+    return result.modifiedCount > 0;
 };
 
 export const verifyWebhook = (req, res) => { 
@@ -383,14 +398,9 @@ const procesarEco = async (inbound, echoData) => {
         } });
     }
 
-    // La conversación nunca retrocede: Meta no garantiza el orden. La vista
-    // previa avanza si el eco es más nuevo o si la conversación acaba de nacer
-    // (sin vista previa, con `lastMessageAt` = ahora). Los no leídos se ponen en
-    // cero solo si no llegó un entrante después del eco.
-    await Conversation.updateOne(
-        { _id: conversation._id, $or: [{ lastMessage: { $in: ['', null] } }, { lastMessageAt: { $lt: timestamp } }] },
-        { $set: { lastMessage: entrante.text, lastMessageAt: timestamp } },
-    );
+    // La conversación nunca retrocede (`advanceConversationPreview`). Los no
+    // leídos se ponen en cero solo si no llegó un entrante después del eco.
+    await advanceConversationPreview(conversation._id, { text: entrante.text, timestamp });
     await Conversation.updateOne(
         { _id: conversation._id, $or: [{ lastInboundAt: null }, { lastInboundAt: { $lte: timestamp } }] },
         { $set: { unreadCount: 0 } },

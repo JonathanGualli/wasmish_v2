@@ -457,7 +457,7 @@ if (conHistorial) {
     console.log(`\nPiezas del historial de esta conexión: ${piezas.map(p => `${p._id} ${p.n}`).join(', ') || 'ninguna'}`);
     console.log(`Archivos de 14 días: ${await HistoryMedia.countDocuments(conexion)} (${await HistoryMedia.countDocuments({ ...conexion, applied: true })} aplicados)`);
     console.log(`Estado de la línea: ${JSON.stringify(historySyncView(linea.historySync))}`);
-    console.log('Los mensajes los creará el worker del historial con el PR 3b: hasta entonces, las piezas se marcan hechas sin crear nada.');
+    console.log('Los mensajes los crea el worker del historial: con el backend levantado con `npm run dev`, aparecen en la bandeja en unos segundos.');
 }
 const contact = await findTestContact();
 const conv = await findTestConversation(contact);
