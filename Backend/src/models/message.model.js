@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { wamidMessageKey } from "../utils/wamid.js";
 
 // El trabajo de las respuestas automáticas, dentro del propio entrante: si el
 // mensaje existe, existe su trabajo (y el índice único de `waMessageId` evita
@@ -86,6 +87,20 @@ const messageSchema = new mongoose.Schema({
     waMessageId: {
         type: String,
     }, 
+    // La clave del wamid (`wamidMessageKey`): Meta puede nombrar el mismo mensaje
+    // con dos wamid (el del teléfono y el del BSUID, ver el #121), y con el
+    // historial de la app un mensaje puede llegar por dos caminos. Lo escribe el
+    // `pre('validate')` de abajo; null si el wamid no tiene la forma conocida.
+    waMessageKey: {
+        type: String,
+        default: null,
+    },
+    // Traído del historial de la app de WhatsApp Business al conectar el número.
+    // Sin default: solo lo lleva lo traído (spec 2026-10-23-historial-coexistencia).
+    fromHistory: {
+        type: Boolean,
+        default: undefined,
+    },
     text: {
         type: String, 
         required: true,
@@ -254,6 +269,12 @@ const messageSchema = new mongoose.Schema({
     timestamps: true,
 });
 
+// Los que crean mensajes (el webhook, el chat, las plantillas y el historial)
+// usan `Message.create` con el wamid ya puesto: aquí sale su clave.
+messageSchema.pre('validate', function setWaMessageKey() {
+    if (this.isModified('waMessageId')) this.waMessageKey = wamidMessageKey(this.waMessageId);
+});
+
 messageSchema.index({ conversationId: 1, timestamp: 1 });
 // La cola de las respuestas automáticas: solo los trabajos activos.
 messageSchema.index(
@@ -292,6 +313,15 @@ messageSchema.index(
     { name: 'waMessageId_unico', unique: true, partialFilterExpression: { waMessageId: { $type: 'string' } } },
 );
 messageSchema.index({ waMessageId: 1 }, { name: 'waMessageId_busqueda' });
+// La clave: un mensaje, una vez por conversación, con cualquiera de sus wamid.
+// Parcial por `$type` como `waMessageId_unico`, y el E11000 lo atrapan los mismos
+// `catch`. El normal busca el mensaje de un archivo del historial sin saber su
+// conversación (el único empieza por `conversationId` y no sirve).
+messageSchema.index(
+    { conversationId: 1, waMessageKey: 1 },
+    { name: 'message_conversation_waMessageKey_unique', unique: true, partialFilterExpression: { waMessageKey: { $type: 'string' } } },
+);
+messageSchema.index({ waMessageKey: 1 }, { name: 'message_waMessageKey' });
 // El acuse de una reacción enviada (`applyReactionStatus`). Parcial: casi ningún
 // mensaje lleva una reacción nuestra. La consulta repite el predicado, que si
 // no Mongo no lo usa (el mismo caso que `waMessageId_busqueda`).
