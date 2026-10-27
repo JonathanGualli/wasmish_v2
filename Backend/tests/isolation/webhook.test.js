@@ -895,3 +895,18 @@ test('un entrante viejo que llega tarde no retrocede la bandeja ni la ventana', 
     assert.ok(conversation.lastInboundAt.getTime() >= (now - 5) * 1000, 'la ventana retrocedió');
     assert.equal(conversation.unreadCount, 2);
 });
+
+// Revisión de Codex del PR #139: Meta da la hora en segundos, y con el `$lt` de
+// `advanceConversationPreview` el segundo de dos entrantes del mismo segundo no
+// cambiaba la vista previa: en vivo se veía «necesito ayuda» y al recargar, «hola».
+test('dos entrantes del mismo segundo: la vista previa queda con el último', async () => {
+    const phone = '593990020005';
+    const second = String(Math.floor(Date.now() / 1000));
+    const hello = textMessage(phone, 'hola');
+    const help = textMessage(phone, 'necesito ayuda');
+    hello.messages[0].timestamp = second;
+    help.messages[0].timestamp = second;
+    assert.equal((await postWebhook(A_NUMBER, hello)).status, 200);
+    assert.equal((await postWebhook(A_NUMBER, help)).status, 200);
+    assert.equal((await conversationOfPhone(phone)).lastMessage, 'necesito ayuda');
+});

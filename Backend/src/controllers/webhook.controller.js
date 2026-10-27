@@ -79,11 +79,14 @@ export const descargarAdjunto = async (inbound, entrante) => {
  * entrante en vivo (un eco, lo traído del historial). Nunca retrocede, porque
  * Meta no garantiza el orden: solo si el mensaje es más nuevo o si la
  * conversación acaba de nacer (sin vista previa, con `lastMessageAt` = ahora).
+ * `sameTime` también la cambia con la misma hora: lo usa el entrante en vivo,
+ * porque Meta da la hora en segundos y, de dos mensajes del mismo segundo
+ * («hola», «necesito ayuda»), el último que se procesa es el que va.
  * @returns {Promise<boolean>} si la cambió.
  */
-export const advanceConversationPreview = async (conversationId, { text, timestamp }) => {
+export const advanceConversationPreview = async (conversationId, { text, timestamp }, { sameTime = false } = {}) => {
     const result = await Conversation.updateOne(
-        { _id: conversationId, $or: [{ lastMessage: { $in: ['', null] } }, { lastMessageAt: { $lt: timestamp } }] },
+        { _id: conversationId, $or: [{ lastMessage: { $in: ['', null] } }, { lastMessageAt: { [sameTime ? '$lte' : '$lt']: timestamp } }] },
         { $set: { lastMessage: text, lastMessageAt: timestamp } },
     );
     return result.modifiedCount > 0;
@@ -251,7 +254,7 @@ const procesarEntrante = async (inbound, messageData, contacts) => {
     // contaba uno solo. La vista previa y la ventana nunca retroceden: Meta no
     // garantiza el orden de los webhooks, y un entrante viejo que llegue tarde
     // cerraría la ventana antes de tiempo (mismo criterio que resolveStatusTransition).
-    await advanceConversationPreview(conversation._id, { text: entrante.text, timestamp });
+    await advanceConversationPreview(conversation._id, { text: entrante.text, timestamp }, { sameTime: true });
     const { unreadCount = 0, lastInboundAt = null } = await (isLooseReaction
         ? Conversation.findById(conversation._id)
         : Conversation.findOneAndUpdate(
