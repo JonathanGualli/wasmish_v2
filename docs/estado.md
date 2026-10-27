@@ -165,6 +165,12 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
   - **Las ediciones del historial se saltan:** el mensaje queda con el texto de antes de editarlo (54 en la prueba), mientras que en vivo se marca «Editado» (`applyMessageChange`). Aplicarlas es un cambio aparte, si Jonathan lo quiere.
   - **Sin comprobar:** el formato del teléfono de la agenda (se guarda ya normalizado) y si un `remove` trae nombres (no llegó ninguno).
   - **La UI (PR 6)**, en producción desde la 1.0.32 (PR #136). **Falta:** que Jonathan la vea en producción (Ajustes → Líneas de su cuenta de prueba, un chat traído y su ficha), y probarla con Meta de verdad al conectar otro número que siga en la app, y en un iPhone.
+- **Multi-agente, Fase 4: asignar conversaciones** (empezada el 2026-10-27). Plan `docs/superpowers/plans/2026-10-27-multi-linea-fase-4.md` y brief de UI `docs/superpowers/specs/2026-10-27-asignacion-brief-ui.md`, en el PR del plan (rama `fase4-plan`), con la revisión de Codex. Después, tres PRs:
+  1. `fase4-asignacion`: el agente ve solo las suyas y las sin asignar, y responder una sin asignar la toma;
+  2. `fase4-transferir`: asignar, pedir la transferencia y liberar al quitar acceso;
+  3. `fase4-ui`: cuando Claude Design devuelva el diseño del brief.
+
+  **No se despliega** hasta que Jonathan lo diga.
 - **Tres fallos del webhook arreglados, en `master` sin desplegar** (2026-10-27): un entrante ya no se pierde si Mongo falla (el webhook responde 500 y Meta lo reentrega) y los no leídos ya no se pisan (PR #139); un acuse que llega antes que su saliente se guarda y se aplica al guardar el saliente (PR #140). Detalle en [webhook-adjuntos.md](arquitectura/webhook-adjuntos.md). **Al desplegar:** solo `wasmish-api`, sin migración ni variables nuevas; al arrancar crea la colección `pendingstatuses` con sus dos índices. **Límites conocidos:** si la BD cae justo después de guardar el entrante y antes de actualizar la conversación, la reentrega no suma su no leído; y un acuse guardado que no se pudo aplicar se reintenta una vez a los 30 s, en memoria: si la api se reinicia antes, caduca a la hora.
 - **Lo que queda de la página pública:**
   - Jonathan confirma en el panel de GTHost el país del servidor: Privacidad dice Estados Unidos, sacado del registro de la IP;
