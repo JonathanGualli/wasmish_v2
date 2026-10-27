@@ -7,7 +7,7 @@
 import Message from '../models/message.model.js';
 import Conversation from '../models/conversation.model.js';
 import { findContactByIdentity, conversationLineFilter } from '../controllers/contact.controller.js';
-import { sendToAccount } from '../controllers/stream.controller.js';
+import { sendConversationEvent } from './assignment.service.js';
 import { hasContactIdentity } from '../utils/contact.identity.js';
 import { DELETED_PREVIEW, serializeMessageUpdate } from '../utils/message.change.js';
 import { wamidMessageKey } from '../utils/wamid.js';
@@ -168,8 +168,7 @@ const refreshPreview = async ({ accountId, conversation, message }) => {
     if (!wrote) return;
 
     const { lastMessage = '' } = await Conversation.findById(conversation._id).select('lastMessage').lean() ?? {};
-    sendToAccount(accountId, 'conversation_updated', { id: String(conversation._id), lastMessage },
-        { lineId: conversation.lineId ?? null });
+    await sendConversationEvent(accountId, conversation._id, 'conversation_updated', { id: String(conversation._id), lastMessage });
 };
 
 /**
@@ -206,7 +205,7 @@ export const applyMessageChange = async ({ line, change, direction, identity }) 
     if (!updated) return 'not_found';
 
     const accountId = String(line.accountId);
-    sendToAccount(accountId, 'message_updated', serializeMessageUpdate(updated), { lineId: conversation.lineId ?? null });
+    await sendConversationEvent(accountId, conversation._id, 'message_updated', serializeMessageUpdate(updated));
 
     await refreshPreview({ accountId, conversation, message: updated });
     return 'applied';

@@ -4,7 +4,7 @@ import Template from "../models/template.model.js";
 import Message from "../models/message.model.js";
 import { decrypt } from "../utils/crypto.js";
 import { getTemplates, sendTemplateMessage } from "../libs/whatsapp.js";
-import { sendToAccount } from "./stream.controller.js";
+import { sendConversationEvent } from "../services/assignment.service.js";
 import { getSendingRecipient, getSendingConversation } from "./contact.controller.js";
 import { MARKETING_OPT_OUT_ERROR } from "../utils/marketing.preference.js";
 import TemplateMedia from "../models/template.media.model.js";
@@ -602,7 +602,7 @@ export const processTemplateSending = async ({
 
     // 7. SSE en vivo → aparece en la UI de wasmish. `campaignId` deja al
     //    frontend agrupar los cientos de eventos de una campaña.
-    sendToAccount(String(accountId), 'message_created', {
+    await sendConversationEvent(accountId, targetConversation._id, 'message_created', {
         id: String(msg._id), conversationId: String(targetConversation._id), sender: 'me',
         text: storedText, timestamp: msg.timestamp.toISOString(),
         status: msg.status, errorCode: msg.errorCode, errorDetail: msg.errorDetail, templateName,
@@ -619,7 +619,7 @@ export const processTemplateSending = async ({
         reactions: serializeReactions(msg),
         canReact: false,
         canReply: canReplyTo(msg),
-    }, { lineId: targetConversation.lineId ?? null });
+    });
 
     return { msg, conversation: targetConversation, waMessageId, status, errorCode, errorDetail };
 

@@ -12,6 +12,7 @@ SSE y sus eventos, no leídos, y la UI del chat: hilo, bandeja, conversación nu
   - [Eventos SSE y sus payloads](#eventos-sse-y-sus-payloads)
   - [`unreadCount`](#unreadcount)
   - [Avisos push (`push.service.js`)](#avisos-push-pushservicejs)
+  - [Asignación de conversaciones](#asignación-de-conversaciones)
 - **Frontend**
   - [`useConversationMessages` — patrón crítico](#useconversationmessages--patrón-crítico)
   - [`useConversations` — reglas del handler de `message_created`](#useconversations--reglas-del-handler-de-message_created)
@@ -55,9 +56,9 @@ SSE y sus eventos, no leídos, y la UI del chat: hilo, bandeja, conversación nu
 - `access_changed`: `{}` — a la persona a la que le cambiaron el rol, las líneas o el estado, justo antes de cerrarle la conexión (`disconnectUser`, Fase 3). El navegador reconecta solo; qué hace la UI con él llega con la UI de la Fase 3
 
 **A quién llega cada evento** (Fase 3, 2026-10-14). Cada conexión guarda la sesión con la que se abrió, y `sendToAccount(accountId, event, data, meta)` solo escribe en las que cumplen `canReceive(auth, meta)` (`utils/permissions.js`):
-- `message_created`, `message_status`, `message_updated` y `conversation_updated` llevan `{ lineId }` de su conversación: llegan a quien ve esa línea. Una conversación sin línea, solo a quien ve todas.
+- `message_created`, `message_status`, `message_updated`, `conversation_updated` y `messages_imported` llevan `{ lineId, assignedTo }` de su conversación (`conversationMeta`): llegan a quien ve esa línea y, si es agente, solo si está sin asignar o es suya (Fase 4). Una conversación sin línea, solo a quien ve todas. Se emiten con **`sendConversationEvent(accountId, conversationId, event, data)`** (`services/assignment.service.js`), que lee la línea y quién la atiende **justo antes de emitir**: entre leer la conversación y avisar puede haber una llamada a Meta o una descarga, y con lo leído al principio el aviso le llegaría a quien la perdió en ese rato (revisión de Codex del plan de la Fase 4). Nunca lanza: un aviso que no sale no deshace lo guardado.
 - `campaign_progress` lleva `{ lineId, permission: 'campaigns.manage' }`: el agente no lo recibe.
-- `history_sync` lleva `{ lineId, permission: 'lines.manage' }`: solo quien administra las líneas. `messages_imported` lleva `{ lineId }`, como los de una conversación.
+- `history_sync` lleva `{ lineId, permission: 'lines.manage' }`: solo quien administra las líneas.
 - `contact_updated`, `contacts_updated` y `tags_updated` no llevan `meta`: los contactos y las etiquetas son de toda la cuenta.
 - La conexión abierta conserva la sesión con la que se abrió: por eso, **cualquier** cambio de acceso la cierra (`disconnectUser(userId)`), no solo quitar una línea.
 
@@ -68,7 +69,7 @@ SSE y sus eventos, no leídos, y la UI del chat: hilo, bandeja, conversación nu
 ### Avisos push (`push.service.js`)
 
 **Avisos push** (app móvil, 2026-10-14; plan: `docs/superpowers/plans/2026-10-14-app-movil.md`): el SSE solo sirve con Wasmish en pantalla. Con la app en segundo plano o cerrada, el celular congela la página y la conexión se cae. Por eso, cada entrante también manda un **aviso push** a los dispositivos suscritos.
-- **Quién recibe:** la misma regla que el `message_created` por SSE. `notifyInbound` (`services/push.service.js`) busca las suscripciones de la cuenta, **relee** a esas personas (`User`: estado, rol y líneas **de ahora**, no las de cuando se suscribieron) y se queda con las que cumplen `pushRecipientIds` (`utils/push.js`: `sessionAuthFor` + `canReceive(auth, { lineId })`). La API key no recibe avisos.
+- **Quién recibe:** la misma regla que el `message_created` por SSE. `notifyInbound` (`services/push.service.js`) busca las suscripciones de la cuenta, **relee** a esas personas (`User`: estado, rol y líneas **de ahora**, no las de cuando se suscribieron) y se queda con las que cumplen `pushRecipientIds` (`utils/push.js`: `sessionAuthFor` + `canReceive(auth, meta)`, con la línea y quién la atiende leídos al enviar). **Una conversación asignada avisa solo a quien la atiende**: el supervisor y el owner la ven en la bandeja, pero su celular no suena con cada mensaje de cada agente (decisión del 2026-10-27). Una sin asignar avisa a todos los que ven su línea. La API key no recibe avisos.
 - **Qué dice:** `buildInboundPush` → `{ title, body, conversationId, url }`. `title` es el nombre del contacto de la bandeja (`contactDisplayName`, 60 caracteres como mucho) y, **si la cuenta tiene más de una línea activa**, la línea detrás (`María López · Ventas`, `pushLineName`): Android no tiene otro sitio para ella. `body` es el `text` del mensaje, 180 caracteres; una foto, un video, un audio o un documento llevan su emoji y, sin pie, el tipo (`📷 Foto`, `📷 <pie>`), como en el diseño D1. `url` es `/private/chats?c=<id>`. Se envía con `TTL` de 12 h y `urgency: 'high'`.
 - **El webhook no lo espera** (`void notifyInbound(…)`, después del SSE) y `notifyInbound` nunca rechaza: un servicio de push lento o caído no frena ni tumba el webhook (regla 7). Ni el texto ni el `endpoint` van al log: solo el código HTTP y el host del servicio.
 - **Suscripciones caducadas:** si el servicio de push responde 404 o 410 (`isGonePushError`), se borra la suscripción. Otro error solo se loguea.
@@ -77,6 +78,14 @@ SSE y sus eventos, no leídos, y la UI del chat: hilo, bandeja, conversación nu
 - **Sin `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` y `VAPID_SUBJECT`** (`PUSH_ENABLED` en `config.js`), los avisos están apagados: `/push/config` da `publicKey: null`, suscribir da 503 `push_disabled` y `notifyInbound` no hace nada.
 - **En el navegador** (activar, sincronizar al entrar, apagar al cerrar sesión): [frontend.md § Avisos push en el navegador](frontend.md#avisos-push-en-el-navegador-libspushts). **Tocar el aviso** abre la conversación: con Wasmish abierta, el service worker le manda `open-conversation` y `PrivateLayout` navega a Chats con `state: { conversationId }`; con la app cerrada, se abre en `/private/chats?c=<id>` (ver [Ir de la ficha al chat](#ir-de-la-ficha-al-chat-chatsnavigationstate)). Sin sesión, el login devuelve a esa URL. Una conversación que ya no es suya da su 404 de siempre y Chats sigue funcionando.
 - **Tras cancelar una suscripción, FCM sigue aceptando envíos unos segundos** (comprobado el 2026-10-14): el aviso ya no llega, pero el 410 que la borra de la BD sale en el envío siguiente.
+
+### Asignación de conversaciones
+
+**Asignación** (Fase 4 de multi-línea, 2026-10-27; plan `docs/superpowers/plans/2026-10-27-multi-linea-fase-4.md`). Cada conversación puede tener a una persona que la atiende: `Conversation.assignedTo` (con `assignedAt` y `assignedBy`; `null`, o el campo ausente, es «sin asignar»). Todas las anteriores empiezan sin asignar, sin migración.
+- **Quién ve qué** (`conversationScope`, `canSeeConversation` en `utils/permissions.js`): owner y admin, todas; el supervisor, todas las de sus líneas, también las de sus agentes; el agente, las de sus líneas **sin asignar o suyas**, nunca las de sus compañeros (404, como lo de otra cuenta). Se aplica en todo lo que ya usaba `conversationScope`: la lista, los mensajes, los adjuntos, los envíos y las reacciones.
+- **En Contactos**, la lista no enseña al agente la conversación de un compañero; la ficha (`GET /contacts/:id`) sí dice que existe, en qué línea y quién la atiende, sin nada de lo que dice: el item va con `restricted: true` y sin `lastInteractionAt` ni `windowExpiresAt` (`restrictedConversationItem`), y no cuenta en la actividad. Así el agente puede pedir que se la pasen desde la ficha (diseño `Design/Wasmish Chats - Asignar conversaciones.html`, 3a).
+- **En `GET /chats`**, cada conversación trae `assignedTo: { id, name } | null` y `transferRequest: { id, requestedBy: { id, name }, requestedAt } | null` (`serializeConversation`).
+- **Tiempo real:** ver «A quién llega cada evento» arriba. Los avisos push, en «Avisos push».
 
 ## Frontend
 

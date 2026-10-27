@@ -100,6 +100,25 @@ export const summarizeConversations = (conversations = []) => {
             lineId: conversation.lineId ? String(conversation.lineId) : null,
             lastInteractionAt: toIso(conversation.lastMessageAt),
             windowExpiresAt: toIso(getWindowExpiry(conversation.lastInboundAt)),
+            assignedTo: assigneeOf(conversation.assignedTo),
+            restricted: false,
         })),
     };
 };
+
+// Quién la atiende: `{ id, name }` (el nombre, si vino con `populate`) o null.
+const assigneeOf = (user) => (user ? { id: String(user._id ?? user), name: user.name ?? null } : null);
+
+/**
+ * La conversación de un compañero en la ficha de un agente (Fase 4): que existe,
+ * en qué línea y quién la atiende, para pedir que se la pasen. Nada de lo que
+ * dice: ni la última interacción ni la ventana.
+ */
+export const restrictedConversationItem = (conversation) => ({
+    conversationId: String(conversation._id),
+    lineId: conversation.lineId ? String(conversation.lineId) : null,
+    lastInteractionAt: null,
+    windowExpiresAt: null,
+    assignedTo: assigneeOf(conversation.assignedTo),
+    restricted: true,
+});

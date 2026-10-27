@@ -4,6 +4,7 @@ import User from '../models/user.model.js';
 import Line from '../models/line.model.js';
 import { PUSH_ENABLED, VAPID_PRIVATE_KEY, VAPID_PUBLIC_KEY, VAPID_SUBJECT } from '../config.js';
 import { buildInboundPush, isGonePushError, pushLineName, pushRecipientIds } from '../utils/push.js';
+import { currentConversationMeta } from './assignment.service.js';
 
 // ---------------------------------------------------------------------------
 // Avisos push (app móvil): al llegar un mensaje, un aviso a cada dispositivo de
@@ -53,7 +54,7 @@ const sendOne = async (subscription, payload) => {
  * El webhook la llama sin esperar: nunca rechaza, y ni el texto ni el endpoint
  * van al log (son conversaciones privadas de los clientes de nuestros clientes).
  */
-export const notifyInbound = async ({ accountId, lineId, conversationId, contact, text, type, caption }) => {
+export const notifyInbound = async ({ accountId, conversationId, contact, text, type, caption }) => {
     if (!PUSH_ENABLED) return;
     try {
         const subscriptions = await PushSubscription.find({ accountId }).lean();
@@ -62,7 +63,12 @@ export const notifyInbound = async ({ accountId, lineId, conversationId, contact
         const memberIds = [...new Set(subscriptions.map(subscription => String(subscription.memberId)))];
         const members = await User.find({ _id: { $in: memberIds }, accountId })
             .select('accountId role lineIds status').lean();
-        const recipients = new Set(pushRecipientIds(members, accountId, { lineId }));
+        // Su línea y quién la atiende, de ahora: solo a quien la atiende, si la
+        // atiende alguien (decisión del 2026-10-27).
+        const meta = await currentConversationMeta(conversationId);
+        if (!meta) return;
+        const { lineId } = meta;
+        const recipients = new Set(pushRecipientIds(members, accountId, meta));
         const targets = subscriptions.filter(subscription => recipients.has(String(subscription.memberId)));
         if (targets.length === 0) return;
 

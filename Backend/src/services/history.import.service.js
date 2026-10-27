@@ -12,7 +12,7 @@ import HistoryMedia from '../models/history.media.model.js';
 import { resolveContact, findOrCreateConversation } from '../controllers/contact.controller.js';
 import { descargarAdjunto, advanceConversationPreview } from '../controllers/webhook.controller.js';
 import { serializeMessage } from '../controllers/chat.controller.js';
-import { sendToAccount } from '../controllers/stream.controller.js';
+import { sendConversationEvent } from './assignment.service.js';
 import { applyReaction } from './reaction.service.js';
 import { findQuotedMessage } from './message.reply.service.js';
 import { describeInboundMessage, describeMessageContext, describeReaction } from '../utils/inbound.message.js';
@@ -104,16 +104,15 @@ export const applyHistoryMedia = async ({ line, connectionAt, message, media = n
     if (!changed) return true;
 
     const updated = await Message.findById(message._id).lean();
-    const meta = { lineId: String(line.lineId) };
     // El mensaje entero (con su archivo) y lo de un cambio: la UI lo funde en su sitio.
-    sendToAccount(String(line.accountId), 'message_updated', { ...serializeMessage(updated), ...serializeMessageUpdate(updated) }, meta);
+    await sendConversationEvent(line.accountId, updated.conversationId, 'message_updated', { ...serializeMessage(updated), ...serializeMessageUpdate(updated) });
     // La vista previa, solo si sigue siendo este placeholder: no pisa nada posterior.
     const preview = await Conversation.updateOne(
         { _id: updated.conversationId, lastMessage: HISTORY_PLACEHOLDER_TEXT, lastMessageAt: updated.timestamp },
         { $set: { lastMessage: updated.text } },
     );
     if (preview.modifiedCount > 0) {
-        sendToAccount(String(line.accountId), 'conversation_updated', { id: String(updated.conversationId), lastMessage: updated.text }, meta);
+        await sendConversationEvent(line.accountId, updated.conversationId, 'conversation_updated', { id: String(updated.conversationId), lastMessage: updated.text });
     }
     return true;
 };
@@ -232,8 +231,7 @@ export const importHistoryPiece = async (piece, { hooks = {} } = {}) => {
     // El hilo abierto no se entera de lo creado por otro camino: que lo vuelva a
     // pedir. Sin tocar los no leídos (revisión de Codex del PR #130).
     if (created > 0) {
-        sendToAccount(String(line.accountId), 'messages_imported', { conversationId: String(conversation._id) },
-            { lineId: String(line.lineId) });
+        await sendConversationEvent(line.accountId, conversation._id, 'messages_imported', { conversationId: String(conversation._id) });
     }
 
     // La vista previa con el más nuevo de la pieza que está en Mongo (creado o
@@ -242,8 +240,7 @@ export const importHistoryPiece = async (piece, { hooks = {} } = {}) => {
     if (newest) {
         const current = await Message.findById(newest._id).select('text timestamp').lean();
         if (current && await advanceConversationPreview(conversation._id, { text: current.text, timestamp: current.timestamp })) {
-            sendToAccount(String(line.accountId), 'conversation_updated', { id: String(conversation._id), lastMessage: current.text },
-                { lineId: String(line.lineId) });
+            await sendConversationEvent(line.accountId, conversation._id, 'conversation_updated', { id: String(conversation._id), lastMessage: current.text });
         }
     }
     return { created, skipped, changes };

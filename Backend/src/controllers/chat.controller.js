@@ -4,7 +4,7 @@ import Contact from "../models/contact.model.js";
 import Message from "../models/message.model.js";
 import { decrypt }  from "../utils/crypto.js";
 import { sendMediaMessage, sendTextMessage, uploadMedia } from "../libs/whatsapp.js";
-import { sendToAccount } from './stream.controller.js';
+import { sendConversationEvent } from '../services/assignment.service.js';
 import { freeTextBlockReason, getWindowExpiry } from "../utils/whatsapp.window.js";
 import { processTemplateSending } from "./template.controller.js";
 import { getSendingRecipient, getSendingConversation, conversationLineFilter } from "./contact.controller.js";
@@ -182,7 +182,7 @@ export const processMessageSending = async ({
     if (await applyHeldStatuses(waMessageId)) msg = await Message.findById(msg._id);
 
     const serialized = serializeMessage(msg, { quoted: quotedMapOf(replyTarget) });
-    sendToAccount(String(line.accountId), 'message_created', serialized, { lineId: line.lineId ?? null });
+    await sendConversationEvent(line.accountId, targetConversation._id, 'message_created', serialized);
 
     return { msg, serialized, waMessageId, status, errorCode, errorDetail };
 };
@@ -222,17 +222,17 @@ const lastInboundOf = async (conversation) => {
 // con el chat a la vista no basta. El filtro `unreadCount > 0` evita escribir y
 // emitir si ya estaba leída. Nunca lanza: quien la llama ya hizo lo suyo (cargó
 // los mensajes, envió la respuesta) y un fallo aquí solo deja el contador igual.
-const markConversationRead = async (userId, conversationId, lineId) => {
+const markConversationRead = async (userId, conversationId) => {
     try {
         const result = await Conversation.updateOne(
             { _id: conversationId, userId, unreadCount: { $gt: 0 } },
             { $set: { unreadCount: 0 } }
         );
         if (result.modifiedCount > 0) {
-            sendToAccount(String(userId), 'conversation_updated', {
+            await sendConversationEvent(userId, conversationId, 'conversation_updated', {
                 id: String(conversationId),
                 unreadCount: 0,
-            }, { lineId: lineId ?? null });
+            });
         }
     } catch (error) {
         console.error('No se pudo marcar la conversación como leída:', error.message);
@@ -328,7 +328,7 @@ export const sendMessageController = async (req, res) => {
 
         // Responder desde el chat es haberlo leído, aunque Meta lo rechace: se
         // leyó y se intentó contestar.
-        await markConversationRead(accountId, msg.conversationId, line.lineId);
+        await markConversationRead(accountId, msg.conversationId);
 
         return res.status(201).json(serialized);
     } catch (error) {
@@ -400,7 +400,7 @@ export const sendMediaMessageController = async (req, res) => {
         });
 
         // Responder con un archivo también es haberlo leído.
-        await markConversationRead(userId, conversation._id, conversation.lineId);
+        await markConversationRead(userId, conversation._id);
 
         return res.status(201).json(serialized);
     } catch (error) {
@@ -443,7 +443,7 @@ export const setReactionController = async (req, res) => {
             return res.status(502).json([{ message: 'No se pudo enviar la reacción a WhatsApp', errorCode, errorDetail: error.waErrorDetail ?? null }]);
         }
 
-        await markConversationRead(req.auth.accountId, conversation._id, conversation.lineId);
+        await markConversationRead(req.auth.accountId, conversation._id);
         // Con su cita resuelta, como la lista (revisión de Codex del PR #116, 2).
         const quoted = await loadQuotedMessages([updated], conversation._id);
         return res.json(serializeMessage(updated, { quoted }));
@@ -453,36 +453,58 @@ export const setReactionController = async (req, res) => {
     }
 };
 
+// Una persona como la ven la bandeja y el chat (con `populate` de `name`).
+const personOf = (user) => (user?._id ? { id: String(user._id), name: user.name ?? null } : null);
+
+/**
+ * Una conversación como la da la lista de la bandeja, y también el evento
+ * `conversation_assigned` y las respuestas de asignar (Fase 4). `item` viene
+ * de `populateConversation`.
+ */
+export const serializeConversation = (item) => {
+    // `populate` deja el contacto en `contactId`. Una conversación anterior
+    // a los contactos aún no lo tiene: se usa lo que ella misma guardaba.
+    const contact = item.contactId ?? { name: item.contactName, phone: item.contactPhone };
+    return {
+        id: String(item._id),
+        // La ficha del contacto en el chat. `null` en una conversación
+        // anterior a los contactos que aún no se enlazó.
+        contactId: item.contactId?._id ? String(item.contactId._id) : null,
+        // La línea de la conversación (Fase 2c: la bandeja la enseña y filtra por ella).
+        lineId: item.lineId ? String(item.lineId) : null,
+        title: contactDisplayName(contact),
+        phone: contact.phone ?? null,
+        username: contact.username ?? null,
+        lastMessage: item.lastMessage || '',
+        updatedAt: (item.lastMessageAt || item.updatedAt).toISOString(),
+        unreadCount: item.unreadCount || 0,
+        windowExpiresAt: getWindowExpiry(item.lastInboundAt)?.toISOString() ?? null,
+        // Quién la atiende y quién pidió que se la pasen (Fase 4).
+        assignedTo: personOf(item.assignedTo),
+        transferRequest: item.transferRequest?.requestedBy
+            ? {
+                id: String(item.transferRequest.id),
+                requestedBy: personOf(item.transferRequest.requestedBy),
+                requestedAt: item.transferRequest.requestedAt.toISOString(),
+            }
+            : null,
+    };
+};
+
+/** Lo que `serializeConversation` necesita de una consulta de conversaciones. */
+export const populateConversation = (query) => query
+    .populate('contactId', 'name agendaName profileName username phone')
+    .populate('assignedTo', 'name')
+    .populate('transferRequest.requestedBy', 'name');
+
 export const listConversations = async (req, res) => {
     const userId = req.auth.accountId;
     try{
-        const items = await Conversation.find({ userId, ...conversationScope(req.auth) })
+        const items = await populateConversation(Conversation.find({ userId, ...conversationScope(req.auth) }))
             .sort({ lastMessageAt: -1 })
-            .populate('contactId', 'name agendaName profileName username phone')
             .lean();
 
-        const result = items.map((item) => {
-            // `populate` deja el contacto en `contactId`. Una conversación anterior
-            // a los contactos aún no lo tiene: se usa lo que ella misma guardaba.
-            const contact = item.contactId ?? { name: item.contactName, phone: item.contactPhone };
-            return {
-                id: String(item._id),
-                // La ficha del contacto en el chat. `null` en una conversación
-                // anterior a los contactos que aún no se enlazó.
-                contactId: item.contactId?._id ? String(item.contactId._id) : null,
-                // La línea de la conversación (Fase 2c: la bandeja la enseña y filtra por ella).
-                lineId: item.lineId ? String(item.lineId) : null,
-                title: contactDisplayName(contact),
-                phone: contact.phone ?? null,
-                username: contact.username ?? null,
-                lastMessage: item.lastMessage || '',
-                updatedAt: (item.lastMessageAt || item.updatedAt).toISOString(),
-                unreadCount: item.unreadCount || 0,
-                windowExpiresAt: getWindowExpiry(item.lastInboundAt)?.toISOString() ?? null,
-            };
-        });
-
-        return res.json(result);
+        return res.json(items.map(serializeConversation));
     }catch(error){
         res.status(500).json([{ message: error.message }]);
     }
@@ -526,7 +548,7 @@ export const listMessages = async (req, res) => {
         const items = msgs.map(msg => serializeMessage(msg, { campaignNames, quoted }));
 
         // Solo marcamos como leído al ABRIR la conversación (primera página, sin cursor)
-        if (!hasCursor) await markConversationRead(userId, conversation._id, conversation.lineId);
+        if (!hasCursor) await markConversationRead(userId, conversation._id);
 
         return res.json({ items, nextCursor });
 
@@ -590,7 +612,7 @@ export const sendConversationTemplateController = async (req, res) => {
         });
 
         // Responder con una plantilla también es haberlo leído.
-        await markConversationRead(userId, conversation._id, conversation.lineId);
+        await markConversationRead(userId, conversation._id);
         return responderEnvioPlantilla(res, resultado);
     } catch (error) {
         return responderErrorPlantilla(res, error);

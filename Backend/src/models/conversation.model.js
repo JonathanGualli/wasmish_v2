@@ -58,6 +58,36 @@ const conversationSchema = new mongoose.Schema({
         type: Date,
         default: null,
     },
+    // Quién la atiende (Fase 4 de multi-línea): null = sin asignar, también
+    // en las anteriores al campo. El agente ve solo las sin asignar y las
+    // suyas (`conversationScope`). Lo escribe solo services/assignment.service.js.
+    assignedTo: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        default: null,
+    },
+    assignedAt: {
+        type: Date,
+        default: null,
+    },
+    // Quién hizo el último cambio de asignación (null al liberarla porque esa
+    // persona perdió el acceso).
+    assignedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        default: null,
+    },
+    // La solicitud de transferencia pendiente: una sola, y una nueva reemplaza
+    // a la anterior. `id` es nuevo en cada una: aceptar y rechazar lo exigen,
+    // para no resolver una distinta de la que se ve (revisión de Codex del plan).
+    transferRequest: {
+        type: new mongoose.Schema({
+            id: { type: mongoose.Schema.Types.ObjectId, required: true },
+            requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+            requestedAt: { type: Date, required: true },
+        }, { _id: false }),
+        default: undefined,
+    },
     // El estado de las respuestas automáticas en esta conversación (ver
     // docs/arquitectura/respuestas-automaticas.md). Solo existe si alguna vez
     // respondió una persona o el bot.
@@ -110,6 +140,13 @@ conversationSchema.index(
         unique: true,
         partialFilterExpression: { contactId: { $type: 'objectId' }, lineId: { $type: 'null' } },
     },
+);
+
+// Las conversaciones de una persona, para soltarlas cuando pierde el acceso
+// (Fase 4). Parcial: la mayoría no tiene a nadie.
+conversationSchema.index(
+    { userId: 1, assignedTo: 1 },
+    { name: 'conversation_assignee', partialFilterExpression: { assignedTo: { $type: 'objectId' } } },
 );
 
 export default mongoose.model('Conversation', conversationSchema);
