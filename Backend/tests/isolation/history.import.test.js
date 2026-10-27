@@ -414,3 +414,21 @@ test('quien cambia el mensaje avisa aunque otro haya marcado applied antes', asy
         await stream.close();
     }
 });
+
+// Regresión: en la prueba con Meta de verdad, los 54 «mensajes mal formados»
+// del log eran todos ediciones, que se saltan a propósito.
+test('una edición del historial se salta y se cuenta aparte, no como mal formada', async () => {
+    const phone = '593990071090';
+    const original = historyMessage(phone, { body: 'Precio: 10' });
+    const edit = historyMessage(phone, { type: 'edit', edit: { original_message_id: original.id, message: { type: 'text', text: { body: 'Precio: 12' } } } });
+    await postThread(phone, [original, edit, historyMessage(phone, { id: '' })]);
+    const results = [];
+    await drain({ importPiece: async (piece) => {
+        const result = await importHistoryPiece(piece);
+        results.push(result);
+        return result;
+    } });
+
+    assert.deepEqual(results, [{ created: 1, skipped: 0, changes: 1 }]);
+    assert.deepEqual((await messagesOf(h, phone)).map(m => m.text), ['Precio: 10']);
+});

@@ -50,6 +50,14 @@ Revisado el 2026-10-23 en la documentación de Meta para desarrolladores: la [gu
 
 **Lo que hay que comprobar con Meta de verdad** (§ 9), porque la documentación no lo deja claro: en qué campo y forma llega el webhook del archivo de 14 días (si es `history` u otro, y si trae el mismo `id` que el placeholder), si una reacción o un `context` aparecen en el historial, y el formato de `phone_number` de la agenda (con o sin `+`).
 
+**Lo que salió con Meta de verdad** (2026-10-26, con el número de trabajo de Jonathan, conectado de nuevo con la coexistencia; los dos pedidos, `accepted`):
+- **Los archivos de 14 días** llegan por el campo `history`, cada uno en su webhook, como un mensaje con su tipo (`image`, `audio`…) y **la misma clave de wamid** que su `media_placeholder`. Llegaron **antes** que los hilos.
+- **Solo los del contacto:** de lo que mandó el negocio no llega el archivo, tampoco de los últimos 14 días (24 salientes se quedan en «Archivo: míralo en tu celular»). Todo lo entrante de esos días llegó con su archivo.
+- **Las fases no son las de la documentación:** llegaron trozos de la fase 0 (`progress: 0`) y de la 1 (de 9 a 100), con chats de hasta 175 días, y uno de la fase 2 vacío, con `progress: 100`. Todo en unos 2 minutos.
+- **Sin citas:** ninguno de los 10.700 mensajes trae `context`. Los reenvíos, sí (62). Las ediciones llegan como mensajes `edit` (54) y se saltan. Los que Meta no sabe describir llegan como `type: 'errors'` con 131051 («Message type unknown»).
+- **9 hilos con un `id` que no es un teléfono** (en 7 trozos): sin saber todavía de qué forma; desde el PR de esta prueba el log lo dice sin escribir el `id`.
+- **Sin comprobar:** el formato de `phone_number` en la agenda (se guarda normalizado, sin `+`) y si un `remove` trae nombres: no llegó ninguno.
+
 ## 4. Pedirlo al conectar
 
 - **El estado vive en la línea**, en `Line.historySync`, ligado a **una conexión concreta** (`connectionAt` = el `connectedAt` de esa conexión):

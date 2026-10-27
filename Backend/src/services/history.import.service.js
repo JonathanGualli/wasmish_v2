@@ -17,7 +17,7 @@ import { applyReaction } from './reaction.service.js';
 import { findQuotedMessage } from './message.reply.service.js';
 import { describeInboundMessage, describeMessageContext, describeReaction } from '../utils/inbound.message.js';
 import { describeHistoryMessage, HISTORY_PLACEHOLDER_TEXT } from '../utils/history.sync.js';
-import { serializeMessageUpdate } from '../utils/message.change.js';
+import { isMessageChange, serializeMessageUpdate } from '../utils/message.change.js';
 import { wamidMessageKey } from '../utils/wamid.js';
 
 // La identidad de un archivo de 14 días: la clave del wamid o, si el wamid no
@@ -165,7 +165,8 @@ const saveHistoryMessage = async ({ conversationId, messageData, info, legacyKey
  * sus archivos y la vista previa que quedaron pendientes.
  *
  * `hooks` solo lo usan los tests, para cortar el proceso en un punto concreto.
- * @returns {Promise<{ created: number, skipped: number }>}
+ * `changes` son las ediciones y los borrados, que se saltan a propósito.
+ * @returns {Promise<{ created: number, skipped: number, changes: number }>}
  */
 export const importHistoryPiece = async (piece, { hooks = {} } = {}) => {
     const line = await historyLine(piece);
@@ -178,7 +179,14 @@ export const importHistoryPiece = async (piece, { hooks = {} } = {}) => {
 
     const described = [];
     let malformed = 0;
+    let changes = 0;
     for (const messageData of piece.messages) {
+        // Contarlos como mal formados era ruido: en la prueba con Meta de verdad,
+        // los 54 «mal formados» eran todos ediciones.
+        if (isMessageChange(messageData)) {
+            changes += 1;
+            continue;
+        }
         const info = describeHistoryMessage(messageData, piece.contactPhone);
         if (info) described.push({ messageData, info });
         else malformed += 1;
@@ -238,5 +246,5 @@ export const importHistoryPiece = async (piece, { hooks = {} } = {}) => {
                 { lineId: String(line.lineId) });
         }
     }
-    return { created, skipped };
+    return { created, skipped, changes };
 };
