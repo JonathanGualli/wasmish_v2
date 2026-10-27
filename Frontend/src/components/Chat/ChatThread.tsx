@@ -216,6 +216,9 @@ export const ChatThread = ({
         setPickerFor(null);
         setToast(null);
         setAssignmentNotice(null);
+        // La pérdida es de esa conversación: abrir otra (o volver a ella desde la
+        // bandeja, si se la devolvieron) no la arrastra (revisión de Codex del PR #145).
+        setLost(null);
     }
     const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const showToast = useCallback((title: string, detail: string) => {
@@ -239,6 +242,10 @@ export const ChatThread = ({
             title: mine ? `Se la pasaste a ${firstName({ id: '', name })}` : `Esta conversación ahora la atiende ${firstName({ id: '', name })}`,
         });
     }), [subscribe, conversationId]);
+    // Se la devolvieron con el chat todavía en «la perdiste»: vuelve a verse.
+    useEffect(() => subscribe("conversation_assigned", (payload) => {
+        setLost(current => (current?.conversationId === payload.id ? null : current));
+    }), [subscribe]);
     const handOff = useCallback((name: string | null) => {
         handOffTo.current = name === null || !conversationId ? null : { conversationId, name };
     }, [conversationId]);

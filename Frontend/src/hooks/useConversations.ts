@@ -82,26 +82,34 @@ export const useConversations = () => {
     const unsubContact = subscribe("contact_updated", refreshList);
     const unsubContacts = subscribe("contacts_updated", refreshList);
 
-    // La asignación (Fase 4). Cambió de manos y la sigue viendo: la conversación
-    // entera, en su sitio (o se pide la lista si no la tenía: la acaba de ganar).
+    // La asignación (Fase 4). Una lectura de la bandeja que ya iba en camino
+    // traería la lista de antes del evento y lo desharía (una conversación
+    // perdida volvía a aparecer; revisión de Codex del PR #145): se cancela, se
+    // aplica el evento y, si se canceló algo, se vuelve a pedir, ya con él.
+    const applyToList = async (update: (old: Conversation[]) => Conversation[]) => {
+      const wasFetching = queryClient.isFetching({ queryKey: ["conversations"] }) > 0;
+      await queryClient.cancelQueries({ queryKey: ["conversations"] });
+      queryClient.setQueryData<Conversation[]>(["conversations"], (old = []) => update(old));
+      if (wasFetching) refreshList();
+    };
+    // Cambió de manos y la sigue viendo: la conversación entera, en su sitio (o
+    // se pide la lista si no la tenía: la acaba de ganar).
     const unsubAssigned = subscribe("conversation_assigned", (payload) => {
       const known = queryClient.getQueryData<Conversation[]>(["conversations"])?.some((c) => c.id === payload.id);
       if (!known) {
         refreshList();
         return;
       }
-      queryClient.setQueryData<Conversation[]>(["conversations"], (old = []) =>
-        old.map((c) => (c.id === payload.id ? { ...c, ...payload } : c)));
+      void applyToList((old) => old.map((c) => (c.id === payload.id ? { ...c, ...payload } : c)));
     });
     // La perdió: fuera de la bandeja y fuera de la caché de su hilo.
     const unsubRevoked = subscribe("conversation_revoked", (payload) => {
-      queryClient.setQueryData<Conversation[]>(["conversations"], (old = []) => old.filter((c) => c.id !== payload.id));
+      void applyToList((old) => old.filter((c) => c.id !== payload.id));
       void queryClient.cancelQueries({ queryKey: ["conversation", payload.id] });
       queryClient.removeQueries({ queryKey: ["conversation", payload.id] });
     });
     const unsubRequested = subscribe("transfer_requested", (payload) => {
-      queryClient.setQueryData<Conversation[]>(["conversations"], (old = []) =>
-        old.map((c) => (c.id === payload.id ? { ...c, transferRequest: payload.transferRequest } : c)));
+      void applyToList((old) => old.map((c) => (c.id === payload.id ? { ...c, transferRequest: payload.transferRequest } : c)));
     });
     // Le quitaron el acceso a alguien y se soltaron sus conversaciones; o a mí
     // me aceptaron una solicitud: la que gané ya me llegó o llega por la lista.
