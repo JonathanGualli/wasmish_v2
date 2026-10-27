@@ -100,6 +100,20 @@ test('pushRecipientIds aplica la regla del SSE', () => {
     assert.deepEqual(pushRecipientIds(members, 'acc-1', { lineId: null }), ['owner', 'admin']);
 });
 
+test('pushRecipientIds: una conversación asignada avisa solo a quien la atiende (decisión del 2026-10-27)', () => {
+    const member = (id, role, lineIds = []) => ({ _id: id, accountId: 'acc-1', role, lineIds, status: 'active' });
+    const members = [
+        member('owner', 'owner'),
+        member('supervisor', 'supervisor', ['l1']),
+        member('ana', 'agent', ['l1']),
+        member('luis', 'agent', ['l1']),
+    ];
+    assert.deepEqual(pushRecipientIds(members, 'acc-1', { lineId: 'l1', assignedTo: 'ana' }), ['ana']);
+    assert.deepEqual(pushRecipientIds(members, 'acc-1', { lineId: 'l1', assignedTo: null }), ['owner', 'supervisor', 'ana', 'luis']);
+    // Si quien la atiende ya no la ve (otra línea), no avisa a nadie: no a los demás.
+    assert.deepEqual(pushRecipientIds(members, 'acc-1', { lineId: 'l2', assignedTo: 'ana' }), []);
+});
+
 test('isGonePushError: 404 y 410 son suscripciones que ya no existen', () => {
     assert.equal(isGonePushError({ statusCode: 410 }), true);
     assert.equal(isGonePushError({ statusCode: 404 }), true);
