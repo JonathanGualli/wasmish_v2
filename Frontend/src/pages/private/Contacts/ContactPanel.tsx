@@ -23,6 +23,7 @@ import { ContactForm } from './ContactForm';
 import { ReferralCard } from '../../../components/Contact/ReferralCard';
 import { ContactNotesCard, ContactNotesSkeleton } from '../../../components/Contact/ContactNotes/ContactNotesCard';
 import { LineWindowList } from '../../../components/Contact/LineWindowList';
+import { TransferRequestCard } from '../../../components/Chat/Assignment/TransferRequestCard';
 import { useLines } from '../../../hooks/useLines';
 import { useAuthContext } from "../../../context/auth.context";
 import { SkeletonBox, SkeletonField, SkeletonLine } from '../../../components/Skeleton/Skeleton';
@@ -252,6 +253,9 @@ const ContactDetails = ({ contact, onClose, onEdit }: {
     const { showLines } = useLines();
     const byLine = showLines && contact.conversations.length > 0;
     const seenConversations = contact.conversations.filter(conversation => !conversation.restricted).length;
+    // Con una línea, la suya la atiende un compañero (Fase 4): en lugar de la
+    // ventana, pedir que se la pasen; y no se le puede escribir.
+    const restricted = byLine ? undefined : contact.conversations.find(conversation => conversation.restricted);
     const { data: allTags = [] } = useTags();
     const tags = tagsFromIds(allTags, contact.tagIds);
     const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -270,6 +274,8 @@ const ContactDetails = ({ contact, onClose, onEdit }: {
             : { draft: { phone: contact.phone ?? '', name: contact.name || contact.profileName || '' } };
         navigate(`${AppRoutes.private.root}/${AppRoutes.private.chats}`, { state });
     };
+    const openConversation = (conversationId: string) => navigate(`${AppRoutes.private.root}/${AppRoutes.private.chats}`,
+        { state: { conversationId } satisfies ChatsNavigationState });
 
     const windowInfo = window24.isOpen
         ? { title: 'Ventana de 24 h abierta', right: `cierra en ${formatRemaining(window24.msRemaining)}`,
@@ -330,7 +336,7 @@ const ContactDetails = ({ contact, onClose, onEdit }: {
 
                 <div className="flex gap-2">
                     <div className="flex-1 h-10">
-                        <CustomButton onClick={openInChats} disabled={!hasConversation && !contact.phone}>
+                        <CustomButton onClick={openInChats} disabled={!hasConversation && (!contact.phone || Boolean(restricted))}>
                             <span className="flex items-center justify-center gap-2">
                                 {hasConversation ? <MessageSquare size={16} /> : <Send size={16} />}
                                 {hasConversation ? 'Abrir conversación' : 'Enviar plantilla'}
@@ -356,8 +362,10 @@ const ContactDetails = ({ contact, onClose, onEdit }: {
                     <SectionLabel>Actividad</SectionLabel>
                     {byLine ? (
                         <LineWindowList framed conversations={contact.conversations} source={contact.source}
-                            onOpen={conversationId => navigate(`${AppRoutes.private.root}/${AppRoutes.private.chats}`,
-                                { state: { conversationId } satisfies ChatsNavigationState })} />
+                            onOpen={openConversation} />
+                    ) : restricted ? (
+                        <TransferRequestCard framed conversationId={restricted.conversationId} assignedTo={restricted.assignedTo ?? null}
+                            onOpen={() => openConversation(restricted.conversationId)} />
                     ) : (
                         <div className={`border rounded-xl px-3.5 py-3 grid gap-0.5 ${windowInfo.box}`}>
                             <div className="flex items-center gap-2">

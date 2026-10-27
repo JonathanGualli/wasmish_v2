@@ -1,20 +1,28 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AxiosError } from "axios";
 import {
-    answerTransferService, assignConversationService, getAssigneesService, requestTransferService, takeConversationService,
+    answerTransferService, assignConversationService, getAssigneesService, takeConversationService,
 } from "../services/api.service";
 import type { Conversation } from "../models/conversation.mode";
 
-type ApiError = AxiosError<{ message: string; code?: string }[]>;
+type ApiError = AxiosError<{ message: string; code?: string; assignedToName?: string | null }[]>;
 
-/** El código y el texto de un error de la asignación (`assignment_changed`, `transfer_request_changed`…). */
+/**
+ * El código y el texto de un error de la asignación (`assignment_changed`,
+ * `transfer_request_changed`…) y, con `assigned_to_other`, quién la atiende.
+ */
 export const assignmentError = (error: unknown) => {
     const body = (error as ApiError | null)?.response?.data?.[0];
-    return { code: body?.code ?? null, message: body?.message ?? 'No se pudo hacer el cambio. Vuelve a intentarlo.' };
+    return {
+        code: body?.code ?? null,
+        message: body?.message ?? 'No se pudo hacer el cambio. Vuelve a intentarlo.',
+        assignedToName: body?.assignedToName ?? null,
+    };
 };
 
 /**
- * Tomar, asignar y responder solicitudes de una conversación (Fase 4). Lo que
+ * Tomar, asignar y responder solicitudes de una conversación (Fase 4); pedir
+ * una ajena es `useTransferRequest`. Lo que
  * devuelve el backend se pone en la bandeja al momento; el SSE lo confirma (y
  * avisa a los demás). `loadAssignees` pide la lista del menú solo al abrirlo.
  */
@@ -56,9 +64,6 @@ export const useConversationAssignment = (conversationId: string, { loadAssignee
         },
         onError: refreshOnError,
     });
-    const requestTransfer = useMutation({
-        mutationFn: () => requestTransferService(conversationId),
-    });
 
-    return { assignees, take, assign, answer, requestTransfer };
+    return { assignees, take, assign, answer };
 };
