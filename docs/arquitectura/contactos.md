@@ -48,6 +48,8 @@ El modelo de contacto (teléfono y BSUID), bajas de publicidad, cambio de númer
 - **Con la cuenta de la línea del webhook** (`findInboundLine`), como todo lo que entra: la agenda de una cuenta no nombra al contacto de otra con el mismo teléfono.
 - **Requisito en Meta:** el campo `smb_app_state_sync` tiene que estar marcado en *App Dashboard → WhatsApp → Configuración → Campos del webhook*, como `smb_message_echoes`. Se comprueba antes de la prueba con Meta. Marcarlo no toca la URL del webhook.
 - Se prueba con `webhook:simulate -- agenda --from <número> --name <nombre>` (`--remove` lo borra de la agenda).
+- **En la UI** (PR 6, 2026-10-26; diseño `Design/Wasmish Líneas - Chats de la app.html`, 3b–3d y 4b–4c): la ficha del chat y el panel de Contactos enseñan «Nombre en tu celular» como un dato más, de solo lectura, con «Se cambia en el celular»; si el equipo le puso otro nombre, se ven los dos (arriba el de Wasmish). Al editar, el nombre sigue siendo el de Wasmish: vacío, enseña el de la agenda en gris y dice que se usa ese (`AgendaNameHint`, `components/Contact/`). El origen es «De la app de WhatsApp Business». La lista de Contactos no cambia (no tiene columna de origen: decisión del 2026-10-06).
+- **La ventana de un contacto traído:** lo traído no abre la ventana de 24 h, y «Nunca escribió» sería falso para quien escribió antes de conectar. Si la ventana nunca se abrió y el contacto es `source: 'businessApp'`, la ficha, el panel y la lista por línea dicen **«No escribió desde que conectaste»** («Hasta que vuelva a escribir, solo plantillas aprobadas»; `noWindowLabel`, `utils/contactDisplay.ts`; decisión del 2026-10-26).
 
 ### Notas del contacto (`ContactNote`, `contact.note.controller.js`)
 

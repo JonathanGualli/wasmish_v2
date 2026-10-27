@@ -24,6 +24,7 @@ interface SSEHandlers {
     onTagsUpdated?: (event: MessageEvent) => void;
     onCampaignProgress?: (event: MessageEvent) => void;
     onMessagesImported?: (event: MessageEvent) => void;
+    onHistorySync?: (event: MessageEvent) => void;
     /** Le cambiaron el acceso (rol, líneas, estado): el servidor cierra justo después (Fase 3). */
     onAccessChanged?: () => void;
     onError?: (err: ErrorEvent) => void;
@@ -185,6 +186,9 @@ export const createSSEConnection = (
     if (handlers.onMessagesImported) {
         source.addEventListener("messages_imported", handlers.onMessagesImported);
     }
+    if (handlers.onHistorySync) {
+        source.addEventListener("history_sync", handlers.onHistorySync);
+    }
     if (handlers.onAccessChanged) {
         const onAccessChanged = handlers.onAccessChanged;
         source.addEventListener("access_changed", () => onAccessChanged());
@@ -286,6 +290,11 @@ export const connectWhatsappService = async ({ code, waBusinessId, phoneNumberId
 };
 
 // Las líneas de WhatsApp de la cuenta (Fase 2c).
+/** Volver a pedir a Meta los chats o la agenda de la app que no se pudieron pedir. */
+export const retryHistorySyncService = async (id: string) => {
+    await axios.post(`${API_URL}/lines/${id}/history-sync`, {}, { withCredentials: true });
+};
+
 export const getLinesService = async (): Promise<LinesResponse> => {
     const { data } = await axios.get(`${API_URL}/lines`, { withCredentials: true });
     return data;

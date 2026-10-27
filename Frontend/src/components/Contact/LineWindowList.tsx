@@ -1,6 +1,7 @@
 import { formatRemaining, useConversationWindow } from "../../hooks/useConversationWindow";
 import { useLines } from "../../hooks/useLines";
-import type { ContactConversation } from "../../models/contact.model";
+import type { ContactConversation, ContactSource } from "../../models/contact.model";
+import { noWindowLabel } from "../../utils/contactDisplay";
 import { formatTimeAgo } from "../../utils/formatChatTime";
 import { lineLabel } from "../../utils/lineDisplay";
 import { LineSwatch } from "../Line/LineSwatch";
@@ -8,6 +9,8 @@ import { LineSwatch } from "../Line/LineSwatch";
 interface Props {
     /** Las del contacto, una por línea, la más reciente primero (como las da el backend). */
     conversations: ContactConversation[];
+    /** El origen del contacto: decide qué se dice de una ventana que nunca se abrió. */
+    source: ContactSource;
     /** La que está abierta en el chat: va resaltada y no se puede tocar. */
     currentConversationId?: string;
     /** Tocar otra fila abre esa conversación. */
@@ -25,21 +28,22 @@ interface Props {
  * Siempre sobre blanco: en la ficha del chat iba sobre el verde profundo de la
  * cabecera, y los colores de las líneas y los estados se perdían en él.
  */
-export const LineWindowList = ({ conversations, currentConversationId, onOpen, framed = false }: Props) => (
+export const LineWindowList = ({ conversations, source, currentConversationId, onOpen, framed = false }: Props) => (
     <div className={`grid bg-brand-surface rounded-xl py-1 ${framed ? 'border border-brand-border' : ''}`}>
         <div className="px-3.5 pt-2 pb-1 text-[10.5px] font-bold uppercase tracking-[0.1em] text-brand-muted">
             Ventana de 24 h · por línea
         </div>
         {conversations.map(conversation => (
-            <LineWindowRow key={conversation.conversationId} conversation={conversation}
+            <LineWindowRow key={conversation.conversationId} conversation={conversation} source={source}
                 current={conversation.conversationId === currentConversationId}
                 highlight={conversations.length > 1} onOpen={onOpen} />
         ))}
     </div>
 );
 
-const LineWindowRow = ({ conversation, current, highlight, onOpen }: {
+const LineWindowRow = ({ conversation, source, current, highlight, onOpen }: {
     conversation: ContactConversation;
+    source: ContactSource;
     current: boolean;
     /** Resaltar la abierta: solo con más de una fila, si no no hay de cuál distinguirla. */
     highlight: boolean;
@@ -50,7 +54,7 @@ const LineWindowRow = ({ conversation, current, highlight, onOpen }: {
     const { hasWindow, isOpen, msRemaining, msSinceClosed } = useConversationWindow(conversation.windowExpiresAt);
     const [state, detail] = isOpen
         ? ['Abierta', formatRemaining(msRemaining)]
-        : hasWindow ? ['Cerrada', formatTimeAgo(msSinceClosed)] : ['Nunca escribió', ''];
+        : hasWindow ? ['Cerrada', formatTimeAgo(msSinceClosed)] : [noWindowLabel(source), ''];
     const clickable = Boolean(onOpen) && !current;
     const disconnected = line?.status === 'disconnected';
 

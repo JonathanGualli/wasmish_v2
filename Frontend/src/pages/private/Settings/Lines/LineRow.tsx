@@ -13,6 +13,7 @@ import { LineActionsMenu } from "./LineActionsMenu";
 import { LineDetails } from "./LineDetails";
 import { isBusy } from "./lineActionError";
 import { BusinessAppMark } from "./RemovedLineRow";
+import { LineHistoryStatus } from "./LineHistoryStatus";
 
 interface Props {
     line: Line;
@@ -36,7 +37,7 @@ const RowError = ({ error, onRetry }: { error: ApiError; onRetry: () => void }) 
 
 /** Una línea conectada: su nombre (editable en el sitio), su número, su estado, sus detalles y su menú. */
 export const LineRow = ({ line, colorClass, showDefault, onDisconnect }: Props) => {
-    const { rename, makeDefault } = useLines();
+    const { rename, makeDefault, retryHistory } = useLines();
     const { copy } = useCopyToClipboard();
     const { setState, setContent } = useNoticeContext();
     const [isEditing, setIsEditing] = useState(false);
@@ -57,6 +58,13 @@ export const LineRow = ({ line, colorClass, showDefault, onDisconnect }: Props) 
         setFailure(null);
         makeDefault.mutate(line.id, {
             onError: (error) => setFailure({ error: apiErrorOf(error), retry: setAsDefault }),
+        });
+    };
+
+    const retryHistorySync = () => {
+        setFailure(null);
+        retryHistory.mutate(line.id, {
+            onError: (error) => setFailure({ error: apiErrorOf(error), retry: retryHistorySync }),
         });
     };
 
@@ -117,6 +125,9 @@ export const LineRow = ({ line, colorClass, showDefault, onDisconnect }: Props) 
                     onDisconnect={() => onDisconnect(line)}
                 />
             </div>
+            {line.historySync && (
+                <LineHistoryStatus sync={line.historySync} isRetrying={retryHistory.isPending} onRetry={retryHistorySync} />
+            )}
             {detailsOpen && <LineDetails line={line} />}
             {failure && <RowError error={failure.error} onRetry={failure.retry} />}
         </div>

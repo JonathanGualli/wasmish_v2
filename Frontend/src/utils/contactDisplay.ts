@@ -21,6 +21,14 @@ export const SOURCE_LABEL: Record<NonNullable<ContactSource> | 'legacy', string>
 
 export const sourceLabel = (source: ContactSource) => SOURCE_LABEL[source ?? 'legacy'];
 
+/**
+ * La ventana de 24 h que nunca se abrió. Un contacto que llegó con los chats de
+ * la app sí escribió, antes de conectar, pero lo traído no abre la ventana:
+ * «Nunca escribió» sería falso (decisión del 2026-10-26).
+ */
+export const noWindowLabel = (source: ContactSource) =>
+    source === 'businessApp' ? 'No escribió desde que conectaste' : 'Nunca escribió';
+
 export const referralTypeLabel = (sourceType: string | null) =>
     sourceType === 'post' ? 'Publicación' : 'Anuncio';
 

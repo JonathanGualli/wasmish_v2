@@ -23,6 +23,28 @@ export interface Line {
     businessApp: boolean;
     /** Por qué la desconectó Meta, tal cual; `null` si no lo dijo o se desconectó desde Wasmish. */
     disconnectionReason: DisconnectionReason | null;
+    /** Los chats y la agenda de la app al conectar; `null` si esta conexión no los pidió. */
+    historySync: HistorySync | null;
+}
+
+/**
+ * Cómo van los chats de la app de WhatsApp Business de una línea, ya resumido
+ * por el backend (`historySyncView`): `requested` y `pending`, pedido sin
+ * respuesta; `receiving`, llegando; `done` y `partial`, terminado (con piezas
+ * perdidas); `declined`, el negocio no los compartió; `none`, pasaron las 24 h
+ * sin nada; `failed`, no se pudo pedir.
+ */
+export interface HistorySync {
+    status: 'requested' | 'pending' | 'receiving' | 'done' | 'partial' | 'declined' | 'none' | 'failed';
+    /** De 0 a 100, el mayor que mandó Meta; `null` hasta el primer trozo. */
+    progress: number | null;
+    /** Los chats que no se pudieron traer. */
+    failedThreads: number;
+    /** Qué pedidos se pueden repetir (`POST /lines/:id/history-sync`). */
+    retryable: ('contacts' | 'history')[];
+    canRetry: boolean;
+    /** Hasta cuándo se puede pedir: 24 h desde la conexión. */
+    retryUntil: string;
 }
 
 /** Los motivos de Meta al retirar el acceso (`PARTNER_REMOVED`); puede llegar otro. */

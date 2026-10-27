@@ -2,9 +2,9 @@ import { useNavigate } from "react-router-dom";
 import { AlertTriangle, ArrowRight, ChevronLeft, X } from "lucide-react";
 import { useLiveContact } from "../../../hooks/useContacts";
 import { formatRemaining, useConversationWindow } from "../../../hooks/useConversationWindow";
-import type { ContactDetail, ContactsNavigationState } from "../../../models/contact.model";
+import type { ContactDetail, ContactSource, ContactsNavigationState } from "../../../models/contact.model";
 import { ContactsPath } from "../../../models/routes.models";
-import { contactIdentity, contactTitle } from "../../../utils/contactDisplay";
+import { contactIdentity, contactTitle, noWindowLabel } from "../../../utils/contactDisplay";
 import { formatTimeAgo } from "../../../utils/formatChatTime";
 import { ContactAvatar } from "../../../pages/private/Contacts/ContactRow";
 import { Callout } from "../../Callout/Callout";
@@ -46,7 +46,7 @@ export const ContactSidebar = ({ contactId, conversationId, windowExpiresAt, onO
             <div className="flex-none bg-brand-deep text-white px-4 pt-3.5 max-md:pt-[calc(10px+var(--safe-top))] pb-4 grid gap-3.5">
                 <SidebarTopBar onClose={onClose} />
                 {contact && (
-                    <ContactIdentity contact={contact} windowSlot={byLine ? null : <WindowLine expiresAt={windowExpiresAt} />} />
+                    <ContactIdentity contact={contact} windowSlot={byLine ? null : <WindowLine expiresAt={windowExpiresAt} source={contact.source} />} />
                 )}
                 {!contact && !isError && <ContactIdentitySkeleton />}
             </div>
@@ -55,7 +55,7 @@ export const ContactSidebar = ({ contactId, conversationId, windowExpiresAt, onO
                 <>
                     <div className="flex-1 min-h-0 overflow-y-auto p-3.5 grid gap-2.5 content-start">
                         {byLine && (
-                            <LineWindowList conversations={contact.conversations}
+                            <LineWindowList conversations={contact.conversations} source={contact.source}
                                 currentConversationId={conversationId} onOpen={onOpenConversation} />
                         )}
                         {contact.marketingOptOut && (
@@ -135,11 +135,11 @@ const ContactIdentity = ({ contact, windowSlot }: { contact: ContactDetail; wind
 };
 
 /** La ventana en una línea: el aviso fuerte vive abajo, en el campo de escribir. */
-const WindowLine = ({ expiresAt }: { expiresAt?: string | null }) => {
+const WindowLine = ({ expiresAt, source }: { expiresAt?: string | null; source: ContactSource }) => {
     const { hasWindow, isOpen, msRemaining, msSinceClosed } = useConversationWindow(expiresAt);
     const [label, detail] = isOpen
         ? ['Ventana abierta', `quedan ${formatRemaining(msRemaining)}`]
-        : hasWindow ? ['Ventana cerrada', formatTimeAgo(msSinceClosed)] : ['Nunca escribió', ''];
+        : hasWindow ? ['Ventana cerrada', formatTimeAgo(msSinceClosed)] : [noWindowLabel(source), ''];
 
     return (
         <div className="flex items-center gap-2 bg-brand-ink rounded-[9px] px-3 py-[9px] text-[12.5px]">

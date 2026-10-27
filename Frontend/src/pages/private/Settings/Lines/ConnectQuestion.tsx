@@ -52,7 +52,10 @@ const Strong = ({ children }: { children: ReactNode }) => <strong className="fon
  * Antes de abrir Facebook, «Conectar WhatsApp» pregunta si el número está en la
  * app de WhatsApp Business (coexistencia): con «No», el camino de siempre; con
  * «Sí», qué sigue igual, qué cambia y qué hace falta. Diseño: «Wasmish Líneas -
- * Junto con la app» (1a–1e, m1–m2), con los textos del spec (2026-10-16).
+ * Junto con la app» (1a–1e, m1–m2), con los textos del spec (2026-10-16); los
+ * chats y la agenda que se traen al conectar, de «Wasmish Líneas - Chats de la
+ * app» (1a), con lo que salió al probarlo con Meta: los archivos que mandó el
+ * negocio no llegan.
  */
 export const ConnectQuestion = ({ open, initialAnswer = null, onCancel, onConnect }: Props) => {
     const isPhone = useMediaQuery(PHONE_QUERY);
@@ -111,13 +114,15 @@ export const ConnectQuestion = ({ open, initialAnswer = null, onCancel, onConnec
                 <><Strong>Sigues respondiendo desde la app,</Strong> con el mismo número. Tu equipo atiende además desde Wasmish. Desde ahora, lo que escriben tus clientes llega a los dos lados, y lo que respondas desde la app (textos, fotos, videos y documentos) se ve también en Wasmish. Los grupos no pasan a Wasmish.</>,
             ]} />
             <Group label="Cambia" labelClass="text-brand-warning" dotClass="bg-brand-warning" items={[
-                <><Strong>Los chats anteriores se quedan en la app.</Strong> No pasan a Wasmish.</>,
+                <><Strong>Tus chats de los últimos 6 meses pasan a Wasmish,</Strong> si lo aceptas en la app al escanear el código. Las fotos, audios, videos y documentos que te mandaron tus clientes en las últimas dos semanas se ven aquí; los más viejos y los que mandaste tú se quedan en el celular, y en Wasmish se ve que había uno.</>,
+                <><Strong>Tus contactos del celular ponen nombre a tus clientes.</Strong> En Contactos solo aparecen los que tienen chat; el resto de tu agenda no se ve. Si cambias un nombre en el celular, cambia también aquí.</>,
                 <><Strong>En la app se apagan las listas de difusión,</Strong> los mensajes temporales, «ver una vez» y la ubicación en tiempo real. Las listas que tienes quedan solo para leer; las campañas las envías desde Wasmish.</>,
                 <><Strong>WhatsApp para Windows y para relojes (WearOS) dejan de funcionar con este número.</Strong> WhatsApp Web y los demás dispositivos sí: al conectar se desvinculan todos y los vuelves a vincular.</>,
                 <><Strong>Desde Wasmish, las reglas de WhatsApp siguen igual:</Strong> pasadas 24 horas desde el último mensaje del cliente, para escribirle hace falta una plantilla, aunque desde la app se le haya respondido.</>,
             ]} />
             <Group label="Te hace falta" labelClass="text-brand-text" dotClass="bg-brand-text" items={[
                 <><Strong>La app actualizada y el celular a mano.</Strong> En la ventana de Facebook vas a escanear un código desde la app.</>,
+                <><Strong>Aceptar compartir tus chats, si los quieres aquí.</Strong> Es una sola vez: si no lo aceptas, para traerlos después tendrías que desconectar el número y volver a conectarlo.</>,
                 <><Strong>Abrir la app de vez en cuando.</Strong> Si el celular pasa unas dos semanas sin usarla, Meta desconecta el número de Wasmish. Se vuelve a conectar desde aquí.</>,
             ]} />
         </>

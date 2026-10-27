@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
 import { ConfirmDialog } from '../../../components/Dialog/ConfirmDialog';
 import {
-    AlertTriangle, ChevronLeft, Lock, MessageSquare, Pencil, Send, Trash2, X,
+    AlertTriangle, ChevronLeft, Lock, MessageSquare, Pencil, Send, Smartphone, Trash2, X,
 } from 'lucide-react';
 import { CustomButton } from '../../../components/Button/Button';
 import { Callout } from '../../../components/Callout/Callout';
@@ -16,7 +16,7 @@ import { formatRemaining, useConversationWindow } from '../../../hooks/useConver
 import type { ContactDetail } from '../../../models/contact.model';
 import type { ChatsNavigationState } from '../../../models/conversation.mode';
 import { AppRoutes } from '../../../models/routes.models';
-import { contactIdentity, contactTitle, sourceLabel } from '../../../utils/contactDisplay';
+import { contactIdentity, contactTitle, noWindowLabel, sourceLabel } from '../../../utils/contactDisplay';
 import { formatActivityTime, formatDateTime } from '../../../utils/formatChatTime';
 import { ContactAvatar } from './ContactRow';
 import { ContactForm } from './ContactForm';
@@ -276,8 +276,9 @@ const ContactDetails = ({ contact, onClose, onEdit }: {
         : window24.hasWindow
             ? { title: 'Ventana de 24 h cerrada', right: '',
                 sub: 'Solo puedes enviarle plantillas aprobadas.', box: 'bg-brand-bg border-brand-border', dot: 'bg-brand-subtle' }
-            : { title: 'Nunca escribió', right: '',
-                sub: 'Hasta que escriba, solo plantillas aprobadas.', box: 'bg-brand-bg border-brand-border', dot: 'bg-brand-border-strong' };
+            : { title: noWindowLabel(contact.source), right: '',
+                sub: contact.source === 'businessApp' ? 'Hasta que vuelva a escribir, solo plantillas aprobadas.' : 'Hasta que escriba, solo plantillas aprobadas.',
+                box: 'bg-brand-bg border-brand-border', dot: 'bg-brand-border-strong' };
 
     const data: [string, ReactNode][] = [
         ['Etiquetas', (
@@ -289,6 +290,15 @@ const ContactDetails = ({ contact, onClose, onEdit }: {
                 </button>
             </span>
         )],
+        // El de la agenda del celular: de solo lectura, se cambia allí.
+        ...(contact.agendaName ? [['Nombre en tu celular', (
+            <span className="grid gap-0.5">
+                <span className="flex items-center gap-1.5">
+                    <Smartphone size={13} strokeWidth={2.2} className="flex-none text-brand-muted" />{contact.agendaName}
+                </span>
+                <span className="text-[12.5px] text-brand-muted">Se cambia en el celular, no aquí.</span>
+            </span>
+        )] as [string, ReactNode]] : []),
         ['Email', contact.email],
         ['Empresa', contact.company],
         ['Origen', sourceLabel(contact.source)],
@@ -344,7 +354,7 @@ const ContactDetails = ({ contact, onClose, onEdit }: {
                 <div className="grid gap-2.5">
                     <SectionLabel>Actividad</SectionLabel>
                     {byLine ? (
-                        <LineWindowList framed conversations={contact.conversations}
+                        <LineWindowList framed conversations={contact.conversations} source={contact.source}
                             onOpen={conversationId => navigate(`${AppRoutes.private.root}/${AppRoutes.private.chats}`,
                                 { state: { conversationId } satisfies ChatsNavigationState })} />
                     ) : (
@@ -402,10 +412,11 @@ const ContactDetails = ({ contact, onClose, onEdit }: {
 
                 <div className="grid gap-2.5">
                     <SectionLabel>Datos</SectionLabel>
-                    <dl className="grid grid-cols-[96px_minmax(0,1fr)] gap-x-3.5 gap-y-[11px] text-[13.5px] leading-[1.5]">
+                    <dl className={`grid gap-x-3.5 gap-y-[11px] text-[13.5px] leading-[1.5]
+                        ${contact.agendaName ? 'grid-cols-[112px_minmax(0,1fr)]' : 'grid-cols-[96px_minmax(0,1fr)]'}`}>
                         {data.map(([label, value]) => (
                             <div key={label} className="contents">
-                                <dt className="text-brand-muted">{label}</dt>
+                                <dt className="text-brand-muted leading-[1.35]">{label}</dt>
                                 <dd className={`[overflow-wrap:anywhere] ${value ? 'text-brand-text' : 'text-brand-subtle'}`}>{value || '—'}</dd>
                             </div>
                         ))}

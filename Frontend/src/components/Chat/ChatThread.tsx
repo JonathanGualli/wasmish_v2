@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useInView } from "react-intersection-observer";
 import { Transition } from "@headlessui/react";
-import { Ban, Bot, CircleAlert, Code2, LoaderCircle, Send, Smartphone } from "lucide-react";
+import { Ban, Bot, CircleAlert, Code2, File as FileIcon, LoaderCircle, Send, Smartphone } from "lucide-react";
 import { useConversationMessages } from "../../hooks/useConversationMessages";
 import { useConversations } from "../../hooks/useConversations.ts";
 import { useTemplates } from "../../hooks/useTemplates.ts";
@@ -35,6 +35,7 @@ import { MessageReactions } from "./Message/MessageReactions";
 import { HoverActions, MessageMenu, type MenuAnchor } from "./Message/MessageActions";
 import { currentOwnEmoji } from "../../utils/messageActions";
 import { quoteFromMessage } from "../../utils/messageQuote";
+import { isHistoryPlaceholder } from "../../utils/historyPlaceholder";
 
 // El selector completo: él y sus datos solo se cargan al abrirlo.
 const EmojiPicker = lazy(() => import("./Emoji/EmojiPicker"));
@@ -308,6 +309,16 @@ export const ChatThread = ({
     // usan la burbuja y lo que enseña el ojo de un mensaje eliminado (`onDeep`:
     // sobre la burbuja propia, en verde profundo).
     const renderBody = (msg: Message, onDeep: boolean) => {
+        // Un archivo de los chats traídos de la app que no llegó: lo dice, sin
+        // icono de tipo (Meta no dice qué era).
+        if (isHistoryPlaceholder(msg)) {
+            return (
+                <span className="flex items-center gap-2">
+                    <FileIcon size={15} className="flex-none" />
+                    <span className="min-w-0">{msg.text}</span>
+                </span>
+            );
+        }
         // Adjuntos, ubicaciones, respuestas a botones… El texto ya viene
         // resuelto del backend (el caption, o una etiqueta); aquí solo se
         // le pone delante el icono que dice de qué se trata.
@@ -372,6 +383,8 @@ export const ChatThread = ({
             const menuOpen = menuId === msg.id;
             const highlighted = jump.highlightedId === msg.id;
             const quote = quoteOf(msg);
+            // Mismo tratamiento en los dos lados: borde punteado, sin el verde de la propia.
+            const placeholder = isHistoryPlaceholder(msg) && !deleted;
 
             nodes.push(
                 <div
@@ -396,13 +409,16 @@ export const ChatThread = ({
                             transition-shadow duration-500 ${hasReactions ? "pb-[22px]" : ""}
                             ${highlighted ? "shadow-[0_0_0_3px_var(--color-brand-accent),0_0_0_9px_var(--color-brand-accent-soft)]" : ""}
                             ${phone && (msg.canReact || msg.canReply) ? "select-none [-webkit-touch-callout:none]" : ""}
-                            ${mine
+                            ${placeholder
+                                ? `text-brand-gray-600 border border-dashed border-brand-border-strong
+                                    ${mine ? "rounded-[12px_12px_3px_12px]" : "rounded-[12px_12px_12px_3px]"}`
+                                : mine
                                 ? "bg-brand-deep text-white rounded-[12px_12px_3px_12px]"
                                 : "bg-brand-surface text-brand-text border border-brand-border rounded-[12px_12px_12px_3px]"}`}
                     >
-                        {msg.forwarded && <ForwardedLabel forwarded={msg.forwarded} onDeep={mine} />}
+                        {msg.forwarded && <ForwardedLabel forwarded={msg.forwarded} onDeep={mine && !placeholder} />}
                         {quote && (
-                            <QuotedMessage quote={quote} onDeep={mine} contactName={title} team={showAuthor}
+                            <QuotedMessage quote={quote} onDeep={mine && !placeholder} contactName={title} team={showAuthor}
                                 onOpen={quote.id ? () => void jump.jumpTo(quote.id!) : undefined} />
                         )}
                         {deleted ? (
@@ -410,7 +426,7 @@ export const ChatThread = ({
                                 <Ban size={14} className="flex-none" />
                                 Mensaje eliminado
                             </span>
-                        ) : renderBody(msg, mine)}
+                        ) : renderBody(msg, mine && !placeholder)}
                     </div>
                     <MessageReactions msg={msg} mine={mine} phone={phone} onReact={(emoji) => react(msg, emoji)} />
                     {!phone && (

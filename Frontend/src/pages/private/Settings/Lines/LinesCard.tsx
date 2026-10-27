@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertCircle, Loader2, Plug, X } from "lucide-react";
 import { LINE_ERROR, type Line } from "../../../../models/line.model";
 import { CustomButton } from "../../../../components/Button/Button";
 import { Callout } from "../../../../components/Callout/Callout";
 import { Pill } from "../../../../components/Pill/Pill";
-import { useLines } from "../../../../hooks/useLines";
+import { LINES_QUERY_KEY, useLines } from "../../../../hooks/useLines";
+import { useThrottledInvalidate } from "../../../../hooks/useThrottledInvalidate";
+import { useSSE } from "../../../../context/sse.context";
 import { useConnectWhatsapp } from "../../../../hooks/useConnectWhatsapp";
 import { apiErrorOf } from "../../../../utils/apiError";
 import { maskWabaId } from "../../../../utils/lineDisplay";
@@ -71,6 +73,33 @@ const connectState = ({ activeCount, maxLines, isMultiLine, isConnecting, hasRem
     };
 };
 
+const HISTORY_REFRESH_MS = 60_000;
+
+/**
+ * El estado de los chats de la app se ve cambiar sin recargar: con el aviso
+ * `history_sync` y, hasta que vence el plazo de 24 h, cada minuto. Parte del
+ * estado cambia con la hora y no con un aviso: reintentar un pedido sin
+ * respuesta a la media hora (también el de la agenda, con los chats ya
+ * terminados: revisión de Codex del PR #136) y el plazo que vence.
+ */
+const useHistorySyncRefresh = (activeLines: Line[]) => {
+    const { subscribe } = useSSE();
+    const refresh = useThrottledInvalidate(LINES_QUERY_KEY);
+    useEffect(() => subscribe("history_sync", refresh), [subscribe, refresh]);
+
+    // El plazo más lejano; una vuelta más después, para ver que venció.
+    const lastDeadline = Math.max(0, ...activeLines.map(line =>
+        line.historySync ? new Date(line.historySync.retryUntil).getTime() : 0));
+    useEffect(() => {
+        if (Date.now() > lastDeadline + HISTORY_REFRESH_MS) return;
+        const timer = setInterval(() => {
+            if (Date.now() > lastDeadline + HISTORY_REFRESH_MS) clearInterval(timer);
+            refresh();
+        }, HISTORY_REFRESH_MS);
+        return () => clearInterval(timer);
+    }, [lastDeadline, refresh]);
+};
+
 /**
  * Ajustes → las líneas de WhatsApp de la cuenta (Fase 2c; diseño: «Wasmish
  * Líneas - Ajustes y superadmin»). Con una sola línea se ve casi como antes;
@@ -80,6 +109,7 @@ const connectState = ({ activeCount, maxLines, isMultiLine, isConnecting, hasRem
 export const LinesCard = () => {
     const { isLoading, isError, refresh, lines, activeLines, previousLines, removedLines, maxLines, isMultiLine, colorOf } = useLines();
     const connectWhatsapp = useConnectWhatsapp();
+    useHistorySyncRefresh(activeLines);
     const [toDisconnect, setToDisconnect] = useState<Line | null>(null);
     // La pregunta antes de abrir Facebook (coexistencia). «Volver a conectar» una
     // línea que estaba junto con la app la abre ya en «Sí». `key` la reinicia.

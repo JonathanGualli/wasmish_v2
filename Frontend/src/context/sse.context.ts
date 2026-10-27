@@ -24,6 +24,8 @@ export interface SSEEventMap {
     campaign_progress: Campaign;
     // Se importaron mensajes del historial de la app de WhatsApp Business en esa conversación
     messages_imported: { conversationId: string };
+    // Cambió el estado de los chats de la app de esa línea (solo a quien gestiona líneas)
+    history_sync: { lineId: string };
 }
 
 export type SSEEventType = keyof SSEEventMap;
