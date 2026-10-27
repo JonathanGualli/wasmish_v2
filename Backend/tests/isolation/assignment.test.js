@@ -5,10 +5,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
     seedAccount, seedMember, connectWhatsapp, request, postWebhook, openStream, metaCalls, onMeta, ANONYMOUS,
-    ApiKey, Contact, Conversation, Message,
+    Account, ApiKey, Contact, Conversation, Message, User,
 } from './helpers.js';
 
-const { acquireConversation } = await import('../../src/services/assignment.service.js');
+const { acquireConversation, confirmAssignee, confirmRequester } = await import('../../src/services/assignment.service.js');
 const { hashApiKey } = await import('../../src/utils/crypto.js');
 
 // TODO lo que se prepara con `await` va aquí, antes del primer `test()` (ver
@@ -24,14 +24,19 @@ const ana = await seedMember(a, { role: 'agent', lineIds: [l1], label: 'ASANA' }
 const luis = await seedMember(a, { role: 'agent', lineIds: [l1], label: 'ASLUIS' });
 const supervisor = await seedMember(a, { role: 'supervisor', lineIds: [l1], label: 'ASSUP' });
 const otherLine = await seedMember(a, { role: 'agent', lineIds: [l2], label: 'ASL2' });
+const marta = await seedMember(a, { role: 'agent', lineIds: [l1], label: 'ASMARTA' });
+const inactive = await seedMember(a, { role: 'agent', lineIds: [l1], label: 'ASOFF' });
+await User.updateOne({ _id: inactive.userId }, { status: 'inactive' });
+// Otra cuenta, para los endpoints nuevos con :id.
+const b = await seedAccount('AT', { seq: 72 });
 
 let phoneSeq = 0;
 const nextPhone = () => `59399007${String(200 + phoneSeq++).padStart(4, '0')}`;
 
-const seedConversation = async (phone, name, assignedTo = null) => {
+const seedConversation = async (phone, name, assignedTo = null, { line = l1, number = '711' } = {}) => {
     const contact = await Contact.create({ userId: a.accountId, phone, name });
     const conversation = await Conversation.create({
-        userId: a.accountId, contactId: contact._id, contactPhone: phone, phoneNumberId: '711', lineId: l1,
+        userId: a.accountId, contactId: contact._id, contactPhone: phone, phoneNumberId: number, lineId: line,
         lastInboundAt: new Date(), lastMessage: `último de ${name}`, assignedTo,
     });
     const message = await Message.create({
@@ -306,4 +311,282 @@ test('cambia de manos mientras se espera a Meta: el mensaje le llega al nuevo du
         onMeta(null);
         await Promise.all([asAna.close(), asLuis.close()]);
     }
+});
+
+// --- Tarea 4: asignar, tomar y a quién --------------------------------------
+
+const assign = (account, conversation, userId) => request(account, 'POST', `/chats/${conversation._id}/assign`, { userId });
+
+test('asignar: el supervisor, cualquiera; el agente pasa o suelta la suya', async () => {
+    const free = await seedConversation(nextPhone(), 'Para Luis');
+    const res = await assign(supervisor, free.conversation, luis.userId);
+    assert.equal(res.status, 200, res.text);
+    assert.deepEqual(res.body.assignedTo, { id: luis.userId, name: 'ASLUIS miembro' });
+    assert.ok(ids(await request(luis, 'GET', '/chats')).includes(String(free.conversation._id)));
+    assert.deepEqual(await assigneeOf(free.conversation), { assignedTo: luis.userId, assignedBy: supervisor.userId });
+
+    const ofAna = await seedConversation(nextPhone(), 'Ana la pasa', ana.userId);
+    assert.equal((await assign(ana, ofAna.conversation, luis.userId)).status, 200);
+    assert.equal((await request(ana, 'GET', `/chats/${ofAna.conversation._id}/messages`)).status, 404, 'Ana la sigue viendo');
+
+    const released = await seedConversation(nextPhone(), 'Ana la suelta', ana.userId);
+    const released1 = await assign(ana, released.conversation, null);
+    assert.equal(released1.status, 200, released1.text);
+    assert.equal(released1.body.assignedTo, null);
+});
+
+test('asignar: el agente no pasa una sin asignar ni elige a quien no puede atenderla', async () => {
+    const free = await seedConversation(nextPhone(), 'Sin asignar');
+    const denied = await assign(ana, free.conversation, luis.userId);
+    assert.equal(denied.status, 403, denied.text);
+    assert.equal((await assigneeOf(free.conversation)).assignedTo, null);
+
+    for (const target of [inactive.userId, otherLine.userId, b.userId]) {
+        const res = await assign(supervisor, free.conversation, target);
+        assert.equal(res.status, 400, res.text);
+        assert.equal(res.body[0].code, 'invalid_assignee');
+    }
+    assert.equal((await assigneeOf(free.conversation)).assignedTo, null);
+});
+
+test('tomar: suya si está sin asignar; la de otro, 409 (y al agente ni se le enseña)', async () => {
+    const free = await seedConversation(nextPhone(), 'Tomar');
+    const taken = await request(luis, 'POST', `/chats/${free.conversation._id}/take`);
+    assert.equal(taken.status, 200, taken.text);
+    assert.equal(taken.body.assignedTo.id, luis.userId);
+    assert.equal((await request(luis, 'POST', `/chats/${free.conversation._id}/take`)).status, 200, 'ya suya');
+
+    const bySupervisor = await request(supervisor, 'POST', `/chats/${free.conversation._id}/take`);
+    assert.equal(bySupervisor.status, 409, bySupervisor.text);
+    assert.equal(bySupervisor.body[0].code, 'assigned_to_other');
+    assert.equal((await request(ana, 'POST', `/chats/${free.conversation._id}/take`)).status, 404);
+    assert.equal((await assigneeOf(free.conversation)).assignedTo, luis.userId);
+});
+
+test('a quién se puede asignar: los activos que pueden atender esa línea', async () => {
+    const res = await request(ana, 'GET', `/chats/${c1.conversation._id}/assignees`);
+    assert.equal(res.status, 200, res.text);
+    const people = res.body.map(person => person.id);
+    for (const member of [a, ana, luis, supervisor, marta]) assert.ok(people.includes(member.userId), member.label);
+    for (const member of [otherLine, inactive]) assert.ok(!people.includes(member.userId), member.label);
+    assert.deepEqual(Object.keys(res.body[0]).sort(), ['id', 'name', 'role']);
+});
+
+test('cambiar la asignación borra la solicitud pendiente', async () => {
+    const ofAna = await seedConversation(nextPhone(), 'Con solicitud', ana.userId);
+    assert.equal((await request(luis, 'POST', `/chats/${ofAna.conversation._id}/transfer-request`)).status, 202);
+    assert.equal((await assign(supervisor, ofAna.conversation, marta.userId)).status, 200);
+    const current = await Conversation.findById(ofAna.conversation._id).lean();
+    assert.equal(current.transferRequest, undefined);
+});
+
+test('otra cuenta: tomar, asignar y a quién, 404 sin cambiar nada', async () => {
+    const free = await seedConversation(nextPhone(), 'Ajena para B');
+    const stream = await openStream(a);
+    try {
+        await noMetaCalls(async () => {
+            for (const [method, url, body] of [
+                ['POST', `/chats/${free.conversation._id}/take`],
+                ['POST', `/chats/${free.conversation._id}/assign`, { userId: b.userId }],
+                ['GET', `/chats/${free.conversation._id}/assignees`],
+            ]) {
+                const res = await request(b, method, url, body);
+                assert.equal(res.status, 404, `${method} ${url}: ${res.text}`);
+            }
+        });
+        assert.equal((await assigneeOf(free.conversation)).assignedTo, null);
+        assert.equal(await stream.waitFor(String(free.conversation._id), 300), false, 'A recibió un evento');
+    } finally {
+        await stream.close();
+    }
+});
+
+// --- Tarea 5: pedir que te la pasen ---------------------------------------
+
+const requestTransfer = (account, conversation) => request(account, 'POST', `/chats/${conversation._id}/transfer-request`);
+const answer = (account, conversation, verb, requestId) =>
+    request(account, 'POST', `/chats/${conversation._id}/transfer-request/${verb}`, { requestId });
+const pendingOf = async (conversation) => (await Conversation.findById(conversation._id).lean()).transferRequest ?? null;
+
+test('Luis pide la de Ana: la ven Ana y el supervisor; sin nada de la conversación en la respuesta', async () => {
+    const ofAna = await seedConversation(nextPhone(), 'Pedida', ana.userId);
+    const res = await requestTransfer(luis, ofAna.conversation);
+    assert.equal(res.status, 202, res.text);
+    assert.equal(res.text, '');
+    for (const account of [ana, supervisor]) {
+        const chat = (await request(account, 'GET', '/chats')).body.find(item => item.id === String(ofAna.conversation._id));
+        assert.deepEqual(chat.transferRequest.requestedBy, { id: luis.userId, name: 'ASLUIS miembro' }, account.label);
+    }
+});
+
+test('aceptar: pasa al que la pidió, y él se entera; rechazar: sigue igual, y también se entera', async () => {
+    const asLuis = await openStream(luis);
+    try {
+        const ofAna = await seedConversation(nextPhone(), 'Aceptada', ana.userId);
+        await requestTransfer(luis, ofAna.conversation);
+        const accepted = await answer(ana, ofAna.conversation, 'accept', String((await pendingOf(ofAna.conversation)).id));
+        assert.equal(accepted.status, 200, accepted.text);
+        assert.equal(accepted.body.assignedTo.id, luis.userId);
+        assert.equal(accepted.body.transferRequest, null);
+        assert.equal((await request(ana, 'GET', `/chats/${ofAna.conversation._id}/messages`)).status, 404);
+        assert.ok(await asLuis.waitFor(`"id":"${ofAna.conversation._id}","accepted":true`, 2000), 'Luis no se enteró');
+
+        const other = await seedConversation(nextPhone(), 'Rechazada', ana.userId);
+        await requestTransfer(luis, other.conversation);
+        const rejected = await answer(ana, other.conversation, 'reject', String((await pendingOf(other.conversation)).id));
+        assert.equal(rejected.status, 204, rejected.text);
+        assert.equal((await assigneeOf(other.conversation)).assignedTo, ana.userId);
+        assert.equal(await pendingOf(other.conversation), null);
+        assert.ok(await asLuis.waitFor(`"id":"${other.conversation._id}","accepted":false`, 2000));
+    } finally {
+        await asLuis.close();
+    }
+});
+
+test('pedir: de otra línea, 404; sin asignar, 409; una segunda reemplaza a la primera', async () => {
+    const ofAna = await seedConversation(nextPhone(), 'Varias', ana.userId);
+    assert.equal((await requestTransfer(otherLine, ofAna.conversation)).status, 404);
+    const free = await seedConversation(nextPhone(), 'Nadie');
+    const notAssigned = await requestTransfer(luis, free.conversation);
+    assert.equal(notAssigned.status, 409);
+    assert.equal(notAssigned.body[0].code, 'not_assigned');
+
+    await requestTransfer(luis, ofAna.conversation);
+    const first = await pendingOf(ofAna.conversation);
+    await requestTransfer(marta, ofAna.conversation);
+    const second = await pendingOf(ofAna.conversation);
+    assert.equal(String(second.requestedBy), marta.userId);
+    assert.notEqual(String(second.id), String(first.id));
+    // Luis acepta su propia solicitud: no ve la conversación.
+    assert.equal((await answer(luis, ofAna.conversation, 'accept', String(second.id))).status, 404);
+});
+
+test('una solicitud reemplazada no se acepta ni se rechaza con el id viejo (revisión de Codex del plan, 5)', async () => {
+    const ofAna = await seedConversation(nextPhone(), 'Reemplazada', ana.userId);
+    await requestTransfer(luis, ofAna.conversation);
+    const seenByAna = String((await pendingOf(ofAna.conversation)).id);
+    await requestTransfer(marta, ofAna.conversation);
+    for (const verb of ['accept', 'reject']) {
+        const res = await answer(ana, ofAna.conversation, verb, seenByAna);
+        assert.equal(res.status, 409, `${verb}: ${res.text}`);
+        assert.equal(res.body[0].code, 'transfer_request_changed');
+    }
+    assert.equal((await assigneeOf(ofAna.conversation)).assignedTo, ana.userId);
+    assert.equal(String((await pendingOf(ofAna.conversation)).requestedBy), marta.userId);
+
+    // La misma persona otra vez: otro id.
+    await requestTransfer(luis, ofAna.conversation);
+    const again = await pendingOf(ofAna.conversation);
+    await requestTransfer(luis, ofAna.conversation);
+    assert.equal((await answer(ana, ofAna.conversation, 'accept', String(again.id))).status, 409);
+});
+
+test('una solicitud vieja no se aplica sobre el dueño nuevo; un solicitante desactivado, 409', async () => {
+    const ofAna = await seedConversation(nextPhone(), 'Vieja', ana.userId);
+    await requestTransfer(luis, ofAna.conversation);
+    const requestId = String((await pendingOf(ofAna.conversation)).id);
+    assert.equal((await assign(supervisor, ofAna.conversation, marta.userId)).status, 200);
+    const late = await answer(ana, ofAna.conversation, 'accept', requestId);
+    assert.ok([403, 404].includes(late.status), late.text);
+    assert.equal((await assigneeOf(ofAna.conversation)).assignedTo, marta.userId);
+
+    const leaving = await seedMember(a, { role: 'agent', lineIds: [l1], label: 'ASLEAVE' });
+    const other = await seedConversation(nextPhone(), 'Se va', ana.userId);
+    await requestTransfer(leaving, other.conversation);
+    const pending = String((await pendingOf(other.conversation)).id);
+    await User.updateOne({ _id: leaving.userId }, { status: 'inactive' });
+    const res = await answer(supervisor, other.conversation, 'accept', pending);
+    assert.equal(res.status, 409, res.text);
+    assert.equal(res.body[0].code, 'invalid_assignee');
+    assert.equal(await pendingOf(other.conversation), null);
+    assert.equal((await assigneeOf(other.conversation)).assignedTo, ana.userId);
+});
+
+test('otra cuenta: pedir, aceptar y rechazar, 404 sin cambiar nada', async () => {
+    const ofAna = await seedConversation(nextPhone(), 'Ajena para pedir', ana.userId);
+    await requestTransfer(luis, ofAna.conversation);
+    const pending = await pendingOf(ofAna.conversation);
+    for (const res of [
+        await requestTransfer(b, ofAna.conversation),
+        await answer(b, ofAna.conversation, 'accept', String(pending.id)),
+        await answer(b, ofAna.conversation, 'reject', String(pending.id)),
+    ]) assert.equal(res.status, 404, res.text);
+    assert.equal((await assigneeOf(ofAna.conversation)).assignedTo, ana.userId);
+    assert.equal(String((await pendingOf(ofAna.conversation)).id), String(pending.id));
+});
+
+// --- Tarea 6: quitar acceso libera ------------------------------------------
+
+const patchMember = (member, body) => request(a, 'PATCH', `/team/members/${member.userId}`, body);
+
+test('desactivar a alguien suelta sus conversaciones y lo que se pidió en ellas; las que él pidió, también', async () => {
+    const leaving = await seedMember(a, { role: 'agent', lineIds: [l1], label: 'ASOUT1' });
+    const his = await seedConversation(nextPhone(), 'De quien se va', leaving.userId);
+    await requestTransfer(luis, his.conversation);
+    const ofAna = await seedConversation(nextPhone(), 'Pedida por quien se va', ana.userId);
+    await requestTransfer(leaving, ofAna.conversation);
+
+    const res = await patchMember(leaving, { status: 'inactive' });
+    assert.equal(res.status, 200, res.text);
+    assert.equal((await assigneeOf(his.conversation)).assignedTo, null);
+    assert.equal(await pendingOf(his.conversation), null, 'quedó la solicitud de Luis');
+    assert.equal((await assigneeOf(ofAna.conversation)).assignedTo, ana.userId);
+    assert.equal(await pendingOf(ofAna.conversation), null, 'quedó la solicitud del desactivado');
+});
+
+test('quitarle una línea suelta solo las de esa línea; pasarlo a admin, nada', async () => {
+    const mover = await seedMember(a, { role: 'agent', lineIds: [l1, l2], label: 'ASOUT2' });
+    const inL1 = await seedConversation(nextPhone(), 'En 711', mover.userId);
+    const inL2 = await seedConversation(nextPhone(), 'En 712', mover.userId, { line: l2, number: '712' });
+    assert.equal((await patchMember(mover, { lineIds: [String(l2)] })).status, 200);
+    assert.equal((await assigneeOf(inL1.conversation)).assignedTo, null);
+    assert.equal((await assigneeOf(inL2.conversation)).assignedTo, mover.userId);
+
+    const promoted = await seedMember(a, { role: 'agent', lineIds: [l1], label: 'ASOUT3' });
+    const kept = await seedConversation(nextPhone(), 'Sigue', promoted.userId);
+    assert.equal((await patchMember(promoted, { role: 'admin' })).status, 200);
+    assert.equal((await assigneeOf(kept.conversation)).assignedTo, promoted.userId, 'un null en releaseFilter soltó todas');
+});
+
+test('la carrera con la desactivación: una asignación escrita después se deshace (revisión de Codex del plan, 1)', async () => {
+    const late = await seedMember(a, { role: 'agent', lineIds: [l1], label: 'ASOUT4' });
+    const free = await seedConversation(nextPhone(), 'Carrera con el equipo');
+    // Como si `updateMember` hubiera guardado el `User` y ya liberado, y la
+    // asignación (validada antes) se escribiera después.
+    await User.updateOne({ _id: late.userId }, { status: 'inactive' });
+    await Conversation.updateOne({ _id: free.conversation._id }, { $set: { assignedTo: late.userId } });
+    assert.equal(await confirmAssignee(a.accountId, free.conversation._id, late.userId), false);
+    assert.equal((await assigneeOf(free.conversation)).assignedTo, null);
+});
+
+test('una solicitud guardada mientras se le quitaba el acceso al que la pidió se borra (revisión de Codex del PR #144)', async () => {
+    const late = await seedMember(a, { role: 'agent', lineIds: [l1], label: 'ASOUT5' });
+    const ofAna = await seedConversation(nextPhone(), 'Pedida a destiempo', ana.userId);
+    // Como si la solicitud se escribiera después de que `updateMember` lo desactivara y limpiara.
+    const requestId = new (await import('mongoose')).default.Types.ObjectId();
+    await User.updateOne({ _id: late.userId }, { status: 'inactive' });
+    await Conversation.updateOne({ _id: ofAna.conversation._id }, {
+        $set: { transferRequest: { id: requestId, requestedBy: late.userId, requestedAt: new Date() } },
+    });
+    assert.equal(await confirmRequester(a.accountId, ofAna.conversation._id, requestId, late.userId), false);
+    assert.equal(await pendingOf(ofAna.conversation), null);
+    assert.equal((await assigneeOf(ofAna.conversation)).assignedTo, ana.userId);
+});
+
+test('desactivar y soltar van con el candado del equipo: ocupado, 409 y nada cambia (revisión de Codex del PR #144)', async () => {
+    const member = await seedMember(a, { role: 'agent', lineIds: [l1], label: 'ASOUT6' });
+    const his = await seedConversation(nextPhone(), 'Con el candado', member.userId);
+    // Otro cambio del equipo en curso (otra petición tiene el candado).
+    await Account.updateOne({ _id: a.accountId }, { $set: { teamLock: { token: 'otro', expiresAt: new Date(Date.now() + 30_000) } } });
+    try {
+        const res = await patchMember(member, { status: 'inactive' });
+        assert.equal(res.status, 409, res.text);
+        assert.equal(res.body[0].code, 'team_busy');
+        assert.equal((await User.findById(member.userId).lean()).status, 'active');
+        assert.equal((await assigneeOf(his.conversation)).assignedTo, member.userId);
+    } finally {
+        await Account.updateOne({ _id: a.accountId }, { $set: { teamLock: null } });
+    }
+    assert.equal((await patchMember(member, { status: 'inactive' })).status, 200);
+    assert.equal((await assigneeOf(his.conversation)).assignedTo, null);
 });

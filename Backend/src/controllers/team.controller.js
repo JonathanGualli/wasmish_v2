@@ -7,6 +7,7 @@ import Line from "../models/line.model.js";
 import User from "../models/user.model.js";
 import { withAccountLock } from "../services/account.lock.service.js";
 import { disconnectUser } from "./stream.controller.js";
+import { releaseAssignments } from "../services/assignment.service.js";
 import { startSession } from "./auth.controller.js";
 import { hashApiKey } from "../utils/crypto.js";
 import { escapeRegex } from "../utils/contact.query.js";
@@ -226,10 +227,20 @@ export const updateMember = async (req, res) => {
                 const current = await User.findOne({ _id: target._id, accountId }).select('status').lean();
                 if (current?.status === 'inactive') await assertFreeSeat(accountId);
             }
-            return User.findOneAndUpdate({ _id: target._id, accountId }, { $set: set }, { new: true })
+            const saved = await User.findOneAndUpdate({ _id: target._id, accountId }, { $set: set }, { new: true })
                 .select('name email role lineIds status createdAt').lean();
+            // Lo que ya no puede atender vuelve a sin asignar (Fase 4), con el
+            // acceso que se acaba de guardar y dentro del candado: un cambio
+            // posterior (reactivarlo) no puede colarse entre guardar y soltar, y
+            // una liberación retrasada no borra lo que ya vuelve a valer
+            // (revisión de Codex del PR #144). Con su cuenta: sin ella,
+            // `releaseFilter` lo tomaría por desactivado y soltaría todas.
+            await releaseAssignments(accountId, { ...saved, accountId });
+            return saved;
         };
-        const updated = change.status === 'active' ? await withTeamLock(accountId, apply) : await apply();
+        // Todo cambio de un miembro, con el candado del equipo: activar ocupa
+        // una plaza, y cualquier cambio de acceso suelta conversaciones.
+        const updated = await withTeamLock(accountId, apply);
 
         disconnectUser(String(target._id));
         return res.json(serializeMember(updated));

@@ -47,7 +47,7 @@ Cómo se autentica cada ruta, el rate limiting y la tabla completa de endpoints 
   | `apiKeys.manage` | ✓ | ✓ | ✗ | ✗ | las de `/api-key` |
   | `lines.manage` | ✓ | ✓ | ✗ | ✗ | `PATCH /lines/:id`, `POST /lines/:id/disconnect`, `GET /lines/:id/pin`, `POST /lines/:id/history-sync`, `POST /whatsapp/connect`, `PUT /users/update-user-token-whatsapp` |
   | `autoReplies.manage` | ✓ | ✓ | ✗ | ✗ | las de `/auto-replies` |
-  | `conversations.assign` | ✓ | ✓ | ✓ (sus líneas) | ✗ | asignar o transferir **cualquier** conversación y resolver sus solicitudes (Fase 4); el agente, solo las suyas |
+  | `conversations.assign` | ✓ | ✓ | ✓ (sus líneas) | ✗ | `POST /chats/:id/assign` y aceptar o rechazar `transfer-request` sobre **cualquier** conversación (Fase 4); el agente, solo con las suyas (`canReassign`, en el servicio: no es un `requirePermission`) |
 
   Lo demás lo hace cualquier rol **en sus líneas**: ver y responder conversaciones, ver y editar contactos, ver plantillas, ver sus líneas.
 - **Las líneas a su alcance** (`lineScope`): owner, admin y la API key, todas (`null`); supervisor y agente, las suyas. Lo de una línea fuera de alcance responde **404**, como lo de otra cuenta:
@@ -93,6 +93,12 @@ No se aplica a `/api/webhook` (Meta manda ráfagas) ni a `/api/stream` (conexió
 | GET | `/api/chats/:id/messages` | JWT | Mensajes paginados (cursor-based) |
 | PUT | `/api/chats/:id/messages/:messageId/reaction` | JWT | Reaccionar a un mensaje del contacto: `{ emoji }`, `''` la quita. 404 si el mensaje no es de esta conversación; 400 `reaction_unavailable` si no se puede (saliente, borrado, más de 30 días); 409 `reaction_in_progress` si otra reacción a ese mensaje va en camino; 502 con `errorCode` si Meta la rechaza. Responde el mensaje ([whatsapp-envio.md](whatsapp-envio.md#responder-citando-y-reaccionar-replytomessageid-sendreaction)) |
 | POST | `/api/chats/:id/template` | JWT | Enviar plantilla a una conversación existente (para reabrir la ventana de 24 h). Body: `{ templateName, language?, parameters?, buttons? }` |
+| POST | `/api/chats/:id/take` | JWT | Tomar una conversación sin asignar (Fase 4): 200 con la conversación como en `GET /chats`; ya suya, 200 sin cambios; de otra persona, **409** `assigned_to_other` (para cualquier rol: para quitársela a alguien está `assign`). 404 si no la ve |
+| POST | `/api/chats/:id/assign` | JWT | `{ userId \| null }`: pasarla a alguien o dejarla sin asignar. Con `conversations.assign`, cualquiera de sus líneas; el agente, solo la suya (si no, **403** `forbidden`). El destino tiene que estar activo y poder atender esa línea (**400** `invalid_assignee`); si otra persona la movió entretanto, **409** `assignment_changed`. Borra la solicitud pendiente. 200 con la conversación |
+| GET | `/api/chats/:id/assignees` | JWT | Quiénes pueden atenderla: `[{ id, name, role }]`, los activos con esa línea, en orden de alta. 404 si no la ve |
+| POST | `/api/chats/:id/transfer-request` | JWT | Pedir que te la pasen. **No hace falta verla**, solo que sea de sus líneas (404 si no). 409 `not_assigned` si nadie la atiende, `already_yours` si es suya. Reemplaza la solicitud anterior, con otro `id`. **202** sin cuerpo |
+| POST | `/api/chats/:id/transfer-request/accept` | JWT | `{ requestId }`: quien la atiende o quien tiene `conversations.assign` se la pasa al que la pidió. 404 `no_transfer_request`; **409** `transfer_request_changed` si `requestId` ya no es la pendiente, `invalid_assignee` si el solicitante ya no puede atenderla (se borra), `assignment_changed` si cambió de manos. 200 con la conversación |
+| POST | `/api/chats/:id/transfer-request/reject` | JWT | `{ requestId }`: la conversación sigue igual y se borra la solicitud. Los mismos 404 / 409 de aceptar. **204** |
 | POST | `/api/chats/template` | JWT | Iniciar conversación con plantilla desde la bandeja. Body: `{ destinationNumber, contactName?, templateName, language?, parameters?, buttons?, lineId? }` — el número solo dígitos (8–15); `lineId` elige la línea (404 si es de otra cuenta; sin él, la por defecto) |
 | GET | `/api/media/:id` | JWT | Adjunto de un mensaje (`:id` es el **id del mensaje**, no el del archivo) |
 | GET | `/api/contacts` | JWT | Contactos paginados (`?search`, `?filter=all\|with_conversation\|without_conversation\|opted_out`, `?tags=id,id` —alguna de—, `?page`, `?limit` máx 50), ordenados por actividad |
