@@ -180,11 +180,31 @@ export const acquireConversation = async (auth, conversationId, { strict = false
     if (!current) throw statusError(404, 'Conversation not found');
     const decision = replyAcquisition(auth, current.assignedTo);
     const isMine = String(current.assignedTo?._id) === auth.userId;
-    if (decision === 'conflict' || (strict && !isMine)) {
-        const assignedToName = current.assignedTo?.name ?? null;
-        throw statusError(409, `Esta conversación la atiende ${assignedToName ?? 'otra persona'}.`, 'assigned_to_other',
-            { assignedToName, conversationId: String(conversationId) });
-    }
+    if (decision === 'conflict' || (strict && !isMine)) throw assignedToOther(current.assignedTo, conversationId);
+};
+
+// La atiende otra persona: el aviso dice quién («Esta conversación la atiende Ana»).
+const assignedToOther = (assignedTo, conversationId) => {
+    const assignedToName = assignedTo?.name ?? null;
+    return statusError(409, `Esta conversación la atiende ${assignedToName ?? 'otra persona'}.`, 'assigned_to_other',
+        { assignedToName, conversationId: String(conversationId) });
+};
+
+/**
+ * Por qué no puede escribir en una conversación que no ve. Si es de sus líneas
+ * y no la ve, la atiende un compañero: la tomó antes de que el SSE se lo dijera
+ * a quien escribe. Es la misma carrera que la de `acquireConversation`, y
+ * responde lo mismo, 409 `assigned_to_other` con quién (diseño, 3c). Si no es de
+ * sus líneas ni de su cuenta, 404. Solo para enviar: leerla sigue en 404.
+ */
+export const unseenConversationError = async (auth, conversationId) => {
+    const conversation = mongoose.isValidObjectId(conversationId)
+        ? await Conversation.findOne({ _id: conversationId, userId: auth.accountId, ...conversationLineScope(auth) })
+            .select('assignedTo').populate('assignedTo', 'name').lean()
+        : null;
+    return conversation?.assignedTo
+        ? assignedToOther(conversation.assignedTo, conversationId)
+        : statusError(404, 'Conversation not found');
 };
 
 /**

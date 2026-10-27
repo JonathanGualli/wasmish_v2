@@ -79,22 +79,35 @@ test('GET /chats: el agente, las sin asignar y las suyas; el supervisor, todas; 
     assert.equal(byId.get(String(c2.conversation._id)).transferRequest, null);
 });
 
-test('la conversación de un compañero: 404 en todo, sin llamar a Meta', async () => {
+test('la conversación de un compañero: leerla, 404; escribirle, 409 con quién la atiende; nada llega a Meta', async () => {
     const id = String(c3.conversation._id);
     await noMetaCalls(async () => {
         for (const [method, url, body] of [
             ['GET', `/chats/${id}/messages`],
             ['GET', `/media/${c3.message._id}`],
-            ['POST', `/chats/${id}/messages`, { text: 'hola', temporalId: 't-asig' }],
-            ['POST', `/chats/${id}/template`, { templateName: a.templateName }],
             ['PUT', `/chats/${id}/messages/${c3.message._id}/reaction`, { emoji: '👍' }],
         ]) {
             const res = await request(ana, method, url, body);
             assert.equal(res.status, 404, `${method} ${url}: ${res.text}`);
             assert.ok(!res.text.includes('Rosa'), `${method} ${url} enseña algo de la conversación`);
         }
-        const media = await request(ana, 'POST', `/chats/${id}/media`, Buffer.from('x'), { 'Content-Type': 'image/png' });
-        assert.equal(media.status, 404, media.text);
+        // Escribirle: Luis la tomó antes de que el SSE se lo dijera a Ana. El
+        // aviso dice quién la atiende, como la carrera al milisegundo (diseño,
+        // 3c), sin nada de lo que dice. Antes daba 404 y el mensaje quedaba «Fallido».
+        const writes = [
+            await request(ana, 'POST', `/chats/${id}/messages`, { text: 'hola', temporalId: 't-asig' }),
+            await request(ana, 'POST', `/chats/${id}/template`, { templateName: a.templateName }),
+            await request(ana, 'POST', `/chats/${id}/media`, Buffer.from('x'), { 'Content-Type': 'image/png' }),
+        ];
+        for (const res of writes) {
+            assert.equal(res.status, 409, res.text);
+            assert.equal(res.body[0].code, 'assigned_to_other');
+            assert.equal(res.body[0].assignedToName, 'ASLUIS miembro');
+            assert.ok(!res.text.includes('Rosa'), 'enseña algo de la conversación');
+        }
+        // De otra línea, o de otra cuenta, sigue sin existir.
+        assert.equal((await request(otherLine, 'POST', `/chats/${id}/messages`, { text: 'hola', temporalId: 't-asig2' })).status, 404);
+        assert.equal((await request(b, 'POST', `/chats/${id}/messages`, { text: 'hola', temporalId: 't-asig3' })).status, 404);
     });
     // El supervisor sí llega.
     assert.equal((await request(supervisor, 'GET', `/chats/${id}/messages`)).status, 200);
