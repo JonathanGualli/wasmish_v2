@@ -1,6 +1,6 @@
 import { CustomButton } from "../../Button/Button";
 import { useAuthContext } from "../../../context/auth.context";
-import { useTransferRequest } from "../../../hooks/useTransferRequest";
+import { reconcileTransferState, useTransferRequest, type ServerTransferState } from "../../../hooks/useTransferRequest";
 import type { ConversationPerson } from "../../../models/conversation.mode";
 import { firstName } from "../../../utils/assignment";
 import { PersonBadge } from "./PersonBadge";
@@ -15,6 +15,8 @@ interface Props {
     onOpen: () => void;
     /** Con su caja (en «Conversación nueva»); sin ella dentro de la fila de su línea (la ficha). */
     framed?: boolean;
+    /** Lo que dice la ficha de la solicitud: corrige un aviso de la respuesta que se perdió. */
+    server?: ServerTransferState;
 }
 
 /**
@@ -23,9 +25,10 @@ interface Props {
  * que dice, y «Solicitar que te la transfieran». Sigue la solicitud: enviada,
  * aceptada (con «Abrir conversación») o rechazada (con «Solicitar otra vez»).
  */
-export const TransferRequestCard = ({ conversationId, assignedTo, lineName, onOpen, framed = false }: Props) => {
+export const TransferRequestCard = ({ conversationId, assignedTo, lineName, onOpen, framed = false, server }: Props) => {
     const { user } = useAuthContext();
-    const { state, request, isPending, reset } = useTransferRequest(conversationId);
+    const { state: local, request, isPending, reset } = useTransferRequest(conversationId);
+    const state = reconcileTransferState(local, server);
     const owner = firstName(assignedTo);
 
     const view = state.status === 'accepted' ? {

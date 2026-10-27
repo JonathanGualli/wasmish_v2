@@ -104,7 +104,7 @@ export const NewConversationPanel = ({ initialDraft, onClose, onBack, onCreated,
   // no está en la bandeja del agente, pero sí en la ficha del contacto. No se le
   // puede escribir: en lugar de la plantilla, pedir que se la pasen (diseño, 3b).
   const recipient = useContactByPhone(phoneValid ? digits : '');
-  const { data: recipientDetail } = useContact(recipient?.id ?? null);
+  const { data: recipientDetail, dataUpdatedAt: recipientFetchedAt } = useContact(recipient?.id ?? null);
   const takenByOther = line
     ? recipientDetail?.conversations.find(c => c.restricted && c.lineId === line.id)
     : undefined;
@@ -197,7 +197,8 @@ export const NewConversationPanel = ({ initialDraft, onClose, onBack, onCreated,
     if (takenByOther) {
       return (
         <TransferRequestCard framed conversationId={takenByOther.conversationId} assignedTo={takenByOther.assignedTo ?? null}
-          lineName={hasManyLines && line ? lineLabel(line) : null} onOpen={() => onOpenExisting(takenByOther.conversationId)} />
+          lineName={hasManyLines && line ? lineLabel(line) : null} onOpen={() => onOpenExisting(takenByOther.conversationId)}
+          server={{ requested: Boolean(takenByOther.transferRequested), fetchedAt: recipientFetchedAt }} />
       );
     }
     if (form.isLoading) return <TemplateFormSkeleton />;

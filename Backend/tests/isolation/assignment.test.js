@@ -130,7 +130,7 @@ test('Contactos: la lista no enseña la conversación de un compañero; la ficha
     assert.equal(card.body.activity.received, 0, 'cuenta los mensajes de una conversación que no ve');
     assert.deepEqual(card.body.conversations, [{
         conversationId: String(c3.conversation._id), lineId: String(l1), lastInteractionAt: null, windowExpiresAt: null,
-        assignedTo: { id: luis.userId, name: 'ASLUIS miembro' }, restricted: true,
+        assignedTo: { id: luis.userId, name: 'ASLUIS miembro' }, restricted: true, transferRequested: false,
     }]);
 
     // Un agente de otra línea no sabe ni que existe.
@@ -472,6 +472,26 @@ test('pedir: de otra línea, 404; sin asignar, 409; una segunda reemplaza a la p
     assert.notEqual(String(second.id), String(first.id));
     // Luis acepta su propia solicitud: no ve la conversación.
     assert.equal((await answer(luis, ofAna.conversation, 'accept', String(second.id))).status, 404);
+});
+
+// Regresión (revisión de Codex del PR #146): sin esto, el bloque de la ficha se
+// quedaba en «Solicitud enviada» si la respuesta llegaba con el SSE cortado o si
+// otro agente la pedía después.
+test('la ficha dice si la solicitud pendiente es de quien mira; la de otro, no', async () => {
+    const ofAna = await seedConversation(nextPhone(), 'Pedida', ana.userId);
+    const requestedBy = async (who) =>
+        (await request(who, 'GET', `/contacts/${ofAna.contact._id}`)).body.conversations[0].transferRequested;
+    assert.equal(await requestedBy(luis), false);
+    await requestTransfer(luis, ofAna.conversation);
+    assert.equal(await requestedBy(luis), true);
+    assert.equal(await requestedBy(marta), false, 'la de Luis no es de Marta');
+    // Marta la pide después y reemplaza la de Luis.
+    await requestTransfer(marta, ofAna.conversation);
+    assert.equal(await requestedBy(luis), false);
+    assert.equal(await requestedBy(marta), true);
+    // Rechazada, ya no está pendiente.
+    await answer(ana, ofAna.conversation, 'reject', String((await pendingOf(ofAna.conversation)).id));
+    assert.equal(await requestedBy(marta), false);
 });
 
 test('una solicitud reemplazada no se acepta ni se rechaza con el id viejo (revisión de Codex del plan, 5)', async () => {

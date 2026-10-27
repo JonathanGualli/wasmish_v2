@@ -290,7 +290,7 @@ export const findOwnedContact = (userId, id) =>
 
 // Lo que la ficha y la lista necesitan de cada conversación del contacto (una
 // por línea, Fase 2b de multi-línea).
-const CONVERSATION_SUMMARY_FIELDS = { lineId: 1, lastMessageAt: 1, lastInboundAt: 1, assignedTo: 1 };
+const CONVERSATION_SUMMARY_FIELDS = { lineId: 1, lastMessageAt: 1, lastInboundAt: 1, assignedTo: 1, 'transferRequest.requestedBy': 1 };
 
 // Todas, de cualquier línea: lo que decide (no cambiar el número de quien ya
 // tiene historial) mira todas. Lo que se ENSEÑA pasa por `visibleConversations`.
@@ -306,7 +306,8 @@ const visibleConversations = (auth, conversations) =>
 // Las de sus líneas que atiende un compañero (Fase 4): la ficha dice que
 // existen y quién las atiende, para pedir que se la pasen, sin lo que dicen.
 const restrictedConversations = (auth, conversations) =>
-    conversations.filter(conversation => inLineScope(auth, conversation.lineId) && !canSeeConversation(auth, conversation));
+    conversations.filter(conversation => inLineScope(auth, conversation.lineId) && !canSeeConversation(auth, conversation))
+        .map(conversation => restrictedConversationItem(conversation, auth.userId));
 
 // Lo mismo dentro de la lista: después de los filtros, que miran TODAS las
 // conversaciones («con conversación» no cambia según quién lo pide; revisión de
@@ -336,7 +337,7 @@ const toIso = (date) => (date ? new Date(date).toISOString() : null);
 const serializeContact = (contact, conversations = [], restricted = []) => {
     const summary = summarizeConversations(conversations);
     const { latest } = summary;
-    const items = [...summary.items, ...restricted.map(restrictedConversationItem)];
+    const items = [...summary.items, ...restricted];
     return {
         id: String(contact._id),
         displayName: contactDisplayName(contact),

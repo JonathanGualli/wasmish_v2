@@ -21,6 +21,8 @@ interface Props {
     onOpen?: (conversationId: string) => void;
     /** Con borde en Contactos (sobre blanco); sin él en la ficha del chat, como sus otras tarjetas. */
     framed?: boolean;
+    /** Cuándo se leyó la ficha (`dataUpdatedAt`): el bloque de la solicitud se ajusta con ella. */
+    fetchedAt?: number;
 }
 
 /**
@@ -32,7 +34,7 @@ interface Props {
  * Siempre sobre blanco: en la ficha del chat iba sobre el verde profundo de la
  * cabecera, y los colores de las líneas y los estados se perdían en él.
  */
-export const LineWindowList = ({ conversations, source, currentConversationId, onOpen, framed = false }: Props) => (
+export const LineWindowList = ({ conversations, source, currentConversationId, onOpen, framed = false, fetchedAt }: Props) => (
     <div className={`grid bg-brand-surface rounded-xl py-1 ${framed ? 'border border-brand-border' : ''}`}>
         <div className="px-3.5 pt-2 pb-1 text-[10.5px] font-bold uppercase tracking-[0.1em] text-brand-muted">
             Ventana de 24 h · por línea
@@ -40,7 +42,7 @@ export const LineWindowList = ({ conversations, source, currentConversationId, o
         {conversations.map(conversation => (
             <LineWindowEntry key={conversation.conversationId} conversation={conversation} source={source}
                 current={conversation.conversationId === currentConversationId}
-                highlight={conversations.length > 1} onOpen={onOpen} />
+                highlight={conversations.length > 1} onOpen={onOpen} fetchedAt={fetchedAt} />
         ))}
     </div>
 );
@@ -52,6 +54,7 @@ interface RowProps {
     /** Resaltar la abierta: solo con más de una fila, si no no hay de cuál distinguirla. */
     highlight: boolean;
     onOpen?: (conversationId: string) => void;
+    fetchedAt?: number;
 }
 
 /**
@@ -60,7 +63,7 @@ interface RowProps {
  * conversación» hasta que la abre.
  */
 const LineWindowEntry = (props: RowProps) => {
-    const { conversation, onOpen } = props;
+    const { conversation, onOpen, fetchedAt } = props;
     const { lineById } = useLines();
     const { state } = useTransferRequest(conversation.conversationId);
     const line = lineById(conversation.lineId);
@@ -71,7 +74,8 @@ const LineWindowEntry = (props: RowProps) => {
             {requestable && (
                 <div className="mx-2 mb-1.5">
                     <TransferRequestCard framed conversationId={conversation.conversationId} assignedTo={conversation.assignedTo ?? null}
-                        lineName={line ? lineLabel(line) : null} onOpen={() => onOpen?.(conversation.conversationId)} />
+                        lineName={line ? lineLabel(line) : null} onOpen={() => onOpen?.(conversation.conversationId)}
+                        server={fetchedAt === undefined ? undefined : { requested: Boolean(conversation.transferRequested), fetchedAt }} />
                 </div>
             )}
         </>

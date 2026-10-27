@@ -213,7 +213,7 @@ const SectionLabel = ({ children }: { children: ReactNode }) => (
 );
 
 const ContactView = ({ id, onClose, onEdit }: { id: string; onClose: () => void; onEdit: () => void }) => {
-    const { data: contact, isError } = useContact(id);
+    const { data: contact, isError, dataUpdatedAt } = useContact(id);
     const loading = !contact && !isError;
 
     return (
@@ -234,7 +234,7 @@ const ContactView = ({ id, onClose, onEdit }: { id: string; onClose: () => void;
             {loading ? (
                 <ContactViewSkeleton />
             ) : contact ? (
-                <ContactDetails contact={contact} onClose={onClose} onEdit={onEdit} />
+                <ContactDetails contact={contact} fetchedAt={dataUpdatedAt} onClose={onClose} onEdit={onEdit} />
             ) : (
                 <PanelState>No se pudo cargar el contacto.</PanelState>
             )}
@@ -242,8 +242,10 @@ const ContactView = ({ id, onClose, onEdit }: { id: string; onClose: () => void;
     );
 };
 
-const ContactDetails = ({ contact, onClose, onEdit }: {
+const ContactDetails = ({ contact, fetchedAt, onClose, onEdit }: {
     contact: ContactDetail;
+    /** Cuándo se leyó: el bloque de la solicitud se ajusta con ella. */
+    fetchedAt: number;
     onClose: () => void;
     onEdit: () => void;
 }) => {
@@ -362,10 +364,11 @@ const ContactDetails = ({ contact, onClose, onEdit }: {
                     <SectionLabel>Actividad</SectionLabel>
                     {byLine ? (
                         <LineWindowList framed conversations={contact.conversations} source={contact.source}
-                            onOpen={openConversation} />
+                            onOpen={openConversation} fetchedAt={fetchedAt} />
                     ) : restricted ? (
                         <TransferRequestCard framed conversationId={restricted.conversationId} assignedTo={restricted.assignedTo ?? null}
-                            onOpen={() => openConversation(restricted.conversationId)} />
+                            onOpen={() => openConversation(restricted.conversationId)}
+                            server={{ requested: Boolean(restricted.transferRequested), fetchedAt }} />
                     ) : (
                         <div className={`border rounded-xl px-3.5 py-3 grid gap-0.5 ${windowInfo.box}`}>
                             <div className="flex items-center gap-2">

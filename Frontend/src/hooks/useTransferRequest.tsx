@@ -13,10 +13,34 @@ import { assignmentError } from "./useConversationAssignment";
 /** Cómo va la solicitud de quien mira para que le pasen una conversación ajena (Fase 4). */
 export type TransferRequestState =
     | { status: 'idle' }
-    | { status: 'sent' }
+    /** `confirmedAt`: cuándo llegó el 202 (antes, todavía en camino). */
+    | { status: 'sent'; confirmedAt?: number }
     | { status: 'accepted' | 'rejected'; answeredBy: ConversationPerson };
 
 const IDLE: TransferRequestState = { status: 'idle' };
+
+/** Lo que dice la ficha: si la solicitud pendiente es de quien mira, y cuándo se leyó. */
+export interface ServerTransferState {
+    requested: boolean;
+    fetchedAt: number;
+}
+
+/**
+ * Lo que se enseña, con lo que dice la ficha (revisión de Codex del PR #146). El
+ * aviso de la respuesta llega por el SSE, y si se corta se pierde; otro agente
+ * también puede pedirla después y reemplazar la suya. Por eso:
+ * - «enviada» vuelve a «sin enviar» si una ficha leída después del 202 ya no la
+ *   tiene pendiente (la rechazaron o la reemplazaron);
+ * - «sin enviar» pasa a «enviada» si la ficha la tiene pendiente (por ejemplo,
+ *   tras recargar la página).
+ * Las respuestas que sí llegaron (`accepted`, `rejected`) mandan.
+ */
+export const reconcileTransferState = (state: TransferRequestState, server?: ServerTransferState): TransferRequestState => {
+    if (!server) return state;
+    if (state.status === 'idle') return server.requested ? { status: 'sent' } : state;
+    if (state.status === 'sent' && state.confirmedAt !== undefined && server.fetchedAt > state.confirmedAt && !server.requested) return IDLE;
+    return state;
+};
 
 // Fuera del componente: la ficha se puede cerrar con la solicitud enviada, y la
 // respuesta llega igual (`useTransferAnswers`). Tampoco en la caché de React
@@ -57,6 +81,11 @@ export const useTransferRequest = (conversationId: string) => {
             const previous = readState(key);
             writeState(key, { status: 'sent' });
             return { previous };
+        },
+        // Ya confirmada: la ficha vuelve a leer, y desde ahora manda lo que diga.
+        onSuccess: () => {
+            if (readState(key).status === 'sent') writeState(key, { status: 'sent', confirmedAt: Date.now() });
+            void queryClient.invalidateQueries({ queryKey: ['contacts'] });
         },
         onError: (error, _variables, context) => {
             if (context && readState(key).status === 'sent') writeState(key, context.previous);

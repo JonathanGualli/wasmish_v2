@@ -36,7 +36,7 @@ interface Props {
  * primera tarjeta blanca, no en la cabecera: sobre el verde no se leía.
  */
 export const ContactSidebar = ({ contactId, conversationId, windowExpiresAt, onOpenConversation, onClose }: Props) => {
-    const { data: contact, isError } = useLiveContact(contactId, conversationId);
+    const { data: contact, isError, dataUpdatedAt } = useLiveContact(contactId, conversationId);
     const { showLines } = useLines();
     const byLine = showLines && contact && contact.conversations.length > 0;
 
@@ -56,7 +56,7 @@ export const ContactSidebar = ({ contactId, conversationId, windowExpiresAt, onO
                     <div className="flex-1 min-h-0 overflow-y-auto p-3.5 grid gap-2.5 content-start">
                         {byLine && (
                             <LineWindowList conversations={contact.conversations} source={contact.source}
-                                currentConversationId={conversationId} onOpen={onOpenConversation} />
+                                currentConversationId={conversationId} onOpen={onOpenConversation} fetchedAt={dataUpdatedAt} />
                         )}
                         {contact.marketingOptOut && (
                             <Callout tone="warning" icon={<AlertTriangle size={16} />} title="Pidió no recibir publicidad.">

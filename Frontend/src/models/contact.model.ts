@@ -59,6 +59,8 @@ export interface ContactConversation {
     assignedTo?: ConversationPerson | null;
     /** La atiende un compañero de quien mira (agente): se sabe que existe y quién la atiende, nada más. */
     restricted?: boolean;
+    /** De una `restricted`: la solicitud pendiente es de quien mira. */
+    transferRequested?: boolean;
 }
 
 export interface ContactActivity {

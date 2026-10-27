@@ -152,6 +152,17 @@ test('restrictedConversationItem: la de un compañero, sin la última interacci�
     });
     assert.deepEqual(item, {
         conversationId: 'c1', lineId: 'l1', lastInteractionAt: null, windowExpiresAt: null,
-        assignedTo: { id: 'u1', name: 'Ana' }, restricted: true,
+        assignedTo: { id: 'u1', name: 'Ana' }, restricted: true, transferRequested: false,
     });
+});
+
+// Regresión (revisión de Codex del PR #146): el bloque se quedaba en «Solicitud
+// enviada» si la respuesta llegaba con el SSE cortado, o si otro la pedía
+// después y reemplazaba la suya. La ficha dice si la de quien mira sigue pendiente.
+test('restrictedConversationItem: si la solicitud pendiente es de quien mira', () => {
+    const conversation = { _id: 'c1', lineId: 'l1', assignedTo: 'u1', transferRequest: { id: 'r1', requestedBy: 'u2' } };
+    assert.equal(restrictedConversationItem(conversation, 'u2').transferRequested, true);
+    assert.equal(restrictedConversationItem(conversation, 'u3').transferRequested, false, 'la de otro');
+    assert.equal(restrictedConversationItem({ ...conversation, transferRequest: null }, 'u2').transferRequested, false);
+    assert.equal(restrictedConversationItem(conversation).transferRequested, false, 'sin saber quién mira');
 });
