@@ -12,6 +12,7 @@ import Message from '../models/message.model.js';
 import Conversation from '../models/conversation.model.js';
 import PendingStatus from '../models/pending.status.model.js';
 import { sendToAccount } from '../controllers/stream.controller.js';
+import { sendConversationEvent } from './assignment.service.js';
 import { getConversationContact, applyMarketingPreference } from '../controllers/contact.controller.js';
 import { resolveStatusTransition } from '../utils/message.status.js';
 import { isMarketingOptOutFailure } from '../utils/marketing.preference.js';
@@ -112,8 +113,9 @@ const announceStatus = async ({ accountId, statusData, conversation, message, ti
     const inbound = { accountId };
     const waMessageId = message.waMessageId;
 
-    sendToAccount(
-        String(accountId),
+    await sendConversationEvent(
+        accountId,
+        conversation._id,
         'message_status', {
             id: String(message._id),
             conversationId: String(message.conversationId),
@@ -128,9 +130,8 @@ const announceStatus = async ({ accountId, statusData, conversation, message, ti
             // porque las entregas y lecturas llegan horas después de enviar.
             ...(message.campaignId && { campaignId: String(message.campaignId) }),
         },
-        // A quien ve la línea de su conversación (Fase 3; revisión de Codex
-        // del plan): con estados, errores y campaña, no es de toda la cuenta.
-        { lineId: conversation.lineId ?? null },
+        // A quien ve su conversación (Fases 3 y 4; revisión de Codex del
+        // plan de la Fase 3): con estados, errores y campaña, no es de toda la cuenta.
     );
 
     // Solo se registran los fallos. Cada mensaje enviado genera dos o tres acuses

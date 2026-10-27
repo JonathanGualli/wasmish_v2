@@ -74,11 +74,15 @@ export const pushLineName = (activeLines, lineId) => {
 /**
  * Quiénes de `members` (usuarios leídos de la BD) reciben el aviso: la misma
  * regla que el `message_created` por SSE. Activos, de esa cuenta y con la línea
- * a su alcance (`canReceive`). Devuelve sus `_id` como string.
+ * a su alcance (`canReceive`). Una conversación asignada (`meta.assignedTo`)
+ * avisa solo a quien la atiende: el supervisor la ve, pero su celular no suena
+ * con cada mensaje de cada agente (decisión del 2026-10-27). Devuelve sus `_id`
+ * como string.
  */
 export const pushRecipientIds = (members, accountId, meta) => members
     .map(sessionAuthFor)
     .filter(auth => auth && auth.accountId === String(accountId) && canReceive(auth, meta))
+    .filter(auth => meta?.assignedTo == null || auth.userId === String(meta.assignedTo))
     .map(auth => auth.userId);
 
 /** El servicio de push dice que esa suscripción ya no existe: hay que borrarla. */

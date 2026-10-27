@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
     pickContactFields, buildContactSearch, buildContactMatch, matchesContactSearch, escapeRegex, summarizeConversations,
+    restrictedConversationItem,
 } from '../src/utils/contact.query.js';
 
 // Lo que pone WhatsApp no se edita a mano: aunque llegue en el body, se ignora.
@@ -122,12 +123,35 @@ test('summarizeConversations: la más reciente primero y como latest', () => {
         {
             conversationId: 'c2', lineId: 'l2',
             lastInteractionAt: '2026-10-12T10:00:00.000Z', windowExpiresAt: '2026-10-13T09:00:00.000Z',
+            assignedTo: null, restricted: false,
         },
-        { conversationId: 'c1', lineId: 'l1', lastInteractionAt: '2026-10-10T10:00:00.000Z', windowExpiresAt: null },
+        {
+            conversationId: 'c1', lineId: 'l1', lastInteractionAt: '2026-10-10T10:00:00.000Z', windowExpiresAt: null,
+            assignedTo: null, restricted: false,
+        },
     ]);
 });
 
 test('summarizeConversations: una conversación sin línea todavía la deja en null', () => {
     const { items } = summarizeConversations([{ _id: 'c1', lastMessageAt: null }]);
-    assert.deepEqual(items, [{ conversationId: 'c1', lineId: null, lastInteractionAt: null, windowExpiresAt: null }]);
+    assert.deepEqual(items, [{ conversationId: 'c1', lineId: null, lastInteractionAt: null, windowExpiresAt: null, assignedTo: null, restricted: false }]);
+});
+
+test('summarizeConversations: quién la atiende, con el nombre si vino con populate (Fase 4)', () => {
+    const { items } = summarizeConversations([
+        { _id: 'c1', lineId: 'l1', lastMessageAt: null, assignedTo: { _id: 'u1', name: 'Ana' } },
+        { _id: 'c2', lineId: 'l2', lastMessageAt: null, assignedTo: 'u2' },
+    ]);
+    assert.deepEqual(items.map(item => item.assignedTo), [{ id: 'u1', name: 'Ana' }, { id: 'u2', name: null }]);
+});
+
+test('restrictedConversationItem: la de un compañero, sin la última interacción ni la ventana', () => {
+    const item = restrictedConversationItem({
+        _id: 'c1', lineId: 'l1', assignedTo: { _id: 'u1', name: 'Ana' },
+        lastMessageAt: new Date('2026-10-12T10:00:00Z'), lastInboundAt: new Date('2026-10-12T09:00:00Z'),
+    });
+    assert.deepEqual(item, {
+        conversationId: 'c1', lineId: 'l1', lastInteractionAt: null, windowExpiresAt: null,
+        assignedTo: { id: 'u1', name: 'Ana' }, restricted: true,
+    });
 });

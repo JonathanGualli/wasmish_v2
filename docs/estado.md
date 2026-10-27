@@ -165,8 +165,8 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
   - **Las ediciones del historial se saltan:** el mensaje queda con el texto de antes de editarlo (54 en la prueba), mientras que en vivo se marca «Editado» (`applyMessageChange`). Aplicarlas es un cambio aparte, si Jonathan lo quiere.
   - **Sin comprobar:** el formato del teléfono de la agenda (se guarda ya normalizado) y si un `remove` trae nombres (no llegó ninguno).
   - **La UI (PR 6)**, en producción desde la 1.0.32 (PR #136). **Falta:** que Jonathan la vea en producción (Ajustes → Líneas de su cuenta de prueba, un chat traído y su ficha), y probarla con Meta de verdad al conectar otro número que siga en la app, y en un iPhone.
-- **Multi-agente, Fase 4: asignar conversaciones** (empezada el 2026-10-27). Plan `docs/superpowers/plans/2026-10-27-multi-linea-fase-4.md` y brief de UI `docs/superpowers/specs/2026-10-27-asignacion-brief-ui.md`, en el PR del plan (rama `fase4-plan`), con la revisión de Codex. Después, tres PRs:
-  1. `fase4-asignacion`: el agente ve solo las suyas y las sin asignar, y responder una sin asignar la toma;
+- **Multi-agente, Fase 4: asignar conversaciones** (empezada el 2026-10-27). Plan `docs/superpowers/plans/2026-10-27-multi-linea-fase-4.md` (PR #142, unido) y brief de UI `docs/superpowers/specs/2026-10-27-asignacion-brief-ui.md`; el diseño de Claude Design ya está (`Design/Wasmish Chats - Asignar conversaciones.html`, entra con el PR de la UI). Tres PRs:
+  1. `fase4-asignacion` (**en revisión**): el agente ve solo las suyas y las sin asignar, y responder una sin asignar la toma;
   2. `fase4-transferir`: asignar, pedir la transferencia y liberar al quitar acceso;
   3. `fase4-ui`: cuando Claude Design devuelva el diseño del brief.
 

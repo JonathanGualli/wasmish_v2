@@ -16,6 +16,7 @@ import { decrypt } from '../utils/crypto.js';
 import { MEDIA_DIR, MEDIA_MAX_BYTES } from '../config.js';
 import { disconnectRemovedWaba, findInboundLine, rememberDisplayPhoneNumber } from '../services/line.service.js';
 import { notifyInbound } from '../services/push.service.js';
+import { sendConversationEvent } from '../services/assignment.service.js';
 import { buildAutoReplyJob } from '../services/auto.reply.service.js';
 import { wakeAutoReplyWorker } from '../workers/auto.reply.worker.js';
 import { markHumanReply } from '../services/auto.reply.service.js';
@@ -266,15 +267,15 @@ const procesarEntrante = async (inbound, messageData, contacts) => {
 
     // El mismo mensaje que da la lista (`serializeMessage`), con la cita
     // resuelta, más el contador y la ventana de la conversación.
-    sendToAccount(
-        String(inbound.accountId),
+    // Solo a quien la ve: su línea (Fase 3) y quién la atiende (Fase 4).
+    await sendConversationEvent(
+        inbound.accountId,
+        conversation._id,
         'message_created', {
             ...serializeMessage(messageCreated, { quoted: quotedMapOf(quoted) }),
             unreadCount,
             windowExpiresAt: getWindowExpiry(lastInboundAt)?.toISOString() ?? null,
         },
-        // Solo a quien ve esa línea (Fase 3).
-        { lineId: conversation.lineId ?? null },
     );
 
     // Ya se ve en el chat: el bot puede responder. Si esto falla, el barrido
@@ -293,7 +294,6 @@ const procesarEntrante = async (inbound, messageData, contacts) => {
     // webhook. Una reacción suelta no avisa.
     if (!isLooseReaction) void notifyInbound({
         accountId: inbound.accountId,
-        lineId: conversation.lineId ?? null,
         conversationId: conversation._id,
         contact,
         text: entrante.text,
@@ -418,9 +418,8 @@ const procesarEco = async (inbound, echoData) => {
     );
     const { unreadCount = 0 } = await Conversation.findById(conversation._id).select('unreadCount').lean() ?? {};
 
-    const meta = { lineId: conversation.lineId ?? null };
-    sendToAccount(String(inbound.accountId), 'message_created', serializeMessage(message, { quoted: quotedMapOf(quoted) }), meta);
-    sendToAccount(String(inbound.accountId), 'conversation_updated', { id: String(conversation._id), unreadCount }, meta);
+    await sendConversationEvent(inbound.accountId, conversation._id, 'message_created', serializeMessage(message, { quoted: quotedMapOf(quoted) }));
+    await sendConversationEvent(inbound.accountId, conversation._id, 'conversation_updated', { id: String(conversation._id), unreadCount });
 
     // Sin el texto, como los entrantes.
     console.log('Eco de la app de WhatsApp Business guardado:', {

@@ -4,11 +4,12 @@ import Contact from "../models/contact.model.js";
 import Message from "../models/message.model.js";
 import { decrypt }  from "../utils/crypto.js";
 import { sendMediaMessage, sendTextMessage, uploadMedia } from "../libs/whatsapp.js";
-import { sendToAccount } from './stream.controller.js';
-import { freeTextBlockReason, getWindowExpiry } from "../utils/whatsapp.window.js";
+import {
+    acquireConversation, claimNewConversation, populateConversation, sendConversationEvent, sendErrorBody, serializeConversation,
+} from '../services/assignment.service.js';
+import { freeTextBlockReason } from "../utils/whatsapp.window.js";
 import { processTemplateSending } from "./template.controller.js";
 import { getSendingRecipient, getSendingConversation, conversationLineFilter } from "./contact.controller.js";
-import { contactDisplayName } from "../utils/contact.identity.js";
 import {
     CAPTION_MAX, buildMediaObject, captionAllowed, outboundMediaIssue, outboundMediaKind, outboundMediaText,
 } from "../utils/outbound.media.js";
@@ -16,7 +17,7 @@ import { mimeBase, saveByContentHash } from "../utils/media.storage.js";
 import { cleanFilename } from "../services/template.media.service.js";
 import { MEDIA_DIR } from "../config.js";
 import { findConversationLine, findStartLine } from "../services/line.service.js";
-import { conversationScope } from "../utils/permissions.js";
+import { canSeeConversation, conversationScope } from "../utils/permissions.js";
 import { messageOrigin, messageSender } from "../utils/message.origin.js";
 import { serializeMessageChange } from "../utils/message.change.js";
 import { canReactTo, canReplyTo, serializeQuoted, serializeReactions } from "../utils/message.actions.js";
@@ -182,7 +183,7 @@ export const processMessageSending = async ({
     if (await applyHeldStatuses(waMessageId)) msg = await Message.findById(msg._id);
 
     const serialized = serializeMessage(msg, { quoted: quotedMapOf(replyTarget) });
-    sendToAccount(String(line.accountId), 'message_created', serialized, { lineId: line.lineId ?? null });
+    await sendConversationEvent(line.accountId, targetConversation._id, 'message_created', serialized);
 
     return { msg, serialized, waMessageId, status, errorCode, errorDetail };
 };
@@ -222,17 +223,17 @@ const lastInboundOf = async (conversation) => {
 // con el chat a la vista no basta. El filtro `unreadCount > 0` evita escribir y
 // emitir si ya estaba leída. Nunca lanza: quien la llama ya hizo lo suyo (cargó
 // los mensajes, envió la respuesta) y un fallo aquí solo deja el contador igual.
-const markConversationRead = async (userId, conversationId, lineId) => {
+const markConversationRead = async (userId, conversationId) => {
     try {
         const result = await Conversation.updateOne(
             { _id: conversationId, userId, unreadCount: { $gt: 0 } },
             { $set: { unreadCount: 0 } }
         );
         if (result.modifiedCount > 0) {
-            sendToAccount(String(userId), 'conversation_updated', {
+            await sendConversationEvent(userId, conversationId, 'conversation_updated', {
                 id: String(conversationId),
                 unreadCount: 0,
-            }, { lineId: lineId ?? null });
+            });
         }
     } catch (error) {
         console.error('No se pudo marcar la conversación como leída:', error.message);
@@ -303,13 +304,20 @@ export const sendMessageController = async (req, res) => {
         // ya lo frena; esto cubre lo que se cuele (otra pestaña, la ventana que
         // se cierra mientras se escribe). Lo que sí pasa al chat es el aviso.
         const target = conversation ?? await findConversationByNumber(accountId, destinationNumber, line);
+        // La de un compañero (sin id, a un número): el 409 de la asignación
+        // antes que nada, sin decir ni cómo está su ventana (Fase 4).
+        if (target && !canSeeConversation(req.auth, target)) await acquireConversation(req.auth, target._id);
         const blocked = freeTextBlockReason(await lastInboundOf(target));
         if (blocked) return res.status(409).json([{ message: WINDOW_BLOCK_MESSAGES[blocked], code: 'window_closed' }]);
         // Con conversación, su línea: 409 si es de un número que ya no está conectado.
         line ??= await findConversationLine(conversation);
 
-        // Una persona responde: el bot se calla en esa conversación. Sin id,
-        // la que ya exista de ese número en esa línea (`target`).
+        // Responder la toma, antes de llamar a Meta (Fase 4): si la atiende
+        // otro agente, 409 sin enviar nada. Sin id, la que ya exista de ese
+        // número en esa línea (`target`).
+        if (target) await acquireConversation(req.auth, target._id);
+
+        // Una persona responde: el bot se calla en esa conversación.
         await markHumanReply(target?._id);
 
         // Llamamos al servicio (que ahora persiste incluso si el envío falla)
@@ -328,12 +336,12 @@ export const sendMessageController = async (req, res) => {
 
         // Responder desde el chat es haberlo leído, aunque Meta lo rechace: se
         // leyó y se intentó contestar.
-        await markConversationRead(accountId, msg.conversationId, line.lineId);
+        await markConversationRead(accountId, msg.conversationId);
 
         return res.status(201).json(serialized);
     } catch (error) {
         if (!error.statusCode) console.error("Error enviando mensaje:", error.response?.data || error.message || error);
-        res.status(error.statusCode || 500).json([{ message: error.message }]);
+        res.status(error.statusCode || 500).json(sendErrorBody(error));
     }
 };
 
@@ -384,6 +392,8 @@ export const sendMediaMessageController = async (req, res) => {
             return res.status(400).json([{ message: `El texto que acompaña al archivo admite hasta ${CAPTION_MAX} caracteres.` }]);
         }
 
+        // Responder la toma, antes de guardar el archivo y de llamar a Meta (Fase 4).
+        await acquireConversation(req.auth, conversation._id);
         const file = await saveByContentHash(MEDIA_DIR, 'outbound', buffer, mimeType);
         await markHumanReply(conversation._id);
         const { serialized } = await processMessageSending({
@@ -400,12 +410,12 @@ export const sendMediaMessageController = async (req, res) => {
         });
 
         // Responder con un archivo también es haberlo leído.
-        await markConversationRead(userId, conversation._id, conversation.lineId);
+        await markConversationRead(userId, conversation._id);
 
         return res.status(201).json(serialized);
     } catch (error) {
         if (!error.statusCode) console.error("Error enviando archivo:", error.message);
-        res.status(error.statusCode || 500).json([{ message: error.message }]);
+        res.status(error.statusCode || 500).json(sendErrorBody(error));
     }
 };
 
@@ -443,7 +453,7 @@ export const setReactionController = async (req, res) => {
             return res.status(502).json([{ message: 'No se pudo enviar la reacción a WhatsApp', errorCode, errorDetail: error.waErrorDetail ?? null }]);
         }
 
-        await markConversationRead(req.auth.accountId, conversation._id, conversation.lineId);
+        await markConversationRead(req.auth.accountId, conversation._id);
         // Con su cita resuelta, como la lista (revisión de Codex del PR #116, 2).
         const quoted = await loadQuotedMessages([updated], conversation._id);
         return res.json(serializeMessage(updated, { quoted }));
@@ -456,33 +466,11 @@ export const setReactionController = async (req, res) => {
 export const listConversations = async (req, res) => {
     const userId = req.auth.accountId;
     try{
-        const items = await Conversation.find({ userId, ...conversationScope(req.auth) })
+        const items = await populateConversation(Conversation.find({ userId, ...conversationScope(req.auth) }))
             .sort({ lastMessageAt: -1 })
-            .populate('contactId', 'name agendaName profileName username phone')
             .lean();
 
-        const result = items.map((item) => {
-            // `populate` deja el contacto en `contactId`. Una conversación anterior
-            // a los contactos aún no lo tiene: se usa lo que ella misma guardaba.
-            const contact = item.contactId ?? { name: item.contactName, phone: item.contactPhone };
-            return {
-                id: String(item._id),
-                // La ficha del contacto en el chat. `null` en una conversación
-                // anterior a los contactos que aún no se enlazó.
-                contactId: item.contactId?._id ? String(item.contactId._id) : null,
-                // La línea de la conversación (Fase 2c: la bandeja la enseña y filtra por ella).
-                lineId: item.lineId ? String(item.lineId) : null,
-                title: contactDisplayName(contact),
-                phone: contact.phone ?? null,
-                username: contact.username ?? null,
-                lastMessage: item.lastMessage || '',
-                updatedAt: (item.lastMessageAt || item.updatedAt).toISOString(),
-                unreadCount: item.unreadCount || 0,
-                windowExpiresAt: getWindowExpiry(item.lastInboundAt)?.toISOString() ?? null,
-            };
-        });
-
-        return res.json(result);
+        return res.json(items.map(serializeConversation));
     }catch(error){
         res.status(500).json([{ message: error.message }]);
     }
@@ -526,7 +514,7 @@ export const listMessages = async (req, res) => {
         const items = msgs.map(msg => serializeMessage(msg, { campaignNames, quoted }));
 
         // Solo marcamos como leído al ABRIR la conversación (primera página, sin cursor)
-        if (!hasCursor) await markConversationRead(userId, conversation._id, conversation.lineId);
+        if (!hasCursor) await markConversationRead(userId, conversation._id);
 
         return res.json({ items, nextCursor });
 
@@ -558,10 +546,7 @@ const responderEnvioPlantilla = (res, { msg, conversation, status, errorCode, er
 const responderErrorPlantilla = (res, error) => {
     const status = error.statusCode || (error.waErrorCode ? 502 : 500);
     if (status >= 500) console.error('Envío de plantilla desde el chat falló:', error.message);
-    return res.status(status).json([{
-        message: error.message,
-        errorCode: error.waErrorCode ?? null,
-    }]);
+    return res.status(status).json(sendErrorBody(error, { errorCode: error.waErrorCode ?? null }));
 };
 
 export const sendConversationTemplateController = async (req, res) => {
@@ -577,6 +562,8 @@ export const sendConversationTemplateController = async (req, res) => {
         // La línea de la conversación: 409 si es de un número que ya no está conectado.
         const line = await findConversationLine(conversation);
 
+        // Responder la toma, antes de llamar a Meta (Fase 4).
+        await acquireConversation(req.auth, conversation._id);
         await markHumanReply(conversation._id);
         const resultado = await processTemplateSending({
             line,
@@ -590,7 +577,7 @@ export const sendConversationTemplateController = async (req, res) => {
         });
 
         // Responder con una plantilla también es haberlo leído.
-        await markConversationRead(userId, conversation._id, conversation.lineId);
+        await markConversationRead(userId, conversation._id);
         return responderEnvioPlantilla(res, resultado);
     } catch (error) {
         return responderErrorPlantilla(res, error);
@@ -610,6 +597,9 @@ export const startConversationTemplateController = async (req, res) => {
         // «Nueva» puede ser una que ya existe para ese número en esa línea: el
         // bot se calla en ella antes de enviar, y en la que quede después.
         const existing = await findConversationByNumber(req.auth.accountId, req.body.destinationNumber, line);
+        // Si ya existe, la toma antes de llamar a Meta; si la atiende otro
+        // agente, 409 con su nombre y su id, para pedir que se la pasen (Fase 4).
+        if (existing) await acquireConversation(req.auth, existing._id);
         await markHumanReply(existing?._id);
 
         const resultado = await processTemplateSending({
@@ -624,7 +614,11 @@ export const startConversationTemplateController = async (req, res) => {
             parameters: req.body.parameters ?? [],
             buttons: req.body.buttons ?? [],
         });
-        if (!existing) await markHumanReply(resultado.conversation?._id);
+        // La que creó el envío, de quien la envió.
+        if (!existing && resultado.conversation) {
+            await claimNewConversation(req.auth, resultado.conversation._id);
+            await markHumanReply(resultado.conversation._id);
+        }
 
         return responderEnvioPlantilla(res, resultado);
     } catch (error) {

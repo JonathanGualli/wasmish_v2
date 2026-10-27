@@ -3,11 +3,11 @@ import Contact from "../models/contact.model.js";
 import Conversation from "../models/conversation.model.js";
 import Message from "../models/message.model.js";
 import { hasContactIdentity, mergeContactUpdates, contactDisplayName } from "../utils/contact.identity.js";
-import { pickContactFields, buildContactMatch, CONTACT_FILTERS, summarizeConversations } from "../utils/contact.query.js";
+import { pickContactFields, buildContactMatch, CONTACT_FILTERS, summarizeConversations, restrictedConversationItem } from "../utils/contact.query.js";
 import { resolveMarketingPreference } from "../utils/marketing.preference.js";
 import { MAX_TAGS_PER_CONTACT } from "../utils/contact.tags.js";
 import { resolveOwnedTagIds } from "../services/tag.service.js";
-import { inLineScope, lineScope } from "../utils/permissions.js";
+import { canSeeConversation, inLineScope, lineScope } from "../utils/permissions.js";
 import { sendToAccount } from "./stream.controller.js";
 import ContactNote from "../models/contact.note.model.js";
 import { cleanNoteText } from "../utils/contact.notes.js";
@@ -290,28 +290,38 @@ export const findOwnedContact = (userId, id) =>
 
 // Lo que la ficha y la lista necesitan de cada conversación del contacto (una
 // por línea, Fase 2b de multi-línea).
-const CONVERSATION_SUMMARY_FIELDS = { lineId: 1, lastMessageAt: 1, lastInboundAt: 1 };
+const CONVERSATION_SUMMARY_FIELDS = { lineId: 1, lastMessageAt: 1, lastInboundAt: 1, assignedTo: 1 };
 
 // Todas, de cualquier línea: lo que decide (no cambiar el número de quien ya
 // tiene historial) mira todas. Lo que se ENSEÑA pasa por `visibleConversations`.
 const findContactConversations = (userId, contactId) =>
-    Conversation.find({ userId, contactId }).select(CONVERSATION_SUMMARY_FIELDS).lean();
+    Conversation.find({ userId, contactId }).select(CONVERSATION_SUMMARY_FIELDS).populate('assignedTo', 'name').lean();
 
-// Las conversaciones que la sesión puede ver: las de sus líneas (Fase 3). El
-// contacto es de toda la cuenta; sus conversaciones, de cada línea.
+// Las conversaciones que la sesión puede ver: las de sus líneas (Fase 3) y,
+// para el agente, sin asignar o suyas (Fase 4). El contacto es de toda la
+// cuenta; sus conversaciones, de cada línea.
 const visibleConversations = (auth, conversations) =>
-    conversations.filter(conversation => inLineScope(auth, conversation.lineId));
+    conversations.filter(conversation => canSeeConversation(auth, conversation));
+
+// Las de sus líneas que atiende un compañero (Fase 4): la ficha dice que
+// existen y quién las atiende, para pedir que se la pasen, sin lo que dicen.
+const restrictedConversations = (auth, conversations) =>
+    conversations.filter(conversation => inLineScope(auth, conversation.lineId) && !canSeeConversation(auth, conversation));
 
 // Lo mismo dentro de la lista: después de los filtros, que miran TODAS las
 // conversaciones («con conversación» no cambia según quién lo pide; revisión de
-// Codex del plan de la Fase 3), se quitan las de líneas que no ve. Sin límite
-// de líneas, nada.
+// Codex del plan de la Fase 3), se quitan las que no ve: las de otras líneas y,
+// para el agente, las de sus compañeros. Sin límite, nada.
 const visibleConversationStages = (auth) => {
     const scope = lineScope(auth);
     if (scope === null) return [];
     const lineIds = scope.map(id => new mongoose.Types.ObjectId(id));
+    const inLines = { $in: ['$$this.lineId', lineIds] };
+    const cond = auth.role === 'agent'
+        ? { $and: [inLines, { $in: [{ $ifNull: ['$$this.assignedTo', null] }, [new mongoose.Types.ObjectId(auth.userId), null]] }] }
+        : inLines;
     return [
-        { $addFields: { conversations: { $filter: { input: '$conversations', cond: { $in: ['$$this.lineId', lineIds] } } } } },
+        { $addFields: { conversations: { $filter: { input: '$conversations', cond } } } },
         { $addFields: { conversation: { $ifNull: [{ $arrayElemAt: ['$conversations', 0] }, null] } } },
     ];
 };
@@ -321,9 +331,12 @@ const toIso = (date) => (date ? new Date(date).toISOString() : null);
 // La forma en que la API devuelve un contacto, en la lista y en la ficha.
 // `conversations`: todas las suyas, una por línea. Los campos sueltos
 // (`conversationId`, `lastInteractionAt`, `windowExpiresAt`) son los de la más
-// reciente: el front los lee hasta la Fase 2c.
-const serializeContact = (contact, conversations = []) => {
-    const { latest, items } = summarizeConversations(conversations);
+// reciente: el front los lee hasta la Fase 2c. `restricted`: las de un
+// compañero, al final y sin lo que dicen (solo en la ficha; Fase 4).
+const serializeContact = (contact, conversations = [], restricted = []) => {
+    const summary = summarizeConversations(conversations);
+    const { latest } = summary;
+    const items = [...summary.items, ...restricted.map(restrictedConversationItem)];
     return {
         id: String(contact._id),
         displayName: contactDisplayName(contact),
@@ -480,7 +493,8 @@ export const getContact = async (req, res) => {
         const contact = await findOwnedContact(userId, req.params.id);
         if (!contact) return sendContactError(res, 404, 'Contacto no encontrado');
 
-        const conversations = visibleConversations(req.auth, await findContactConversations(userId, contact._id));
+        const all = await findContactConversations(userId, contact._id);
+        const conversations = visibleConversations(req.auth, all);
 
         const [stats] = conversations.length > 0
             ? await Message.aggregate([
@@ -496,7 +510,7 @@ export const getContact = async (req, res) => {
             : [];
 
         return res.json({
-            ...serializeContact(contact, conversations),
+            ...serializeContact(contact, conversations, restrictedConversations(req.auth, all)),
             noteList: await listContactNotes(contact, req.auth),
             activity: {
                 firstMessageAt: toIso(stats?.firstMessageAt),
@@ -569,7 +583,7 @@ export const updateContact = async (req, res) => {
         Object.assign(contact, fields);
         await contact.save();
         notifyContactChanged(userId, contact._id);
-        return res.json(serializeContact(contact, visibleConversations(req.auth, conversations)));
+        return res.json(serializeContact(contact, visibleConversations(req.auth, conversations), restrictedConversations(req.auth, conversations)));
     } catch (error) {
         if (error.code === 11000) return sendDuplicatePhone(res, userId, fields.phone);
         return sendContactError(res, 500, error.message);

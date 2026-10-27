@@ -5,7 +5,7 @@
 
 import Message from '../models/message.model.js';
 import Conversation from '../models/conversation.model.js';
-import { sendToAccount } from '../controllers/stream.controller.js';
+import { sendConversationEvent } from './assignment.service.js';
 import { findWebhookTarget } from './message.change.service.js';
 import { getSendingRecipient } from '../controllers/contact.controller.js';
 import { sendReactionMessage } from '../libs/whatsapp.js';
@@ -51,15 +51,14 @@ export const syncReactionPreview = async ({ accountId, conversation, messageId, 
     if (!written) return;
 
     const { lastMessage = '' } = await Conversation.findById(conversation._id).select('lastMessage').lean() ?? {};
-    sendToAccount(String(accountId), 'conversation_updated', { id: String(conversation._id), lastMessage },
-        { lineId: conversation.lineId ?? null });
+    await sendConversationEvent(accountId, conversation._id, 'conversation_updated', { id: String(conversation._id), lastMessage });
 };
 
 /** Avisa por SSE del mensaje como queda, releído después de escribir. */
 const emitMessageUpdated = async (accountId, messageId, conversation) => {
     const updated = await Message.findById(messageId).lean();
     if (!updated) return null;
-    sendToAccount(String(accountId), 'message_updated', serializeMessageUpdate(updated), { lineId: conversation.lineId ?? null });
+    await sendConversationEvent(accountId, conversation._id, 'message_updated', serializeMessageUpdate(updated));
     return updated;
 };
 

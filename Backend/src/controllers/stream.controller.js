@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import { canReceive } from '../utils/permissions.js';
+import { assignmentEventFor, canReceive } from '../utils/permissions.js';
 
 const emitter = new EventEmitter();
 // Conexiones SSE abiertas, por cuenta (`accountId` → sus conexiones). Cada una
@@ -31,6 +31,31 @@ export const sendToAccount = (accountId, event, data, meta = {}) => {
     if (!set) return;
     for (const { auth, res } of set) {
         if (canReceive(auth, meta)) write(res, event, data);
+    }
+};
+
+/**
+ * Una conversación cambió de manos (Fase 4): `before` y `after` son su
+ * `conversationMeta` antes y después. Quien la sigue viendo recibe
+ * `conversation_assigned` con `data` (la conversación como la da la lista);
+ * quien la pierde, `conversation_revoked { id }`, para quitarla de su caché.
+ */
+export const sendAssignmentChange = (accountId, data, before, after) => {
+    const set = clients.get(accountId);
+    if (!set) return;
+    for (const { auth, res } of set) {
+        const event = assignmentEventFor(auth, before, after);
+        if (event === 'conversation_assigned') write(res, event, data);
+        else if (event === 'conversation_revoked') write(res, event, { id: data.id });
+    }
+};
+
+/** Un evento solo a las conexiones de una persona (la respuesta a su solicitud de transferencia). */
+export const sendToUser = (accountId, userId, event, data) => {
+    const set = clients.get(accountId);
+    if (!set) return;
+    for (const { auth, res } of set) {
+        if (auth.userId === String(userId)) write(res, event, data);
     }
 };
 
