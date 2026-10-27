@@ -41,7 +41,7 @@
 - **Dos agentes responden a la vez la misma conversación sin asignar:** solo uno llega a Meta y se la queda; el otro recibe `409 assigned_to_other` con el nombre del primero, y Meta se llama una sola vez → test en la Tarea 3.
 - **Un agente empieza una conversación nueva con un contacto cuya conversación en esa línea atiende otro agente:** 409 con `assignedToName` y `conversationId`, sin llamar a Meta, y sin ver el historial → test en la Tarea 3.
 - **A un agente le quitan la conversación con el chat abierto:** recibe `conversation_revoked` antes que cualquier evento nuevo de ella, y no le llega ninguno más (ni `message_created`, ni push) → tests en las Tareas 1 y 3.
-- **Se acepta una solicitud de transferencia cuando la conversación ya cambió de manos, o el solicitante fue desactivado:** 409 y nada cambia; la solicitud vieja no se aplica sobre el dueño nuevo → test en la Tarea 5.
+- **Se acepta una solicitud de transferencia cuando la conversación ya cambió de manos, la solicitud fue reemplazada o el solicitante fue desactivado:** 409 y nada cambia; la solicitud vieja no se aplica sobre el dueño nuevo → tests en las Tareas 5 y 6.
 - **Un agente intenta asignar a un compañero una conversación que no es suya, o asignarla a alguien sin esa línea o desactivado:** 403 o 400, y la asignación no cambia → test en la Tarea 4.
 
 ---
@@ -118,6 +118,7 @@
     - `services/reaction.service.js`, `services/message.status.service.js`, `services/message.change.service.js`, `services/history.import.service.js`;
   - `services/push.service.js` (`notifyInbound` recibe `assignedTo`);
   - `docs/arquitectura/chat.md` (eventos), `docs/arquitectura/api.md` (`GET /chats`).
+- Create: `Backend/src/services/assignment.service.js`
 - Test: `Backend/tests/isolation/assignment.test.js` (nuevo); `Backend/tests/isolation/push.test.js`
 
 **Interfaces:**
@@ -126,14 +127,15 @@
   - **`Conversation`, campos nuevos:**
     - `assignedTo`, `assignedBy`: ObjectId → `User`, `default: null`;
     - `assignedAt`: Date, `default: null`;
-    - `transferRequest`: subdocumento `{ requestedBy: ObjectId → User, requestedAt: Date }`, sin `_id`, `default: undefined`.
+    - `transferRequest`: subdocumento `{ id: ObjectId, requestedBy: ObjectId → User, requestedAt: Date }`, sin `_id` propio, `default: undefined`. El `id` es nuevo en cada solicitud: aceptar y rechazar lo exigen (Tarea 5).
   - **Índice nuevo:** `conversation_assignee` `{ userId: 1, assignedTo: 1 }`, parcial con `assignedTo: { $type: 'objectId' }`. Para liberar las de una persona (Tarea 6).
   - **`serializeConversation(item)`** en `chat.controller.js`: lo que hoy arma el `map` de `listConversations`, más dos campos. `item` viene con `populate` de `contactId`, `assignedTo` (`name`) y `transferRequest.requestedBy` (`name`). Las Tareas 4 y 5 responden con él.
     - `assignedTo: { id, name } | null`;
-    - `transferRequest: { requestedBy: { id, name }, requestedAt } | null`.
+    - `transferRequest: { id, requestedBy: { id, name }, requestedAt } | null`.
   - **`sendAssignmentChange(accountId, data, before, after)`** en `stream.controller.js`: a cada conexión, el evento que diga `assignmentEventFor`. `conversation_assigned` lleva `data`; `conversation_revoked`, solo `{ id: data.id }`.
   - **`sendToUser(accountId, userId, event, data)`** en `stream.controller.js`: a las conexiones de esa persona.
-  - **`markConversationRead(accountId, conversation)`**: recibe el documento, no `(conversationId, lineId)`, para emitir con `conversationMeta`.
+  - **`sendConversationEvent(accountId, conversationId, event, data)`** en `services/assignment.service.js` (nuevo): relee `lineId` y `assignedTo` de la conversación **justo antes de emitir** y llama a `sendToAccount` con su `conversationMeta`. Así la audiencia es la de ese momento, no la del documento leído antes de esperar a Meta o de descargar un adjunto (revisión de Codex del plan, 2).
+  - **`markConversationRead(accountId, conversationId)`**: emite con `sendConversationEvent`.
 
 - [ ] **Step 1: Tests de aislamiento** en `tests/isolation/assignment.test.js`. Escenario: una cuenta con la línea L1 y tres conversaciones (c1 sin asignar, c2 de Ana, c3 de Luis), con Ana y Luis agentes de L1 y un supervisor de L1.
   - `GET /chats`:
@@ -151,19 +153,18 @@
 - [ ] **Step 3: Implementar.**
   - El modelo y `serializeConversation`.
   - `visibleConversations` usa `canSeeConversation`, y `visibleConversationStages` añade la condición de `assignedTo` para el agente (con `$$this.assignedTo`, que puede faltar: `$ifNull` a `null`). `CONVERSATION_SUMMARY_FIELDS` añade `assignedTo`. Los **filtros** («con conversación») siguen mirando todas, como en la Fase 3.
-  - Cada `sendToAccount` de un evento de conversación pasa `conversationMeta(conversation)` en lugar de `{ lineId }`:
-    - donde la conversación se lee con `select`, se añade `assignedTo`;
-    - en `history.import.service.js`, la `meta` de la línea se cambia por la de la conversación de cada evento;
-    - `notifyInbound` recibe `assignedTo` y lo pone en la `meta` de `pushRecipientIds`.
-  - Comprobar con `grep -rn "lineId: .*lineId ?? null" Backend/src`: solo queda `campaign.service.js` (no es de una conversación).
+  - Cada `sendToAccount` de un evento de conversación pasa a ser `sendConversationEvent(accountId, conversationId, …)`:
+    - en `history.import.service.js`, también los que hoy usan la `meta` de la línea;
+    - `notifyInbound` lee `assignedTo` de la conversación al enviar (como `sendConversationEvent`) y lo pone en la `meta` de `pushRecipientIds`.
+  - Comprobar con `grep -rn "lineId: .*lineId ?? null\|const meta = " Backend/src`: solo queda `campaign.service.js` (no es de una conversación).
 - [ ] **Step 4:** `npm test && npm run test:isolation` → pasan; los tests de la Fase 3 siguen en verde.
 - [ ] **Step 5: Commit** — `git commit -m "Asignación: el agente solo ve las suyas y las sin asignar"`
 
 ### Task 3: Responder toma la conversación (PR 1)
 
 **Files:**
-- Create: `Backend/src/services/assignment.service.js`
 - Modify:
+  - `Backend/src/services/assignment.service.js`;
   - `Backend/src/controllers/chat.controller.js`: `sendMessageController`, `sendMediaMessageController`, `sendConversationTemplateController`, `startConversationTemplateController` y sus `catch`;
   - `docs/arquitectura/chat.md` y `docs/arquitectura/api.md` (el 409 y la regla);
   - `docs/arquitectura/whatsapp-envio.md` (§ flujo saliente: adquirir antes de Meta).
@@ -195,6 +196,7 @@
   - **Meta rechaza el envío** (`onMeta` con error) → el mensaje queda fallido y c1 queda de quien lo intentó.
   - **Nada automático asigna:** con c1 sin asignar, `POST /api/v1/templates/send` (API key) a su contacto → c1 sigue sin asignar. Una reacción de Ana a un mensaje de c1 → c1 sigue sin asignar.
   - **El evento:** con un cliente SSE falso de Luis registrado (`addClient`), Ana toma c1 → Luis recibe `conversation_revoked { id }` y ningún `message_created` de c1 después.
+  - **Cambia de manos mientras se espera a Meta:** el supervisor responde c2 (de Ana), y el `onMeta` de ese envío, antes de responder, reasigna c2 a Luis en la BD. El `message_created` del envío le llega a Luis y **no** a Ana (revisión de Codex del plan, 2).
 - [ ] **Step 2:** `npm run test:isolation` → fallan.
 - [ ] **Step 3: Implementar.**
   - En cada envío desde el chat, `acquireConversation` va **antes** de `markHumanReply`, de guardar el archivo y de llamar a Meta.
@@ -237,13 +239,14 @@
   - `take` de c2 por Luis → 409 `assigned_to_other`; `take` de c1 → suya.
   - `assignees` de una conversación de L1: Ana, Luis, el supervisor, el owner y el admin; no un agente de L2 ni un desactivado.
   - El cambio de asignación borra una `transferRequest` pendiente.
+  - **Otra cuenta:** el owner de la cuenta B hace `take`, `assign` y `GET assignees` sobre c1 de la cuenta A → 404 en los tres, c1 no cambia y ninguna conexión de A recibe un evento.
 - [ ] **Step 2:** fallan. **Step 3:** implementar. **Step 4:** pasan.
 - [ ] **Step 5: Commit** — `git commit -m "Asignación: asignar, tomar y a quién se puede asignar"`
 
 ### Task 5: Pedir que te la transfieran (PR 2)
 
 **Files:**
-- Modify: `Backend/src/services/assignment.service.js`, `Backend/src/controllers/chat.controller.js`, `Backend/src/routes/chat.routes.js`, `docs/arquitectura/chat.md` (eventos), `docs/arquitectura/api.md`
+- Modify: `Backend/src/services/assignment.service.js`, `Backend/src/controllers/chat.controller.js`, `Backend/src/routes/chat.routes.js`, `Backend/src/schemas/chat.schema.js` (`transferAnswerSchema`), `docs/arquitectura/chat.md` (eventos), `docs/arquitectura/api.md`
 - Test: `Backend/tests/isolation/assignment.test.js`
 
 **Interfaces:**
@@ -251,15 +254,15 @@
 - Produces:
   - **`POST /chats/:id/transfer-request`** → `202`. La conversación se busca con `conversationLineScope` (el agente **no** necesita verla; spec § 4, Fase 4).
     - Sin asignar → 409 `not_assigned` («Nadie la atiende: respóndela y será tuya.»); ya suya → 409 `already_yours`.
-    - Si no, guarda `transferRequest = { requestedBy: yo, requestedAt }`, reemplazando la que hubiera.
+    - Si no, guarda `transferRequest = { id: nuevo ObjectId, requestedBy: yo, requestedAt }`, reemplazando la que hubiera.
     - Emite `transfer_requested { id, transferRequest }` con `conversationMeta`: le llega al que la atiende y a quienes ven todas sus conversaciones. Ni el historial ni el último mensaje van en la respuesta.
-  - **`POST /chats/:id/transfer-request/accept`** → `200 serializeConversation`:
+  - **`POST /chats/:id/transfer-request/accept { requestId }`** → `200 serializeConversation` (`transferAnswerSchema` en `chat.schema.js`; `requestId` es el `transferRequest.id` que la persona tiene a la vista):
     1. Con `conversationScope` y `canReassign` (404 / 403).
-    2. Sin solicitud → 404 `no_transfer_request`.
-    3. El solicitante ya no vale (`isValidAssignee`): se borra la solicitud y 409 `invalid_assignee`.
-    4. Escritura condicional sobre `assignedTo` y `transferRequest.requestedBy` leídos (si falla, 409 `assignment_changed`).
+    2. Sin solicitud → 404 `no_transfer_request`. Con otra (`transferRequest.id` distinto de `requestId`) → 409 `transfer_request_changed`, «La solicitud cambió. Revísala de nuevo.».
+    3. El solicitante ya no vale (`isValidAssignee`): se borra **esa** solicitud (condición sobre su `id`) y 409 `invalid_assignee`.
+    4. Escritura condicional sobre el `assignedTo` leído y `transferRequest.id: requestId` (si falla, 409 `assignment_changed`).
     5. Emite el cambio y, por `sendToUser`, `transfer_answered { id, accepted: true }` al solicitante.
-  - **`POST /chats/:id/transfer-request/reject`** → `204`. Mismo acceso; borra la solicitud de forma condicional y emite:
+  - **`POST /chats/:id/transfer-request/reject { requestId }`** → `204`. Mismo acceso y los mismos 404 / 409 del paso 2; borra la solicitud con la condición sobre su `id` y emite:
     - `transfer_requested { id, transferRequest: null }` con `conversationMeta`;
     - `transfer_answered { id, accepted: false }` al solicitante.
 
@@ -274,27 +277,35 @@
   - **Solicitud vieja:** el supervisor reasigna c2 a otra persona y Ana intenta aceptar → 403 (ya no es suya) y nada cambia.
   - **Solicitante desactivado:** Luis queda desactivado y el supervisor acepta → 409 `invalid_assignee` y la solicitud se borra.
   - Luis acepta su propia solicitud → 404 (no ve c2).
+  - **Solicitud reemplazada:** Ana tiene a la vista la de Luis; Marta (otra agente de L1) pide c2; Ana acepta con el `requestId` de Luis → 409 `transfer_request_changed` y c2 sigue de Ana, con la de Marta pendiente. Lo mismo si Luis vuelve a pedirla (otro `id`, misma persona). Lo mismo al rechazar.
+  - **Otra cuenta:** el owner de B pide, acepta y rechaza sobre c2 de A → 404 en los tres, sin escribir ni emitir nada.
 - [ ] **Step 2:** fallan. **Step 3:** implementar. **Step 4:** pasan.
 - [ ] **Step 5: Commit** — `git commit -m "Asignación: pedir que te transfieran una conversación"`
 
 ### Task 6: Quitar acceso libera las conversaciones (PR 2)
 
 **Files:**
-- Modify: `Backend/src/services/assignment.service.js`, `Backend/src/controllers/team.controller.js` (`updateMember`), `docs/arquitectura/chat.md`, `docs/estado.md`
+- Modify: `Backend/src/services/assignment.service.js` (y `acquireConversation`, `assignConversation` y aceptar una solicitud, que pasan a usar `confirmAssignee`), `Backend/src/controllers/team.controller.js` (`updateMember`), `docs/arquitectura/chat.md`, `docs/estado.md`
 - Test: `Backend/tests/isolation/assignment.test.js`
 
 **Interfaces:**
-- Consumes: `releaseFilter` (Tarea 1).
-- Produces: `releaseAssignments(accountId, member) → number`, con el `User` ya actualizado:
-  - `updateMany({ userId: accountId, assignedTo: member._id, ...releaseFilter(member) }, { $set: { assignedTo: null, assignedAt: ahora, assignedBy: null } })`;
-  - borra las `transferRequest` que pidió él con el mismo filtro;
-  - si cambió algo, emite `conversations_updated {}` a toda la cuenta: la bandeja vuelve a leer la lista.
+- Consumes: `releaseFilter`, `isValidAssignee` (Tarea 1).
+- Produces:
+  - **`releaseAssignments(accountId, member) → number`**, con el `User` ya actualizado. Si `releaseFilter(member)` es `null`, no hace nada y devuelve 0: **no** se expande un `null`, que dejaría el filtro sin condición y liberaría todas (revisión de Codex del plan, 3). Si no, dos escrituras:
+    1. `updateMany({ userId: accountId, assignedTo: member._id, ...filtro }, { $set: { assignedTo: null, assignedAt: ahora, assignedBy: null }, $unset: { transferRequest: 1 } })`: las suyas quedan sin asignar y **sin la solicitud** que tuvieran, de quien fuera.
+    2. `updateMany({ userId: accountId, 'transferRequest.requestedBy': member._id, ...filtro }, { $unset: { transferRequest: 1 } })`: las solicitudes que **pidió él**, que están en conversaciones de otros (revisión de Codex del plan, 4).
+
+    Si cambió algo, emite `conversations_updated {}` a toda la cuenta: la bandeja vuelve a leer la lista.
+  - **`confirmAssignee(accountId, conversationId, userId) → boolean`**: después de cada escritura que asigna a una persona (tomar al responder, `take`, `assign`, aceptar una solicitud), relee el `User`. Si ya no es `isValidAssignee` para la línea, deshace la asignación con una escritura condicional (`assignedTo: userId` en el filtro), emite el cambio y devuelve falso; quien la llamó responde 409 `invalid_assignee`.
+    - **Por qué basta sin candado:** `updateMember` guarda el `User` **antes** de `releaseAssignments`. O la asignación se escribió antes de liberar, y la liberación la encuentra; o se escribió después, y `confirmAssignee` lee el `User` ya cambiado (revisión de Codex del plan, 1).
 
 - [ ] **Step 1: Tests**
   - Desactivar a Ana → c2 sin asignar, y su solicitud pendiente desaparece.
   - Quitarle L1 a Luis con c3 en L1 y otra suya en L2 → solo se libera la de L1.
   - Pasar a Luis a admin → no se libera nada.
   - Cambiarle solo el nombre de una línea, o nada de acceso → nada.
+  - **Las solicitudes:** Luis pidió c2 (de Ana). Desactivar a Ana → c2 sin asignar **y** sin la solicitud de Luis. Desactivar a Luis → c2 sigue de Ana, sin la solicitud.
+  - **La carrera con la desactivación:** se desactiva a Luis directamente en la BD (sin liberar, como si `updateMember` estuviera a medias), y el supervisor asigna c1 a Luis con la validación ya pasada (llamando a la escritura y a `confirmAssignee`) → c1 vuelve a sin asignar y la respuesta es 409 `invalid_assignee`.
 - [ ] **Step 2:** fallan. **Step 3:** `updateMember` llama a `releaseAssignments` después de guardar y **antes** de `disconnectUser`. **Step 4:** pasan.
 - [ ] **Step 5: Commit** — `git commit -m "Asignación: desactivar o quitar una línea libera sus conversaciones"`. Abrir el **PR 2**, con la revisión de Codex.
 
@@ -305,7 +316,7 @@
   - `Frontend/src/models/conversation.mode.ts` (`assignedTo`, `transferRequest`);
   - `Frontend/src/services/api.service.ts` (los cuatro endpoints, y los cinco eventos);
   - `Frontend/src/context/sse.provider.tsx`;
-  - `Frontend/src/hooks/useConversations.ts`;
+  - `Frontend/src/hooks/useConversations.ts`, `Frontend/src/hooks/useContacts.ts` y la caché del hilo (`useConversationMessages`);
   - `docs/arquitectura/frontend.md` y `docs/arquitectura/chat.md`.
 - Create: `Frontend/src/hooks/useConversationAssignment.ts`
 
@@ -319,8 +330,10 @@
     - `transfer_requested`: actualiza `transferRequest`;
     - `conversations_updated`: invalida;
     - `transfer_answered`: un aviso al solicitante.
+  - **Fuera de Chats** (revisión de Codex del plan, 6): `conversation_assigned`, `conversation_revoked` y `conversations_updated` invalidan también la lista de Contactos y la ficha abierta (`useContacts`), que enseñan la conversación de cada línea. `conversation_revoked` además cancela y borra la caché de mensajes de esa conversación.
+  - `acceptTransfer` y `rejectTransfer` mandan el `transferRequest.id` que se está viendo; un 409 `transfer_request_changed` vuelve a leer la lista.
 
-- [ ] **Step 1:** Implementar. `npm run lint && npm run build` → sin errores.
+- [ ] **Step 1:** Implementar. `npm run lint && npm run build` → sin errores. Probar con Contactos y una ficha abiertos mientras otra sesión transfiere la conversación.
 - [ ] **Step 2: Commit** — `git commit -m "Asignación: los datos y los eventos en el frontend"`
 
 ### Task 8: La bandeja y el chat, según el diseño (PR 3)
@@ -360,4 +373,5 @@
 - **La solicitud rechazada o aceptada avisa al solicitante con `transfer_answered`** (`sendToUser`): no ve la conversación, así que los eventos de ella no le llegarían.
 - **Una solicitud reemplazada no avisa al primero que la pidió**: es raro, y su aviso solo diría «ya no está».
 - **Sin índice para la lista del agente**: hoy la lista lee todas las conversaciones de la cuenta sin paginar, y `{ userId, assignedTo }` (para liberar) basta.
-- **Un evento que ya estaba saliendo al cambiar de manos** puede llegarle al que la pierde, una vez y en el mismo instante: la `meta` se arma con la conversación leída al empezar. `conversation_revoked` la quita de su caché de todos modos.
+- **La audiencia de cada evento se lee justo antes de emitirlo** (`sendConversationEvent`): una consulta pequeña más por evento, a cambio de que la espera a Meta o la descarga de un adjunto no lo manden a quien ya perdió la conversación. Queda el hueco entre esa lectura y el envío (milisegundos, sin esperas): un evento que coincida justo con el cambio puede llegarle al que la pierde. `conversation_revoked` la quita de su caché de todos modos.
+- **Sin candado entre el equipo y la asignación:** `confirmAssignee` relee a la persona después de asignar y deshace si ya no vale (ver la Tarea 6), en lugar de bloquear cada envío del chat con el candado del equipo.
