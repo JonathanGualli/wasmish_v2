@@ -113,8 +113,10 @@ export const storeHistoryChunks = async (inbound, value) => {
             hilos: chunk.threads.length, mensajes: chunk.threads.reduce((sum, thread) => sum + thread.messages.length, 0),
             piezas: pieces.length, nuevas: inserted,
         });
-        if (chunk.skippedThreads > 0) {
-            console.warn('Hilos del historial mal formados; se saltan:', { lineId: String(sync.lineId), phase, chunkOrder, hilos: chunk.skippedThreads });
+        // Con la forma de cada `id`, no el `id`: en la prueba con Meta de verdad
+        // saltaron 9 hilos y el log no decía si eran grupos, BSUID u otra cosa.
+        if (chunk.skippedThreads.length > 0) {
+            console.warn('Hilos del historial sin un teléfono; se saltan:', { lineId: String(sync.lineId), phase, chunkOrder, hilos: chunk.skippedThreads });
         }
     }
     return { stored, declined, ignored: false };

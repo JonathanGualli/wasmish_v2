@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    normalizeWaPhone, describeHistoryChunk, splitThreadMessages, describeHistoryMessage, historySyncView,
+    normalizeWaPhone, describeShape, describeHistoryChunk, splitThreadMessages, describeHistoryMessage, historySyncView,
     HISTORY_DECLINED_CODE,
 } from '../src/utils/history.sync.js';
 
@@ -36,7 +36,7 @@ test('describeHistoryChunk: un trozo con dos hilos, con su fase, su orden y su a
     assert.equal(chunk.progress, 55);
     assert.deepEqual(chunk.threads.map(thread => thread.contactPhone), [CONTACT, '593990001111']);
     assert.equal(chunk.threads[0].messages.length, 1);
-    assert.equal(chunk.skippedThreads, 0);
+    assert.deepEqual(chunk.skippedThreads, []);
 });
 
 test('describeHistoryChunk: el error 2593109 es que el negocio no compartió', () => {
@@ -44,13 +44,26 @@ test('describeHistoryChunk: el error 2593109 es que el negocio no compartió', (
     assert.deepEqual(describeHistoryChunk(item), { declined: true });
 });
 
-test('describeHistoryChunk: un hilo sin teléfono o sin mensajes se salta y se cuenta', () => {
+test('describeShape: la forma sin el contenido, para el log', () => {
+    assert.equal(describeShape('120363025875043210@g.us'), '9{18}@a.a{2}');
+    assert.equal(describeShape('PE.1000000000000000'), 'a{2}.9{16}');
+    assert.equal(describeShape('Ñandú 7'), 'a{5} 9');
+    assert.deepEqual([undefined, null, 5, {}].map(describeShape), ['undefined', 'null', 'number', 'object']);
+});
+
+// Regresión: en la prueba con Meta de verdad saltaron 9 hilos y el log solo
+// decía cuántos, sin la forma de su `id` (grupo, BSUID…).
+test('describeHistoryChunk: un hilo sin teléfono o sin mensajes se salta, con la forma de su id', () => {
     const chunk = describeHistoryChunk({
         metadata: { phase: 0, chunk_order: 1, progress: 10 },
         threads: [{ id: 'abc', messages: [messageOf()] }, { id: CONTACT }, null, { id: CONTACT, messages: [] }],
     });
     assert.equal(chunk.threads.length, 1);
-    assert.equal(chunk.skippedThreads, 3);
+    assert.deepEqual(chunk.skippedThreads, [
+        { id: 'a{3}', mensajes: 1 },
+        { id: '9{11}', mensajes: 'undefined' },
+        { id: 'undefined', mensajes: 'undefined' },
+    ]);
 });
 
 test('describeHistoryChunk: sin nada que leer da null; sin metadata, los números en null', () => {

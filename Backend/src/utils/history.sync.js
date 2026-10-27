@@ -41,10 +41,27 @@ const toNumber = (value) => {
 };
 
 /**
- * Un elemento de `value.history[]`.
+ * La forma de un valor sin su contenido, para el log: los dígitos como `9` y
+ * las letras como `a`, con la longitud de cada tramo repetido (un grupo
+ * `120363…@g.us` da `9{18}@a.a{2}`). Distingue un grupo de un BSUID sin
+ * escribir ninguno.
+ */
+export const describeShape = (value) => {
+    if (value === undefined || value === null) return String(value);
+    if (typeof value !== 'string') return typeof value;
+    return value
+        .replace(/\p{N}/gu, '9')
+        .replace(/\p{L}/gu, 'a')
+        .replace(/(.)\1+/gu, (run, char) => `${char}{${[...run].length}}`);
+};
+
+/**
+ * Un elemento de `value.history[]`. Cada hilo saltado va con la forma de su
+ * `id` y cuántos mensajes traía (o la forma de `messages` si no es una lista).
  * @returns {{ declined: true }
  *          |{ declined: false, phase: number|null, chunkOrder: number|null, progress: number|null,
- *             threads: { contactPhone: string, messages: object[] }[], skippedThreads: number }
+ *             threads: { contactPhone: string, messages: object[] }[],
+ *             skippedThreads: { id: string, mensajes: number|string }[] }
  *          |null} null si no hay nada que leer.
  */
 export const describeHistoryChunk = (item) => {
@@ -55,11 +72,12 @@ export const describeHistoryChunk = (item) => {
     if (!item.metadata && !Array.isArray(item.threads)) return null;
 
     const threads = [];
-    let skippedThreads = 0;
+    const skippedThreads = [];
     for (const thread of Array.isArray(item.threads) ? item.threads : []) {
         const contactPhone = normalizeWaPhone(thread?.id);
         if (!contactPhone || !Array.isArray(thread.messages)) {
-            skippedThreads += 1;
+            const messages = thread?.messages;
+            skippedThreads.push({ id: describeShape(thread?.id), mensajes: Array.isArray(messages) ? messages.length : describeShape(messages) });
             continue;
         }
         threads.push({ contactPhone, messages: thread.messages });
