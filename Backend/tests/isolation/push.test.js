@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
     seedAccount, seedMember, connectWhatsapp, postWebhook, request, onPush, pushCalls, ANONYMOUS,
-    Contact, Conversation, Message, PushSubscription, User,
+    Contact, Conversation, Line, Message, PushSubscription, User,
 } from './helpers.js';
 
 const a = await seedAccount('PA', { seq: 61 });
@@ -25,6 +25,12 @@ const { lineId: line2 } = await connectWhatsapp(pc, { phoneNumberId: '632' });
 const agent1 = await seedMember(pc, { role: 'agent', lineIds: [line1], label: 'PCAG1' });
 const agent2 = await seedMember(pc, { role: 'agent', lineIds: [line2], label: 'PCAG2' });
 const agentOff = await seedMember(pc, { role: 'agent', lineIds: [line1], label: 'PCAGOFF' });
+// Fase 4: una conversación de la línea 1 sin asignar, que alguien toma justo
+// mientras se preparan los avisos (revisión de Codex del PR #143).
+const racedContact = await Contact.create({ userId: pc.accountId, phone: '593990006308', name: 'Cliente en carrera' });
+const racedConversation = await Conversation.create({
+    userId: pc.accountId, contactId: racedContact._id, contactPhone: racedContact.phone, phoneNumberId: '631', lineId: line1,
+});
 // Fase 4: una conversación de la línea 1 que atiende un agente.
 const assignedAgent = await seedMember(pc, { role: 'agent', lineIds: [line1], label: 'PCASIG' });
 const assignedContact = await Contact.create({ userId: pc.accountId, phone: '593990006309', name: 'Cliente asignado' });
@@ -170,6 +176,36 @@ test('un entrante en una conversación asignada avisa solo a quien la atiende (d
     await new Promise(resolve => setTimeout(resolve, 200));
     assert.equal(sentTo(endpoints.owner).length, 0, 'se avisó al owner');
     assert.equal(sentTo(endpoints.agent1).length, 0, 'se avisó a otro agente de la línea');
+});
+
+test('si la conversación cambia de manos mientras se preparan los avisos, el push no le llega a quien la perdió', async () => {
+    pushCalls.length = 0;
+    const endpoints = {};
+    for (const [name, account] of [['agent1', agent1], ['assigned', assignedAgent]]) {
+        endpoints[name] = newEndpoint();
+        assert.equal((await subscribe(account, endpoints[name])).status, 200, name);
+    }
+    // La conversación se asigna a mitad de `notifyInbound`: mientras busca a
+    // las personas y las líneas (la consulta de las líneas activas).
+    const originalFind = Line.find;
+    Line.find = function (filter, ...rest) {
+        const query = originalFind.call(this, filter, ...rest);
+        if (filter?.status !== 'active' || String(filter?.accountId) !== String(pc.accountId)) return query;
+        const exec = query.exec.bind(query);
+        query.exec = async (...args) => {
+            await Conversation.updateOne({ _id: racedConversation._id }, { $set: { assignedTo: assignedAgent.userId } });
+            return exec(...args);
+        };
+        return query;
+    };
+    try {
+        assert.equal((await postWebhook('631', textMessage(racedContact.phone, 'en plena carrera'))).status, 200);
+        assert.ok(await waitFor(() => sentTo(endpoints.assigned).length), 'no se avisó al nuevo dueño');
+        await new Promise(resolve => setTimeout(resolve, 200));
+        assert.equal(sentTo(endpoints.agent1).length, 0, 'se avisó a quien ya no la ve');
+    } finally {
+        Line.find = originalFind;
+    }
 });
 
 test('quitarle la línea al agente después de suscribirse lo deja sin avisos de ella', async () => {

@@ -61,21 +61,22 @@ export const notifyInbound = async ({ accountId, conversationId, contact, text, 
         if (subscriptions.length === 0) return;
 
         const memberIds = [...new Set(subscriptions.map(subscription => String(subscription.memberId)))];
-        const members = await User.find({ _id: { $in: memberIds }, accountId })
-            .select('accountId role lineIds status').lean();
-        // Su línea y quién la atiende, de ahora: solo a quien la atiende, si la
-        // atiende alguien (decisión del 2026-10-27).
+        const [members, activeLines] = await Promise.all([
+            User.find({ _id: { $in: memberIds }, accountId }).select('accountId role lineIds status').lean(),
+            // Con varias líneas, la del mensaje va en el título.
+            Line.find({ accountId, status: 'active' }).select('name verifiedName displayPhoneNumber phoneNumberId').lean(),
+        ]);
+        // Su línea y quién la atiende, leídos lo ÚLTIMO, sin otra espera hasta
+        // enviar: si cambia de manos mientras se lee lo demás, el push no le
+        // llega a quien la perdió (revisión de Codex del PR #143). Si la atiende
+        // alguien, solo a esa persona (decisión del 2026-10-27).
         const meta = await currentConversationMeta(conversationId);
         if (!meta) return;
-        const { lineId } = meta;
         const recipients = new Set(pushRecipientIds(members, accountId, meta));
         const targets = subscriptions.filter(subscription => recipients.has(String(subscription.memberId)));
         if (targets.length === 0) return;
 
-        // Con varias líneas, la del mensaje va en el título.
-        const activeLines = await Line.find({ accountId, status: 'active' })
-            .select('name verifiedName displayPhoneNumber phoneNumberId').lean();
-        const lineName = pushLineName(activeLines, lineId);
+        const lineName = pushLineName(activeLines, meta.lineId);
         const payload = JSON.stringify(buildInboundPush({ conversationId, contact, text, type, caption, lineName }));
         await Promise.allSettled(targets.map(subscription => sendOne(subscription, payload)));
     } catch (error) {
