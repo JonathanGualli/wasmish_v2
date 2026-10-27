@@ -73,33 +73,39 @@ const connectState = ({ activeCount, maxLines, isMultiLine, isConnecting, hasRem
     };
 };
 
-/**
- * Ajustes → las líneas de WhatsApp de la cuenta (Fase 2c; diseño: «Wasmish
- * Líneas - Ajustes y superadmin»). Con una sola línea se ve casi como antes;
- * con un plan de varias, la lista agrupada por WABA, el uso del plan y
- * «Conectar otro número».
- */
-/** Mientras se espera a WhatsApp, el estado cambia con la hora (reintentar a la media hora, el plazo de 24 h), no por un aviso. */
-const WAITING_STATUSES = new Set(['requested', 'pending', 'failed']);
-const WAITING_REFRESH_MS = 60_000;
+const HISTORY_REFRESH_MS = 60_000;
 
 /**
  * El estado de los chats de la app se ve cambiar sin recargar: con el aviso
- * `history_sync` y, mientras se espera a WhatsApp, cada minuto.
+ * `history_sync` y, hasta que vence el plazo de 24 h, cada minuto. Parte del
+ * estado cambia con la hora y no con un aviso: reintentar un pedido sin
+ * respuesta a la media hora (también el de la agenda, con los chats ya
+ * terminados: revisión de Codex del PR #136) y el plazo que vence.
  */
 const useHistorySyncRefresh = (activeLines: Line[]) => {
     const { subscribe } = useSSE();
     const refresh = useThrottledInvalidate(LINES_QUERY_KEY);
     useEffect(() => subscribe("history_sync", refresh), [subscribe, refresh]);
 
-    const waiting = activeLines.some(line => line.historySync && WAITING_STATUSES.has(line.historySync.status));
+    // El plazo más lejano; una vuelta más después, para ver que venció.
+    const lastDeadline = Math.max(0, ...activeLines.map(line =>
+        line.historySync ? new Date(line.historySync.retryUntil).getTime() : 0));
     useEffect(() => {
-        if (!waiting) return;
-        const timer = setInterval(refresh, WAITING_REFRESH_MS);
+        if (Date.now() > lastDeadline + HISTORY_REFRESH_MS) return;
+        const timer = setInterval(() => {
+            if (Date.now() > lastDeadline + HISTORY_REFRESH_MS) clearInterval(timer);
+            refresh();
+        }, HISTORY_REFRESH_MS);
         return () => clearInterval(timer);
-    }, [waiting, refresh]);
+    }, [lastDeadline, refresh]);
 };
 
+/**
+ * Ajustes → las líneas de WhatsApp de la cuenta (Fase 2c; diseño: «Wasmish
+ * Líneas - Ajustes y superadmin»). Con una sola línea se ve casi como antes;
+ * con un plan de varias, la lista agrupada por WABA, el uso del plan y
+ * «Conectar otro número».
+ */
 export const LinesCard = () => {
     const { isLoading, isError, refresh, lines, activeLines, previousLines, removedLines, maxLines, isMultiLine, colorOf } = useLines();
     const connectWhatsapp = useConnectWhatsapp();
