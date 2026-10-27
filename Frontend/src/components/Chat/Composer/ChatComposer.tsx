@@ -155,14 +155,18 @@ export const ChatComposer = ({
 
         const message = text;
         setText("");
-        sendText.mutate({ conversationId, message, temporalId: crypto.randomUUID(), replyTo }, {
-            onSuccess: onSent,
-            onError: (error) => {
+        // `mutateAsync` y no los callbacks de `mutate`: si el SSE cierra el chat
+        // antes de que llegue el 409, este composer se desmonta y React Query ya
+        // no los llamaría; la promesa sí se cumple, y el texto llega al chat
+        // cerrado (revisión de Codex del PR #146).
+        sendText.mutateAsync({ conversationId, message, temporalId: crypto.randomUUID(), replyTo }).then(
+            () => onSent?.(),
+            (error: Error) => {
                 const { code, assignedToName } = assignmentError(error);
                 if (code === 'assigned_to_other' && onTakenByOther) onTakenByOther(assignedToName, message);
                 else showTextError(error);
             },
-        });
+        );
         onCancelReply();
     };
 

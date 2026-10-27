@@ -1,6 +1,7 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { useNavigate } from "react-router-dom";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useAuthContext } from "../context/auth.context";
 import { useSSE } from "../context/sse.context";
 import { useNoticeContext } from "../components/Notice/context/UseNoticeContext";
 import { requestTransferService } from "../services/api.service";
@@ -17,9 +18,23 @@ export type TransferRequestState =
 
 const IDLE: TransferRequestState = { status: 'idle' };
 
-// En la caché y no en el componente: la ficha se puede cerrar con la solicitud
-// enviada, y la respuesta llega igual (`useTransferAnswers`).
-const transferKey = (conversationId: string) => ['transfer-request', conversationId];
+// Fuera del componente: la ficha se puede cerrar con la solicitud enviada, y la
+// respuesta llega igual (`useTransferAnswers`). Tampoco en la caché de React
+// Query: al reconectar, el SSE la invalida entera y una `queryFn` la devolvía a
+// `idle` (revisión de Codex del PR #146). Por persona: otra sesión en la misma
+// pestaña no hereda las solicitudes de la anterior.
+const states = new Map<string, TransferRequestState>();
+const listeners = new Set<() => void>();
+const stateKey = (userId: string, conversationId: string) => `${userId}:${conversationId}`;
+const readState = (key: string) => states.get(key) ?? IDLE;
+const writeState = (key: string, state: TransferRequestState) => {
+    states.set(key, state);
+    listeners.forEach(listener => listener());
+};
+const subscribeStates = (listener: () => void) => {
+    listeners.add(listener);
+    return () => { listeners.delete(listener); };
+};
 
 /**
  * Pedir que le pasen una conversación que atiende un compañero, desde la ficha,
@@ -29,18 +44,22 @@ const transferKey = (conversationId: string) => ['transfer-request', conversatio
 export const useTransferRequest = (conversationId: string) => {
     const queryClient = useQueryClient();
     const { setState: showNotice, setContent } = useNoticeContext();
-
-    const { data: state = IDLE } = useQuery<TransferRequestState>({
-        queryKey: transferKey(conversationId),
-        queryFn: () => IDLE,
-        staleTime: Infinity,
-        gcTime: 30 * 60_000,
-    });
+    const { user } = useAuthContext();
+    const key = stateKey(user?.id ?? '', conversationId);
+    const state = useSyncExternalStore(subscribeStates, useCallback(() => readState(key), [key]));
 
     const request = useMutation({
         mutationFn: () => requestTransferService(conversationId),
-        onSuccess: () => queryClient.setQueryData<TransferRequestState>(transferKey(conversationId), { status: 'sent' }),
-        onError: (error) => {
+        // «Enviada» antes de mandarla: la respuesta (`transfer_answered`) puede
+        // llegar antes que el 202, y el 202 no debe pisarla (revisión de Codex
+        // del PR #146). Si falla, vuelve a como estaba.
+        onMutate: () => {
+            const previous = readState(key);
+            writeState(key, { status: 'sent' });
+            return { previous };
+        },
+        onError: (error, _variables, context) => {
+            if (context && readState(key).status === 'sent') writeState(key, context.previous);
             const { code, message } = assignmentError(error);
             if (code === 'not_assigned' || code === 'already_yours') {
                 void queryClient.invalidateQueries({ queryKey: ['conversations'] });
@@ -52,7 +71,7 @@ export const useTransferRequest = (conversationId: string) => {
     });
 
     // Ya la abrió: la próxima vez que se vea la ficha, sin «te pasó la conversación».
-    const reset = () => queryClient.setQueryData<TransferRequestState>(transferKey(conversationId), IDLE);
+    const reset = () => writeState(key, IDLE);
 
     return { state, request: () => request.mutate(), isPending: request.isPending, reset };
 };
@@ -64,20 +83,21 @@ export const useTransferRequest = (conversationId: string) => {
  */
 export const useTransferAnswers = () => {
     const queryClient = useQueryClient();
+    const { user } = useAuthContext();
+    const userId = user?.id ?? '';
     const { subscribe } = useSSE();
     const { setState: showNotice, setContent } = useNoticeContext();
     const navigate = useNavigate();
 
     useEffect(() => subscribe("transfer_answered", (payload) => {
-        queryClient.setQueryData<TransferRequestState>(transferKey(payload.id), {
-            status: payload.accepted ? 'accepted' : 'rejected', answeredBy: payload.answeredBy,
-        });
+        const key = stateKey(userId, payload.id);
+        writeState(key, { status: payload.accepted ? 'accepted' : 'rejected', answeredBy: payload.answeredBy });
         // La ficha (también la que usa «Conversación nueva») deja de verla ajena.
         if (payload.accepted) void queryClient.invalidateQueries({ queryKey: ['contacts'] });
         const who = firstName(payload.answeredBy);
         const open = () => {
             showNotice(false);
-            queryClient.setQueryData<TransferRequestState>(transferKey(payload.id), IDLE);
+            writeState(key, IDLE);
             navigate(ChatsPath, { state: { conversationId: payload.id } satisfies ChatsNavigationState });
         };
         setContent(payload.accepted ? (
@@ -90,5 +110,5 @@ export const useTransferAnswers = () => {
             <p className="text-sm text-brand-strong pr-6">{who} no te pasó la conversación con {payload.contactName}.</p>
         ));
         showNotice(true);
-    }), [subscribe, queryClient, showNotice, setContent, navigate]);
+    }), [subscribe, queryClient, userId, showNotice, setContent, navigate]);
 };
