@@ -15,6 +15,7 @@ import {
 import { MEDIA_DIR } from "../config.js";
 import { mimeParaServir, rutaDeArchivo } from "../utils/media.storage.js";
 import { findAccountWabas, findSendingLine, templateScopeFor } from "../services/line.service.js";
+import { applyHeldStatuses } from "../services/message.status.service.js";
 import Line from "../models/line.model.js";
 import Waba from "../models/waba.model.js";
 import { LINE_NOT_FOUND_MESSAGE } from "../utils/whatsapp.line.js";
@@ -576,7 +577,7 @@ export const processTemplateSending = async ({
     targetConversation.lastMessageAt = now;
     await targetConversation.save();
 
-    const msg = await Message.create({
+    let msg = await Message.create({
         conversationId: targetConversation._id, direction: 'outbound', sender: 'me',
         sentBy: sender?.userId ?? null, sentByName: sender?.name ?? null,
         origin: origin ?? (campaignId ? 'campaign' : null),
@@ -596,12 +597,15 @@ export const processTemplateSending = async ({
         }),
     });
 
+    // Un acuse que se adelantó a este mensaje (`PendingStatus`): antes de avisar.
+    if (await applyHeldStatuses(waMessageId)) msg = await Message.findById(msg._id);
+
     // 7. SSE en vivo → aparece en la UI de wasmish. `campaignId` deja al
     //    frontend agrupar los cientos de eventos de una campaña.
     sendToAccount(String(accountId), 'message_created', {
         id: String(msg._id), conversationId: String(targetConversation._id), sender: 'me',
         text: storedText, timestamp: msg.timestamp.toISOString(),
-        status, errorCode, errorDetail, templateName,
+        status: msg.status, errorCode: msg.errorCode, errorDetail: msg.errorDetail, templateName,
         type: msg.type, hasMedia: Boolean(msg.mediaFile),
         mediaFilename: msg.mediaFilename, mediaSize: msg.mediaSize,
         ...(campaignId && { campaignId: String(campaignId) }),

@@ -22,6 +22,7 @@ import { serializeMessageChange } from "../utils/message.change.js";
 import { canReactTo, canReplyTo, serializeQuoted, serializeReactions } from "../utils/message.actions.js";
 import { findReplyTarget, loadQuotedMessages, quotedMapOf } from "../services/message.reply.service.js";
 import { sendReaction } from "../services/reaction.service.js";
+import { applyHeldStatuses } from "../services/message.status.service.js";
 import { markHumanReply } from "../services/auto.reply.service.js";
 import Campaign from "../models/campaign.model.js";
 
@@ -159,7 +160,7 @@ export const processMessageSending = async ({
     await targetConversation.save();
 
     // Creamos el mensaje con su estado REAL (sent o failed)
-    const msg = await Message.create({
+    let msg = await Message.create({
         conversationId: targetConversation._id,
         direction: 'outbound',
         sender: 'me',
@@ -177,6 +178,8 @@ export const processMessageSending = async ({
         errorDetail,
         failedAt: status === 'failed' ? now : null,
     });
+    // Un acuse que se adelantó a este mensaje (`PendingStatus`): antes de avisar.
+    if (await applyHeldStatuses(waMessageId)) msg = await Message.findById(msg._id);
 
     const serialized = serializeMessage(msg, { quoted: quotedMapOf(replyTarget) });
     sendToAccount(String(line.accountId), 'message_created', serialized, { lineId: line.lineId ?? null });
@@ -431,6 +434,8 @@ export const setReactionController = async (req, res) => {
         let updated;
         try {
             updated = await sendReaction({ line, conversation, message, emoji: req.body.emoji, sender: senderOf(req.auth) });
+            // Un acuse que se adelantó a la reacción (`PendingStatus`): un `failed` la marca.
+            if (await applyHeldStatuses(updated?.reactions?.me?.waMessageId)) updated = await Message.findById(updated._id).lean();
         } catch (error) {
             if (error.statusCode) throw error;
             const errorCode = error.waErrorCode != null ? String(error.waErrorCode) : null;
