@@ -8,7 +8,7 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 **La página pública `wasmish.com`**, en el aire desde el 2026-10-19: el inicio, `/capacitacion`, `/imprentas`, Privacidad y Términos (PRs #93 a #100, cada uno con su revisión de Codex; spec `docs/superpowers/specs/2026-10-17-pagina-publica-design.md`, plan `docs/superpowers/plans/2026-10-17-pagina-publica.md`, detalle en [pagina-publica.md](arquitectura/pagina-publica.md)). Vive en Cloudflare Pages y **se publica al unir un PR que toca `Site/`**, sin desplegar la app. `www` redirige a `wasmish.com` con una regla de Cloudflare (301, con la ruta y los parámetros), y `hola@wasmish.com` llega al Gmail de Jonathan. Probado el 2026-10-19: las páginas, la 404, las redirecciones de `www` y de `http://`, la vista previa en WhatsApp y el correo; Lighthouse en celular, rendimiento de 94 a 97. La app, el webhook y la API siguieron en 200.
 
-**Versión 1.0.32** (etiqueta `v1.0.32` al desplegarla; comprobar con `curl https://app.wasmish.com/api/version`). Lleva:
+**Versión 1.0.32**, desplegada el 2026-10-26 (etiqueta `v1.0.32`; comprobar con `curl https://app.wasmish.com/api/version`). Lleva:
 
 - **La UI de los chats de la app de WhatsApp Business** (PR #136, el PR 6 del plan, con su revisión de Codex; diseño `Design/Wasmish Líneas - Chats de la app.html`):
   - **Ajustes → Líneas:** cómo van los chats de la app bajo cada línea, con «Reintentar» siempre que se pueda. Se pone al día sin recargar.
@@ -164,7 +164,7 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
   - **Los avisos del log** (en la 1.0.32, PR #135): «Hilos del historial sin un teléfono» dice la forma de cada `id` saltado (`describeShape`); las ediciones van aparte (`changes` en `Historial: pieza`). **Para la próxima conexión** con historial: mirar en el log la forma de los hilos saltados (en la prueba saltaron 9).
   - **Las ediciones del historial se saltan:** el mensaje queda con el texto de antes de editarlo (54 en la prueba), mientras que en vivo se marca «Editado» (`applyMessageChange`). Aplicarlas es un cambio aparte, si Jonathan lo quiere.
   - **Sin comprobar:** el formato del teléfono de la agenda (se guarda ya normalizado) y si un `remove` trae nombres (no llegó ninguno).
-  - **La UI (PR 6)**, en la 1.0.32 (PR #136). **Falta:** desplegarla, y probarla con Meta de verdad (al conectar otro número que siga en la app) y en un iPhone.
+  - **La UI (PR 6)**, en producción desde la 1.0.32 (PR #136). **Falta:** que Jonathan la vea en producción (Ajustes → Líneas de su cuenta de prueba, un chat traído y su ficha), y probarla con Meta de verdad al conectar otro número que siga en la app, y en un iPhone.
 - **Lo que queda de la página pública:**
   - Jonathan confirma en el panel de GTHost el país del servidor: Privacidad dice Estados Unidos, sacado del registro de la IP;
   - **Google Search Console** (registro TXT en Cloudflare) con `https://wasmish.com/sitemap.xml`;
