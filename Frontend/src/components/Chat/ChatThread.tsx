@@ -207,6 +207,8 @@ export const ChatThread = ({
     const [toast, setToast] = useState<{ title: string; detail: string } | null>(null);
     // La barra bajo la cabecera: «Carla te pasó esta conversación» o «cambió de manos» (diseño, 2a y 2c).
     const [assignmentNotice, setAssignmentNotice] = useState<{ tone: 'handoff' | 'changed'; text: string } | null>(null);
+    // El texto que no salió, de vuelta en el campo (el composer se monta de nuevo con él).
+    const [restored, setRestored] = useState<{ conversationId: string; text: string; n: number } | null>(null);
     // Cambiar de conversación descarta todo eso, como el borrador del
     // composer: volver no trae de vuelta una cita a medias (revisión de Codex
     // del PR #117). Durante el render, como recomienda React, para no pintar
@@ -219,6 +221,7 @@ export const ChatThread = ({
         setPickerFor(null);
         setToast(null);
         setAssignmentNotice(null);
+        setRestored(null);
         // La pérdida es de esa conversación: abrir otra (o volver a ella desde la
         // bandeja, si se la devolvieron) no la arrastra (revisión de Codex del PR #145).
         setLost(null);
@@ -247,15 +250,26 @@ export const ChatThread = ({
         }));
     }), [subscribe, conversationId]);
     // Se la devolvieron con el chat todavía en «la perdiste»: vuelve a verse.
+    // Cuándo se la asignaron por última vez a quien mira: un 409 de un envío
+    // anterior ya no vale (revisión de Codex del PR #146).
+    const assignedAt = useRef(new Map<string, number>());
     useEffect(() => subscribe("conversation_assigned", (payload) => {
+        assignedAt.current.set(payload.id, Date.now());
         setLost(current => (current?.conversationId === payload.id ? null : current));
     }), [subscribe]);
     // Respondió a la vez que otra persona, y la otra llegó antes (diseño, 3c).
     // La bandeja vuelve a leer: el `conversation_revoked` puede tardar.
     const queryClient = useQueryClient();
-    const takenByOther = useCallback((assignedToName: string | null, text: string) => {
+    const takenByOther = useCallback((assignedToName: string | null, text: string, sentAt: number) => {
         if (!conversationId) return;
         void queryClient.invalidateQueries({ queryKey: ["conversations"] });
+        // Se la devolvieron después de enviar: el 409 es de antes y el chat no se
+        // cierra. El texto vuelve al campo para enviarlo otra vez.
+        if ((assignedAt.current.get(conversationId) ?? 0) > sentAt) {
+            setRestored(current => ({ conversationId, text, n: (current?.n ?? 0) + 1 }));
+            setAssignmentNotice({ tone: 'changed', text: 'Tu mensaje no se envió: la conversación cambió de manos mientras tanto. Lo dejamos en el campo.' });
+            return;
+        }
         setLost({
             conversationId,
             title: `Esta conversación la atiende ${firstName({ id: '', name: assignedToName })}`,
@@ -595,6 +609,7 @@ export const ChatThread = ({
     };
 
     if (lostHere && lost) return <LostConversation lost={lost} onBack={onBack} />;
+    const restoredHere = restored !== null && restored.conversationId === conversationId;
     // Una conversación anterior a los contactos sin enlazar no tiene ficha.
     const contactId = conversation?.contactId;
     const sidebarOpen = contactSidebarOpen && Boolean(contactId);
@@ -677,7 +692,9 @@ export const ChatThread = ({
                 </div>
 
                 {conversationId && (
-                    <ChatComposer key={conversationId} conversationId={conversationId} conversation={conversation} title={title}
+                    <ChatComposer key={restoredHere ? `${conversationId}:${restored.n}` : conversationId}
+                        initialText={restoredHere ? restored.text : undefined}
+                        conversationId={conversationId} conversation={conversation} title={title}
                         onStartConversation={onStartConversation}
                         replyTo={replyTo} onCancelReply={cancelReply} team={showAuthor}
                         hint={showAssignment && conversation ? replyHint(conversation, userId) : null}
