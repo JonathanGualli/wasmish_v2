@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuthContext } from "../context/auth.context";
-import { disconnectLineService, getLinesService, updateLineService } from "../services/api.service";
+import { disconnectLineService, getLinesService, retryHistorySyncService, updateLineService } from "../services/api.service";
 import { lineColorClasses } from "../utils/lineDisplay";
 
 export const LINES_QUERY_KEY = ['lines'];
@@ -59,6 +59,10 @@ export const useLines = () => {
         mutationFn: (id: string) => disconnectLineService(id),
         onSettled: refresh,
     });
+    const retryHistory = useMutation({
+        mutationFn: (id: string) => retryHistorySyncService(id),
+        onSettled: refresh,
+    });
 
     return {
         isLoading: query.isLoading,
@@ -85,6 +89,7 @@ export const useLines = () => {
         rename,
         makeDefault,
         disconnect,
+        retryHistory,
         refresh,
     };
 };

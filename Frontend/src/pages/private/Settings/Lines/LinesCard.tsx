@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertCircle, Loader2, Plug, X } from "lucide-react";
 import { LINE_ERROR, type Line } from "../../../../models/line.model";
 import { CustomButton } from "../../../../components/Button/Button";
 import { Callout } from "../../../../components/Callout/Callout";
 import { Pill } from "../../../../components/Pill/Pill";
-import { useLines } from "../../../../hooks/useLines";
+import { LINES_QUERY_KEY, useLines } from "../../../../hooks/useLines";
+import { useThrottledInvalidate } from "../../../../hooks/useThrottledInvalidate";
+import { useSSE } from "../../../../context/sse.context";
 import { useConnectWhatsapp } from "../../../../hooks/useConnectWhatsapp";
 import { apiErrorOf } from "../../../../utils/apiError";
 import { maskWabaId } from "../../../../utils/lineDisplay";
@@ -77,9 +79,31 @@ const connectState = ({ activeCount, maxLines, isMultiLine, isConnecting, hasRem
  * con un plan de varias, la lista agrupada por WABA, el uso del plan y
  * «Conectar otro número».
  */
+/** Mientras se espera a WhatsApp, el estado cambia con la hora (reintentar a la media hora, el plazo de 24 h), no por un aviso. */
+const WAITING_STATUSES = new Set(['requested', 'pending', 'failed']);
+const WAITING_REFRESH_MS = 60_000;
+
+/**
+ * El estado de los chats de la app se ve cambiar sin recargar: con el aviso
+ * `history_sync` y, mientras se espera a WhatsApp, cada minuto.
+ */
+const useHistorySyncRefresh = (activeLines: Line[]) => {
+    const { subscribe } = useSSE();
+    const refresh = useThrottledInvalidate(LINES_QUERY_KEY);
+    useEffect(() => subscribe("history_sync", refresh), [subscribe, refresh]);
+
+    const waiting = activeLines.some(line => line.historySync && WAITING_STATUSES.has(line.historySync.status));
+    useEffect(() => {
+        if (!waiting) return;
+        const timer = setInterval(refresh, WAITING_REFRESH_MS);
+        return () => clearInterval(timer);
+    }, [waiting, refresh]);
+};
+
 export const LinesCard = () => {
     const { isLoading, isError, refresh, lines, activeLines, previousLines, removedLines, maxLines, isMultiLine, colorOf } = useLines();
     const connectWhatsapp = useConnectWhatsapp();
+    useHistorySyncRefresh(activeLines);
     const [toDisconnect, setToDisconnect] = useState<Line | null>(null);
     // La pregunta antes de abrir Facebook (coexistencia). «Volver a conectar» una
     // línea que estaba junto con la app la abre ya en «Sí». `key` la reinicia.
