@@ -4,12 +4,13 @@
 // wamid: lo mismo que pasa cuando Meta es más rápido que el guardado.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import mongoose from 'mongoose';
 import {
     seedAccount, connectWhatsapp, request, onMeta, postWebhook, Contact, Conversation, Message,
 } from './helpers.js';
 
 const { default: PendingStatus } = await import('../../src/models/pending.status.model.js');
-const { receiveStatus } = await import('../../src/services/message.status.service.js');
+const { receiveStatus, applyHeldStatuses } = await import('../../src/services/message.status.service.js');
 
 // Todo lo que se prepara con `await` va antes del primer `test()` (ver chats.test.js).
 const a = await seedAccount('PS', { seq: 141 });
@@ -156,4 +157,80 @@ test('un fallido que llega antes que la reacción la marca fallida', async () =>
     assert.equal(res.status, 200, res.text);
     assert.equal(res.body.reactions.me.status, 'failed');
     assert.equal((await Message.findById(target._id).lean()).reactions.me.status, 'failed');
+});
+
+/** Un saliente de A ya guardado, en «enviado», y un acuse suyo esperando en `PendingStatus`. */
+const sentWithHeld = async (held, extra = {}) => {
+    const conversation = await openChat();
+    const waMessageId = nextWamid();
+    const message = await Message.create({
+        conversationId: conversation._id, direction: 'outbound', sender: 'me', text: 'hola',
+        waMessageId, status: 'sent', timestamp: new Date(),
+    });
+    const statusData = { id: waMessageId, status: held, timestamp: String(Math.floor(Date.now() / 1000)), ...extra };
+    await PendingStatus.create({ userId: a.accountId, waMessageId, status: held, statusData });
+    return { message, waMessageId };
+};
+
+/** Cambia la escritura del estado `status` (`Message.updateOne`) la primera vez: `around(exec)` decide. */
+const interceptStatusWrite = (status, around) => {
+    const original = Message.updateOne;
+    let intercepted = false;
+    Message.updateOne = function (...args) {
+        if (intercepted || args[1]?.$set?.status !== status) return original.apply(this, args);
+        intercepted = true;
+        Message.updateOne = original;
+        const query = original.apply(this, args);
+        const exec = query.exec.bind(query);
+        query.exec = () => around(exec);
+        return query;
+    };
+    return { restore: () => { Message.updateOne = original; }, wasIntercepted: () => intercepted };
+};
+
+// Revisión de Codex del PR #140, 2: el envío aplica un `delivered` guardado y, a
+// la vez, el webhook un `read`. Los dos leían «enviado» y guardaban con `save()`:
+// el `delivered` llegaba último y el mensaje retrocedía. Aquí el `read` se
+// aplica entero mientras el `delivered` espera para escribir.
+test('un acuse guardado y otro del webhook a la vez: el estado no retrocede', async () => {
+    const { message, waMessageId } = await sentWithHeld('delivered');
+    const read = { id: waMessageId, status: 'read', timestamp: String(Math.floor(Date.now() / 1000)) };
+    const write = interceptStatusWrite('delivered', async (exec) => {
+        await receiveStatus({ accountId: a.accountId, statusData: read });
+        return exec();
+    });
+    try {
+        assert.equal(await applyHeldStatuses(waMessageId), 1);
+    } finally {
+        write.restore();
+    }
+    assert.ok(write.wasIntercepted(), 'el test no forzó el cruce');
+    const saved = await Message.findById(message._id).lean();
+    assert.equal(saved.status, 'read');
+    assert.ok(saved.deliveredAt);
+    assert.equal(await PendingStatus.countDocuments({ waMessageId }), 0);
+});
+
+// Revisión de Codex del PR #140, 1: el acuse se tomaba borrándolo antes de
+// aplicarlo, y un fallo de la BD en medio lo perdía. Ahora se borra después:
+// sigue guardado y el siguiente intento lo aplica.
+test('si la BD falla al aplicar un acuse guardado, sigue guardado y otro intento lo aplica', async () => {
+    const { message, waMessageId } = await sentWithHeld('failed', FAILED);
+    const write = interceptStatusWrite('failed', async () => {
+        throw new mongoose.mongo.MongoNetworkError('connection reset');
+    });
+    try {
+        assert.equal(await applyHeldStatuses(waMessageId, { retryLater: false }), 0);
+    } finally {
+        write.restore();
+    }
+    assert.ok(write.wasIntercepted(), 'el test no forzó el fallo');
+    assert.equal((await Message.findById(message._id).lean()).status, 'sent');
+    assert.equal(await PendingStatus.countDocuments({ waMessageId }), 1, 'el acuse se perdió');
+
+    assert.equal(await applyHeldStatuses(waMessageId), 1);
+    const saved = await Message.findById(message._id).lean();
+    assert.equal(saved.status, 'failed');
+    assert.equal(saved.errorCode, '131049');
+    assert.equal(await PendingStatus.countDocuments({ waMessageId }), 0);
 });

@@ -44,8 +44,18 @@ const marcarBajaPorFallo = async (inbound, message, timestamp) => {
     if (updated) avisarPreferencia(inbound, updated);
 };
 
+// Cuántas veces se relee un mensaje que otro acuse cambió a la vez. Cada
+// choque es un estado que subió, y solo hay tres por encima de `sent`.
+const MAX_STATUS_ATTEMPTS = 5;
+
 /**
  * Aplica UN acuse a su mensaje, o a una reacción nuestra, de la cuenta `accountId`.
+ *
+ * La escritura va condicionada al estado que se leyó (revisión de Codex del PR
+ * #140): dos acuses del mismo mensaje a la vez (un `delivered` guardado que
+ * aplica el envío y un `read` del webhook) leían los dos `sent`, y el último en
+ * guardar hacía retroceder el estado. Si otro se adelantó, se relee y se
+ * recalcula. Así aplicar el mismo acuse dos veces tampoco hace nada.
  * @returns {Promise<boolean>} false si no encontró de quién es: ni un mensaje ni
  *          una reacción de esta cuenta.
  */
@@ -55,38 +65,52 @@ const applyMessageStatus = async ({ accountId, statusData }) => {
     const status = statusData.status; // 'send' | 'delivered' | 'read' | 'failed'
     const timestamp = statusData.timestamp ? new Date(parseInt(statusData.timestamp) * 1000) : new Date();
 
-    const message = await Message.findOne({ waMessageId });
-    // Si no es un mensaje, puede ser el acuse de una reacción nuestra.
-    if (!message) return applyReactionStatus({ line: inbound, statusData });
-    // El mensaje tiene que ser de la cuenta del número por el que llega el
-    // acuse: si el número pasó de A a B, un acuse tardío de un mensaje de A no
-    // lo toca ni se avisa a B (revisión de Codex del PR #35). De aquí sale
-    // también la línea del aviso.
-    const conversation = await Conversation.findOne({ _id: message.conversationId, userId: accountId })
-        .select('lineId').lean();
-    if (!conversation) return false;
+    let conversation = null;
+    for (let attempt = 0; attempt < MAX_STATUS_ATTEMPTS; attempt++) {
+        const current = await Message.findOne({ waMessageId }).lean();
+        // Si no es un mensaje, puede ser el acuse de una reacción nuestra.
+        if (!current) return applyReactionStatus({ line: inbound, statusData });
+        // El mensaje tiene que ser de la cuenta del número por el que llega el
+        // acuse: si el número pasó de A a B, un acuse tardío de un mensaje de A no
+        // lo toca ni se avisa a B (revisión de Codex del PR #35). De aquí sale
+        // también la línea del aviso.
+        conversation ??= await Conversation.findOne({ _id: current.conversationId, userId: accountId })
+            .select('lineId').lean();
+        if (!conversation) return false;
 
-    // Estado desconocido, repetido o que retrocede → lo ignoramos
-    const changes = resolveStatusTransition({
-        currentStatus: message.status,
-        incomingStatus: status,
-        timestamp,
-        hasDeliveredAt: Boolean(message.deliveredAt),
-    });
+        // Estado desconocido, repetido o que retrocede → lo ignoramos
+        const changes = resolveStatusTransition({
+            currentStatus: current.status,
+            incomingStatus: status,
+            timestamp,
+            hasDeliveredAt: Boolean(current.deliveredAt),
+        });
 
-    if (!changes) return true;
+        if (!changes) return true;
 
-    Object.assign(message, changes);
+        const errors = status === 'failed' ? statusData?.errors ?? [] : [];
+        const set = {
+            ...changes,
+            ...(!current.errorCode && errors.length > 0 && {
+                errorCode: errors[0]?.code != null ? String(errors[0].code) : null,
+                errorDetail: errors[0]?.error_data?.details ?? null,
+            }),
+        };
+        const result = await Message.updateOne({ _id: current._id, status: current.status ?? null }, { $set: set });
+        if (result.matchedCount === 0) continue;
 
-    if (status === 'failed') {
-        const errors = statusData?.errors ?? [];
-        if (!message.errorCode && errors.length > 0) {
-            message.errorCode = errors[0]?.code;
-            message.errorDetail = errors[0]?.error_data?.details;
-        }
+        await announceStatus({ accountId, statusData, conversation, message: { ...current, ...set }, timestamp });
+        return true;
     }
+    console.warn('Acuse sin aplicar: el mensaje cambió en cada intento.', { waMessageId, status });
+    return true;
+};
 
-    await message.save();
+// Lo que sigue a un acuse aplicado: el aviso a la UI y, si falló, el log y la
+// baja por el 131050.
+const announceStatus = async ({ accountId, statusData, conversation, message, timestamp }) => {
+    const inbound = { accountId };
+    const waMessageId = message.waMessageId;
 
     sendToAccount(
         String(accountId),
@@ -125,7 +149,6 @@ const applyMessageStatus = async ({ accountId, statusData }) => {
             await marcarBajaPorFallo(inbound, message, timestamp);
         }
     }
-    return true;
 };
 
 // Si ya hay algo con ese wamid: un mensaje o una reacción nuestra. El predicado
@@ -136,18 +159,25 @@ const hasStatusTarget = async (waMessageId) =>
         { 'reactions.me.waMessageId': { $type: 'string' } },
     ] }));
 
-// Aplica los acuses guardados de ese wamid, de uno en uno y en el orden en que
-// llegaron. Cada uno se toma borrándolo: si los dos lados lo buscan a la vez,
-// solo uno lo aplica. Solo se llama cuando el mensaje ya existe: uno de otra
-// cuenta se borra sin aplicarse, porque nunca lo será.
-// @returns {Promise<number>} cuántos tomó.
+// Aplica los acuses guardados de ese wamid, en el orden en que llegaron, y
+// borra cada uno DESPUÉS de aplicarlo (revisión de Codex del PR #140): si la BD
+// falla en medio, sigue guardado para otro intento. Si los dos lados lo aplican
+// a la vez, no pasa nada: `applyMessageStatus` no repite un estado. Solo se
+// llama cuando el mensaje ya existe: uno de otra cuenta se borra sin
+// aplicarse, porque nunca lo será.
+// @returns {Promise<number>} cuántos aplicó.
 const drainHeldStatuses = async (waMessageId) => {
-    for (let taken = 0; ; taken++) {
-        const held = await PendingStatus.findOneAndDelete({ waMessageId }, { sort: { createdAt: 1 } }).lean();
-        if (!held) return taken;
-        await applyMessageStatus({ accountId: held.userId, statusData: held.statusData });
+    const held = await PendingStatus.find({ waMessageId }).sort({ createdAt: 1 }).lean();
+    for (const one of held) {
+        await applyMessageStatus({ accountId: one.userId, statusData: one.statusData });
+        await PendingStatus.deleteOne({ _id: one._id });
     }
+    return held.length;
 };
+
+// Si fallan los del envío, otro intento a los 30 s: siguen guardados. Si la api
+// se reinicia antes, se pierden (caducan con la hora).
+const HELD_RETRY_MS = 30 * 1000;
 
 /**
  * UN acuse del webhook (`procesarEstado`): se aplica o, si su mensaje todavía
@@ -178,12 +208,13 @@ export const receiveStatus = async ({ accountId, statusData }) => {
  * fallo aquí no puede convertir el envío en un error.
  * @returns {Promise<number>} cuántos aplicó: si no es 0, quien llama relee el mensaje.
  */
-export const applyHeldStatuses = async (waMessageId) => {
+export const applyHeldStatuses = async (waMessageId, { retryLater = true } = {}) => {
     if (!waMessageId) return 0;
     try {
         return await drainHeldStatuses(waMessageId);
     } catch (error) {
-        console.error('No se pudieron aplicar los acuses adelantados:', { waMessageId, error: error.message });
+        console.error('No se pudieron aplicar los acuses adelantados:', { waMessageId, retryLater, error: error.message });
+        if (retryLater) setTimeout(() => { void applyHeldStatuses(waMessageId, { retryLater: false }); }, HELD_RETRY_MS).unref();
         return 0;
     }
 };
