@@ -22,6 +22,7 @@ import { useNoticeContext } from "../../Notice/context/UseNoticeContext";
 import { SendTemplateDialog } from "../SendTemplateDialog";
 import { AttachmentPreview } from "./AttachmentPreview";
 import { ReplyBar } from "./ReplyBar";
+import { assignmentError } from "../../../hooks/useConversationAssignment";
 
 interface Props {
     conversationId: string;
@@ -39,6 +40,8 @@ interface Props {
     hint?: string | null;
     /** Un texto salió (para decir que responder la tomó). */
     onSent?: () => void;
+    /** Otra persona respondió antes y se la quedó: el texto no salió (Fase 4; diseño, 3c). */
+    onTakenByOther?: (assignedToName: string | null, text: string) => void;
 }
 
 /** Hasta 6 líneas de 21 px; luego, scroll. */
@@ -68,7 +71,9 @@ const namePasted = (file: File) => {
  * El aviso al arrastrar se pinta sobre toda la conversación: su contenedor
  * tiene que ser `relative`.
  */
-export const ChatComposer = ({ conversationId, conversation, title, onStartConversation, replyTo, onCancelReply, team, hint, onSent }: Props) => {
+export const ChatComposer = ({
+    conversationId, conversation, title, onStartConversation, replyTo, onCancelReply, team, hint, onSent, onTakenByOther,
+}: Props) => {
     const sendText = useConversationSendMessages();
     const media = useSendMediaMessage();
     const attachment = useOutgoingAttachment();
@@ -150,7 +155,14 @@ export const ChatComposer = ({ conversationId, conversation, title, onStartConve
 
         const message = text;
         setText("");
-        sendText.mutate({ conversationId, message, temporalId: crypto.randomUUID(), replyTo }, { onError: showTextError, onSuccess: onSent });
+        sendText.mutate({ conversationId, message, temporalId: crypto.randomUUID(), replyTo }, {
+            onSuccess: onSent,
+            onError: (error) => {
+                const { code, assignedToName } = assignmentError(error);
+                if (code === 'assigned_to_other' && onTakenByOther) onTakenByOther(assignedToName, message);
+                else showTextError(error);
+            },
+        });
         onCancelReply();
     };
 
