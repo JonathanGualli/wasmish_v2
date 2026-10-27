@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { ChevronLeft, PanelRight } from "lucide-react";
 import type { Conversation } from "../../models/conversation.mode";
 import { initials } from "../../utils/initials";
@@ -9,6 +10,8 @@ interface Props {
     onBack?: () => void;
     contactSidebarOpen: boolean;
     onToggleContactSidebar: () => void;
+    /** Quién la atiende y «Tomar» (Fase 4), en escritorio; en el teléfono va en su propia fila (diseño, m2). */
+    assignment?: ReactNode;
 }
 
 /**
@@ -19,7 +22,7 @@ interface Props {
  * pastilla con el número; en el teléfono, la etiqueta corta junto al número
  * del contacto, bajo el nombre (diseño «Wasmish Móvil», E2).
  */
-export const ChatHeader = ({ conversation, onBack, contactSidebarOpen, onToggleContactSidebar }: Props) => {
+export const ChatHeader = ({ conversation, onBack, contactSidebarOpen, onToggleContactSidebar, assignment }: Props) => {
     const title = conversation.title || conversation.phone || "";
     const identity = conversation.phone ? `+${conversation.phone}` : conversation.username && `@${conversation.username}`;
     const hasContact = Boolean(conversation.contactId);
@@ -60,6 +63,7 @@ export const ChatHeader = ({ conversation, onBack, contactSidebarOpen, onToggleC
             </button>
             <div className="ml-auto flex-none flex items-center gap-2">
                 <span className="hidden md:contents"><LineChip lineId={conversation.lineId} variant="header" /></span>
+                {assignment && <span className="hidden md:contents">{assignment}</span>}
                 {hasContact && (
                     <button
                         type="button"

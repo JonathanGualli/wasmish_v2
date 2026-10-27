@@ -168,7 +168,9 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
 - **Multi-agente, Fase 4: asignar conversaciones** (empezada el 2026-10-27). Plan `docs/superpowers/plans/2026-10-27-multi-linea-fase-4.md` (PR #142, unido) y brief de UI `docs/superpowers/specs/2026-10-27-asignacion-brief-ui.md`; el diseño de Claude Design ya está (`Design/Wasmish Chats - Asignar conversaciones.html`, entra con el PR de la UI). Tres PRs:
   1. `fase4-asignacion` (**en revisión**): el agente ve solo las suyas y las sin asignar, y responder una sin asignar la toma;
   2. `fase4-transferir` (**en revisión**, encima del 1): asignar, pedir la transferencia y liberar al quitar acceso;
-  3. `fase4-ui`: cuando Claude Design devuelva el diseño del brief.
+  3. La UI, partida en dos:
+     - `fase4-ui-bandeja` (**en revisión**, encima del 2): la bandeja, «Atiende» y la solicitud en el chat;
+     - después, la ficha (pedir desde ahí), «Conversación nueva», el «respondió antes que tú» y los avisos de la respuesta.
 
   **No se despliega** hasta que Jonathan lo diga.
 - **Tres fallos del webhook arreglados, en `master` sin desplegar** (2026-10-27): un entrante ya no se pierde si Mongo falla (el webhook responde 500 y Meta lo reentrega) y los no leídos ya no se pisan (PR #139); un acuse que llega antes que su saliente se guarda y se aplica al guardar el saliente (PR #140). Detalle en [webhook-adjuntos.md](arquitectura/webhook-adjuntos.md). **Al desplegar:** solo `wasmish-api`, sin migración ni variables nuevas; al arrancar crea la colección `pendingstatuses` con sus dos índices. **Límites conocidos:** si la BD cae justo después de guardar el entrante y antes de actualizar la conversación, la reentrega no suma su no leído; y un acuse guardado que no se pudo aplicar se reintenta una vez a los 30 s, en memoria: si la api se reinicia antes, caduca a la hora.

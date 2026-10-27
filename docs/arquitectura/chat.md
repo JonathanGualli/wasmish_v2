@@ -28,6 +28,7 @@ SSE y sus eventos, no leídos, y la UI del chat: hilo, bandeja, conversación nu
   - [Mensajes eliminados y editados en la UI](#mensajes-eliminados-y-editados-en-la-ui)
   - [Citas y reacciones en la UI](#citas-y-reacciones-en-la-ui)
   - [`temporalId`](#temporalid)
+  - [Asignación en la UI](#asignación-en-la-ui)
 
 ---
 
@@ -219,3 +220,15 @@ Desde 2026-10-20, siguiendo el diseño de Claude Design `Design/Wasmish Chat - C
 ### `temporalId`
 
 **`temporalId`:** string generado en el frontend antes de enviar. El backend lo guarda en `Message.temporalId` y lo devuelve en `message_created` SSE. El frontend lo usa para evitar duplicados al recibir el evento de vuelta.
+
+### Asignación en la UI
+
+**Asignación en la UI** (Fase 4, 2026-10-27; diseño `Design/Wasmish Chats - Asignar conversaciones.html`; piezas en `components/Chat/Assignment/`, reglas en `utils/assignment.ts`). **Con una sola persona en la cuenta no se ve nada** (`hasTeam`, decisión del 2026-10-27).
+- **La bandeja** (`ConversationList`): las vistas «Mías / Sin asignar / Todas» (`AssignmentTabs`), cada una con sus sin leer; filtran en el cliente (la lista ya trae todo lo que la persona ve) y se recuerdan por persona en este navegador (`localStorage`, `wasmish:chats-tab:<userId>`; la primera vez, «Todas»). En cada fila, quién la atiende cuando no es quien mira («Sin asignar» con el cuadrito punteado, o las iniciales y el nombre corto), y «Luis la pide» a quien puede responder la solicitud. La vista vacía dice qué aparecerá ahí.
+- **La cabecera** (`AssigneeControl`): «Sin asignar» con «Tomar», o «Atiende · Ana». Quien puede moverla (`conversations.assign`, o el agente con la suya: `canReassignConversation`) abre la lista de quienes pueden atender la línea (`GET /chats/:id/assignees`), más «Sin asignar»; en el teléfono va en su propia fila bajo la cabecera y la lista sube desde abajo (m2, m3).
+- **La solicitud** (`TransferRequestBar`), bajo la cabecera, a quien la atiende («pide que se la pases») o a quien supervisa («pide que le pasen esta conversación»), con «Rechazar» y «Pasársela a Luis». Manda el `transferRequest.id` que se ve; si cambió, el aviso lo dice.
+- **El composer** dice a quién le queda al responder: «Sin asignar. Si respondes, pasa a ser tuya.» o «La atiende Ana. Tu mensaje sale con tu nombre y la sigue atendiendo Ana.»; responder una sin asignar avisa «Respondiste: ahora la atiendes tú.».
+- **Cambia de manos con el chat abierto** (2a, 2b, 2c): si se la pasan a quien mira, «Carla te pasó esta conversación» (`assignedBy`); si la pierde (`conversation_revoked`), el chat se cierra con «Esta conversación ahora la atiende Luis» o, si la pasó él, «Se la pasaste a Luis» (sin pedir sus mensajes: `useConversationMessages('')`); si su cambio llegó tarde, «La conversación cambió de manos. Vuelve a intentarlo.».
+- **Los eventos** en `useConversations`: `conversation_assigned` pone la conversación en su sitio (o pide la lista si no la tenía), `conversation_revoked` la quita junto con la caché de su hilo, `transfer_requested` cambia la solicitud, y `conversations_updated` y `transfer_answered` vuelven a pedir la lista. Contactos (`useContacts`, `useLiveContact`) se refresca con los cuatro.
+- **En la ficha** (`LineWindowList`), la conversación de un compañero (`restricted`) dice «Atiende · Ana», sin ventana, no se abre y no cuenta en la actividad.
+

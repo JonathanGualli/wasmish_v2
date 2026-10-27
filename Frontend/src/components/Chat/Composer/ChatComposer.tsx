@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type FormEvent, type KeyboardEvent } from "react";
 import type { Message } from "../../../models/message.mode";
-import { Clock, Download, Info, LayoutTemplate, Paperclip, SendHorizonal, Unplug, X } from "lucide-react";
+import { Clock, Download, Info, LayoutTemplate, Paperclip, SendHorizonal, Unplug, UserRound, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { AxiosError } from "axios";
 import { useConversationSendMessages } from "../../../hooks/useConversationSendMessages";
@@ -35,6 +35,10 @@ interface Props {
     onCancelReply: () => void;
     /** Con equipo, la cita nombra a quien escribió lo nuestro (nunca «Tú»). */
     team: boolean;
+    /** Con equipo, a quién le queda la conversación al responder (Fase 4; diseño, 1a). */
+    hint?: string | null;
+    /** Un texto salió (para decir que responder la tomó). */
+    onSent?: () => void;
 }
 
 /** Hasta 6 líneas de 21 px; luego, scroll. */
@@ -64,7 +68,7 @@ const namePasted = (file: File) => {
  * El aviso al arrastrar se pinta sobre toda la conversación: su contenedor
  * tiene que ser `relative`.
  */
-export const ChatComposer = ({ conversationId, conversation, title, onStartConversation, replyTo, onCancelReply, team }: Props) => {
+export const ChatComposer = ({ conversationId, conversation, title, onStartConversation, replyTo, onCancelReply, team, hint, onSent }: Props) => {
     const sendText = useConversationSendMessages();
     const media = useSendMediaMessage();
     const attachment = useOutgoingAttachment();
@@ -146,7 +150,7 @@ export const ChatComposer = ({ conversationId, conversation, title, onStartConve
 
         const message = text;
         setText("");
-        sendText.mutate({ conversationId, message, temporalId: crypto.randomUUID(), replyTo }, { onError: showTextError });
+        sendText.mutate({ conversationId, message, temporalId: crypto.randomUUID(), replyTo }, { onError: showTextError, onSuccess: onSent });
         onCancelReply();
     };
 
@@ -193,6 +197,11 @@ export const ChatComposer = ({ conversationId, conversation, title, onStartConve
                 `minmax(0,1fr)`: sin él, el ancho mínimo del campo a 16 px sacaba el botón de enviar de la pantalla. */}
             <div className="bg-brand-surface border-t border-brand-border px-4 md:px-6 py-3.5 max-md:pt-2.5
                 pb-[calc(14px+var(--safe-bottom))] md:pb-3.5 flex-none grid grid-cols-[minmax(0,1fr)] gap-3 max-md:gap-2.5">
+                {hint && !lineBlock && (
+                    <p className="flex items-center gap-[7px] text-[12.5px] text-brand-gray-600 -mb-1">
+                        <UserRound size={13} className="flex-none text-brand-muted" />{hint}
+                    </p>
+                )}
                 {lineBlock ? (
                     <LineClosedNotice reason={lineBlock} sendFrom={defaultLine}
                         onWrite={conversation?.phone

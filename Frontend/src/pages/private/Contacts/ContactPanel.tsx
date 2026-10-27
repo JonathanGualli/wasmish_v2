@@ -251,6 +251,7 @@ const ContactDetails = ({ contact, onClose, onEdit }: {
     // Con más de una línea, la ventana es de cada número: una fila por conversación.
     const { showLines } = useLines();
     const byLine = showLines && contact.conversations.length > 0;
+    const seenConversations = contact.conversations.filter(conversation => !conversation.restricted).length;
     const { data: allTags = [] } = useTags();
     const tags = tagsFromIds(allTags, contact.tagIds);
     const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -398,8 +399,9 @@ const ContactDetails = ({ contact, onClose, onEdit }: {
                             </div>
                         ))}
                     </div>
-                    {byLine && contact.conversations.length > 1 && (
-                        <div className="text-[11.5px] text-brand-subtle -mt-1">Suma de sus {contact.conversations.length} conversaciones</div>
+                    {/* La actividad no cuenta las de un compañero (Fase 4). */}
+                    {byLine && seenConversations > 1 && (
+                        <div className="text-[11.5px] text-brand-subtle -mt-1">Suma de sus {seenConversations} conversaciones</div>
                     )}
                 </div>
 

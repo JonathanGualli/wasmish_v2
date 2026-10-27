@@ -1,6 +1,7 @@
 import { createContext, useContext } from "react";
 import type { Message } from "../models/message.mode";
 import type { Campaign } from "../models/campaign.model";
+import type { Conversation, ConversationPerson, TransferRequest } from "../models/conversation.mode";
 
 // Lo que trae cada evento que emite el backend (`sendUser`)
 export interface SSEEventMap {
@@ -26,6 +27,16 @@ export interface SSEEventMap {
     messages_imported: { conversationId: string };
     // Cambió el estado de los chats de la app de esa línea (solo a quien gestiona líneas)
     history_sync: { lineId: string };
+    // Cambió de manos y la sigue viendo: la conversación entera, como en la lista (Fase 4)
+    conversation_assigned: Conversation;
+    // Cambió de manos y ya no la ve: con quién la atiende ahora
+    conversation_revoked: { id: string; assignedTo: ConversationPerson | null };
+    // Alguien pidió que se la pasen (o se resolvió: null), a quien puede responder
+    transfer_requested: { id: string; transferRequest: TransferRequest | null };
+    // La respuesta a SU solicitud: solo al que la pidió
+    transfer_answered: { id: string; accepted: boolean; answeredBy: ConversationPerson; contactName: string };
+    // Quitarle el acceso a alguien soltó sus conversaciones: se vuelve a pedir la bandeja
+    conversations_updated: Record<string, never>;
 }
 
 export type SSEEventType = keyof SSEEventMap;

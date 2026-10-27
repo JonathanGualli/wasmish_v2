@@ -13,6 +13,15 @@ import { SkeletonLine } from "../Skeleton/Skeleton";
 import { LineChip } from "../Line/LineChip";
 import { ALL_LINES, LineFilter } from "./LineFilter";
 import { useOpenMobileMenu } from "../Layout/MobileMenuContext";
+import { useAuthContext } from "../../context/auth.context";
+import { hasTeam } from "../../utils/roleDisplay";
+import {
+    canReassignConversation, firstName, inAssignmentTab, loadAssignmentTab, saveAssignmentTab, type AssignmentTab,
+} from "../../utils/assignment";
+import { AssignmentTabs } from "./Assignment/AssignmentTabs";
+import { PersonBadge, UnassignedBadge } from "./Assignment/PersonBadge";
+import { ArrowRight } from "lucide-react";
+import type { Conversation } from "../../models/conversation.mode";
 
 interface Props {
     onSelect: (id: string) => void;
@@ -43,8 +52,11 @@ const CenteredState = ({ children, tone = 'muted' }: { children: React.ReactNode
  * la hora, y bajo la búsqueda se filtra por línea (en el cliente: la lista ya
  * trae todas). El contador de sin leer es el de lo que se ve.
  *
- * Los filtros (Todos / Míos / Sin asignar) y las etiquetas de la maqueta no
- * están: dependen de asignación y etiquetado, que el backend todavía no tiene.
+ * Con más de una persona en la cuenta (Fase 4; diseño «Wasmish Chats -
+ * Asignar conversaciones», 1a), las vistas «Mías / Sin asignar / Todas» (en el
+ * cliente: la lista ya trae todo lo que la persona ve), quién atiende cada
+ * conversación cuando no es quien mira, y la solicitud pendiente a quien puede
+ * responderla. La vista se recuerda por persona en este navegador.
  *
  * En el teléfono se ve como una app de mensajería (diseño «Wasmish Móvil», E1):
  * título «Chats» con el ☰ del menú, buscador y línea en una fila, filas más
@@ -57,6 +69,17 @@ export const ChatconversationList = ({ onSelect, selectedId, onNewConversation, 
     const openMenu = useOpenMobileMenu();
     const [query, setQuery] = useState('');
     const [lineFilter, setLineFilter] = useState(ALL_LINES);
+    const { user, can } = useAuthContext();
+    const userId = user?.id ?? '';
+    const showAssignment = hasTeam(user);
+    const canAssignAny = can('conversations.assign');
+    const [tabState, setTabState] = useState<{ userId: string; tab: AssignmentTab }>(() => ({ userId, tab: loadAssignmentTab(userId) }));
+    // Otra persona en la misma pestaña: su vista, no la de la anterior.
+    const tab: AssignmentTab = !showAssignment ? 'all' : tabState.userId === userId ? tabState.tab : loadAssignmentTab(userId);
+    const pickTab = (next: AssignmentTab) => {
+        setTabState({ userId, tab: next });
+        saveAssignmentTab(userId, next);
+    };
     // Una línea que ya no está (u otra cuenta en la misma pestaña) vuelve a «todas».
     const filterLineId = showLines && lineById(lineFilter) ? lineFilter : ALL_LINES;
 
@@ -65,17 +88,24 @@ export const ChatconversationList = ({ onSelect, selectedId, onNewConversation, 
         [conversations, filterLineId]
     );
 
-    const unread = useMemo(() => ofLine.reduce((n, c) => n + (c.unreadCount > 0 ? 1 : 0), 0), [ofLine]);
+    // Cuántas sin leer hay en cada vista (las pestañas lo dicen).
+    const unreadByTab = useMemo(() => {
+        const count = (key: AssignmentTab) =>
+            ofLine.filter(c => c.unreadCount > 0 && inAssignmentTab(c, key, userId)).length;
+        return { mine: count('mine'), unassigned: count('unassigned'), all: count('all') };
+    }, [ofLine, userId]);
+    const ofTab = useMemo(() => ofLine.filter(c => inAssignmentTab(c, tab, userId)), [ofLine, tab, userId]);
+    const unread = unreadByTab[tab];
 
     const visible = useMemo(() => {
         const q = query.trim().toLowerCase();
-        if (!q) return ofLine;
-        return ofLine.filter(c =>
+        if (!q) return ofTab;
+        return ofTab.filter(c =>
             (c.title ?? '').toLowerCase().includes(q)
             || (c.phone ?? '').includes(q)
             || (c.username ?? '').toLowerCase().includes(q.replace(/^@/, ''))
         );
-    }, [ofLine, query]);
+    }, [ofTab, query]);
 
     const renderRows = () => {
         if (isLoading) return <ConversationListSkeleton />;
@@ -84,6 +114,17 @@ export const ChatconversationList = ({ onSelect, selectedId, onNewConversation, 
             return <CenteredState>Todavía no hay conversaciones. Empieza una con el botón +.</CenteredState>;
         }
         if (visible.length === 0) {
+            if (!query.trim() && tab !== 'all') {
+                const [titleText, detail] = tab === 'mine'
+                    ? ['No tienes conversaciones', 'Las que tomes o te pasen aparecen aquí.']
+                    : ['Nadie está esperando', 'Las nuevas sin asignar aparecen aquí.'];
+                return (
+                    <div className="px-7 py-12 text-center grid gap-1.5">
+                        <span className="text-sm font-semibold text-brand-strong">{titleText}</span>
+                        <span className="text-[13px] leading-normal text-brand-muted">{detail}</span>
+                    </div>
+                );
+            }
             return <CenteredState>
                 {query.trim() ? `Ninguna conversación coincide con «${query}».` : 'Esta línea todavía no tiene conversaciones.'}
             </CenteredState>;
@@ -137,8 +178,19 @@ export const ChatconversationList = ({ onSelect, selectedId, onNewConversation, 
                         </div>
 
                         {/* La línea, en su propia fila: junto a la hora le quitaba sitio al
-                            nombre. Con una sola línea, LineChip no pinta nada y la fila no existe. */}
-                        <div className="max-md:hidden empty:hidden mt-1 flex min-w-0"><LineChip lineId={chat.lineId} wide /></div>
+                            nombre. Con una sola línea, LineChip no pinta nada y la fila no existe.
+                            Con equipo, a su derecha va quién la atiende (Fase 4). */}
+                        <div className="empty:hidden mt-1 flex items-center gap-2 min-w-0">
+                            <span className="max-md:hidden flex min-w-0 empty:hidden"><LineChip lineId={chat.lineId} wide /></span>
+                            {showAssignment && <AssigneeTag chat={chat} userId={userId} />}
+                        </div>
+                        {showAssignment && chat.transferRequest && canReassignConversation(chat, userId, canAssignAny) && (
+                            <span className="mt-1.5 inline-flex items-center gap-[5px] rounded-full bg-brand-accent-soft
+                                pl-[7px] pr-[9px] py-[3px] text-[11.5px] max-md:text-xs font-semibold text-brand-accent-strong">
+                                <ArrowRight size={12} strokeWidth={2.4} />
+                                {firstName(chat.transferRequest.requestedBy)} la pide
+                            </span>
+                        )}
                     </div>
                 </button>
             );
@@ -178,6 +230,10 @@ export const ChatconversationList = ({ onSelect, selectedId, onNewConversation, 
                         <Plus size={17} strokeWidth={2.4} className="text-brand-ink max-md:size-[22px]" />
                     </button>
                 </div>
+
+                {showAssignment && (
+                    <div className="mt-3"><AssignmentTabs value={tab} onChange={pickTab} unread={unreadByTab} /></div>
+                )}
 
                 {/* En el teléfono, buscador y línea en una fila (E1). */}
                 <div className="mt-3 max-md:flex max-md:gap-2">
@@ -220,5 +276,22 @@ export const ChatconversationList = ({ onSelect, selectedId, onNewConversation, 
                 {renderRows()}
             </div>
         </div>
+    );
+};
+
+/** Quién atiende la conversación, en su fila: nada si es quien mira (diseño, 1a). */
+const AssigneeTag = ({ chat, userId }: { chat: Conversation; userId: string }) => {
+    if (!chat.assignedTo) {
+        return (
+            <span className="ml-auto flex-none inline-flex items-center gap-[5px] text-[11.5px] max-md:text-xs font-medium text-brand-muted">
+                <UnassignedBadge size={14} />Sin asignar
+            </span>
+        );
+    }
+    if (chat.assignedTo.id === userId) return null;
+    return (
+        <span className="ml-auto flex-none inline-flex items-center gap-[5px] text-[11.5px] max-md:text-xs font-semibold text-brand-strong">
+            <PersonBadge name={chat.assignedTo.name} size={16} />{firstName(chat.assignedTo)}
+        </span>
     );
 };
