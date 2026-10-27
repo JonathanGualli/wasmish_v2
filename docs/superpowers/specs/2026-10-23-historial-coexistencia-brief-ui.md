@@ -10,7 +10,7 @@
 
 Un negocio puede conectar a Wasmish el número que sigue usando en la app de WhatsApp Business del celular. Hasta ahora, lo de antes de conectar se quedaba en el celular: la bandeja empezaba vacía y los contactos aparecían como números sueltos.
 
-Ahora, al conectar, Wasmish **trae los chats de los últimos 6 meses y la agenda del celular**, si el negocio lo permite en la app (lo decide al escanear el código, en la app). Pasa **solo una vez** y en las 24 horas siguientes a conectar: Wasmish lo pide solo, sin que nadie toque nada. Puede tardar unos minutos, o más si hay muchos chats.
+Ahora, al conectar, Wasmish **trae los chats de los últimos 6 meses y la agenda del celular**, si el negocio lo permite en la app (lo decide al escanear el código, en la app). Pasa **solo una vez** y en las 24 horas siguientes a conectar: Wasmish lo pide solo, sin que nadie toque nada. Puede tardar unos minutos, o más si hay muchos chats. En la primera prueba real (unos 130 chats y 10.700 mensajes de 6 meses) los chats llegaron en 2 minutos, y Wasmish los dio por terminados unos 10 minutos después.
 
 Quien lo usa: el dueño o el administrador de un negocio pequeño, que no es técnico, muchas veces desde el celular. Las palabras «historial», «sincronizar», «Cloud API» o «coexistencia» no le dicen nada: se habla de «tus chats de la app» y de «tus contactos del celular».
 
@@ -20,7 +20,7 @@ Quien lo usa: el dueño o el administrador de un negocio pequeño, que no es té
 
 La lista de «qué va a pasar» que ve quien responde que sí usa la app hoy dice que **los chats anteriores se quedan en la app**. Eso cambia:
 
-- **Sus chats de los últimos 6 meses pasan a Wasmish**, si lo acepta en la app al escanear el código. Los grupos no. Las fotos, videos y documentos de las **últimas dos semanas** se ven en Wasmish; los más viejos se quedan en el celular (en Wasmish se ve que había un archivo).
+- **Sus chats de los últimos 6 meses pasan a Wasmish**, si lo acepta en la app al escanear el código. Los grupos no. Las fotos, audios, videos y documentos que le **mandaron sus clientes en las últimas dos semanas** se ven en Wasmish. Los más viejos, y **los que mandó el propio negocio** (aunque sean recientes: WhatsApp no los entrega), se quedan en el celular; en Wasmish se ve que había un archivo.
 - **Sus contactos del celular** ponen nombre a los clientes en Wasmish. Solo aparecen en Contactos los que tienen chat; el resto de la agenda no se ve. Lo que cambie en la agenda del celular se refleja en Wasmish.
 - **Es una sola vez:** si no lo acepta en la app, para traerlos después tendría que desconectar el número y volver a conectarlo.
 
@@ -33,7 +33,7 @@ El resto de la lista no cambia.
 Cada línea conectada con la app muestra **cómo van sus chats de la app**, en pocas palabras. Los estados posibles:
 
 - **Pedido, esperando a WhatsApp:** acaba de conectar y todavía no llegó nada (puede tardar unos minutos). Si pasa media hora sin que llegue nada, también ofrece «Reintentar», por si el pedido no llegó a WhatsApp.
-- **Trayendo tus chats:** con el avance en porcentaje, que sube solo. Los chats van apareciendo en la bandeja mientras tanto.
+- **Trayendo tus chats:** con el avance en porcentaje, que sube solo. Los chats van apareciendo en la bandeja mientras tanto. **Al llegar al 100 % se queda así unos 10 minutos** antes de pasar a «Listo» (Wasmish espera por si WhatsApp manda algo tarde): ese rato no debe parecer atascado; los chats ya se pueden usar.
 - **Listo:** los chats ya están en Wasmish. Habla solo de los chats: los contactos del celular no tienen un «terminado» (siguen llegando cada vez que el negocio cambia su agenda) y las fotos recientes pueden terminar de llegar un poco después.
 - **Listo, con algunos chats que no se pudieron traer:** cuántos. No hay acción para recuperarlos (Meta no los vuelve a mandar); es informativo.
 - **No los compartiste desde la app:** el negocio no lo aceptó en la app. Para traerlos, desconectar y volver a conectar el número (y aceptarlo esta vez). Es informativo, no un error grave.
@@ -49,11 +49,12 @@ Solo lo ven quienes pueden gestionar líneas (como hoy Ajustes → Líneas). El 
 ## 4. En el chat, la ficha y Contactos
 
 - **La bandeja** se llena con las conversaciones traídas, ordenadas por la fecha de su último mensaje, **sin** no leídos ni avisos. Nada nuevo que diseñar en la bandeja.
-- **En el hilo**, los mensajes traídos se ven como los demás: lo que el negocio mandó desde el celular, con la marca «Desde la app de WhatsApp» que ya existe; lo del cliente, como cualquier mensaje recibido. Un archivo viejo que no se trajo se ve como un mensaje con el texto «Archivo: míralo en tu celular» (con el mismo tratamiento que hoy tiene un mensaje que no se pudo traer).
+- **En el hilo**, los mensajes traídos se ven como los demás: lo que el negocio mandó desde el celular, con la marca «Desde la app de WhatsApp» que ya existe; lo del cliente, como cualquier mensaje recibido. Un archivo que no se trajo se ve como un mensaje con el texto «Archivo: míralo en tu celular» (con el mismo tratamiento que hoy tiene un mensaje que no se pudo traer). **Es frecuente:** en la prueba real fue casi 1 de cada 10 mensajes traídos (unos 990 de 10.700), así que tiene que leerse tranquilo y no como un error repetido por todo el hilo.
 - **El nombre** que se enseña de un contacto es, en este orden: el que le puso el equipo en Wasmish, el de la agenda del celular, el de su perfil de WhatsApp, su teléfono. No hay que diseñar nada para eso, pero sí:
   - **En la ficha del contacto y en el panel de Contactos**, el nombre de la agenda se ve como un dato más («Nombre en tu celular»), de solo lectura: se cambia en el celular, no en Wasmish. Si el equipo le puso otro nombre en Wasmish, se ven los dos.
   - Al editar el contacto, el campo de nombre sigue siendo el de Wasmish. Si está vacío, que se entienda que se está usando el de la agenda.
 - **El origen** de un contacto que llegó así: «De la app de WhatsApp Business», junto a los que ya existen («Te escribió primero», «Importado»…).
+- **La ventana de 24 h en la ficha y en Contactos:** hoy, un contacto que nunca escribió en vivo dice «Nunca escribió». Un contacto que solo tiene chats traídos de la app **sí escribió** (antes de conectar), pero lo traído no abre la ventana de 24 h: hay que decirlo de otra forma, sin mentir y sin jerga. Lo que se sabe: cuándo fue su último mensaje; que, hasta que vuelva a escribir, solo se le pueden mandar plantillas aprobadas.
 
 ---
 
