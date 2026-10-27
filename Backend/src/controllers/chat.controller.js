@@ -5,7 +5,8 @@ import Message from "../models/message.model.js";
 import { decrypt }  from "../utils/crypto.js";
 import { sendMediaMessage, sendTextMessage, uploadMedia } from "../libs/whatsapp.js";
 import {
-    acquireConversation, claimNewConversation, populateConversation, sendConversationEvent, sendErrorBody, serializeConversation,
+    acquireConversation, answerTransfer, assignConversation, claimNewConversation, listAssignees, populateConversation,
+    requestTransfer, sendConversationEvent, sendErrorBody, serializeConversation, takeConversation,
 } from '../services/assignment.service.js';
 import { freeTextBlockReason } from "../utils/whatsapp.window.js";
 import { processTemplateSending } from "./template.controller.js";
@@ -623,5 +624,69 @@ export const startConversationTemplateController = async (req, res) => {
         return responderEnvioPlantilla(res, resultado);
     } catch (error) {
         return responderErrorPlantilla(res, error);
+    }
+};
+
+// --- Asignación (Fase 4) --------------------------------------------------------
+// Quién puede cada cosa lo decide `services/assignment.service.js`; aquí solo HTTP.
+
+const sendAssignmentError = (res, error) => {
+    if (!error.statusCode) console.error('Asignación:', error.message);
+    return res.status(error.statusCode || 500).json(sendErrorBody(error));
+};
+
+/** POST /chats/:id/take — tomarla: suya si está sin asignar; si es de otro, 409. */
+export const takeConversationController = async (req, res) => {
+    try {
+        return res.json(await takeConversation(req.auth, req.params.id));
+    } catch (error) {
+        return sendAssignmentError(res, error);
+    }
+};
+
+/** POST /chats/:id/assign `{ userId | null }` — pasarla a alguien o dejarla sin asignar. */
+export const assignConversationController = async (req, res) => {
+    try {
+        return res.json(await assignConversation(req.auth, req.params.id, req.body.userId));
+    } catch (error) {
+        return sendAssignmentError(res, error);
+    }
+};
+
+/** GET /chats/:id/assignees — quiénes pueden atenderla, para el menú de asignar. */
+export const listAssigneesController = async (req, res) => {
+    try {
+        return res.json(await listAssignees(req.auth, req.params.id));
+    } catch (error) {
+        return sendAssignmentError(res, error);
+    }
+};
+
+/** POST /chats/:id/transfer-request — pedir que te pasen una que atiende otra persona. */
+export const requestTransferController = async (req, res) => {
+    try {
+        await requestTransfer(req.auth, req.params.id);
+        return res.status(202).end();
+    } catch (error) {
+        return sendAssignmentError(res, error);
+    }
+};
+
+/** POST /chats/:id/transfer-request/accept `{ requestId }` — se la pasa al que la pidió. */
+export const acceptTransferController = async (req, res) => {
+    try {
+        return res.json(await answerTransfer(req.auth, req.params.id, req.body.requestId, true));
+    } catch (error) {
+        return sendAssignmentError(res, error);
+    }
+};
+
+/** POST /chats/:id/transfer-request/reject `{ requestId }` — la conversación sigue como estaba. */
+export const rejectTransferController = async (req, res) => {
+    try {
+        await answerTransfer(req.auth, req.params.id, req.body.requestId, false);
+        return res.status(204).end();
+    } catch (error) {
+        return sendAssignmentError(res, error);
     }
 };

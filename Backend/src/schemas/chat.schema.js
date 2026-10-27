@@ -85,3 +85,13 @@ export const sendMessageTemplateSchema = z.object({
 export const reactionSchema = z.object({
     emoji: z.string().max(16).refine(value => value === '' || isSingleEmoji(value), 'Tiene que ser un solo emoji.'),
 });
+
+// Asignar o pasar una conversación (Fase 4): a quién, o null para dejarla sin asignar.
+export const assignSchema = z.object({
+    userId: objectIdSchema.nullable(),
+});
+
+// Aceptar o rechazar una solicitud de transferencia: la que la persona tiene a la vista.
+export const transferAnswerSchema = z.object({
+    requestId: objectIdSchema,
+});

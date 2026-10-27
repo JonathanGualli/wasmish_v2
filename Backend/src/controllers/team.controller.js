@@ -7,6 +7,7 @@ import Line from "../models/line.model.js";
 import User from "../models/user.model.js";
 import { withAccountLock } from "../services/account.lock.service.js";
 import { disconnectUser } from "./stream.controller.js";
+import { releaseAssignments } from "../services/assignment.service.js";
 import { startSession } from "./auth.controller.js";
 import { hashApiKey } from "../utils/crypto.js";
 import { escapeRegex } from "../utils/contact.query.js";
@@ -231,6 +232,10 @@ export const updateMember = async (req, res) => {
         };
         const updated = change.status === 'active' ? await withTeamLock(accountId, apply) : await apply();
 
+        // Lo que ya no puede atender vuelve a sin asignar (Fase 4), antes de
+        // cerrarle las conexiones. Con su cuenta: sin ella, `releaseFilter` lo
+        // tomaría por desactivado y soltaría todas.
+        await releaseAssignments(accountId, { ...updated, accountId });
         disconnectUser(String(target._id));
         return res.json(serializeMember(updated));
     } catch (error) {
