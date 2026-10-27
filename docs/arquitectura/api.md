@@ -56,6 +56,7 @@ Cómo se autentica cada ruta, el rate limiting y la tabla completa de endpoints 
   - **las plantillas son del WABA**, y un WABA está a su alcance si tiene alguna de sus líneas (`templateScopeFor`): listarlas (sin ninguna línea, ninguna), sincronizar, la cabecera (subirla, añadir un archivo, quitarla) y la plantilla de una campaña (vista previa y crear). Fuera de alcance, 404 o como si no existiera (revisión de Codex del PR #34). `GET /templates/media/:id` mira solo la cuenta: los archivos de cabecera no son de ninguna línea;
   - en Contactos, el contacto es de toda la cuenta, pero sus conversaciones de otras líneas no se enseñan. Los filtros «con / sin conversación» miran **todas** (no cambian según quién los pide).
 - **Empezar algo sin elegir línea** (una conversación nueva o una campaña; `findStartLine`, con `pickSendingLineId`): la línea por defecto si está a su alcance; si no, su única línea activa; con varias, **400** `choose_line` «Elige por qué línea enviar.»; sin ninguna, 404.
+- **Responder toma la conversación** (Fase 4): los envíos desde el chat (texto, archivo, plantilla a una conversación o a un número) la toman si estaba sin asignar; un agente en la de un compañero recibe **409** `[{ message: 'Esta conversación la atiende Ana.', code: 'assigned_to_other', assignedToName, conversationId }]` sin llamar a Meta ([chat.md § Asignación](chat.md#asignación-de-conversaciones)).
 - La API key (`role: 'api'`) no tiene ninguna de las acciones de la tabla (no las necesita: solo usa `/v1`) y llega a todas las líneas.
 
 ### Rate limiting
