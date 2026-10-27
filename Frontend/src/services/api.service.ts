@@ -6,6 +6,7 @@ import type { ImportBatchResult, ImportInput, ImportPreview } from '../models/co
 import type { BulkTagResult, Tag, TagSelectionSummary } from '../models/tag.model';
 import type { CampaignAudienceInput, CampaignDraftInput, CampaignRecipientsInput, CreateCampaignInput, RecipientState } from '../models/campaign.model';
 import type { Message } from '../models/message.mode';
+import type { Assignee, Conversation } from '../models/conversation.mode';
 import type { Line, LineUpdate, LinesResponse } from '../models/line.model';
 import type { InvitationInfo, InvitationInput, MemberChange, TeamInvitation, TeamMember, TeamResponse } from '../models/team.model';
 import type { User } from '../models/user.mode';
@@ -25,6 +26,12 @@ interface SSEHandlers {
     onCampaignProgress?: (event: MessageEvent) => void;
     onMessagesImported?: (event: MessageEvent) => void;
     onHistorySync?: (event: MessageEvent) => void;
+    // La asignación de conversaciones (Fase 4).
+    onConversationAssigned?: (event: MessageEvent) => void;
+    onConversationRevoked?: (event: MessageEvent) => void;
+    onTransferRequested?: (event: MessageEvent) => void;
+    onTransferAnswered?: (event: MessageEvent) => void;
+    onConversationsUpdated?: (event: MessageEvent) => void;
     /** Le cambiaron el acceso (rol, líneas, estado): el servidor cierra justo después (Fase 3). */
     onAccessChanged?: () => void;
     onError?: (err: ErrorEvent) => void;
@@ -141,6 +148,38 @@ export const sendMessageService = async (
     return data;
 }
 
+// --- Asignación de conversaciones (Fase 4) ---------------------------------
+
+/** Tomarla: suya si está sin asignar. Devuelve la conversación como en la lista. */
+export const takeConversationService = async (conversationId: string): Promise<Conversation> => {
+    const { data } = await axios.post(`${API_URL}/chats/${conversationId}/take`, {}, { withCredentials: true });
+    return data;
+}
+
+/** Pasarla a alguien, o dejarla sin asignar (`null`). */
+export const assignConversationService = async (conversationId: string, userId: string | null): Promise<Conversation> => {
+    const { data } = await axios.post(`${API_URL}/chats/${conversationId}/assign`, { userId }, { withCredentials: true });
+    return data;
+}
+
+/** Quiénes pueden atenderla: el menú de «Atiende». */
+export const getAssigneesService = async (conversationId: string): Promise<Assignee[]> => {
+    const { data } = await axios.get(`${API_URL}/chats/${conversationId}/assignees`, { withCredentials: true });
+    return data;
+}
+
+/** Pedir que te pasen una que atiende otra persona (no hace falta verla). */
+export const requestTransferService = async (conversationId: string): Promise<void> => {
+    await axios.post(`${API_URL}/chats/${conversationId}/transfer-request`, {}, { withCredentials: true });
+}
+
+/** Aceptar o rechazar la solicitud que se tiene a la vista (`requestId`). */
+export const answerTransferService = async (conversationId: string, requestId: string, accept: boolean): Promise<Conversation | null> => {
+    const verb = accept ? 'accept' : 'reject';
+    const { data } = await axios.post(`${API_URL}/chats/${conversationId}/transfer-request/${verb}`, { requestId }, { withCredentials: true });
+    return accept ? data : null;
+}
+
 /** Reaccionar a un mensaje del contacto; `''` quita la reacción. Devuelve el mensaje. */
 export const setReactionService = async (conversationId: string, messageId: string, emoji: string): Promise<Message> => {
     const { data } = await axios.put(`${API_URL}/chats/${conversationId}/messages/${messageId}/reaction`, { emoji }, { withCredentials: true });
@@ -188,6 +227,16 @@ export const createSSEConnection = (
     }
     if (handlers.onHistorySync) {
         source.addEventListener("history_sync", handlers.onHistorySync);
+    }
+    const assignmentEvents = [
+        ["conversation_assigned", handlers.onConversationAssigned],
+        ["conversation_revoked", handlers.onConversationRevoked],
+        ["transfer_requested", handlers.onTransferRequested],
+        ["transfer_answered", handlers.onTransferAnswered],
+        ["conversations_updated", handlers.onConversationsUpdated],
+    ] as const;
+    for (const [event, handler] of assignmentEvents) {
+        if (handler) source.addEventListener(event, handler);
     }
     if (handlers.onAccessChanged) {
         const onAccessChanged = handlers.onAccessChanged;

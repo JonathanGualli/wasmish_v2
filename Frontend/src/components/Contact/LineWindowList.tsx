@@ -5,6 +5,8 @@ import { noWindowLabel } from "../../utils/contactDisplay";
 import { formatTimeAgo } from "../../utils/formatChatTime";
 import { lineLabel } from "../../utils/lineDisplay";
 import { LineSwatch } from "../Line/LineSwatch";
+import { PersonBadge } from "../Chat/Assignment/PersonBadge";
+import { firstName } from "../../utils/assignment";
 
 interface Props {
     /** Las del contacto, una por línea, la más reciente primero (como las da el backend). */
@@ -55,7 +57,8 @@ const LineWindowRow = ({ conversation, source, current, highlight, onOpen }: {
     const [state, detail] = isOpen
         ? ['Abierta', formatRemaining(msRemaining)]
         : hasWindow ? ['Cerrada', formatTimeAgo(msSinceClosed)] : [noWindowLabel(source), ''];
-    const clickable = Boolean(onOpen) && !current;
+    // La de un compañero (Fase 4): solo quién la atiende; no se abre.
+    const clickable = Boolean(onOpen) && !current && !conversation.restricted;
     const disconnected = line?.status === 'disconnected';
 
     return (
@@ -68,11 +71,19 @@ const LineWindowRow = ({ conversation, source, current, highlight, onOpen }: {
                 <span className="truncate font-semibold text-brand-text">{line ? lineLabel(line) : 'Número anterior'}</span>
                 {disconnected && <span className="text-[11px] text-brand-muted">Desconectada</span>}
             </span>
-            <span className="ml-auto flex-none inline-flex items-center gap-1.5 text-brand-strong">
-                <span className={`w-1.5 h-1.5 rounded-full ${isOpen ? 'bg-brand-success' : 'bg-brand-subtle'}`} />
-                {state}
-            </span>
-            {detail && (
+            {conversation.restricted ? (
+                <span className="ml-auto flex-none inline-flex items-center gap-1.5 text-brand-strong">
+                    <span className="text-brand-muted">Atiende</span>
+                    <PersonBadge name={conversation.assignedTo?.name ?? null} size={16} />
+                    <span className="font-semibold">{firstName(conversation.assignedTo)}</span>
+                </span>
+            ) : (
+                <span className="ml-auto flex-none inline-flex items-center gap-1.5 text-brand-strong">
+                    <span className={`w-1.5 h-1.5 rounded-full ${isOpen ? 'bg-brand-success' : 'bg-brand-subtle'}`} />
+                    {state}
+                </span>
+            )}
+            {!conversation.restricted && detail && (
                 <span className={`flex-none font-mono tabular-nums text-right ${isOpen ? 'text-brand-accent-strong' : 'text-brand-muted'}`}>
                     {detail}
                 </span>

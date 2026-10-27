@@ -361,10 +361,15 @@ Columna de **360px** fijos, `bg-brand-surface`, borde derecho.
   `brand-bg` radio 10 con auto-alto hasta 6 líneas, y botón de envío de 44px
   radio 10 en menta
 
+**La asignación** (Fase 4) sigue su propio diseño, `Design/Wasmish Chats - Asignar
+conversaciones.html`: las vistas «Mías / Sin asignar / Todas», quién atiende
+cada fila, «Atiende» con su menú en la cabecera y la solicitud de transferencia.
+Piezas en `components/Chat/Assignment/`. Con una sola persona en la cuenta no se
+ve nada de esto.
+
 **Lo que la maqueta muestra y la app no tiene todavía** (falta modelo en el
-backend): etiquetas por conversación, asignación de agente («Sin asignar»,
-«Asignarme», «Respondiendo como…»), notas internas y los filtros Todos / Míos /
-Sin asignar. Están omitidos a propósito — no maquetar botones que no hacen nada.
+backend): etiquetas por conversación y notas internas. Están omitidas a
+propósito — no maquetar botones que no hacen nada.
 
 ### Aviso global — `components/Notice/Notice.css`
 

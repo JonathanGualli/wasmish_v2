@@ -25,6 +25,13 @@ export const useContacts = (pageIndex: number, pageSize: number, search: string,
             subscribe("contact_updated", refresh),
             subscribe("contacts_updated", refresh),
             subscribe("tags_updated", refresh),
+            // Una conversación que cambia de manos: la ficha y la lista enseñan
+            // quién atiende cada una, y al agente se le esconde la que pierde
+            // (Fase 4; revisión de Codex del plan).
+            subscribe("conversation_assigned", refresh),
+            subscribe("conversation_revoked", refresh),
+            subscribe("conversations_updated", refresh),
+            subscribe("transfer_answered", refresh),
         ];
         return () => unsubscribers.forEach(unsubscribe => unsubscribe());
     }, [subscribe, refresh]);
@@ -76,11 +83,20 @@ export const useLiveContact = (id: string, conversationId: string) => {
         // la ficha seguiría mandando su id al etiquetar (400).
         const unsubContacts = subscribe("contacts_updated", refresh);
         const unsubTags = subscribe("tags_updated", refresh);
+        // Cambió de manos alguna conversación (puede ser una suya): la ficha
+        // dice quién atiende cada una (Fase 4).
+        const unsubAssignment = [
+            subscribe("conversation_assigned", refresh),
+            subscribe("conversation_revoked", refresh),
+            subscribe("conversations_updated", refresh),
+            subscribe("transfer_answered", refresh),
+        ];
         return () => {
             unsubMessage();
             unsubContact();
             unsubContacts();
             unsubTags();
+            unsubAssignment.forEach(unsubscribe => unsubscribe());
         };
     }, [subscribe, refresh, queryClient, id, conversationId]);
 

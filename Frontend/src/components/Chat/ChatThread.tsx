@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useInView } from "react-intersection-observer";
 import { Transition } from "@headlessui/react";
-import { Ban, Bot, CircleAlert, Code2, File as FileIcon, LoaderCircle, Send, Smartphone } from "lucide-react";
+import { ArrowRight, Ban, Bot, CircleAlert, Code2, File as FileIcon, LoaderCircle, Send, Smartphone } from "lucide-react";
 import { useConversationMessages } from "../../hooks/useConversationMessages";
 import { useConversations } from "../../hooks/useConversations.ts";
 import { useTemplates } from "../../hooks/useTemplates.ts";
@@ -36,6 +36,12 @@ import { HoverActions, MessageMenu, type MenuAnchor } from "./Message/MessageAct
 import { currentOwnEmoji } from "../../utils/messageActions";
 import { quoteFromMessage } from "../../utils/messageQuote";
 import { isHistoryPlaceholder } from "../../utils/historyPlaceholder";
+import { useSSE } from "../../context/sse.context";
+import { assignmentError, useConversationAssignment } from "../../hooks/useConversationAssignment";
+import { canReassignConversation, firstName, replyHint } from "../../utils/assignment";
+import { AssigneeControl } from "./Assignment/AssigneeControl";
+import { AssignmentNotice } from "./Assignment/AssignmentNotice";
+import { TransferRequestBar } from "./Assignment/TransferRequestBar";
 
 // El selector completo: él y sus datos solo se cargan al abrirlo.
 const EmojiPicker = lazy(() => import("./Emoji/EmojiPicker"));
@@ -158,14 +164,18 @@ const MessageAuthor = ({ msg }: { msg: Message }) => {
 export const ChatThread = ({
     conversationId, onBack, contactSidebarOpen, onContactSidebarChange, onStartConversation, onOpenConversation,
 }: Props) => {
+    // La perdió con el chat abierto (Fase 4: se la pasaron a otra persona, o la
+    // pasó él): el chat se cierra sin enseñar nada más (diseño, 2b).
+    const [lost, setLost] = useState<{ conversationId: string; title: string } | null>(null);
+    const lostHere = lost !== null && lost.conversationId === conversationId;
     const { data: messages, isLoading, isError, error, fetchNextPage, hasNextPage } =
-        useConversationMessages(conversationId || "");
+        useConversationMessages(lostHere ? "" : conversationId || "");
     const { setState: showNotice, setContent: setNoticeContent } = useNoticeContext();
 
     // La conversación dejó de existir para esta sesión: le quitaron su línea con
     // el chat abierto (Fase 3, `access_changed`; revisión de Codex del PR #37).
     // Un 404 cierra el chat con un aviso, en vez de quedarse en el error.
-    const lostAccess = isError && (error as AxiosError | null)?.response?.status === 404;
+    const lostAccess = !lostHere && isError && (error as AxiosError | null)?.response?.status === 404;
     useEffect(() => {
         if (!lostAccess) return;
         setNoticeContent(<p className="text-sm text-brand-strong">Ya no tienes acceso a esta conversación.</p>);
@@ -175,8 +185,12 @@ export const ChatThread = ({
     const { data: conversations } = useConversations();
     const { templates } = useTemplates();
     const { ref, inView } = useInView();
-    // Con una sola persona en la cuenta, la línea de la hora queda como siempre.
-    const showAuthor = hasTeam(useAuthContext().user);
+    // Con una sola persona en la cuenta, la línea de la hora queda como siempre;
+    // tampoco se ve nada de la asignación (Fase 4).
+    const { user, can } = useAuthContext();
+    const showAuthor = hasTeam(user);
+    const userId = user?.id ?? "";
+    const canAssignAny = can("conversations.assign");
     const phone = useMediaQuery(PHONE_QUERY);
 
     // Citas y reacciones (diseño «Wasmish Chat - Citas y reacciones»).
@@ -188,6 +202,8 @@ export const ChatThread = ({
     const [pickerFor, setPickerFor] = useState<Message | null>(null);
     // Los avisos dentro del hilo (el diseño): una reacción rechazada, una cita demasiado vieja.
     const [toast, setToast] = useState<{ title: string; detail: string } | null>(null);
+    // La barra bajo la cabecera: «Carla te pasó esta conversación» o «cambió de manos» (diseño, 2a y 2c).
+    const [assignmentNotice, setAssignmentNotice] = useState<{ tone: 'handoff' | 'changed'; text: string } | null>(null);
     // Cambiar de conversación descarta todo eso, como el borrador del
     // composer: volver no trae de vuelta una cita a medias (revisión de Codex
     // del PR #117). Durante el render, como recomienda React, para no pintar
@@ -199,6 +215,10 @@ export const ChatThread = ({
         setMenu(null);
         setPickerFor(null);
         setToast(null);
+        setAssignmentNotice(null);
+        // La pérdida es de esa conversación: abrir otra (o volver a ella desde la
+        // bandeja, si se la devolvieron) no la arrastra (revisión de Codex del PR #145).
+        setLost(null);
     }
     const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const showToast = useCallback((title: string, detail: string) => {
@@ -207,6 +227,30 @@ export const ChatThread = ({
         toastTimer.current = setTimeout(() => setToast(null), TOAST_MS);
     }, []);
     useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
+
+    // A quién se la pasa quien mira, si la va a perder: el `conversation_revoked`
+    // llega antes que la respuesta, y el chat dice «Se la pasaste a Luis».
+    const handOffTo = useRef<{ conversationId: string; name: string | null } | null>(null);
+    const { subscribe } = useSSE();
+    useEffect(() => subscribe("conversation_revoked", (payload) => {
+        if (payload.id !== conversationId) return;
+        const mine = handOffTo.current?.conversationId === payload.id;
+        const name = mine ? handOffTo.current?.name ?? null : payload.assignedTo?.name ?? null;
+        handOffTo.current = null;
+        setLost({
+            conversationId: payload.id,
+            title: mine ? `Se la pasaste a ${firstName({ id: '', name })}` : `Esta conversación ahora la atiende ${firstName({ id: '', name })}`,
+        });
+    }), [subscribe, conversationId]);
+    // Se la devolvieron con el chat todavía en «la perdiste»: vuelve a verse.
+    useEffect(() => subscribe("conversation_assigned", (payload) => {
+        setLost(current => (current?.conversationId === payload.id ? null : current));
+    }), [subscribe]);
+    const handOff = useCallback((name: string | null) => {
+        handOffTo.current = name === null || !conversationId ? null : { conversationId, name };
+    }, [conversationId]);
+    const { answer } = useConversationAssignment(conversationId || "");
+    const toastText = useCallback((text: string) => showToast(text, ""), [showToast]);
 
     const { react } = useMessageReaction(conversationId || "", useCallback(
         (reason: string) => showToast("No se pudo reaccionar.", `${reason} El mensaje quedó como estaba.`), [showToast]));
@@ -492,6 +536,65 @@ export const ChatThread = ({
     };
 
     const title = conversation?.title || conversation?.phone || "";
+
+    // Le pasaron la conversación con el chat abierto (diseño, 2a): quién.
+    const assigneeId = conversation?.assignedTo?.id ?? null;
+    const assignedById = conversation?.assignedBy?.id ?? null;
+    const previousAssignee = useRef<{ conversationId: string | null; id: string | null } | null>(null);
+    useEffect(() => {
+        const previous = previousAssignee.current;
+        previousAssignee.current = { conversationId, id: assigneeId };
+        if (!previous || previous.conversationId !== conversationId || previous.id === assigneeId) return;
+        if (assigneeId === userId && assignedById && assignedById !== userId) {
+            setAssignmentNotice({ tone: 'handoff', text: `${firstName(conversation?.assignedBy)} te pasó esta conversación` });
+        }
+    }, [conversationId, assigneeId, assignedById, userId, conversation?.assignedBy]);
+
+    const showAssignment = showAuthor && Boolean(conversation);
+    const assignmentChanged = useCallback(
+        () => setAssignmentNotice({ tone: 'changed', text: 'La conversación cambió de manos. Vuelve a intentarlo.' }), []);
+    const assignmentControl = showAssignment && conversation ? (
+        <AssigneeControl conversation={conversation} userId={userId} canAssignAny={canAssignAny}
+            onToast={toastText} onHandOff={handOff} onChanged={assignmentChanged} />
+    ) : null;
+    const request = showAssignment && conversation?.transferRequest
+        && canReassignConversation(conversation, userId, canAssignAny) ? conversation.transferRequest : null;
+    const answerRequest = (accept: boolean) => {
+        if (!request || !conversation) return;
+        const who = firstName(request.requestedBy);
+        // El agente que se la pasa al que la pidió deja de verla.
+        if (accept && !canAssignAny) handOff(request.requestedBy.name);
+        answer.mutate({ requestId: request.id, accept }, {
+            onSuccess: () => {
+                if (!accept) toastText(`Rechazaste la solicitud. Se le avisa a ${who}.`);
+                else if (canAssignAny) toastText(`Se la pasaste a ${who}.`);
+            },
+            onError: (err) => {
+                handOff(null);
+                const { code, message } = assignmentError(err);
+                if (code === 'assignment_changed') assignmentChanged();
+                else toastText(code === 'transfer_request_changed' ? 'La solicitud cambió. Revísala de nuevo.' : message);
+            },
+        });
+    };
+
+    if (lostHere && lost) {
+        return (
+            <div className="h-full w-full flex flex-col items-center justify-center gap-2.5 text-center p-10 bg-brand-bg">
+                <span className="w-12 h-12 rounded-xl bg-brand-surface border border-brand-border text-brand-gray-600 flex items-center justify-center">
+                    <ArrowRight size={22} />
+                </span>
+                <span className="text-[17px] font-bold tracking-[-0.01em] text-brand-text">{lost.title}</span>
+                <span className="text-sm text-brand-muted">Ya no está en tu bandeja.</span>
+                {onBack && (
+                    <button type="button" onClick={onBack}
+                        className="md:hidden mt-2 text-sm font-semibold text-brand-accent-strong cursor-pointer">
+                        Volver a la bandeja
+                    </button>
+                )}
+            </div>
+        );
+    }
     // Una conversación anterior a los contactos sin enlazar no tiene ficha.
     const contactId = conversation?.contactId;
     const sidebarOpen = contactSidebarOpen && Boolean(contactId);
@@ -506,7 +609,23 @@ export const ChatThread = ({
                         onBack={onBack}
                         contactSidebarOpen={sidebarOpen}
                         onToggleContactSidebar={() => onContactSidebarChange(!sidebarOpen)}
+                        assignment={assignmentControl}
                     />
+                )}
+                {/* En el teléfono, quién la atiende va en su propia fila (diseño, m2). */}
+                {assignmentControl && (
+                    <div className="md:hidden flex-none bg-brand-surface border-b border-brand-border px-3 py-2 flex items-center">
+                        {assignmentControl}
+                    </div>
+                )}
+                {request && (
+                    <TransferRequestBar request={request} isMine={conversation?.assignedTo?.id === userId}
+                        busy={answer.isPending} onAccept={() => answerRequest(true)} onReject={() => answerRequest(false)} />
+                )}
+                {assignmentNotice && (
+                    <AssignmentNotice tone={assignmentNotice.tone} onClose={() => setAssignmentNotice(null)}>
+                        {assignmentNotice.text}
+                    </AssignmentNotice>
                 )}
 
                 {/* Lienzo, con lo que flota sobre él: buscar el original, los avisos y el selector. */}
@@ -560,7 +679,10 @@ export const ChatThread = ({
                 {conversationId && (
                     <ChatComposer key={conversationId} conversationId={conversationId} conversation={conversation} title={title}
                         onStartConversation={onStartConversation}
-                        replyTo={replyTo} onCancelReply={cancelReply} team={showAuthor} />
+                        replyTo={replyTo} onCancelReply={cancelReply} team={showAuthor}
+                        hint={showAssignment && conversation ? replyHint(conversation, userId) : null}
+                        onSent={showAssignment && conversation && !conversation.assignedTo
+                            ? () => toastText("Respondiste: ahora la atiendes tú.") : undefined} />
                 )}
             </div>
 

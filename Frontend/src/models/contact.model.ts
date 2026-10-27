@@ -1,3 +1,4 @@
+import type { ConversationPerson } from "./conversation.mode";
 /** Cómo llegó el contacto. `null` = anterior a que existieran los contactos. */
 export type ContactSource = 'inbound' | 'manual' | 'api' | 'ad' | 'import' | 'businessApp' | null;
 
@@ -54,6 +55,10 @@ export interface ContactConversation {
     lastInteractionAt: string | null;
     /** La ventana de esta conversación: es de su línea, no del contacto. */
     windowExpiresAt: string | null;
+    /** Quién la atiende (Fase 4). */
+    assignedTo?: ConversationPerson | null;
+    /** La atiende un compañero de quien mira (agente): se sabe que existe y quién la atiende, nada más. */
+    restricted?: boolean;
 }
 
 export interface ContactActivity {

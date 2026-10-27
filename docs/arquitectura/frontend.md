@@ -44,7 +44,8 @@ Lógica no obvia del `AuthProvider`, los errores de WhatsApp en palabras y la li
 
 **Hooks disponibles:**
 - `useLogin`, `useSignUp`, `useLogOut`, `useVerifyLogin` — auth
-- `useConversations` — lista de conversaciones (query + suscripción SSE)
+- `useConversations` — lista de conversaciones (query + suscripción SSE; también los eventos de la asignación: [chat.md § Asignación en la UI](chat.md#asignación-en-la-ui))
+- `useConversationAssignment(conversationId, { loadAssignees })` — tomar, asignar y responder solicitudes (`take`, `assign`, `answer`, `requestTransfer`) y la lista de quiénes pueden atenderla (`assignees`, solo al abrir el menú); `assignmentError(error)` da el `code` y el texto
 - `useConversationMessages(conversationId)` — mensajes paginados + suscripción SSE
 - `useConversationSendMessages` — envío de mensajes (UI optimista; marca `failed` en error); con `replyTo`, responde citando
 - `useMessageReaction(conversationId, onRejected)` — reaccionar (`react(message, emoji)`; el mismo emoji la quita), con UI optimista y vuelta atrás si el servidor la rechaza. Ver [chat.md § Citas y reacciones en la UI](chat.md#citas-y-reacciones-en-la-ui)

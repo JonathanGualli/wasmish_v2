@@ -66,7 +66,7 @@ export const ContactSidebar = ({ contactId, conversationId, windowExpiresAt, onO
                         {/* Por contacto: lo que se escribe, se edita o falló es de esa ficha. */}
                         <ContactNotesCard key={contact.id} contact={contact} initialVisible={3} />
                         <ContactDataCard key={`data-${contact.id}`} contact={contact} />
-                        <ActivityCard contact={contact} conversationCount={byLine ? contact.conversations.length : 1} />
+                        <ActivityCard contact={contact} conversationCount={byLine ? contact.conversations.filter(c => !c.restricted).length : 1} />
                     </div>
                     <div className="flex-none px-3.5 pb-3.5 max-md:pb-[calc(14px+var(--safe-bottom))]">
                         <SeeInContacts contactId={contact.id} />

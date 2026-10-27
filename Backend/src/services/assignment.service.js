@@ -65,8 +65,9 @@ export const serializeConversation = (item) => {
         updatedAt: (item.lastMessageAt || item.updatedAt).toISOString(),
         unreadCount: item.unreadCount || 0,
         windowExpiresAt: getWindowExpiry(item.lastInboundAt)?.toISOString() ?? null,
-        // Quién la atiende y quién pidió que se la pasen (Fase 4).
+        // Quién la atiende, quién se la asignó y quién pidió que se la pasen (Fase 4).
         assignedTo: personOf(item.assignedTo),
+        assignedBy: personOf(item.assignedBy),
         transferRequest: item.transferRequest?.requestedBy
             ? {
                 id: String(item.transferRequest.id),
@@ -81,6 +82,7 @@ export const serializeConversation = (item) => {
 export const populateConversation = (query) => query
     .populate('contactId', 'name agendaName profileName username phone')
     .populate('assignedTo', 'name')
+    .populate('assignedBy', 'name')
     .populate('transferRequest.requestedBy', 'name');
 
 /**
@@ -318,14 +320,20 @@ export const answerTransfer = async (auth, conversationId, requestId, accept) =>
     }
     const requester = pending.requestedBy;
     const ofThisRequest = { _id: conversation._id, 'transferRequest.id': pending.id };
-    const answered = (accepted) =>
-        sendToUser(String(auth.accountId), String(requester), 'transfer_answered', { id: String(conversation._id), accepted });
+    // Con quién respondió y el contacto: el aviso lo dice («Ana te pasó la
+    // conversación con Marisol Ruiz»), y el solicitante no tiene la conversación.
+    const answered = async (accepted) => {
+        const { title } = await serializedConversation(conversation._id);
+        sendToUser(String(auth.accountId), String(requester), 'transfer_answered', {
+            id: String(conversation._id), accepted, answeredBy: { id: auth.userId, name: auth.name ?? null }, contactName: title,
+        });
+    };
 
     if (!accept) {
         const result = await Conversation.updateOne(ofThisRequest, { $unset: { transferRequest: 1 } });
         if (result.matchedCount === 0) throw statusError(409, 'La solicitud cambió. Revísala de nuevo.', 'transfer_request_changed');
         await emitTransferRequest(auth.accountId, conversation._id);
-        answered(false);
+        await answered(false);
         return null;
     }
 
@@ -349,7 +357,7 @@ export const answerTransfer = async (auth, conversationId, requestId, accept) =>
     const valid = await confirmAssignee(auth.accountId, conversation._id, requester);
     await emitAssignmentChange(auth.accountId, conversationMeta(previous), conversation._id);
     if (!valid) throw invalidAssignee();
-    answered(true);
+    await answered(true);
     return serializedConversation(conversation._id);
 };
 

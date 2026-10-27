@@ -30,6 +30,11 @@ export const SSEProvider = ({ children }: { children: ReactNode }) => {
         campaign_progress: new Set(),
         messages_imported: new Set(),
         history_sync: new Set(),
+        conversation_assigned: new Set(),
+        conversation_revoked: new Set(),
+        transfer_requested: new Set(),
+        transfer_answered: new Set(),
+        conversations_updated: new Set(),
     });
 
     // Abrir UNA conexión SSE, solo cuando hay sesión.
@@ -69,6 +74,11 @@ export const SSEProvider = ({ children }: { children: ReactNode }) => {
                 onCampaignProgress: dispatch("campaign_progress"),
                 onMessagesImported: dispatch("messages_imported"),
                 onHistorySync: dispatch("history_sync"),
+                onConversationAssigned: dispatch("conversation_assigned"),
+                onConversationRevoked: dispatch("conversation_revoked"),
+                onTransferRequested: dispatch("transfer_requested"),
+                onTransferAnswered: dispatch("transfer_answered"),
+                onConversationsUpdated: dispatch("conversations_updated"),
                 onAccessChanged: () => accessChanged.current(),
                 onOpen: () => {
                     attempt = 0;
