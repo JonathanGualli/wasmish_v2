@@ -227,15 +227,21 @@ export const updateMember = async (req, res) => {
                 const current = await User.findOne({ _id: target._id, accountId }).select('status').lean();
                 if (current?.status === 'inactive') await assertFreeSeat(accountId);
             }
-            return User.findOneAndUpdate({ _id: target._id, accountId }, { $set: set }, { new: true })
+            const saved = await User.findOneAndUpdate({ _id: target._id, accountId }, { $set: set }, { new: true })
                 .select('name email role lineIds status createdAt').lean();
+            // Lo que ya no puede atender vuelve a sin asignar (Fase 4), con el
+            // acceso que se acaba de guardar y dentro del candado: un cambio
+            // posterior (reactivarlo) no puede colarse entre guardar y soltar, y
+            // una liberación retrasada no borra lo que ya vuelve a valer
+            // (revisión de Codex del PR #144). Con su cuenta: sin ella,
+            // `releaseFilter` lo tomaría por desactivado y soltaría todas.
+            await releaseAssignments(accountId, { ...saved, accountId });
+            return saved;
         };
-        const updated = change.status === 'active' ? await withTeamLock(accountId, apply) : await apply();
+        // Todo cambio de un miembro, con el candado del equipo: activar ocupa
+        // una plaza, y cualquier cambio de acceso suelta conversaciones.
+        const updated = await withTeamLock(accountId, apply);
 
-        // Lo que ya no puede atender vuelve a sin asignar (Fase 4), antes de
-        // cerrarle las conexiones. Con su cuenta: sin ella, `releaseFilter` lo
-        // tomaría por desactivado y soltaría todas.
-        await releaseAssignments(accountId, { ...updated, accountId });
         disconnectUser(String(target._id));
         return res.json(serializeMember(updated));
     } catch (error) {

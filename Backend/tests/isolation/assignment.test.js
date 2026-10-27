@@ -5,10 +5,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
     seedAccount, seedMember, connectWhatsapp, request, postWebhook, openStream, metaCalls, onMeta, ANONYMOUS,
-    ApiKey, Contact, Conversation, Message, User,
+    Account, ApiKey, Contact, Conversation, Message, User,
 } from './helpers.js';
 
-const { acquireConversation, confirmAssignee } = await import('../../src/services/assignment.service.js');
+const { acquireConversation, confirmAssignee, confirmRequester } = await import('../../src/services/assignment.service.js');
 const { hashApiKey } = await import('../../src/utils/crypto.js');
 
 // TODO lo que se prepara con `await` va aquí, antes del primer `test()` (ver
@@ -557,4 +557,36 @@ test('la carrera con la desactivación: una asignación escrita después se desh
     await Conversation.updateOne({ _id: free.conversation._id }, { $set: { assignedTo: late.userId } });
     assert.equal(await confirmAssignee(a.accountId, free.conversation._id, late.userId), false);
     assert.equal((await assigneeOf(free.conversation)).assignedTo, null);
+});
+
+test('una solicitud guardada mientras se le quitaba el acceso al que la pidió se borra (revisión de Codex del PR #144)', async () => {
+    const late = await seedMember(a, { role: 'agent', lineIds: [l1], label: 'ASOUT5' });
+    const ofAna = await seedConversation(nextPhone(), 'Pedida a destiempo', ana.userId);
+    // Como si la solicitud se escribiera después de que `updateMember` lo desactivara y limpiara.
+    const requestId = new (await import('mongoose')).default.Types.ObjectId();
+    await User.updateOne({ _id: late.userId }, { status: 'inactive' });
+    await Conversation.updateOne({ _id: ofAna.conversation._id }, {
+        $set: { transferRequest: { id: requestId, requestedBy: late.userId, requestedAt: new Date() } },
+    });
+    assert.equal(await confirmRequester(a.accountId, ofAna.conversation._id, requestId, late.userId), false);
+    assert.equal(await pendingOf(ofAna.conversation), null);
+    assert.equal((await assigneeOf(ofAna.conversation)).assignedTo, ana.userId);
+});
+
+test('desactivar y soltar van con el candado del equipo: ocupado, 409 y nada cambia (revisión de Codex del PR #144)', async () => {
+    const member = await seedMember(a, { role: 'agent', lineIds: [l1], label: 'ASOUT6' });
+    const his = await seedConversation(nextPhone(), 'Con el candado', member.userId);
+    // Otro cambio del equipo en curso (otra petición tiene el candado).
+    await Account.updateOne({ _id: a.accountId }, { $set: { teamLock: { token: 'otro', expiresAt: new Date(Date.now() + 30_000) } } });
+    try {
+        const res = await patchMember(member, { status: 'inactive' });
+        assert.equal(res.status, 409, res.text);
+        assert.equal(res.body[0].code, 'team_busy');
+        assert.equal((await User.findById(member.userId).lean()).status, 'active');
+        assert.equal((await assigneeOf(his.conversation)).assignedTo, member.userId);
+    } finally {
+        await Account.updateOne({ _id: a.accountId }, { $set: { teamLock: null } });
+    }
+    assert.equal((await patchMember(member, { status: 'inactive' })).status, 200);
+    assert.equal((await assigneeOf(his.conversation)).assignedTo, null);
 });

@@ -131,6 +131,22 @@ export const confirmAssignee = async (accountId, conversationId, userId) => {
 const invalidAssignee = () => statusError(409, INVALID_ASSIGNEE_MESSAGE, 'invalid_assignee');
 
 /**
+ * Lo mismo para una solicitud de transferencia recién guardada: si quien la
+ * pidió perdió el acceso mientras tanto, se borra ESA solicitud (por su `id`).
+ * Si no, sobreviviría a la limpieza de `releaseAssignments` y podría haber
+ * reemplazado a una válida (revisión de Codex del PR #144).
+ */
+export const confirmRequester = async (accountId, conversationId, requestId, userId) => {
+    const [member, conversation] = await Promise.all([
+        User.findOne({ _id: userId, accountId }).select(MEMBER_FIELDS).lean(),
+        Conversation.findById(conversationId).select('lineId').lean(),
+    ]);
+    if (conversation && isValidAssignee(member, conversation.lineId)) return true;
+    await Conversation.updateOne({ _id: conversationId, 'transferRequest.id': requestId }, { $unset: { transferRequest: 1 } });
+    return false;
+};
+
+/**
  * Antes de responder una conversación (y antes de llamar a Meta: spec § 2.2),
  * la adquiere quien responde. Una sola escritura condicional la toma si está
  * sin asignar: de dos personas a la vez, solo una la gana. Si ya tiene dueño
@@ -277,6 +293,9 @@ export const requestTransfer = async (auth, conversationId) => {
         { $set: { transferRequest: request } },
     );
     if (result.matchedCount === 0) throw statusError(409, ASSIGNMENT_CHANGED_MESSAGE, 'assignment_changed');
+    if (!(await confirmRequester(auth.accountId, conversation._id, request.id, auth.userId))) {
+        throw statusError(409, 'Ya no puedes atender esta línea.', 'invalid_assignee');
+    }
     await emitTransferRequest(auth.accountId, conversation._id);
 };
 
