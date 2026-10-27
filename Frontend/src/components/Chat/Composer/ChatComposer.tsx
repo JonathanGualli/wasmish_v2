@@ -22,6 +22,7 @@ import { useNoticeContext } from "../../Notice/context/UseNoticeContext";
 import { SendTemplateDialog } from "../SendTemplateDialog";
 import { AttachmentPreview } from "./AttachmentPreview";
 import { ReplyBar } from "./ReplyBar";
+import { assignmentError } from "../../../hooks/useConversationAssignment";
 
 interface Props {
     conversationId: string;
@@ -39,6 +40,11 @@ interface Props {
     hint?: string | null;
     /** Un texto salió (para decir que responder la tomó). */
     onSent?: () => void;
+    /** Otra persona respondió antes y se la quedó: el texto no salió (Fase 4; diseño, 3c). */
+    /** `sentAt`: cuándo salió, para saber si el 409 llega después de que se la devolvieran. */
+    onTakenByOther?: (assignedToName: string | null, text: string, sentAt: number) => void;
+    /** Lo que se escribió y no salió, de vuelta en el campo al montarse. */
+    initialText?: string;
 }
 
 /** Hasta 6 líneas de 21 px; luego, scroll. */
@@ -68,12 +74,15 @@ const namePasted = (file: File) => {
  * El aviso al arrastrar se pinta sobre toda la conversación: su contenedor
  * tiene que ser `relative`.
  */
-export const ChatComposer = ({ conversationId, conversation, title, onStartConversation, replyTo, onCancelReply, team, hint, onSent }: Props) => {
+export const ChatComposer = ({
+    conversationId, conversation, title, onStartConversation, replyTo, onCancelReply, team, hint, onSent, onTakenByOther,
+    initialText = "",
+}: Props) => {
     const sendText = useConversationSendMessages();
     const media = useSendMediaMessage();
     const attachment = useOutgoingAttachment();
     const { setState, setContent } = useNoticeContext();
-    const [text, setText] = useState("");
+    const [text, setText] = useState(initialText);
     const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     useAutosizeTextarea(textareaRef, text, MAX_HEIGHT);
@@ -150,7 +159,19 @@ export const ChatComposer = ({ conversationId, conversation, title, onStartConve
 
         const message = text;
         setText("");
-        sendText.mutate({ conversationId, message, temporalId: crypto.randomUUID(), replyTo }, { onError: showTextError, onSuccess: onSent });
+        // `mutateAsync` y no los callbacks de `mutate`: si el SSE cierra el chat
+        // antes de que llegue el 409, este composer se desmonta y React Query ya
+        // no los llamaría; la promesa sí se cumple, y el texto llega al chat
+        // cerrado (revisión de Codex del PR #146).
+        const sentAt = Date.now();
+        sendText.mutateAsync({ conversationId, message, temporalId: crypto.randomUUID(), replyTo }).then(
+            () => onSent?.(),
+            (error: Error) => {
+                const { code, assignedToName } = assignmentError(error);
+                if (code === 'assigned_to_other' && onTakenByOther) onTakenByOther(assignedToName, message, sentAt);
+                else showTextError(error);
+            },
+        );
         onCancelReply();
     };
 

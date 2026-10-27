@@ -7,6 +7,7 @@ import { ChatsPath } from '../../models/routes.models';
 import type { ChatsNavigationState } from '../../models/conversation.mode';
 import { MobileMenuContext } from './MobileMenuContext';
 import { NavigationGuardContext, useNavigationGuardValue } from './NavigationGuardContext';
+import { useTransferAnswers } from '../../hooks/useTransferRequest';
 
 /**
  * Sin barra de título: la maqueta «Sidebar y Chats» da toda la altura al
@@ -30,6 +31,8 @@ export const PrivateLayout = ({ children }: { children: ReactNode }) => {
   const { pathname } = useLocation();
   const inChats = pathname.startsWith(ChatsPath);
   const navigationGuard = useNavigationGuardValue();
+  // La respuesta a una solicitud de transferencia, en cualquier página (Fase 4).
+  useTransferAnswers();
 
   // Tocar el aviso de un mensaje con Wasmish ya abierta: el service worker
   // enfoca esta ventana y pide abrir la conversación, sin recargar (public/sw.js).

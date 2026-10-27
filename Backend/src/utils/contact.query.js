@@ -112,13 +112,16 @@ const assigneeOf = (user) => (user ? { id: String(user._id ?? user), name: user.
 /**
  * La conversación de un compañero en la ficha de un agente (Fase 4): que existe,
  * en qué línea y quién la atiende, para pedir que se la pasen. Nada de lo que
- * dice: ni la última interacción ni la ventana.
+ * dice: ni la última interacción ni la ventana. `transferRequested`: la
+ * solicitud pendiente es de quien mira (`userId`); el bloque de la ficha se
+ * ajusta con esto aunque se haya perdido el aviso de la respuesta.
  */
-export const restrictedConversationItem = (conversation) => ({
+export const restrictedConversationItem = (conversation, userId = null) => ({
     conversationId: String(conversation._id),
     lineId: conversation.lineId ? String(conversation.lineId) : null,
     lastInteractionAt: null,
     windowExpiresAt: null,
     assignedTo: assigneeOf(conversation.assignedTo),
     restricted: true,
+    transferRequested: Boolean(userId) && String(conversation.transferRequest?.requestedBy ?? '') === userId,
 });

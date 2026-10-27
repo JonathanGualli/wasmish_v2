@@ -20,6 +20,11 @@ import { useLines } from '../../hooks/useLines';
 import type { Line } from '../../models/line.model';
 import { lineLabel } from '../../utils/lineDisplay';
 import { LineSelect } from '../Line/LineSelect';
+import { useContact, useContactByPhone } from '../../hooks/useContacts';
+import { assignmentError } from '../../hooks/useConversationAssignment';
+import { firstName } from '../../utils/assignment';
+import { TransferRequestCard } from './Assignment/TransferRequestCard';
+import { useQueryClient } from '@tanstack/react-query';
 
 /** La plantilla que se quitó al cambiar a una línea de otra cuenta, con lo rellenado: «Volver a …» la recupera. */
 interface RemovedTemplate {
@@ -77,6 +82,7 @@ export const NewConversationPanel = ({ initialDraft, onClose, onBack, onCreated,
   const form = useTemplateForm(initialDraft, line ? line.waBusinessId : undefined);
   const startConversation = useStartConversation();
   const { data: conversations } = useConversations();
+  const queryClient = useQueryClient();
 
   const digits = phone.replace(/\D/g, '');
   const phoneValid = PHONE_RE.test(digits);
@@ -93,6 +99,15 @@ export const NewConversationPanel = ({ initialDraft, onClose, onBack, onCreated,
     () => (phoneValid ? conversations?.find(c => c.phone === digits) : undefined),
     [conversations, digits, phoneValid],
   );
+
+  // La conversación de ese número en esa línea la atiende un compañero (Fase 4):
+  // no está en la bandeja del agente, pero sí en la ficha del contacto. No se le
+  // puede escribir: en lugar de la plantilla, pedir que se la pasen (diseño, 3b).
+  const recipient = useContactByPhone(phoneValid ? digits : '');
+  const { data: recipientDetail, dataUpdatedAt: recipientFetchedAt } = useContact(recipient?.id ?? null);
+  const takenByOther = line
+    ? recipientDetail?.conversations.find(c => c.restricted && c.lineId === line.id)
+    : undefined;
 
   const { selectedName, values, buttonValues } = form;
   useEffect(() => {
@@ -139,6 +154,7 @@ export const NewConversationPanel = ({ initialDraft, onClose, onBack, onCreated,
   const status = !digits ? 'Escribe el número de destino.'
     : !phoneValid ? 'El número parece incompleto: lleva código de país.'
     : lineUnresolved ? (linesError ? 'No se pudieron cargar las líneas. Recarga la página.' : 'Cargando las líneas…')
+    : takenByOther ? `La atiende ${firstName(takenByOther.assignedTo)}.`
     : form.isLoading ? 'Cargando plantillas…'
     : form.approved.length === 0 ? 'Necesitas una plantilla aprobada.'
     : !form.selected ? 'Elige una plantilla.'
@@ -146,7 +162,7 @@ export const NewConversationPanel = ({ initialDraft, onClose, onBack, onCreated,
     : form.missing === 1 ? 'Falta 1 valor por completar.'
     : form.missing > 1 ? `Faltan ${form.missing} valores por completar.`
     : 'Listo para enviar.';
-  const ready = phoneValid && !lineUnresolved && Boolean(form.selected) && form.missing === 0 && !form.headerIssue;
+  const ready = phoneValid && !lineUnresolved && !takenByOther && Boolean(form.selected) && form.missing === 0 && !form.headerIssue;
 
   const handleClose = () => {
     if (!startConversation.isPending) onClose();
@@ -167,6 +183,9 @@ export const NewConversationPanel = ({ initialDraft, onClose, onBack, onCreated,
       });
       onCreated(message.conversationId);
     } catch (err) {
+      // Un compañero la tomó entretanto: la ficha del contacto lo dice, y el
+      // bloque de la solicitud ocupa el sitio de la plantilla.
+      if (assignmentError(err).code === 'assigned_to_other') void queryClient.invalidateQueries({ queryKey: ['contacts'] });
       // El error va al aviso global, como el resto de la app. Lo escrito no se
       // pierde: el panel sigue montado debajo y se puede corregir y reenviar.
       setContent(<div className="text-brand-danger text-sm"><p>{templateSendError(err)}</p></div>);
@@ -175,6 +194,13 @@ export const NewConversationPanel = ({ initialDraft, onClose, onBack, onCreated,
   };
 
   const renderComposer = () => {
+    if (takenByOther) {
+      return (
+        <TransferRequestCard framed conversationId={takenByOther.conversationId} assignedTo={takenByOther.assignedTo ?? null}
+          lineName={hasManyLines && line ? lineLabel(line) : null} onOpen={() => onOpenExisting(takenByOther.conversationId)}
+          server={{ requested: Boolean(takenByOther.transferRequested), fetchedAt: recipientFetchedAt }} />
+      );
+    }
     if (form.isLoading) return <TemplateFormSkeleton />;
     if (form.approved.length === 0) {
       return (
@@ -269,7 +295,7 @@ export const NewConversationPanel = ({ initialDraft, onClose, onBack, onCreated,
 
           {renderComposer()}
 
-          {removed && (
+          {removed && !takenByOther && (
             <Callout tone="warning" icon={<AlertCircle size={16} />} title={`Quitamos «${removed.templateName}».`}
               action={<button type="button" onClick={undoLineChange}
                 className="text-[13px] font-semibold text-brand-accent-strong hover:underline cursor-pointer">
@@ -281,7 +307,7 @@ export const NewConversationPanel = ({ initialDraft, onClose, onBack, onCreated,
           )}
 
           {/* Vista previa: el mensaje tal y como quedará en el hilo */}
-          {form.selected && (
+          {form.selected && !takenByOther && (
             <div className="justify-self-end w-full max-w-[85%] md:max-w-[75%]">
               <TemplateBubble bodyText={form.selected.bodyText ?? ''} values={form.values} template={form.selected} />
               <TemplateButtons buttons={form.selected.buttons} />

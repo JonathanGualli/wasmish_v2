@@ -5,7 +5,7 @@ import Message from "../models/message.model.js";
 import { decrypt }  from "../utils/crypto.js";
 import { sendMediaMessage, sendTextMessage, uploadMedia } from "../libs/whatsapp.js";
 import {
-    acquireConversation, answerTransfer, assignConversation, claimNewConversation, listAssignees, populateConversation,
+    acquireConversation, unseenConversationError, answerTransfer, assignConversation, claimNewConversation, listAssignees, populateConversation,
     requestTransfer, sendConversationEvent, sendErrorBody, serializeConversation, takeConversation,
 } from '../services/assignment.service.js';
 import { freeTextBlockReason } from "../utils/whatsapp.window.js";
@@ -265,6 +265,12 @@ const findOwnConversation = (auth, id) =>
         ? Conversation.findOne({ _id: id, userId: auth.accountId, ...conversationScope(auth) })
         : null;
 
+// Enviar en una que no ve: 409 si la atiende un compañero, 404 si no (`unseenConversationError`).
+const sendUnseenConversation = async (res, auth, id) => {
+    const error = await unseenConversationError(auth, id);
+    return res.status(error.statusCode).json(sendErrorBody(error));
+};
+
 export const sendMessageController = async (req, res) => {
     try {
         const { id } = req.params; // Puede ser undefined si es un chat nuevo
@@ -287,7 +293,7 @@ export const sendMessageController = async (req, res) => {
         let conversation = null;
         if (id) {
             conversation = await findOwnConversation(req.auth, id);
-            if (!conversation) return res.status(404).json([{ message: "Conversation not found" }]);
+            if (!conversation) return sendUnseenConversation(res, req.auth, id);
         }
         // El citado, de ESTA conversación, antes de la ventana y de pausar al bot.
         const { replyTarget, error: replyError } = conversation
@@ -370,7 +376,7 @@ export const sendMediaMessageController = async (req, res) => {
     try {
         const userId = req.auth.accountId;
         const conversation = await findOwnConversation(req.auth, req.params.id);
-        if (!conversation) return res.status(404).json([{ message: "Conversation not found" }]);
+        if (!conversation) return sendUnseenConversation(res, req.auth, req.params.id);
         // `X-Reply-To`: el id del mensaje que cita, de esta conversación.
         const replyToMessageId = String(req.headers['x-reply-to'] ?? '').trim() || null;
         const { replyTarget, error: replyError } = await resolveReplyTarget(conversation, replyToMessageId);
@@ -558,7 +564,7 @@ export const sendConversationTemplateController = async (req, res) => {
         // Sin `findOwnConversation`, cualquier sesión podría enviar en la
         // conversación de otro, o en una de una línea que no es suya.
         const conversation = await findOwnConversation(req.auth, id);
-        if (!conversation) return res.status(404).json([{ message: "Conversation not found" }]);
+        if (!conversation) return sendUnseenConversation(res, req.auth, id);
 
         // La línea de la conversación: 409 si es de un número que ya no está conectado.
         const line = await findConversationLine(conversation);
