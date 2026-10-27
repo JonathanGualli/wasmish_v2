@@ -38,7 +38,8 @@ export const sendToAccount = (accountId, event, data, meta = {}) => {
  * Una conversación cambió de manos (Fase 4): `before` y `after` son su
  * `conversationMeta` antes y después. Quien la sigue viendo recibe
  * `conversation_assigned` con `data` (la conversación como la da la lista);
- * quien la pierde, `conversation_revoked { id }`, para quitarla de su caché.
+ * quien la pierde, `conversation_revoked { id, assignedTo }`, para quitarla de
+ * su caché y decirle quién la atiende ahora.
  */
 export const sendAssignmentChange = (accountId, data, before, after) => {
     const set = clients.get(accountId);
@@ -46,7 +47,8 @@ export const sendAssignmentChange = (accountId, data, before, after) => {
     for (const { auth, res } of set) {
         const event = assignmentEventFor(auth, before, after);
         if (event === 'conversation_assigned') write(res, event, data);
-        else if (event === 'conversation_revoked') write(res, event, { id: data.id });
+        // Con quién la atiende ahora: «Esta conversación ahora la atiende Luis».
+        else if (event === 'conversation_revoked') write(res, event, { id: data.id, assignedTo: data.assignedTo });
     }
 };
 

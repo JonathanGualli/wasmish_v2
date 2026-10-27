@@ -289,7 +289,7 @@ test('SSE: cuando Ana toma una sin asignar, Luis recibe conversation_revoked y n
         const free = await seedConversation(nextPhone(), 'Se la lleva Ana');
         const text = `de-ana-${Date.now()}`;
         assert.equal((await reply(ana, free.conversation, text)).status, 201);
-        assert.ok(await asLuis.waitFor(`event: conversation_revoked\ndata: {"id":"${free.conversation._id}"}`, 2000), 'Luis no recibió el revoked');
+        assert.ok(await asLuis.waitFor(`event: conversation_revoked\ndata: {"id":"${free.conversation._id}","assignedTo":{"id":"${ana.userId}"`, 2000), 'Luis no recibió el revoked');
         assert.equal(await asLuis.waitFor(text, 300), false, 'a Luis le llegó el mensaje de Ana');
     } finally {
         onMeta(null);
