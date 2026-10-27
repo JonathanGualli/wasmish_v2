@@ -3,6 +3,7 @@
 // y se avisa en la cuenta de A, no en la persona ni en la cuenta de B.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import mongoose from 'mongoose';
 import {
     seedAccount, seedMember, connectWhatsapp, postWebhook, postWebhookBody, postEcho, openStream, recordQueries, onMeta,
     FAKE_MEDIA_URL, PNG, request, pushCalls, Contact, Conversation, Line, Message, User,
@@ -806,4 +807,106 @@ test('fromHistory se guarda, y solo en lo que lo lleva', async () => {
     const live = await Message.create({ ...base, waMessageId: 'wamid.en.vivo.1' });
     assert.equal((await Message.collection.findOne({ _id: imported._id })).fromHistory, true);
     assert.equal('fromHistory' in (await Message.collection.findOne({ _id: live._id })), false);
+});
+
+// --- La conversación y los fallos de la BD (2026-10-27) ----------------------
+
+const conversationOfPhone = (phone) => Conversation.findOne({ userId: a.accountId, contactPhone: phone }).lean();
+
+/** Cambia `Message.create` mientras dura `fn`: `onCreate(doc)` corre antes del de verdad. */
+const withMessageCreate = async (onCreate, fn) => {
+    const original = Message.create;
+    Message.create = async function (...args) {
+        await onCreate(args[0]);
+        return original.apply(this, args);
+    };
+    try { return await fn(); } finally { Message.create = original; }
+};
+
+// Regresión que vigila: `procesarEntrante` leía la conversación, sumaba uno a
+// `unreadCount` en memoria y guardaba con `save()`. Con dos entrantes a la vez,
+// los dos leían el mismo número y la conversación quedaba con un no leído de
+// menos. Aquí el segundo entrante se procesa entero mientras el primero espera
+// para guardar su mensaje, con la conversación ya leída.
+test('dos entrantes cruzados de la misma conversación cuentan dos no leídos', async () => {
+    const phone = '593990020001';
+    const first = textMessage(phone, 'primero');
+    const second = textMessage(phone, 'segundo');
+    let crossed = false;
+    const res = await withMessageCreate(async (doc) => {
+        if (crossed || doc?.waMessageId !== first.messages[0].id) return;
+        crossed = true;
+        assert.equal((await postWebhook(A_NUMBER, second)).status, 200);
+    }, () => postWebhook(A_NUMBER, first));
+    assert.equal(res.status, 200);
+    assert.ok(crossed, 'el test no forzó el cruce');
+
+    const conversation = await conversationOfPhone(phone);
+    assert.equal(conversation.unreadCount, 2);
+    assert.equal(await Message.countDocuments({ conversationId: conversation._id }), 2);
+});
+
+// Regresión que vigila: un fallo de Mongo en mitad de `procesarEntrante` caía en
+// el catch del mensaje, que lo descartaba y respondía 200: Meta no lo
+// reentregaba y el entrante se perdía. Ahora el lote acaba en 500 y la
+// reentrega lo guarda, una sola vez.
+test('si la BD falla al guardar un entrante, 500 y la reentrega lo guarda una vez', async () => {
+    const phone = '593990020002';
+    const body = textMessage(phone, 'se cayó Mongo');
+    let failed = false;
+    const res = await withMessageCreate((doc) => {
+        if (failed || doc?.waMessageId !== body.messages[0].id) return;
+        failed = true;
+        throw new mongoose.mongo.MongoNetworkError('connection reset');
+    }, () => postWebhook(A_NUMBER, body));
+    assert.ok(failed, 'el test no forzó el fallo');
+    assert.equal(res.status, 500);
+    assert.equal(await Message.exists({ waMessageId: body.messages[0].id }), null);
+
+    assert.equal((await postWebhook(A_NUMBER, body)).status, 200);
+    assert.equal((await postWebhook(A_NUMBER, body)).status, 200);
+    const conversation = await conversationOfPhone(phone);
+    assert.equal(await Message.countDocuments({ waMessageId: body.messages[0].id }), 1);
+    assert.equal(conversation.unreadCount, 1);
+});
+
+// Lo de siempre (regla 7): un mensaje roto no hace que Meta reentregue el lote.
+test('un entrante que falla por otra cosa se descarta con 200', async () => {
+    const body = textMessage('593990020003', 'roto');
+    const res = await withMessageCreate((doc) => {
+        if (doc?.waMessageId === body.messages[0].id) throw new TypeError('dato inesperado');
+    }, () => postWebhook(A_NUMBER, body));
+    assert.equal(res.status, 200);
+    assert.equal(await Message.exists({ waMessageId: body.messages[0].id }), null);
+});
+
+// Meta no garantiza el orden: un entrante viejo que llega tarde no retrocede ni
+// la vista previa ni la ventana, pero sí cuenta como no leído.
+test('un entrante viejo que llega tarde no retrocede la bandeja ni la ventana', async () => {
+    const phone = '593990020004';
+    const now = Math.floor(Date.now() / 1000);
+    const late = textMessage(phone, 'el de antes');
+    late.messages[0].timestamp = String(now - 3600);
+    assert.equal((await postWebhook(A_NUMBER, textMessage(phone, 'el de ahora'))).status, 200);
+    assert.equal((await postWebhook(A_NUMBER, late)).status, 200);
+
+    const conversation = await conversationOfPhone(phone);
+    assert.equal(conversation.lastMessage, 'el de ahora');
+    assert.ok(conversation.lastInboundAt.getTime() >= (now - 5) * 1000, 'la ventana retrocedió');
+    assert.equal(conversation.unreadCount, 2);
+});
+
+// Revisión de Codex del PR #139: Meta da la hora en segundos, y con el `$lt` de
+// `advanceConversationPreview` el segundo de dos entrantes del mismo segundo no
+// cambiaba la vista previa: en vivo se veía «necesito ayuda» y al recargar, «hola».
+test('dos entrantes del mismo segundo: la vista previa queda con el último', async () => {
+    const phone = '593990020005';
+    const second = String(Math.floor(Date.now() / 1000));
+    const hello = textMessage(phone, 'hola');
+    const help = textMessage(phone, 'necesito ayuda');
+    hello.messages[0].timestamp = second;
+    help.messages[0].timestamp = second;
+    assert.equal((await postWebhook(A_NUMBER, hello)).status, 200);
+    assert.equal((await postWebhook(A_NUMBER, help)).status, 200);
+    assert.equal((await conversationOfPhone(phone)).lastMessage, 'necesito ayuda');
 });
