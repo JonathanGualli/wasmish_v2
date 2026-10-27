@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { AlertTriangle, Lock, Pencil } from 'lucide-react';
 import { AuthField } from '../../../components/Auth/AuthField';
+import { AgendaNameHint } from '../../../components/Contact/AgendaNameHint';
 import { CustomButton } from '../../../components/Button/Button';
 import { Callout } from '../../../components/Callout/Callout';
 import { useNoticeContext } from '../../../components/Notice/context/UseNoticeContext';
@@ -168,8 +169,11 @@ export const ContactForm = ({ contact, onCancel, onSaved, onViewContact }: Props
                     labelAction={<Counter value={name} max={NAME_MAX} />}
                     value={name}
                     onChange={e => setName(e.target.value)}
-                    placeholder="Ferretería La Estrella"
+                    placeholder={contact?.agendaName ?? 'Ferretería La Estrella'}
                     maxLength={NAME_MAX}
+                    hint={contact?.agendaName && !name.trim() && (
+                        <AgendaNameHint>Vacío, se usa «{contact.agendaName}», el nombre en tu celular. Si escribes otro, el equipo ve este.</AgendaNameHint>
+                    )}
                 />
                 <AuthField
                     label={<Optional>Email</Optional>}

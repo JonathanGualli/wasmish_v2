@@ -1,5 +1,5 @@
 import { useState, type KeyboardEvent, type ReactNode } from "react";
-import { Lock } from "lucide-react";
+import { Lock, Smartphone } from "lucide-react";
 import { contactError, useContactMutations } from "../../../hooks/useContacts";
 import type { ContactDetail } from "../../../models/contact.model";
 import { CONTACT_NAME_MAX, EMAIL_RE, sourceLabel } from "../../../utils/contactDisplay";
@@ -7,6 +7,7 @@ import { formatShortDate } from "../../../utils/formatChatTime";
 import { AuthField } from "../../Auth/AuthField";
 import { CustomButton } from "../../Button/Button";
 import { ReferralCard } from "../../Contact/ReferralCard";
+import { AgendaNameHint } from "../../Contact/AgendaNameHint";
 import { useNoticeContext } from "../../Notice/context/UseNoticeContext";
 import { SidebarCard } from "./SidebarCard";
 
@@ -32,7 +33,9 @@ export const ContactDataCard = ({ contact }: { contact: ContactDetail }) => {
                 </button>
             }
         >
-            <dl className="grid grid-cols-[64px_minmax(0,1fr)] gap-x-2.5 gap-y-[7px] text-[13px] leading-[1.5]">
+            <dl className={`grid gap-x-2.5 gap-y-[7px] text-[13px] leading-[1.5]
+                ${contact.agendaName ? 'grid-cols-[82px_minmax(0,1fr)]' : 'grid-cols-[64px_minmax(0,1fr)]'}`}>
+                {contact.agendaName && <AgendaNameRow name={contact.agendaName} />}
                 <DataRow label="Email" value={contact.email} empty="Sin email" />
                 <DataRow label="Empresa" value={contact.company} empty="Sin empresa" />
                 <DataRow label="Origen" value={sourceLabel(contact.source)} />
@@ -47,6 +50,19 @@ const DataRow = ({ label, value, empty = '—' }: { label: string; value: ReactN
     <>
         <dt className="text-brand-muted">{label}</dt>
         <dd className={`[overflow-wrap:anywhere] ${value ? 'text-brand-text' : 'text-brand-subtle'}`}>{value || empty}</dd>
+    </>
+);
+
+/** El nombre de la agenda del celular: un dato más, de solo lectura. */
+const AgendaNameRow = ({ name }: { name: string }) => (
+    <>
+        <dt className="text-brand-muted leading-[1.35]">Nombre en tu celular</dt>
+        <dd className="grid gap-0.5 min-w-0">
+            <span className="flex items-center gap-1.5 text-brand-text [overflow-wrap:anywhere]">
+                <Smartphone size={12} strokeWidth={2.2} className="flex-none text-brand-muted" />{name}
+            </span>
+            <span className="text-xs text-brand-muted">Se cambia en el celular.</span>
+        </dd>
     </>
 );
 
@@ -91,7 +107,10 @@ const EditData = ({ contact, onDone }: { contact: ContactDetail; onDone: () => v
         <SidebarCard title="Datos">
             <form onSubmit={handleSubmit} onKeyDown={handleKeyDown} className="grid gap-3">
                 <AuthField label="Nombre" value={name} onChange={e => setName(e.target.value)}
-                    maxLength={CONTACT_NAME_MAX} placeholder={contact.profileName ?? 'Ferretería La Estrella'} />
+                    maxLength={CONTACT_NAME_MAX} placeholder={contact.agendaName ?? contact.profileName ?? 'Ferretería La Estrella'}
+                    hint={contact.agendaName && !name.trim() && (
+                        <AgendaNameHint>Vacío: se usa el de tu celular. Escribe otro si en Wasmish lo quieren ver distinto.</AgendaNameHint>
+                    )} />
                 <AuthField label="Email" type="email" value={email} onChange={e => setEmail(e.target.value)}
                     onBlur={() => setEmailTouched(true)} error={emailError} placeholder="nombre@empresa.com" />
                 <AuthField label="Empresa" value={company} onChange={e => setCompany(e.target.value)}
