@@ -28,6 +28,7 @@ import { findQuotedMessage, quotedMapOf } from '../services/message.reply.servic
 import { serializeMessage } from './chat.controller.js';
 import { storeHistoryChunks, storeHistoryMedia } from '../services/history.intake.service.js';
 import { storeAgendaSync } from '../services/agenda.service.js';
+import { isTransientDbError } from '../utils/db.errors.js';
 
 // Baja el adjunto y lo deja en disco. Devuelve SIEMPRE un objeto: si algo falla
 // —token caducado, archivo enorme, Meta caída— sale con mediaFile en null y el
@@ -194,13 +195,6 @@ const procesarEntrante = async (inbound, messageData, contacts) => {
     // propio historial y su propia ventana.
     const conversation = await findOrCreateConversation({ userId: inbound.accountId, contact, line: inbound });
 
-    // La ventana nunca retrocede: Meta no garantiza el orden de los
-    // webhooks, y un entrante viejo que llegue tarde la cerraría antes
-    // de tiempo. Mismo criterio que resolveStatusTransition.
-    if (!isLooseReaction && (!conversation.lastInboundAt || timestamp > conversation.lastInboundAt)) {
-        conversation.lastInboundAt = timestamp;
-    }
-
     // A qué responde (la cita) y si es un reenvío. El citado, solo de esta conversación.
     const context = describeMessageContext(messageData);
     const quoted = await findQuotedMessage(conversation._id, context.replyToWaMessageId);
@@ -248,11 +242,24 @@ const procesarEntrante = async (inbound, messageData, contacts) => {
         throw error;
     }
 
-    // Update conversation
-    conversation.lastMessage = entrante.text;
-    conversation.lastMessageAt = timestamp;
-    if (!isLooseReaction) conversation.unreadCount = (conversation.unreadCount || 0) + 1;
-    await conversation.save();
+    // El teléfono que Meta acaba de revelar (`findOrCreateConversation`). `save`
+    // solo escribe lo que cambió: nunca los no leídos, que van aparte.
+    if (conversation.isModified()) await conversation.save();
+
+    // La conversación, con escrituras atómicas, como los ecos: con leer, sumar
+    // uno y `save()`, dos entrantes a la vez leían el mismo `unreadCount` y se
+    // contaba uno solo. La vista previa y la ventana nunca retroceden: Meta no
+    // garantiza el orden de los webhooks, y un entrante viejo que llegue tarde
+    // cerraría la ventana antes de tiempo (mismo criterio que resolveStatusTransition).
+    await advanceConversationPreview(conversation._id, { text: entrante.text, timestamp });
+    const { unreadCount = 0, lastInboundAt = null } = await (isLooseReaction
+        ? Conversation.findById(conversation._id)
+        : Conversation.findOneAndUpdate(
+            { _id: conversation._id },
+            { $inc: { unreadCount: 1 }, $max: { lastInboundAt: timestamp } },
+            { new: true },
+        )
+    ).select('unreadCount lastInboundAt').lean() ?? {};
 
     // El mismo mensaje que da la lista (`serializeMessage`), con la cita
     // resuelta, más el contador y la ventana de la conversación.
@@ -260,8 +267,8 @@ const procesarEntrante = async (inbound, messageData, contacts) => {
         String(inbound.accountId),
         'message_created', {
             ...serializeMessage(messageCreated, { quoted: quotedMapOf(quoted) }),
-            unreadCount: conversation.unreadCount,
-            windowExpiresAt: getWindowExpiry(conversation.lastInboundAt)?.toISOString() ?? null,
+            unreadCount,
+            windowExpiresAt: getWindowExpiry(lastInboundAt)?.toISOString() ?? null,
         },
         // Solo a quien ve esa línea (Fase 3).
         { lineId: conversation.lineId ?? null },
@@ -305,7 +312,7 @@ const procesarEntrante = async (inbound, messageData, contacts) => {
         sender: messageCreated.sender,
         type: messageCreated.type,
         longitud: messageCreated.text.length,
-        unreadCount: conversation.unreadCount,
+        unreadCount,
         timestamp: messageCreated.timestamp.toISOString(),
         status: messageCreated.status,
         waMessageId: messageCreated.waMessageId,
@@ -568,6 +575,19 @@ const procesarEstado = async (inbound, statusData) => {
     }
 };
 
+// Un entrante, eco o aviso que no se pudo aplicar. Si fue la BD, el mismo
+// mensaje se guardaría minutos después: true, y el lote acaba en 500 para que
+// Meta lo reentregue (los ya guardados se saltan por `waMessageId`, y los
+// acuses son monótonos). Si no, el roto es ese mensaje: reentregarlo fallaría
+// igual durante días, así que se descarta y el lote sigue con 200.
+const logItemFailure = (label, error, details = {}) => {
+    const transient = isTransientDbError(error);
+    console.error(`${label} con error, ${transient ? 'se pide a Meta que reentregue el lote' : 'se descarta'}:`, {
+        ...details, error: error.message,
+    });
+    return transient;
+};
+
 export const handleWebhook = async (req, res) => {
     try {
         const body = req.body;
@@ -579,8 +599,8 @@ export const handleWebhook = async (req, res) => {
         if(!entries) return res.sendStatus(200);
 
         // Un aviso de Meta que no se pudo aplicar porque el candado de líneas
-        // estaba ocupado: el resto del lote se procesa igual y, al final, 500
-        // para que Meta lo reentregue. Es seguro: los mensajes ya guardados se
+        // estaba ocupado o la BD falló: el resto del lote se procesa igual y, al
+        // final, 500 para que Meta lo reentregue. Es seguro: los mensajes ya guardados se
         // saltan por `waMessageId` antes de cualquier efecto, y los acuses son
         // monótonos.
         let retryBatch = false;
@@ -663,19 +683,14 @@ export const handleWebhook = async (req, res) => {
                 const messages = value?.messages ?? [];
 
                 for(const messageData of messages) {
-                    // Cada mensaje va en su propio try/catch a propósito. Si dejáramos
-                    // subir el error, handleWebhook respondería 500 y Meta reintentaría
-                    // el LOTE ENTERO: como no hay índice único en waMessageId, los que
-                    // sí se guardaron se duplicarían en el chat del cliente. Ahora Meta
-                    // recibe 200 y como mucho se pierde el mensaje que venía roto.
+                    // Cada mensaje va en su propio try/catch a propósito: uno roto
+                    // no tumba el lote. Solo un fallo de la BD pide la reentrega
+                    // (`logItemFailure`); antes se descartaba también, y el
+                    // entrante se perdía aunque Meta recibiera 200.
                     try {
                         await procesarEntrante(inbound, messageData, value.contacts);
                     } catch (error) {
-                        console.error("Entrante descartado por error:", {
-                            waMessageId: messageData?.id,
-                            type: messageData?.type,
-                            error: error.message,
-                        });
+                        if (logItemFailure('Entrante', error, { waMessageId: messageData?.id, type: messageData?.type })) retryBatch = true;
                     }
                 }
 
@@ -686,11 +701,7 @@ export const handleWebhook = async (req, res) => {
                     try {
                         await procesarEco(inbound, echoData);
                     } catch (error) {
-                        console.error("Eco descartado por error:", {
-                            waMessageId: echoData?.id,
-                            type: echoData?.type,
-                            error: error.message,
-                        });
+                        if (logItemFailure('Eco', error, { waMessageId: echoData?.id, type: echoData?.type })) retryBatch = true;
                     }
                 }
 
@@ -700,11 +711,7 @@ export const handleWebhook = async (req, res) => {
                     try {
                         await procesarEstado(inbound, statusData);
                     } catch (error) {
-                        console.error("Acuse descartado por error:", {
-                            waMessageId: statusData?.id,
-                            status: statusData?.status,
-                            error: error.message,
-                        });
+                        if (logItemFailure('Acuse', error, { waMessageId: statusData?.id, status: statusData?.status })) retryBatch = true;
                     }
                 }
 
@@ -716,11 +723,7 @@ export const handleWebhook = async (req, res) => {
                     try {
                         await procesarPreferencia(inbound, preferenceData);
                     } catch (error) {
-                        console.error("Preferencia descartada por error:", {
-                            category: preferenceData?.category,
-                            value: preferenceData?.value,
-                            error: error.message,
-                        });
+                        if (logItemFailure('Preferencia', error, { category: preferenceData?.category, value: preferenceData?.value })) retryBatch = true;
                     }
                 }
 
@@ -732,7 +735,7 @@ export const handleWebhook = async (req, res) => {
                         await procesarCambioDeNumero(inbound, updateData);
                     } catch (error) {
                         // Sin BSUID ni teléfono: solo el error.
-                        console.error("Cambio de número descartado por error:", { error: error.message });
+                        if (logItemFailure('Cambio de número', error)) retryBatch = true;
                     }
                 }
             }
