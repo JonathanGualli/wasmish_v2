@@ -3,14 +3,13 @@ import Message from "../models/message.model.js";
 import { sendToAccount } from './stream.controller.js';
 import Conversation from "../models/conversation.model.js";
 import {
-    resolveContact, findOrCreateConversation, findContactByIdentity, getConversationContact, applyMarketingPreference,
+    resolveContact, findOrCreateConversation, findContactByIdentity, applyMarketingPreference,
     applyUserIdUpdate, notifyContactsChanged,
 } from './contact.controller.js';
-import { resolveStatusTransition } from '../utils/message.status.js';
 import { getWindowExpiry } from '../utils/whatsapp.window.js';
 import { describeInboundMessage, describeUnsupportedReason, describeReaction, describeMessageContext } from '../utils/inbound.message.js';
 import { describeInboundContact, hasContactIdentity, describeUserIdUpdate } from '../utils/contact.identity.js';
-import { describeUserPreference, isMarketingOptOutFailure } from '../utils/marketing.preference.js';
+import { describeUserPreference } from '../utils/marketing.preference.js';
 import { TIPOS_CON_ARCHIVO, nombreDeArchivo, guardarArchivo } from '../utils/media.storage.js';
 import { getMediaInfo, downloadMedia } from '../libs/whatsapp.js';
 import { decrypt } from '../utils/crypto.js';
@@ -23,7 +22,8 @@ import { markHumanReply } from '../services/auto.reply.service.js';
 import { describeEcho, describeEchoRecipient, parsePartnerRemoved } from '../utils/business.app.js';
 import { isMessageChange, describeMessageChange } from '../utils/message.change.js';
 import { applyMessageChange } from '../services/message.change.service.js';
-import { applyReaction, applyReactionStatus } from '../services/reaction.service.js';
+import { applyReaction } from '../services/reaction.service.js';
+import { receiveStatus, avisarPreferencia } from '../services/message.status.service.js';
 import { findQuotedMessage, quotedMapOf } from '../services/message.reply.service.js';
 import { serializeMessage } from './chat.controller.js';
 import { storeHistoryChunks, storeHistoryMedia } from '../services/history.intake.service.js';
@@ -419,21 +419,6 @@ const procesarEco = async (inbound, echoData) => {
     });
 };
 
-// Avisa a la UI de que un contacto se dio de baja o de alta de la publicidad.
-// La ficha y la lista de Contactos se refrescan con él.
-const avisarPreferencia = (inbound, contact) => {
-    sendToAccount(String(inbound.accountId), 'contact_updated', {
-        id: String(contact._id),
-        marketingOptOut: contact.marketingOptOut,
-        marketingOptOutAt: contact.marketingOptOutAt ? contact.marketingOptOutAt.toISOString() : null,
-    });
-    // Sin teléfono ni nombre: basta el id para encontrarlo en la app.
-    console.log('Preferencia de marketing:', {
-        contactId: String(contact._id),
-        marketingOptOut: contact.marketingOptOut,
-    });
-};
-
 // Procesa UN aviso de `user_preferences`: la persona pidió dejar de recibir
 // publicidad, o volver a recibirla.
 const procesarPreferencia = async (inbound, preferenceData) => {
@@ -472,101 +457,10 @@ const procesarCambioDeNumero = async (inbound, updateData) => {
     console.log('Cambio de número aplicado:', { contactId: String(contact._id) });
 };
 
-// El 131050 dice que la persona está dada de baja aunque el webhook de
-// `user_preferences` no haya llegado (no estar suscrito a ese campo, o que se
-// perdiera). Se marca con la hora del acuse.
-const marcarBajaPorFallo = async (inbound, message, timestamp) => {
-    const conversation = await Conversation.findOne({ _id: message.conversationId, userId: inbound.accountId });
-    if (!conversation) return;
-
-    const contact = await getConversationContact(conversation);
-    const updated = await applyMarketingPreference(contact, { optOut: true, at: timestamp });
-    if (updated) avisarPreferencia(inbound, updated);
-};
-
-// Procesa UN acuse de recibo (entregado / leído / fallido).
-const procesarEstado = async (inbound, statusData) => {
-
-    const waMessageId = statusData.id;
-    const status = statusData.status; // 'send' | 'delivered' | 'read' | 'failed'
-    const timestamp = statusData.timestamp ? new Date(parseInt(statusData.timestamp) * 1000) : new Date();
-
-    if(!waMessageId) return;
-
-    const message = await Message.findOne({ waMessageId });
-    // Si no es un mensaje, puede ser el acuse de una reacción nuestra.
-    if (!message) {
-        await applyReactionStatus({ line: inbound, statusData });
-        return;
-    }
-    // El mensaje tiene que ser de la cuenta del número por el que llega el
-    // acuse: si el número pasó de A a B, un acuse tardío de un mensaje de A no
-    // lo toca ni se avisa a B (revisión de Codex del PR #35). De aquí sale
-    // también la línea del aviso.
-    const conversation = await Conversation.findOne({ _id: message.conversationId, userId: inbound.accountId })
-        .select('lineId').lean();
-    if (!conversation) return;
-
-    // Estado desconocido, repetido o que retrocede → lo ignoramos
-    const changes = resolveStatusTransition({
-        currentStatus: message.status,
-        incomingStatus: status,
-        timestamp,
-        hasDeliveredAt: Boolean(message.deliveredAt),
-    });
-
-    if (!changes) return;
-
-    Object.assign(message, changes);
-
-    if (status === 'failed') {
-        const errors = statusData?.errors ?? [];
-        if (!message.errorCode && errors.length > 0) {
-            message.errorCode = errors[0]?.code;
-            message.errorDetail = errors[0]?.error_data?.details;
-        }
-    }
-
-    await message.save();
-
-    sendToAccount(
-        String(inbound.accountId),
-        'message_status', {
-            id: String(message._id),
-            conversationId: String(message.conversationId),
-            waMessageId, 
-            status: message.status,
-            deliveredAt: message.deliveredAt ? message.deliveredAt.toISOString() : null,
-            readAt: message.readAt ? message.readAt.toISOString() : null,
-            failedAt: message.failedAt ? message.failedAt.toISOString() : null,
-            errorCode: message.errorCode,
-            errorDetail: message.errorDetail,
-            // Si salió de una campaña: su detalle se refresca con esto,
-            // porque las entregas y lecturas llegan horas después de enviar.
-            ...(message.campaignId && { campaignId: String(message.campaignId) }),
-        },
-        // A quien ve la línea de su conversación (Fase 3; revisión de Codex
-        // del plan): con estados, errores y campaña, no es de toda la cuenta.
-        { lineId: conversation.lineId ?? null },
-    );
-
-    // Solo se registran los fallos. Cada mensaje enviado genera dos o tres acuses
-    // (`delivered`, `read`), y anotarlos todos multiplicaba por tres el tamaño del
-    // log sin decir nada: que un mensaje llegue es lo normal, y el estado ya queda
-    // guardado en el propio Message y se ve en la UI. Lo que se busca en un log es
-    // lo que salió mal, y eso sí se conserva entero, con el error de Meta.
-    if (message.status === 'failed') {
-        console.error("Message failed:", {
-            id: String(message._id),
-            waMessageId: message.waMessageId,
-            errors: statusData.errors,
-        });
-
-        if (isMarketingOptOutFailure(statusData.errors)) {
-            await marcarBajaPorFallo(inbound, message, timestamp);
-        }
-    }
-};
+// Procesa UN acuse de recibo (entregado / leído / fallido). Si su mensaje
+// todavía no está (el envío lo guarda después de que Meta responde), se guarda
+// para aplicarlo al guardarlo (`message.status.service.js`).
+const procesarEstado = (inbound, statusData) => receiveStatus({ accountId: inbound.accountId, statusData });
 
 export const handleWebhook = async (req, res) => {
     try {
