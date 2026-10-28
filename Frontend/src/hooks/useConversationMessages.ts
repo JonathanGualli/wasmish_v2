@@ -109,8 +109,9 @@ export const useConversationMessages = (conversationId: string) => {
 
 import { useInfiniteQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import type { Message } from "../models/message.mode.ts";
+import type { ConversationEvent } from "../models/conversation.event.model.ts";
 import { getConversationsMessagesService } from "../services/api.service.ts";
-import { useEffect } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useSSE } from "../context/sse.context.ts";
 
 /**
@@ -127,13 +128,21 @@ const insertByTime = (items: Message[], message: Message, hasOlderPages: boolean
   return [...items.slice(0, index), message, ...items.slice(index)];
 };
 
-export const useConversationMessages = (conversationId: string) => {
+/** Una página del hilo: los mensajes y, con equipo, la historia de su tramo. */
+type MessagesPage = { items: Message[], nextCursor: string | undefined, events?: ConversationEvent[] };
+
+/**
+ * Los mensajes de una conversación, por páginas, al día con el SSE. Con
+ * `withEvents` (con equipo), también su historia (avisos de la asignación): una
+ * página que los eventos acortan puede venir sin mensajes.
+ */
+export const useConversationMessages = (conversationId: string, { withEvents = false }: { withEvents?: boolean } = {}) => {
   const queryClient = useQueryClient();
   const { subscribe } = useSSE();
 
-  const { isLoading, isError, error, data, fetchNextPage, hasNextPage } = useInfiniteQuery<{ items: Message[], nextCursor: string | undefined }>({
+  const { isLoading, isError, error, data, fetchNextPage, hasNextPage } = useInfiniteQuery<MessagesPage>({
     queryKey: ["conversation", conversationId],
-    queryFn: (context) => getConversationsMessagesService(conversationId, context),
+    queryFn: (context) => getConversationsMessagesService(conversationId, context, withEvents),
     getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,
     refetchOnWindowFocus: false,
     initialPageParam: '',
@@ -237,13 +246,56 @@ export const useConversationMessages = (conversationId: string) => {
       void queryClient.cancelQueries({ queryKey: key }).then(() => queryClient.invalidateQueries({ queryKey: key }));
     });
 
+    // Un cambio de manos en ESTA conversación (avisos de la asignación), sin
+    // repetir uno que ya trajo una página. Con el hilo cargándose, como con
+    // `message_updated`: se cancela y se vuelve a pedir, para que una respuesta
+    // leída antes del evento no lo borre al llegar (revisión de Codex del spec, 8).
+    const unsubEvent = subscribe("conversation_event", ({ conversationId: eventConversationId, event }) => {
+      if (eventConversationId !== conversationId || !withEvents) return;
+      const key = ["conversation", conversationId];
+      if (queryClient.isFetching({ queryKey: key }) > 0 || !queryClient.getQueryData(key)) {
+        void queryClient.cancelQueries({ queryKey: key }).then(() => queryClient.invalidateQueries({ queryKey: key }));
+        return;
+      }
+      queryClient.setQueryData<InfiniteData<MessagesPage>>(key, (oldData) => {
+        if (!oldData || oldData.pages.some(page => page.events?.some(known => known.id === event.id))) return oldData;
+        const newPages = [...oldData.pages];
+        newPages[0] = { ...newPages[0], events: [event, ...(newPages[0].events ?? [])] };
+        return { ...oldData, pages: newPages };
+      });
+    });
+
     return () => {
       unsubCreated();
       unsubStatus();
       unsubUpdated();
       unsubImported();
+      unsubEvent();
     };
-  }, [subscribe, queryClient, conversationId]);
+  }, [subscribe, queryClient, conversationId, withEvents]);
+
+  // Si cambia si se piden eventos (el usuario recordado decía una persona y
+  // `/verify` trae el equipo, o al revés), el hilo se vuelve a pedir: la clave
+  // de la caché es la misma y lo de antes no los traía (revisión de Codex del PR #155).
+  const askedWithEvents = useRef(withEvents);
+  useEffect(() => {
+    if (askedWithEvents.current === withEvents) return;
+    askedWithEvents.current = withEvents;
+    if (!conversationId) return;
+    const key = ["conversation", conversationId];
+    void queryClient.cancelQueries({ queryKey: key }).then(() => queryClient.invalidateQueries({ queryKey: key }));
+  }, [withEvents, conversationId, queryClient]);
+
+  // La historia de todas las páginas cargadas, sin repetir; sin `withEvents`, ninguna.
+  const events = useMemo(() => {
+    if (!withEvents) return [];
+    const seen = new Set<string>();
+    return (data?.pages ?? []).flatMap(page => page.events ?? []).filter(event => {
+      if (seen.has(event.id)) return false;
+      seen.add(event.id);
+      return true;
+    });
+  }, [data, withEvents]);
 
   return {
     isLoading,
@@ -251,6 +303,7 @@ export const useConversationMessages = (conversationId: string) => {
     // Con él, un 404 (la conversación ya no es suya) se distingue de un fallo de red.
     error,
     data: data?.pages.flatMap(page => page.items) ?? [],
+    events,
     fetchNextPage,
     hasNextPage,
   };

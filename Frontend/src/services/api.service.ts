@@ -7,6 +7,7 @@ import type { BulkTagResult, Tag, TagSelectionSummary } from '../models/tag.mode
 import type { CampaignAudienceInput, CampaignDraftInput, CampaignRecipientsInput, CreateCampaignInput, RecipientState } from '../models/campaign.model';
 import type { Message } from '../models/message.mode';
 import type { Assignee, Conversation } from '../models/conversation.mode';
+import type { ConversationEvent } from '../models/conversation.event.model';
 import type { Line, LineUpdate, LinesResponse } from '../models/line.model';
 import type { InvitationInfo, InvitationInput, MemberChange, TeamInvitation, TeamMember, TeamResponse } from '../models/team.model';
 import type { User } from '../models/user.mode';
@@ -28,6 +29,7 @@ interface SSEHandlers {
     onHistorySync?: (event: MessageEvent) => void;
     // La asignación de conversaciones (Fase 4).
     onConversationAssigned?: (event: MessageEvent) => void;
+    onConversationEvent?: (event: MessageEvent) => void;
     onConversationRevoked?: (event: MessageEvent) => void;
     onTransferRequested?: (event: MessageEvent) => void;
     onTransferAnswered?: (event: MessageEvent) => void;
@@ -82,16 +84,17 @@ export const getConversationsService = async () => {
 }
 
 // Servicio para obtener los mensajes de una conversación
-export const getConversationsMessagesService = async (conversationId: string, context: QueryFunctionContext) => {
+// Con `withEvents`, también la historia de esa página (avisos de la asignación):
+// solo con equipo, porque una página que los eventos acortan puede venir sin mensajes.
+export const getConversationsMessagesService = async (conversationId: string, context: QueryFunctionContext, withEvents = false) => {
     const pageParam = context.pageParam as string || undefined;
     let query = '?limit=50';
-    if (pageParam !== undefined) query += '&before=' + pageParam;
-    console.log('pageParam', pageParam);
+    if (pageParam !== undefined) query += '&before=' + encodeURIComponent(pageParam);
+    if (withEvents) query += '&events=1';
     const res = await axios.get(`${API_URL}/chats/${conversationId}/messages${query}`, { withCredentials: true });
 
-    const { items = [], nextCursor } = res.data;
-    console.log('Next cursor:', nextCursor);
-    return { items, nextCursor };
+    const { items = [], nextCursor, events = [] } = res.data;
+    return { items, nextCursor, events: events as ConversationEvent[] };
 }
 
 // Servicio para enviar un mensaje en una conversación
@@ -230,6 +233,7 @@ export const createSSEConnection = (
     }
     const assignmentEvents = [
         ["conversation_assigned", handlers.onConversationAssigned],
+        ["conversation_event", handlers.onConversationEvent],
         ["conversation_revoked", handlers.onConversationRevoked],
         ["transfer_requested", handlers.onTransferRequested],
         ["transfer_answered", handlers.onTransferAnswered],

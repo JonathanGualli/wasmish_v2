@@ -2,6 +2,7 @@ import { createContext, useContext } from "react";
 import type { Message } from "../models/message.mode";
 import type { Campaign } from "../models/campaign.model";
 import type { Conversation, ConversationPerson, TransferRequest } from "../models/conversation.mode";
+import type { ConversationEvent } from "../models/conversation.event.model";
 
 // Lo que trae cada evento que emite el backend (`sendUser`)
 export interface SSEEventMap {
@@ -37,6 +38,8 @@ export interface SSEEventMap {
     transfer_answered: { id: string; accepted: boolean; answeredBy: ConversationPerson; contactName: string };
     // Quitarle el acceso a alguien soltó sus conversaciones: se vuelve a pedir la bandeja
     conversations_updated: Record<string, never>;
+    // Un cambio de manos para la historia del hilo, a quien ve la conversación (avisos de la asignación)
+    conversation_event: { conversationId: string; event: ConversationEvent };
 }
 
 export type SSEEventType = keyof SSEEventMap;
