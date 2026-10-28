@@ -5,7 +5,7 @@ import { TemplateFormSkeleton } from './ChatSkeletons';
 import { AuthField } from '../Auth/AuthField';
 import { CustomButton } from '../Button/Button';
 import { Callout } from '../Callout/Callout';
-import { useNoticeContext } from '../Notice/context/UseNoticeContext';
+import { useNotice } from '../Notice/context/useNotice';
 import { useConversations } from '../../hooks/useConversations';
 import { useStartConversation } from '../../hooks/useSendTemplate';
 import { useTemplateForm, templateSendError } from '../../hooks/useTemplateForm';
@@ -70,7 +70,7 @@ export const NewConversationPanel = ({ initialDraft, onClose, onBack, onCreated,
   const [name, setName] = useState(initialDraft.name);
   const [lineId, setLineId] = useState(initialDraft.lineId);
   const [removed, setRemoved] = useState<RemovedTemplate | null>(null);
-  const { setState, setContent } = useNoticeContext();
+  const { notify } = useNotice();
 
   // La elegida si sigue conectada; si no (o sin elegir), la por defecto.
   const { hasManyLines, activeLines, defaultLine, lineById, isLoading: linesLoading, isError: linesError } = useLines();
@@ -188,8 +188,7 @@ export const NewConversationPanel = ({ initialDraft, onClose, onBack, onCreated,
       if (assignmentError(err).code === 'assigned_to_other') void queryClient.invalidateQueries({ queryKey: ['contacts'] });
       // El error va al aviso global, como el resto de la app. Lo escrito no se
       // pierde: el panel sigue montado debajo y se puede corregir y reenviar.
-      setContent(<div className="text-brand-danger text-sm"><p>{templateSendError(err)}</p></div>);
-      setState(true);
+      notify({ kind: 'error', text: templateSendError(err) });
     }
   };
 

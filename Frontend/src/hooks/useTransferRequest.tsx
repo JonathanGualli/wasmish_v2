@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuthContext } from "../context/auth.context";
 import { useSSE } from "../context/sse.context";
-import { useNoticeContext } from "../components/Notice/context/UseNoticeContext";
+import { useNotice } from "../components/Notice/context/useNotice";
 import { requestTransferService } from "../services/api.service";
 import type { ChatsNavigationState, ConversationPerson } from "../models/conversation.mode";
 import { ChatsPath } from "../models/routes.models";
@@ -67,7 +67,7 @@ const subscribeStates = (listener: () => void) => {
  */
 export const useTransferRequest = (conversationId: string) => {
     const queryClient = useQueryClient();
-    const { setState: showNotice, setContent } = useNoticeContext();
+    const { notify } = useNotice();
     const { user } = useAuthContext();
     const key = stateKey(user?.id ?? '', conversationId);
     const state = useSyncExternalStore(subscribeStates, useCallback(() => readState(key), [key]));
@@ -94,8 +94,9 @@ export const useTransferRequest = (conversationId: string) => {
                 void queryClient.invalidateQueries({ queryKey: ['conversations'] });
                 void queryClient.invalidateQueries({ queryKey: ['contacts'] });
             }
-            setContent(<p className="text-sm text-brand-strong">{message}</p>);
-            showNotice(true);
+            // Ya nadie la atiende o ya es suya: no es un fallo, la ficha se pone al día.
+            const settled = code === 'not_assigned' || code === 'already_yours';
+            notify({ kind: settled ? 'info' : 'error', text: message });
         },
     });
 
@@ -115,7 +116,7 @@ export const useTransferAnswers = () => {
     const { user } = useAuthContext();
     const userId = user?.id ?? '';
     const { subscribe } = useSSE();
-    const { setState: showNotice, setContent } = useNoticeContext();
+    const { notify } = useNotice();
     const navigate = useNavigate();
 
     useEffect(() => subscribe("transfer_answered", (payload) => {
@@ -125,19 +126,11 @@ export const useTransferAnswers = () => {
         if (payload.accepted) void queryClient.invalidateQueries({ queryKey: ['contacts'] });
         const who = firstName(payload.answeredBy);
         const open = () => {
-            showNotice(false);
             writeState(key, IDLE);
             navigate(ChatsPath, { state: { conversationId: payload.id } satisfies ChatsNavigationState });
         };
-        setContent(payload.accepted ? (
-            <p className="text-sm text-brand-strong pr-6">
-                {who} te pasó la conversación con {payload.contactName}.{' '}
-                <button type="button" onClick={open}
-                    className="font-semibold text-brand-accent-strong hover:underline cursor-pointer">Abrir</button>
-            </p>
-        ) : (
-            <p className="text-sm text-brand-strong pr-6">{who} no te pasó la conversación con {payload.contactName}.</p>
-        ));
-        showNotice(true);
-    }), [subscribe, queryClient, userId, showNotice, setContent, navigate]);
+        notify(payload.accepted
+            ? { kind: 'new', text: `${who} te pasó la conversación con ${payload.contactName}.`, action: { label: 'Abrir', onClick: open } }
+            : { kind: 'info', text: `${who} no te pasó la conversación con ${payload.contactName}.` });
+    }), [subscribe, queryClient, userId, notify, navigate]);
 };

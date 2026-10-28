@@ -13,6 +13,7 @@ Lógica no obvia del `AuthProvider`, los errores de WhatsApp en palabras y la li
 - [App instalable y service worker (`public/sw.js`)](#app-instalable-y-service-worker-publicswjs)
 - [Avisos push en el navegador (`libs/push.ts`)](#avisos-push-en-el-navegador-libspushts)
 - [Pantallas de carga (skeletons)](#pantallas-de-carga-skeletons)
+- [El aviso de arriba (`useNotice`)](#el-aviso-de-arriba-usenotice)
 
 ---
 
@@ -145,4 +146,14 @@ Lógica no obvia del `AuthProvider`, los errores de WhatsApp en palabras y la li
   - **Enviar plantilla** monta el formulario con su pie desde el principio y solo el selector es skeleton (`TemplateFormSkeleton`: la etiqueta «Plantilla» y la caja del alto del real), así el diálogo no crece al llegar. La conversación nueva usa el mismo.
   - **Gestionar etiquetas** pinta sus filas reales como bloques.
   - Las plantillas y las etiquetas se piden al entrar en Chats y en Contactos: si ya llegaron, el diálogo abre sin skeleton.
+
+### El aviso de arriba (`useNotice`)
+
+Uno solo en toda la app (`components/Notice/`), del diseño «Avisos de la asignación» (7a). Se pide con `useNotice().notify({ kind, text, action })`:
+
+- `kind`: `error` (rojo), `info` (verde tinta, «cambió algo»), `success` (verde tinta con ✓, una confirmación) o `new` (menta, «algo nuevo para ti»). `success` no estaba en el diseño: lo pidió Jonathan para que «ID de la línea copiado» no salga con las flechas de `info` (decisión del 2026-10-28).
+- `text`: una o dos frases. **Nunca JSX**: una lista de errores se une con un espacio.
+- `action` (opcional): `{ label, onClick }`, como «Abrir»; pulsarla también cierra el aviso.
+
+Se va a los 5 s; con el puntero encima, no (al salir vuelve a contar 5 s). Uno a la vez: `notify` reemplaza al que hubiera y reinicia la cuenta. Esc y la ✕ lo cierran. `visible` sirve a los diálogos para no tomar un clic en el aviso por un «clic fuera» (`ConfirmDialog`, `BulkTagDialog`, `TagManager`, la ficha de Contactos y `SendTemplateDialog`). Los colores que la marca no tenía (`brand-notice-*`) y las animaciones están en `App.css`.
 

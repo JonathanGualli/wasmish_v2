@@ -371,13 +371,27 @@ ve nada de esto.
 backend): etiquetas por conversación y notas internas. Están omitidas a
 propósito — no maquetar botones que no hacen nada.
 
-### Aviso global — `components/Notice/Notice.css`
+### Aviso de arriba — `components/Notice/Notice.tsx`
 
-Notificación, no modal: no bloquea la página (`useNoticeContext`). Tarjeta clara
-(el contenido siempre es blanco): `#ffffff`, borde `#e4e7eb`, borde izquierdo
-3px menta, radio 12px, esquina superior derecha, auto-dismiss a los 5s. El
-contenido lo inyectan las páginas con tokens de texto sobre claro — **no
-oscurecer este aviso**, rompería ese contraste.
+Fuente: `Design/Wasmish Chats - Avisos de la asignación.html` (7a y 7b).
+Notificación, no modal: no bloquea la página. Se pide con
+`useNotice().notify({ kind, text, action? })`: **un tipo y un texto**, nunca JSX.
+Arriba a la derecha (380px; en móvil, a lo ancho con 16px de margen), radio 12,
+icono de 28px a la izquierda, texto 13,5px, la acción en negrita y la ✕. Se va a
+los 5s, **no mientras el puntero está encima**; uno a la vez (el nuevo reemplaza
+al anterior); Esc lo cierra.
+
+**El fondo es el color del tipo** (decisión del 2026-10-28; reemplaza a la
+tarjeta clara de antes):
+
+| `kind` | Para qué | Fondo | Texto | Icono |
+|---|---|---|---|---|
+| `error` | Algo no salió | `brand-notice-error` `#b4321f` | blanco | triángulo |
+| `info` | Cambió algo y hay que volver a mirar | `brand-deep` | blanco | flechas que giran |
+| `success` | Confirmar lo que hizo quien mira | `brand-deep` | blanco | ✓ |
+| `new` | Algo nuevo para ti (te pasaron una conversación) | `brand-accent` | `brand-ink` | campana |
+
+Lo que ya queda escrito en el hilo o en la campanita no se repite aquí (7b).
 
 ### Diálogos (modales) — `components/Dialog/ConfirmDialog.tsx`
 

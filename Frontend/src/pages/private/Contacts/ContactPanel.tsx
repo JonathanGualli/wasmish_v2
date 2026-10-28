@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { CustomButton } from '../../../components/Button/Button';
 import { Callout } from '../../../components/Callout/Callout';
-import { useNoticeContext } from '../../../components/Notice/context/UseNoticeContext';
+import { useNotice } from '../../../components/Notice/context/useNotice';
 import { contactError, useContact, useContactMutations } from '../../../hooks/useContacts';
 import { useTags } from '../../../hooks/useTags';
 import { TagChip } from '../../../components/Tag/TagChip';
@@ -45,7 +45,7 @@ interface Props {
  * En escritorio se abre sobre la lista; en móvil ocupa la pantalla.
  */
 export const ContactPanel = ({ state, onChange }: Props) => {
-    const { state: errorVisible } = useNoticeContext();
+    const { visible: errorVisible } = useNotice();
     const close = () => onChange(null);
 
     // El aviso de error vive en otro portal: para el Dialog, pulsar su X es un
@@ -477,7 +477,7 @@ const DeleteContactDialog = ({ contact, open, onCancel, onDeleted }: {
     onDeleted: () => void;
 }) => {
     const { remove } = useContactMutations();
-    const { setState, setContent } = useNoticeContext();
+    const { notify } = useNotice();
 
     const handleDelete = async () => {
         try {
@@ -485,8 +485,7 @@ const DeleteContactDialog = ({ contact, open, onCancel, onDeleted }: {
             onDeleted();
         } catch (err) {
             onCancel();
-            setContent(<div className="text-brand-danger text-sm"><p>{contactError(err).message}</p></div>);
-            setState(true);
+            notify({ kind: 'error', text: contactError(err).message });
         }
     };
 

@@ -3,7 +3,7 @@ import { AlertTriangle, ChevronRight } from "lucide-react";
 import { CustomButton } from "../../../../components/Button/Button";
 import { CustomInput } from "../../../../components/Input/Input";
 import { Callout } from "../../../../components/Callout/Callout";
-import { useNoticeContext } from "../../../../components/Notice/context/UseNoticeContext";
+import { useNotice } from "../../../../components/Notice/context/useNotice";
 import { useUpdateWhatsappToken } from "../../../../hooks/useUpdateWhatsappToken";
 import { LINE_ERROR } from "../../../../models/line.model";
 import { apiErrorOf } from "../../../../utils/apiError";
@@ -19,7 +19,7 @@ export const ManualCredentialsForm = ({ hasToken }: { hasToken: boolean }) => {
     const [phoneNumberId, setPhoneNumberId] = useState('');
     const [waBusinessId, setWaBusinessId] = useState('');
     const mutation = useUpdateWhatsappToken();
-    const { setState, setContent } = useNoticeContext();
+    const { notify } = useNotice();
 
     const error = mutation.isError ? apiErrorOf(mutation.error) : null;
 
@@ -28,8 +28,7 @@ export const ManualCredentialsForm = ({ hasToken }: { hasToken: boolean }) => {
         mutation.mutate({ tokenWhatsapp: token, phoneNumberId, waBusinessId }, {
             onSuccess: () => {
                 setToken('');
-                setContent(<p className="text-brand-accent-strong">Número conectado correctamente.</p>);
-                setState(true);
+                notify({ kind: 'success', text: 'Número conectado correctamente.' });
             },
         });
     };

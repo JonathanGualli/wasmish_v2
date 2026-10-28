@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { FileText, Upload, Video } from "lucide-react";
 import { Pill } from "../../../components/Pill/Pill";
-import { useNoticeContext } from "../../../components/Notice/context/UseNoticeContext";
+import { useNotice } from "../../../components/Notice/context/useNotice";
 import { parseError, useTemplates } from "../../../hooks/useTemplates";
 import type { Template } from "../../../models/template.model";
 import { headerFileIssue, headerMediaRule, headerMediaUrl, templateHeaderIssue } from "../../../utils/templateHeader";
@@ -42,15 +42,12 @@ export const TemplateHeaderCell = ({ template }: { template: Template }) => {
     const { uploadHeaderMedia, removeHeaderMedia } = useTemplates();
     // Sin `templates.manage` (el agente), la cabecera se ve pero no se cambia (Fase 3).
     const canManage = useAuthContext().can('templates.manage');
-    const { setState: showNotice, setContent: setNoticeContent } = useNoticeContext();
+    const { notify } = useNotice();
     const rule = headerMediaRule(template);
     // Las mutaciones son de esta celda: cada fila lleva su propio estado.
     const busy = uploadHeaderMedia.isPending || removeHeaderMedia.isPending;
 
-    const notify = (message: string) => {
-        setNoticeContent(<p className="text-sm text-brand-danger">{message}</p>);
-        showNotice(true);
-    };
+    const notifyError = (message: string) => notify({ kind: 'error', text: message });
 
     if (!template.header) return <span className="text-brand-subtle">—</span>;
 
@@ -67,16 +64,16 @@ export const TemplateHeaderCell = ({ template }: { template: Template }) => {
         if (!file) return;
         const issue = headerFileIssue(rule, file);
         if (issue) {
-            notify(issue);
+            notifyError(issue);
             return;
         }
         uploadHeaderMedia.mutate({ templateId: template.templateId, file }, {
-            onError: (err) => notify(parseError(err, 'No se pudo subir el archivo.')),
+            onError: (err) => notifyError(parseError(err, 'No se pudo subir el archivo.')),
         });
     };
 
     const remove = () => removeHeaderMedia.mutate(template.templateId, {
-        onError: (err) => notify(parseError(err, 'No se pudo quitar el archivo.')),
+        onError: (err) => notifyError(parseError(err, 'No se pudo quitar el archivo.')),
     });
 
     const input = (

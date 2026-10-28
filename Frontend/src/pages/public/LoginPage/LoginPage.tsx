@@ -6,7 +6,7 @@ import { AuthShell, AuthHero, AuthAvatars } from '../../../components/Auth/AuthS
 import { LogoLockup } from '../../../components/Logo/Logo';
 import { useAuthContext } from '../../../context/auth.context';
 import { AppRoutes, afterLoginPath } from '../../../models/routes.models';
-import { useNoticeContext } from '../../../components/Notice/context/UseNoticeContext';
+import { useNotice } from '../../../components/Notice/context/useNotice';
 import { isIos, isStandalone } from '../../../libs/push';
 import { markInstalledWelcomeShown, wasInstalledWelcomeShown } from '../../../libs/pushPrompts';
 import { Check } from 'lucide-react';
@@ -15,7 +15,7 @@ export const LoginPage = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const { signIn, errors, isAuthenticated, isLoading } = useAuthContext();
-  const { setState, setContent } = useNoticeContext();
+  const { notify } = useNotice();
   const navigate = useNavigate();
   const location = useLocation();
   // La app del iPhone recién instalada se abre sin sesión (no comparte la de
@@ -40,14 +40,9 @@ export const LoginPage = () => {
 
   useEffect(() => {
     if (errors.length > 0) {
-      setContent(
-        <div className="text-brand-danger text-sm space-y-0.5">
-          {errors.map((err, i) => <p key={i}>{err}</p>)}
-        </div>
-      );
-      setState(true);
+      notify({ kind: 'error', text: errors.join(' ') });
     }
-  }, [errors, setContent, setState]);
+  }, [errors, notify]);
 
   const forgotLink = (
     <span className="text-[13px] font-semibold text-brand-accent-strong cursor-pointer hover:underline">

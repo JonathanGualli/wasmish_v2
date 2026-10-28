@@ -18,7 +18,7 @@ import { lineLabel } from "../../../utils/lineDisplay";
 import { CAPTION_MAX, OUTBOUND_ACCEPT } from "../../../utils/outboundMedia";
 import { Callout } from "../../Callout/Callout";
 import { CustomButton } from "../../Button/Button";
-import { useNoticeContext } from "../../Notice/context/UseNoticeContext";
+import { useNotice } from "../../Notice/context/useNotice";
 import { SendTemplateDialog } from "../SendTemplateDialog";
 import { AttachmentPreview } from "./AttachmentPreview";
 import { ReplyBar } from "./ReplyBar";
@@ -81,7 +81,7 @@ export const ChatComposer = ({
     const sendText = useConversationSendMessages();
     const media = useSendMediaMessage();
     const attachment = useOutgoingAttachment();
-    const { setState, setContent } = useNoticeContext();
+    const { notify } = useNotice();
     const [text, setText] = useState(initialText);
     const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -128,14 +128,8 @@ export const ChatComposer = ({
     const canSend = file ? !issue : Boolean(text.trim());
 
     const showTextError = (error: Error) => {
-        setContent(
-            <div className="text-brand-danger text-sm">
-                {(error as AxiosError<ErrorItem[]>).response?.data?.map((err, i) => (
-                    <p key={i}>{err.message}</p>
-                )) || <p>Ha ocurrido un error, inténtalo de nuevo más tarde</p>}
-            </div>
-        );
-        setState(true);
+        const messages = (error as AxiosError<ErrorItem[]>).response?.data?.map?.(err => err.message);
+        notify({ kind: 'error', text: messages?.length ? messages.join(' ') : 'Ha ocurrido un error, inténtalo de nuevo más tarde.' });
     };
 
     const handleSend = (event?: FormEvent) => {

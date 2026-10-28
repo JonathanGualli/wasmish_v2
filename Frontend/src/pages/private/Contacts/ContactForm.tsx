@@ -4,7 +4,7 @@ import { AuthField } from '../../../components/Auth/AuthField';
 import { AgendaNameHint } from '../../../components/Contact/AgendaNameHint';
 import { CustomButton } from '../../../components/Button/Button';
 import { Callout } from '../../../components/Callout/Callout';
-import { useNoticeContext } from '../../../components/Notice/context/UseNoticeContext';
+import { useNotice } from '../../../components/Notice/context/useNotice';
 import { contactError, useContactByPhone, useContactMutations } from '../../../hooks/useContacts';
 import { tagError, useTagMutations } from '../../../hooks/useTags';
 import { TagSelector, type TagSelection } from '../../../components/Tag/TagSelector';
@@ -51,7 +51,7 @@ export const ContactForm = ({ contact, onCancel, onSaved, onViewContact }: Props
 
     const { create, update } = useContactMutations();
     const { createMissing, create: createTag } = useTagMutations();
-    const { setState, setContent } = useNoticeContext();
+    const { notify } = useNotice();
     const isPending = create.isPending || update.isPending || createTag.isPending;
 
     const phoneLocked = Boolean(contact?.conversationId);
@@ -91,8 +91,7 @@ export const ContactForm = ({ contact, onCancel, onSaved, onViewContact }: Props
             const created = await createMissing(tags.newNames);
             tagIds = [...new Set([...tags.ids, ...created.map(tag => tag.id)])];
         } catch (err) {
-            setContent(<div className="text-brand-danger text-sm"><p>{tagError(err, 'No se pudo crear la etiqueta. Inténtalo de nuevo.')}</p></div>);
-            setState(true);
+            notify({ kind: 'error', text: tagError(err, 'No se pudo crear la etiqueta. Inténtalo de nuevo.') });
             return;
         }
         // Ya creadas: si falla el guardado y se reintenta, no se vuelven a pedir.
@@ -114,8 +113,7 @@ export const ContactForm = ({ contact, onCancel, onSaved, onViewContact }: Props
                 setServerDuplicateId(error.contactId);
                 return;
             }
-            setContent(<div className="text-brand-danger text-sm"><p>{error.message}</p></div>);
-            setState(true);
+            notify({ kind: 'error', text: error.message });
         }
     };
 

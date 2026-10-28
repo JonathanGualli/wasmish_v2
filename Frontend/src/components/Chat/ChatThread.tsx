@@ -21,7 +21,7 @@ import { ContactSidebar } from "./ContactSidebar/ContactSidebar.tsx";
 import { ChatComposer } from "./Composer/ChatComposer.tsx";
 import { MessageUploadStatus } from "./MessageUploadStatus.tsx";
 import { useAuthContext } from "../../context/auth.context";
-import { useNoticeContext } from "../Notice/context/UseNoticeContext";
+import { useNotice } from "../Notice/context/useNotice";
 import type { AxiosError } from "axios";
 import { hasTeam } from "../../utils/roleDisplay";
 import { showsUploadStatus, uploadPercent } from "../../utils/outboundMedia.ts";
@@ -173,7 +173,7 @@ export const ChatThread = ({
     const lostHere = lost !== null && lost.conversationId === conversationId;
     const { data: messages, isLoading, isError, error, fetchNextPage, hasNextPage } =
         useConversationMessages(lostHere ? "" : conversationId || "");
-    const { setState: showNotice, setContent: setNoticeContent } = useNoticeContext();
+    const { notify } = useNotice();
 
     // La conversación dejó de existir para esta sesión: le quitaron su línea con
     // el chat abierto (Fase 3, `access_changed`; revisión de Codex del PR #37).
@@ -181,10 +181,9 @@ export const ChatThread = ({
     const lostAccess = !lostHere && isError && (error as AxiosError | null)?.response?.status === 404;
     useEffect(() => {
         if (!lostAccess) return;
-        setNoticeContent(<p className="text-sm text-brand-strong">Ya no tienes acceso a esta conversación.</p>);
-        showNotice(true);
+        notify({ kind: 'info', text: 'Ya no tienes acceso a esta conversación.' });
         onBack?.();
-    }, [lostAccess, onBack, setNoticeContent, showNotice]);
+    }, [lostAccess, onBack, notify]);
     const { data: conversations } = useConversations();
     const { templates } = useTemplates();
     const { ref, inView } = useInView();
