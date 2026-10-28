@@ -27,6 +27,8 @@ import { sendReaction } from "../services/reaction.service.js";
 import { applyHeldStatuses } from "../services/message.status.service.js";
 import { markHumanReply } from "../services/auto.reply.service.js";
 import Campaign from "../models/campaign.model.js";
+import { EVENTS_PER_PAGE, eventBounds, eventCutoff } from "../utils/conversation.events.js";
+import { listPageEvents, serializeEvent } from "../services/assignment.history.service.js";
 
 /**
  * Un mensaje tal como lo ve el frontend: la lista del chat, la respuesta de un
@@ -501,14 +503,32 @@ export const listMessages = async (req, res) => {
             criteria.timestamp = { $lt: cursorDate };
        }
 
-        const msgs = await Message.find(criteria)
+        let msgs = await Message.find(criteria)
             .sort({ timestamp: -1 })
             .limit(pageLimit)
             .lean();
         
-        const nextCursor = msgs.length === pageLimit 
+        let nextCursor = msgs.length === pageLimit 
             ? msgs[msgs.length -1].timestamp.toISOString()
             : null;
+
+        // La historia de la conversación (avisos de la asignación, spec § 5.1),
+        // solo si el cliente la pide: una página que los eventos acortan puede
+        // quedarse sin mensajes, y el frontend de antes no lo entiende
+        // (revisión de Codex del plan, 2).
+        let events;
+        if (req.query.events === '1') {
+            const bounds = eventBounds({ before: hasCursor ? cursorDate : null, messages: msgs, hasMore: nextCursor !== null });
+            let pageEvents = await listPageEvents(conversation._id, bounds, EVENTS_PER_PAGE + 1);
+            const cutoff = eventCutoff(pageEvents);
+            if (cutoff) {
+                // Todos los de esa misma fecha van en esta página, aunque pasen de 100.
+                pageEvents = await listPageEvents(conversation._id, { from: cutoff, to: bounds.to });
+                msgs = msgs.filter(msg => msg.timestamp >= cutoff);
+                nextCursor = cutoff.toISOString();
+            }
+            events = pageEvents.map(serializeEvent);
+        }
         
         // El nombre de las campañas de esta página, de una vez (para «Campaña «…»»).
         const campaignIds = [...new Set(msgs.filter(msg => msg.campaignId).map(msg => String(msg.campaignId)))];
@@ -523,7 +543,7 @@ export const listMessages = async (req, res) => {
         // Solo marcamos como leído al ABRIR la conversación (primera página, sin cursor)
         if (!hasCursor) await markConversationRead(userId, conversation._id);
 
-        return res.json({ items, nextCursor });
+        return res.json(events ? { items, nextCursor, events } : { items, nextCursor });
 
     } catch (error) {
         res.status(500).json([{ message: error.message }]);

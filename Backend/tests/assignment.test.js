@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
-import { canReassign, isValidAssignee, releaseFilter, replyAcquisition } from '../src/utils/assignment.js';
+import { canReassign, isValidAssignee, releaseFilter, replyAcquisition, requestRecipients } from '../src/utils/assignment.js';
 
 const ME = '64b000000000000000000001';
 const OTHER = '64b000000000000000000002';
@@ -45,3 +45,35 @@ test('releaseFilter: desactivado, todas; sin límite de líneas, nada; si no, la
     assert.deepEqual(filter.lineId.$nin.map(String), [String(l1)]);
     assert.ok(filter.lineId.$nin[0] instanceof mongoose.Types.ObjectId);
 });
+
+// Avisos de la asignación (spec § 4): a quién le llega «Luis pide la conversación».
+test('requestRecipients: quien la atiende y quienes pueden responderla con esa línea, nunca el solicitante', () => {
+    const ana = member('agent', ['l1']);
+    const owner = member('owner');
+    const admin = member('admin');
+    const supL1 = member('supervisor', ['l1']);
+    const supL2 = member('supervisor', ['l2']);
+    const luis = member('agent', ['l1']);
+    const offAdmin = member('admin', [], { status: 'inactive' });
+    const otherAgent = member('agent', ['l1']);
+    const members = [ana, owner, admin, supL1, supL2, luis, offAdmin, otherAgent];
+    const ids = (list) => list.map(m => String(m._id)).sort();
+
+    const got = requestRecipients(members, { lineId: 'l1', assignedTo: ana._id }, String(luis._id));
+    assert.deepEqual(got.sort(), ids([ana, owner, admin, supL1]));
+});
+
+test('requestRecipients: el solicitante no se avisa aunque sea supervisor, y sin repetir', () => {
+    const ana = member('agent', ['l1']);
+    const supL1 = member('supervisor', ['l1']);
+    const got = requestRecipients([ana, supL1, ana], { lineId: 'l1', assignedTo: ana._id }, String(supL1._id));
+    assert.deepEqual(got, [String(ana._id)]);
+});
+
+test('requestRecipients: quien la atiende sin la línea (aún no soltada) no la recibe', () => {
+    const ana = member('agent', ['l2']);
+    const owner = member('owner');
+    const got = requestRecipients([ana, owner], { lineId: 'l1', assignedTo: ana._id }, 'x');
+    assert.deepEqual(got, [String(owner._id)]);
+});
+

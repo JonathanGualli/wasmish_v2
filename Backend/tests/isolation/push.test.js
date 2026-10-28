@@ -276,3 +276,72 @@ test('con el endpoint reasignado a B, un entrante de PC ya no llega a ese dispos
     assert.ok(await waitFor(() => sentTo(ownerOther).length), 'no se avisó al otro dispositivo del owner');
     assert.equal(sentTo(shared).length, 0, 'el dispositivo ahora de B recibió un aviso de PC');
 });
+
+// --- Avisos de la asignación: «te asignaron» y «te la pasaron» (spec § 7) ---
+
+const { notifyAssignment } = await import('../../src/services/push.service.js');
+let assignSeq = 0;
+const assignConversationOf = async (assignedTo = null) => {
+    const contact = await Contact.create({ userId: pc.accountId, phone: `59399000640${assignSeq++}`, name: 'Cliente por asignar' });
+    return Conversation.create({
+        userId: pc.accountId, contactId: contact._id, contactPhone: contact.phone, phoneNumberId: '631', lineId: line1, assignedTo,
+    });
+};
+
+test('asignar avisa por push solo a quien la recibe; asignársela a uno mismo, a nadie', async () => {
+    pushCalls.length = 0;
+    const endpoints = {};
+    for (const [name, account] of [['owner', pc], ['agent1', agent1], ['assigned', assignedAgent]]) {
+        endpoints[name] = newEndpoint();
+        assert.equal((await subscribe(account, endpoints[name])).status, 200, name);
+    }
+    const conversation = await assignConversationOf();
+    const res = await request(pc, 'POST', `/chats/${conversation._id}/assign`, { userId: agent1.userId });
+    assert.equal(res.status, 200, res.text);
+    assert.ok(await waitFor(() => sentTo(endpoints.agent1).length), 'no se avisó a quien la recibe');
+    const [call] = sentTo(endpoints.agent1);
+    assert.equal(call.payload.title, 'Cliente por asignar · 631');
+    assert.match(call.payload.body, / te asignó esta conversación\.$/);
+    assert.equal(call.payload.conversationId, String(conversation._id));
+    await new Promise(resolve => setTimeout(resolve, 200));
+    assert.equal(sentTo(endpoints.owner).length, 0, 'se avisó a quien asignó');
+    assert.equal(sentTo(endpoints.assigned).length, 0, 'se avisó a otro agente');
+
+    pushCalls.length = 0;
+    const own = await assignConversationOf();
+    assert.equal((await request(agent1, 'POST', `/chats/${own._id}/assign`, { userId: agent1.userId })).status, 403,
+        'el agente no asigna una sin asignar: la toma');
+    assert.equal((await request(pc, 'POST', `/chats/${own._id}/assign`, { userId: pc.userId })).status, 200);
+    await new Promise(resolve => setTimeout(resolve, 200));
+    assert.equal(pushCalls.length, 0, 'asignársela a uno mismo avisó');
+});
+
+test('notifyAssignment no avisa si la conversación ya no es suya al enviar', async () => {
+    pushCalls.length = 0;
+    const endpoint = newEndpoint();
+    await subscribe(agent1, endpoint);
+    const conversation = await assignConversationOf(assignedAgent.userId);
+    await notifyAssignment({ accountId: pc.accountId, conversationId: conversation._id, recipientId: agent1.userId, actorName: 'PC', kind: 'assigned' });
+    assert.equal(sentTo(endpoint).length, 0);
+});
+
+// Vigila que el push siga la regla del entrante (con la línea), no solo la
+// asignación: `updateMember` guarda el acceso antes de soltar sus conversaciones
+// (revisión de Codex del spec, 1).
+test('notifyAssignment no avisa a quien le quitaron la línea antes de soltarla; con la línea, sí', async () => {
+    pushCalls.length = 0;
+    const member = await seedMember(pc, { role: 'agent', lineIds: [line1], label: 'PCNOLINE' });
+    const endpoint = newEndpoint();
+    await subscribe(member, endpoint);
+    const conversation = await assignConversationOf(member.userId);
+
+    await User.updateOne({ _id: member.userId }, { $set: { lineIds: [line2] } });
+    await notifyAssignment({ accountId: pc.accountId, conversationId: conversation._id, recipientId: member.userId, actorName: 'PC', kind: 'passed' });
+    assert.equal(String((await Conversation.findById(conversation._id).lean()).assignedTo), member.userId, 'sigue asignada');
+    assert.equal(sentTo(endpoint).length, 0, 'avisó sin la línea');
+
+    await User.updateOne({ _id: member.userId }, { $set: { lineIds: [line1] } });
+    await notifyAssignment({ accountId: pc.accountId, conversationId: conversation._id, recipientId: member.userId, actorName: 'PC', kind: 'passed' });
+    assert.equal(sentTo(endpoint).length, 1);
+    assert.match(sentTo(endpoint)[0].payload.body, / te pasó esta conversación\.$/);
+});

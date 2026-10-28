@@ -45,3 +45,25 @@ export const releaseFilter = (member) => {
     if (scope === null) return null;
     return { lineId: { $nin: scope.map(id => new mongoose.Types.ObjectId(id)) } };
 };
+
+/**
+ * A quién le llega el aviso de una solicitud de transferencia (avisos de la
+ * asignación, spec § 4): a quien la atiende, si todavía puede atenderla, y a
+ * quienes pueden responderla (`conversations.assign` con esa línea: owner,
+ * admin y el supervisor de la línea). Solo activos de la cuenta, sin repetir,
+ * y nunca al que la pide. `members` son `User` leídos de la BD; devuelve sus
+ * `_id` como texto.
+ */
+export const requestRecipients = (members, conversation, requesterId) => {
+    const assignedTo = idOf(conversation.assignedTo);
+    const recipients = new Set();
+    for (const member of members) {
+        const auth = sessionAuthFor(member);
+        if (!auth || auth.userId === String(requesterId)) continue;
+        const attends = auth.userId === assignedTo && isValidAssignee(member, conversation.lineId);
+        const answers = can(auth, 'conversations.assign') && inLineScope(auth, conversation.lineId);
+        if (attends || answers) recipients.add(auth.userId);
+    }
+    return [...recipients];
+};
+

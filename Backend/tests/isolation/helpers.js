@@ -121,6 +121,8 @@ export const ContactNote = await load('contact.note.model.js');
 export const HistoryThread = await load('history.thread.model.js');
 export const HistoryMedia = await load('history.media.model.js');
 export const AgendaEntry = await load('agenda.entry.model.js');
+export const ConversationEvent = await load('conversation.event.model.js');
+export const Notification = await load('notification.model.js');
 
 const server = app.listen(0);
 const baseUrl = `http://127.0.0.1:${server.address().port}/api`;

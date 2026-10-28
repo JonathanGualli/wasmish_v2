@@ -64,6 +64,28 @@ export const buildInboundPush = ({ conversationId, contact, text, type = null, c
     };
 };
 
+// Quién lo hizo, por su nombre de pila; sin nombre, «Alguien».
+const actorFirstName = (name) => String(name ?? '').trim().split(/\s+/)[0] || 'Alguien';
+
+const ASSIGNMENT_VERBS = { assigned: 'te asignó', passed: 'te pasó' };
+
+/**
+ * El aviso de «te asignaron» o «te la pasaron» (avisos de la asignación, spec
+ * § 7 y diseño m3): el título del de un entrante (el contacto, y la línea con
+ * más de una) y el cuerpo «Carla te asignó esta conversación.». Tocarlo abre
+ * la conversación, como el de un entrante.
+ */
+export const buildAssignmentPush = ({ conversationId, contact, lineName = null, actorName, kind }) => {
+    const id = String(conversationId);
+    const suffix = lineName ? ` · ${lineName}` : '';
+    return {
+        title: truncate(contactDisplayName(contact), TITLE_MAX - suffix.length) + suffix,
+        body: `${actorFirstName(actorName)} ${ASSIGNMENT_VERBS[kind]} esta conversación.`,
+        conversationId: id,
+        url: `/private/chats?c=${id}`,
+    };
+};
+
 /** El nombre de la línea para el aviso: solo si la cuenta tiene más de una activa. */
 export const pushLineName = (activeLines, lineId) => {
     if (activeLines.length < 2 || lineId == null) return null;

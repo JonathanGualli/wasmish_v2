@@ -2,8 +2,9 @@ import webpush from 'web-push';
 import PushSubscription from '../models/push.subscription.model.js';
 import User from '../models/user.model.js';
 import Line from '../models/line.model.js';
+import Conversation from '../models/conversation.model.js';
 import { PUSH_ENABLED, VAPID_PRIVATE_KEY, VAPID_PUBLIC_KEY, VAPID_SUBJECT } from '../config.js';
-import { buildInboundPush, isGonePushError, pushLineName, pushRecipientIds } from '../utils/push.js';
+import { buildAssignmentPush, buildInboundPush, isGonePushError, pushLineName, pushRecipientIds } from '../utils/push.js';
 import { currentConversationMeta } from './assignment.service.js';
 
 // ---------------------------------------------------------------------------
@@ -83,3 +84,41 @@ export const notifyInbound = async ({ accountId, conversationId, contact, text, 
         console.error('No se pudieron enviar los avisos push de un entrante:', { error: error.message });
     }
 };
+
+/**
+ * El aviso de «te asignaron» o «te la pasaron» (avisos de la asignación, spec
+ * § 7), solo a los dispositivos de `recipientId` y con la misma regla que el
+ * de un entrante (`pushRecipientIds`: activo, de la cuenta y con la línea),
+ * además de que la conversación siga siendo suya al enviar. Hace falta la
+ * línea, no solo la asignación: `updateMember` guarda el acceso nuevo antes de
+ * soltar sus conversaciones, y en ese hueco sigue asignado sin tener ya la
+ * línea (revisión de Codex del spec, 1). Se llama sin esperar: nunca rechaza.
+ */
+export const notifyAssignment = async ({ accountId, conversationId, recipientId, actorName, kind }) => {
+    if (!PUSH_ENABLED) return;
+    try {
+        const subscriptions = await PushSubscription.find({ accountId, memberId: recipientId }).lean();
+        if (subscriptions.length === 0) return;
+
+        const [member, activeLines, conversation] = await Promise.all([
+            User.findOne({ _id: recipientId, accountId }).select('accountId role lineIds status').lean(),
+            Line.find({ accountId, status: 'active' }).select('name verifiedName displayPhoneNumber phoneNumberId').lean(),
+            Conversation.findOne({ _id: conversationId, userId: accountId }).select('contactId contactName contactPhone')
+                .populate('contactId', 'name agendaName profileName username phone').lean(),
+        ]);
+        if (!member || !conversation) return;
+        // Leída lo último, como en `notifyInbound`.
+        const meta = await currentConversationMeta(conversationId);
+        if (!meta || String(meta.assignedTo) !== String(recipientId)) return;
+        if (pushRecipientIds([member], accountId, meta).length === 0) return;
+
+        const contact = conversation.contactId ?? { name: conversation.contactName, phone: conversation.contactPhone };
+        const payload = JSON.stringify(buildAssignmentPush({
+            conversationId, contact, lineName: pushLineName(activeLines, meta.lineId), actorName, kind,
+        }));
+        await Promise.allSettled(subscriptions.map(subscription => sendOne(subscription, payload)));
+    } catch (error) {
+        console.error('No se pudo enviar el aviso push de una asignación:', { error: error.message });
+    }
+};
+
