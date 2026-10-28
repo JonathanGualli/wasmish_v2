@@ -111,7 +111,7 @@ import { useInfiniteQuery, useQueryClient, type InfiniteData } from "@tanstack/r
 import type { Message } from "../models/message.mode.ts";
 import type { ConversationEvent } from "../models/conversation.event.model.ts";
 import { getConversationsMessagesService } from "../services/api.service.ts";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useSSE } from "../context/sse.context.ts";
 
 /**
@@ -274,15 +274,28 @@ export const useConversationMessages = (conversationId: string, { withEvents = f
     };
   }, [subscribe, queryClient, conversationId, withEvents]);
 
-  // La historia de todas las páginas cargadas, sin repetir.
+  // Si cambia si se piden eventos (el usuario recordado decía una persona y
+  // `/verify` trae el equipo, o al revés), el hilo se vuelve a pedir: la clave
+  // de la caché es la misma y lo de antes no los traía (revisión de Codex del PR #155).
+  const askedWithEvents = useRef(withEvents);
+  useEffect(() => {
+    if (askedWithEvents.current === withEvents) return;
+    askedWithEvents.current = withEvents;
+    if (!conversationId) return;
+    const key = ["conversation", conversationId];
+    void queryClient.cancelQueries({ queryKey: key }).then(() => queryClient.invalidateQueries({ queryKey: key }));
+  }, [withEvents, conversationId, queryClient]);
+
+  // La historia de todas las páginas cargadas, sin repetir; sin `withEvents`, ninguna.
   const events = useMemo(() => {
+    if (!withEvents) return [];
     const seen = new Set<string>();
     return (data?.pages ?? []).flatMap(page => page.events ?? []).filter(event => {
       if (seen.has(event.id)) return false;
       seen.add(event.id);
       return true;
     });
-  }, [data]);
+  }, [data, withEvents]);
 
   return {
     isLoading,
