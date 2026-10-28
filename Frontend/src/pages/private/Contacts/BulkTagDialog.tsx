@@ -1,10 +1,10 @@
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
-import { Check, LoaderCircle, Plus } from 'lucide-react';
+import { LoaderCircle, Plus } from 'lucide-react';
 import { Checkbox } from '../../../components/Checkbox/Checkbox';
 import { CustomButton } from '../../../components/Button/Button';
 import { TagChip } from '../../../components/Tag/TagChip';
-import { useNoticeContext } from '../../../components/Notice/context/UseNoticeContext';
+import { useNotice } from '../../../components/Notice/context/useNotice';
 import { tagError, useTagMutations, useTagSelectionSummary, useTags } from '../../../hooks/useTags';
 import type { CampaignRecipientsInput } from '../../../models/campaign.model';
 import type { BulkTagResult } from '../../../models/tag.model';
@@ -29,31 +29,17 @@ interface Props {
 const fmt = (n: number) => n.toLocaleString('es-EC');
 
 /** El aviso de cómo quedó, con los que no se pudieron etiquetar si los hubo. */
-const resultMessage = (mode: Mode, names: string[], result: BulkTagResult): ReactNode => {
+const resultMessage = (mode: Mode, names: string[], result: BulkTagResult): string => {
     const one = names.length === 1;
-    const what = one ? <b className="font-semibold">{names[0]}</b> : `${names.length} etiquetas`;
+    const what = one ? names[0] : `${names.length} etiquetas`;
     const changed = mode === 'add' ? result.matched - result.overLimit : result.modified;
-    const people = <><b className="font-mono font-semibold">{fmt(changed)}</b> {changed === 1 ? 'contacto' : 'contactos'}</>;
-    return (
-        <div className="flex items-start gap-2.5 text-sm text-brand-text">
-            <span className="flex-none mt-px w-[22px] h-[22px] rounded-full bg-brand-accent-soft text-brand-accent-strong flex items-center justify-center">
-                <Check size={13} strokeWidth={3} />
-            </span>
-            <span className="grid gap-1">
-                <span>
-                    {mode === 'add'
-                        ? <>{one ? 'Se añadió' : 'Se añadieron'} {what} a {people}</>
-                        : <>{one ? 'Se quitó' : 'Se quitaron'} {what} de {people}</>}
-                </span>
-                {result.overLimit > 0 && (
-                    <span className="text-[13px] text-brand-warning">
-                        {pluralize(result.overLimit, 'no se etiquetó', 'no se etiquetaron')}: tendría{result.overLimit === 1 ? '' : 'n'} más
-                        de {MAX_TAGS_PER_CONTACT} etiquetas.
-                    </span>
-                )}
-            </span>
-        </div>
-    );
+    const people = `${fmt(changed)} ${changed === 1 ? 'contacto' : 'contactos'}`;
+    const done = mode === 'add'
+        ? `${one ? 'Se añadió' : 'Se añadieron'} ${what} a ${people}.`
+        : `${one ? 'Se quitó' : 'Se quitaron'} ${what} de ${people}.`;
+    if (result.overLimit === 0) return done;
+    return `${done} ${pluralize(result.overLimit, 'no se etiquetó', 'no se etiquetaron')}: `
+        + `tendría${result.overLimit === 1 ? '' : 'n'} más de ${MAX_TAGS_PER_CONTACT} etiquetas.`;
 };
 
 /**
@@ -66,7 +52,7 @@ export const BulkTagDialog = ({ selection, count, allMatching, scope, onClose, o
     const { data: tags = [] } = useTags();
     const summary = useTagSelectionSummary(selection, true);
     const { bulk, create, createMissing } = useTagMutations();
-    const { state: noticeVisible, setState, setContent } = useNoticeContext();
+    const { visible: noticeVisible, notify } = useNotice();
 
     const [mode, setMode] = useState<Mode>('add');
     const [query, setQuery] = useState('');
@@ -143,12 +129,10 @@ export const BulkTagDialog = ({ selection, count, allMatching, scope, onClose, o
                 add: mode === 'add' ? ids : [],
                 remove: mode === 'remove' ? ids : [],
             });
-            setContent(resultMessage(mode, names, result));
-            setState(true);
+            notify({ kind: 'success', text: resultMessage(mode, names, result) });
             onDone();
         } catch (err) {
-            setContent(<div className="text-brand-danger text-sm"><p>{tagError(err, 'No se pudieron guardar las etiquetas. Inténtalo de nuevo.')}</p></div>);
-            setState(true);
+            notify({ kind: 'error', text: tagError(err, 'No se pudieron guardar las etiquetas. Inténtalo de nuevo.') });
         }
     };
 

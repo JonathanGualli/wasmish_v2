@@ -8,7 +8,7 @@ import { AuthField } from "../../Auth/AuthField";
 import { CustomButton } from "../../Button/Button";
 import { ReferralCard } from "../../Contact/ReferralCard";
 import { AgendaNameHint } from "../../Contact/AgendaNameHint";
-import { useNoticeContext } from "../../Notice/context/UseNoticeContext";
+import { useNotice } from "../../Notice/context/useNotice";
 import { SidebarCard } from "./SidebarCard";
 
 /**
@@ -68,7 +68,7 @@ const AgendaNameRow = ({ name }: { name: string }) => (
 
 const EditData = ({ contact, onDone }: { contact: ContactDetail; onDone: () => void }) => {
     const { update } = useContactMutations();
-    const { setState, setContent } = useNoticeContext();
+    const { notify } = useNotice();
     const [name, setName] = useState(contact.name ?? '');
     const [email, setEmail] = useState(contact.email ?? '');
     const [company, setCompany] = useState(contact.company ?? '');
@@ -91,8 +91,7 @@ const EditData = ({ contact, onDone }: { contact: ContactDetail; onDone: () => v
             });
             onDone();
         } catch (err) {
-            setContent(<div className="text-brand-danger text-sm"><p>{contactError(err).message}</p></div>);
-            setState(true);
+            notify({ kind: 'error', text: contactError(err).message });
         }
     };
 

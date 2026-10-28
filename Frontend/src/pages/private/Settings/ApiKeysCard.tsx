@@ -4,7 +4,7 @@ import { CustomButton } from "../../../components/Button/Button";
 import { CustomInput } from "../../../components/Input/Input";
 import { Callout } from "../../../components/Callout/Callout";
 import { SectionTitle } from "../../../components/Page/PageShell";
-import { useNoticeContext } from "../../../components/Notice/context/UseNoticeContext";
+import { useNotice } from "../../../components/Notice/context/useNotice";
 import { useApiKey } from "../../../hooks/useApiKey";
 import { useCopyToClipboard } from "../../../hooks/useCopyToClipboard";
 import { apiErrorOf } from "../../../utils/apiError";
@@ -14,7 +14,7 @@ import { SettingsListSkeleton } from "./SettingsListSkeleton";
 
 /** Las API keys de la cuenta: generarlas (la key se ve una sola vez), listarlas y revocarlas. */
 export const ApiKeysCard = ({ description }: { description: string }) => {
-    const { setState, setContent } = useNoticeContext();
+    const { notify } = useNotice();
     const { apiKeys, isLoading: apiKeysLoading, generate, revoke } = useApiKey();
     const [apiKeyName, setApiKeyName] = useState('');
     const [newKey, setNewKey] = useState<string | null>(null);
@@ -28,8 +28,7 @@ export const ApiKeysCard = ({ description }: { description: string }) => {
                 setApiKeyName('');
             },
             onError: (error: Error) => {
-                setContent(<div className="text-brand-danger"><p>{apiErrorOf(error, 'No se pudo generar la API key.').message}</p></div>);
-                setState(true);
+                notify({ kind: 'error', text: apiErrorOf(error, 'No se pudo generar la API key.').message });
             }
         });
     }

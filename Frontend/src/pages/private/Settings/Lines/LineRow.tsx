@@ -5,7 +5,7 @@ import { LineSwatch } from "../../../../components/Line/LineSwatch";
 import { Pill } from "../../../../components/Pill/Pill";
 import { useLines } from "../../../../hooks/useLines";
 import { useCopyToClipboard } from "../../../../hooks/useCopyToClipboard";
-import { useNoticeContext } from "../../../../components/Notice/context/UseNoticeContext";
+import { useNotice } from "../../../../components/Notice/context/useNotice";
 import { apiErrorOf, type ApiError } from "../../../../utils/apiError";
 import { lineLabel } from "../../../../utils/lineDisplay";
 import { LineNameEditor } from "./LineNameEditor";
@@ -39,7 +39,7 @@ const RowError = ({ error, onRetry }: { error: ApiError; onRetry: () => void }) 
 export const LineRow = ({ line, colorClass, showDefault, onDisconnect }: Props) => {
     const { rename, makeDefault, retryHistory } = useLines();
     const { copy } = useCopyToClipboard();
-    const { setState, setContent } = useNoticeContext();
+    const { notify } = useNotice();
     const [isEditing, setIsEditing] = useState(false);
     const [detailsOpen, setDetailsOpen] = useState(false);
     const [failure, setFailure] = useState<{ error: ApiError; retry: () => void } | null>(null);
@@ -70,8 +70,7 @@ export const LineRow = ({ line, colorClass, showDefault, onDisconnect }: Props) 
 
     const copyId = async () => {
         await copy(line.id);
-        setContent(<p className="text-brand-accent-strong">ID de la línea copiado.</p>);
-        setState(true);
+        notify({ kind: 'success', text: 'ID de la línea copiado.' });
     };
 
     return (

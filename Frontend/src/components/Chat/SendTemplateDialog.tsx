@@ -2,7 +2,7 @@ import { Dialog, DialogPanel, DialogTitle } from '@headlessui/react';
 import { X, LayoutTemplate } from 'lucide-react';
 import { CustomButton } from '../Button/Button';
 import { Callout } from '../Callout/Callout';
-import { useNoticeContext } from '../Notice/context/UseNoticeContext';
+import { useNotice } from '../Notice/context/useNotice';
 import { useSendTemplate } from '../../hooks/useSendTemplate';
 import { useTemplateForm, templateSendError } from '../../hooks/useTemplateForm';
 import { TemplatePicker, TemplateFields } from './TemplateFields';
@@ -47,7 +47,7 @@ export const SendTemplateDialog = ({ open, onClose, conversationId, line, contac
   const form = useTemplateForm(undefined, line ? line.waBusinessId : undefined);
   const { showLines, colorOf } = useLines();
   const sendTemplate = useSendTemplate();
-  const { state: errorVisible, setState, setContent } = useNoticeContext();
+  const { visible: errorVisible, notify } = useNotice();
 
   const handleClose = () => {
     if (sendTemplate.isPending) return;
@@ -74,8 +74,7 @@ export const SendTemplateDialog = ({ open, onClose, conversationId, line, contac
       await sendTemplate.mutateAsync({ conversationId, ...form.buildPayload() });
       handleClose();
     } catch (err) {
-      setContent(<div className="text-brand-danger text-sm"><p>{templateSendError(err)}</p></div>);
-      setState(true);
+      notify({ kind: 'error', text: templateSendError(err) });
     }
   };
 

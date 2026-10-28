@@ -6,7 +6,7 @@ import { AuthField, AuthPasswordField } from '../../../components/Auth/AuthField
 import { AuthShell, AuthHero } from '../../../components/Auth/AuthShell';
 import { useAuthContext } from '../../../context/auth.context';
 import { AppRoutes } from '../../../models/routes.models';
-import { useNoticeContext } from '../../../components/Notice/context/UseNoticeContext';
+import { useNotice } from '../../../components/Notice/context/useNotice';
 import { useSignUp } from '../../../hooks/useSignUp';
 import type { AxiosError } from 'axios';
 
@@ -36,7 +36,7 @@ export const SignUpPage = () => {
   const [password, setPassword] = useState('');
 
   const { isLoading, errors, isAuthenticated, signUp } = useAuthContext();
-  const { setState, setContent } = useNoticeContext();
+  const { notify } = useNotice();
   const signUpMutation = useSignUp();
   const navigate = useNavigate();
 
@@ -53,27 +53,16 @@ export const SignUpPage = () => {
 
   useEffect(() => {
     if (errors.length > 0) {
-      setContent(
-        <div className="text-brand-danger text-sm">
-          {errors.map((err, i) => <p key={i}>{err}</p>)}
-        </div>
-      );
-      setState(true);
+      notify({ kind: 'error', text: errors.join(' ') });
     }
-  }, [errors, setContent, setState]);
+  }, [errors, notify]);
 
   useEffect(() => {
     if (signUpMutation.isError) {
-      setContent(
-        <div className="text-brand-danger text-sm">
-          {(signUpMutation.error as AxiosError<ErrorItem[]>).response?.data.map((err, i) => (
-            <p key={i}>{err.message}</p>
-          )) || <p>Ocurrió un error, inténtalo de nuevo más tarde</p>}
-        </div>
-      );
-      setState(true);
+      const messages = (signUpMutation.error as AxiosError<ErrorItem[]>).response?.data?.map(err => err.message);
+      notify({ kind: 'error', text: messages?.length ? messages.join(' ') : 'Ocurrió un error, inténtalo de nuevo más tarde.' });
     }
-  }, [signUpMutation, setContent, setState]);
+  }, [signUpMutation, notify]);
 
   return (
     <AuthShell
