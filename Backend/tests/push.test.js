@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    buildInboundPush, isAllowedPushEndpoint, isGonePushError, pushLineName, pushRecipientIds,
+    buildAssignmentPush, buildInboundPush, isAllowedPushEndpoint, isGonePushError, pushLineName, pushRecipientIds,
 } from '../src/utils/push.js';
 
 test('isAllowedPushEndpoint acepta los servicios de push conocidos', () => {
@@ -121,3 +121,26 @@ test('isGonePushError: 404 y 410 son suscripciones que ya no existen', () => {
     assert.equal(isGonePushError(new Error('caído')), false);
     assert.equal(isGonePushError(null), false);
 });
+
+// Avisos de la asignación (spec § 7, diseño m3): título = contacto, cuerpo = qué pasó.
+test('buildAssignmentPush: asignar y pasar, con el nombre de pila de quien lo hizo', () => {
+    const contact = { name: 'Marisol Ruiz', phone: '593981112233' };
+    const assigned = buildAssignmentPush({ conversationId: 'c1', contact, actorName: 'Carla Ríos', kind: 'assigned' });
+    assert.equal(assigned.title, 'Marisol Ruiz');
+    assert.equal(assigned.body, 'Carla te asignó esta conversación.');
+    assert.equal(assigned.conversationId, 'c1');
+    assert.equal(assigned.url, '/private/chats?c=c1');
+    const passed = buildAssignmentPush({ conversationId: 'c1', contact, actorName: 'Ana Vera', kind: 'passed' });
+    assert.equal(passed.body, 'Ana te pasó esta conversación.');
+});
+
+test('buildAssignmentPush: sin nombre, «Alguien»; con varias líneas, la línea en el título', () => {
+    const contact = { name: 'Marisol Ruiz', phone: '593981112233' };
+    assert.equal(buildAssignmentPush({ conversationId: 'c1', contact, actorName: null, kind: 'assigned' }).body,
+        'Alguien te asignó esta conversación.');
+    assert.equal(buildAssignmentPush({ conversationId: 'c1', contact, actorName: '  ', kind: 'passed' }).body,
+        'Alguien te pasó esta conversación.');
+    assert.equal(buildAssignmentPush({ conversationId: 'c1', contact, lineName: 'Ventas', actorName: 'Carla', kind: 'assigned' }).title,
+        'Marisol Ruiz · Ventas');
+});
+
