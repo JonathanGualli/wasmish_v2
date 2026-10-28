@@ -133,18 +133,22 @@
   - `recordEvent({ accountId, conversationId, type, actorId = null, targetId = null, at }) → Promise<void>`: guarda y emite `conversation_event` `{ conversationId, event }` con `sendConversationEvent`; nunca lanza.
   - `serializeEvent(doc) → { id, type, actor: { id, name } | null, target: { id, name } | null, timestamp }` (`timestamp` = `at` en ISO; `doc` con `populate('actorId targetId', 'name')`).
   - `listPageEvents(conversationId, { from, to }) → Promise<doc[]>`: del más nuevo al más viejo, `cap + 1`, con `populate`.
-- Modelos (spec § 3): `ConversationEvent` con `at` requerido y el índice `conversation_event_list` `{ conversationId: 1, at: 1, _id: 1 }`; `Notification` con `timestamps: true` y los índices `notification_inbox` `{ recipientId: 1, _id: -1 }` (ver «Decisiones del plan»), `notification_request` `{ conversationId: 1, requestId: 1 }` parcial con `requestId: { $type: 'objectId' }` y `notification_ttl` `{ createdAt: 1 }` con `expireAfterSeconds: 2592000`.
-- `GET /chats/:id/messages` responde `{ items, nextCursor, events }`.
+- Modelos (spec § 3): `ConversationEvent` con `at` requerido y el índice `conversation_event_list` `{ conversationId: 1, at: 1, _id: 1 }`; `Notification` con `timestamps: true` y los índices `notification_inbox` `{ recipientId: 1, createdAt: -1, _id: -1 }`, `notification_request` `{ conversationId: 1, requestId: 1 }` parcial con `requestId: { $type: 'objectId' }` y `notification_ttl` `{ createdAt: 1 }` con `expireAfterSeconds: 2592000`.
+- `GET /chats/:id/messages?events=1` responde `{ items, nextCursor, events }`, y **solo con `events=1`** trae eventos y recorta la página. Sin el parámetro, la respuesta y la paginación son las de hoy (revisión de Codex del plan, 2). Así:
+  - el PR 2 se puede unir solo, porque el frontend de hoy no pide eventos;
+  - las pestañas abiertas con la 1.0.33 durante el despliegue no reciben páginas sin mensajes;
+  - con una sola persona (`hasTeam` falso), el frontend no los pide y la paginación no cambia.
 
 - [ ] **Step 1: tests de aislamiento que fallan** (cuenta con l1, owner, supervisor, Ana y Luis; eventos sembrados con `ConversationEvent.create` y fechas fijas):
   - `'mensajes: la primera página trae los eventos más nuevos que el último mensaje y los del tramo'`.
   - `'mensajes: recorrer todas las páginas trae cada evento una sola vez, también con un evento a la misma hora que un mensaje'` (25 mensajes, 30 eventos intercalados, `limit=10`).
   - `'mensajes: con 3 mensajes y 230 eventos, las páginas se acortan en 100 y no se pierde ni se repite ninguno'` (comprobar que cada `nextCursor` es el `timestamp` del evento 100 y que la unión de páginas es exacta).
   - `'mensajes: el agente ve los eventos de antes de que fuera suya'` (Review Focus).
+  - `'mensajes: sin events=1, la respuesta y las páginas son las de hoy aunque haya 230 eventos'`.
   - `'mensajes: un agente que ya no la ve recibe 404 y ningún evento'` y otra cuenta, 404.
   - `'conversation_event: no le llega al agente que la perdió'` (`openStream` de Ana; se la asignan a Luis; `recordEvent`; Ana no recibe `conversation_event`, Luis sí) (Review Focus).
 - [ ] **Step 2:** `npm run test:isolation` → fallan.
-- [ ] **Step 3:** los dos modelos, `recordEvent` / `serializeEvent` / `listPageEvents`, y en `listMessages`: `eventBounds` → `listPageEvents` → si `eventCutoff` da `T`, volver a pedir los eventos `>= T` del tramo sin límite, quedarse con los mensajes `>= T` y `nextCursor = T.toISOString()`; responder `events` serializados.
+- [ ] **Step 3:** los dos modelos, `recordEvent` / `serializeEvent` / `listPageEvents`, y en `listMessages`, solo con `events=1`: `eventBounds` → `listPageEvents` → si `eventCutoff` da `T`, volver a pedir los eventos `>= T` del tramo sin límite, quedarse con los mensajes `>= T` y `nextCursor = T.toISOString()`; responder `events` serializados.
 - [ ] **Step 4:** `npm run test:isolation` en verde, y `npm test`.
 - [ ] **Step 5: commit** con `Backend/AGENTS.md` y `chat.md`.
 
@@ -160,14 +164,23 @@
 **Interfaces:**
 - Consumes: Tasks 2 y 3.
 - Produces, en `assignment.history.service.js`:
-  - `notifyMembers({ accountId, recipientIds, type, actorId, conversationId, requestId = null }) → Promise<doc[]>`: crea los avisos y emite a cada uno `notification_created` `{ notification, unseenCount }` serializado con **su** `auth`; nunca lanza.
+  - `createNotifications({ accountId, recipientIds, type, actorId, conversationId, requestId = null }) → Promise<doc[]>`: solo inserta; nunca lanza (devuelve `[]` si falla).
+  - `emitNotificationsCreated(accountId, docs) → Promise<void>`: a cada destinatario, `notification_created` `{ notification, unseenCount }` serializado con **su** `auth`; nunca lanza.
+  - `notifyMembers(args) → Promise<doc[]>`: `createNotifications` y después `emitNotificationsCreated`. Lo usan todos los caminos **menos** `requestTransfer`, que separa los dos pasos (revisión de Codex del plan, 3).
   - `resolveRequest({ accountId, conversationId, requestId, status: 'passed' | 'rejected' | 'gone', by = null }) → Promise<void>`: `updateMany({ conversationId, requestId, resolution: null }, { resolution: { status, by, at: new Date() } })` y `notification_updated` a cada destinatario; nunca lanza.
   - `serializeNotifications(auth, docs) → Promise<object[]>`: la forma de spec § 5.2, en una tanda (conversaciones con su contacto y `assignedTo`, actores); `canOpen = canSeeConversation(auth, conversation)`; `pending = String(conversation.transferRequest?.id) === String(doc.requestId)`; `canAnswer = canOpen && pending && canReassign(auth, conversation.assignedTo)`; sin conversación, `conversation: null`.
   - `memberAuth(accountId, userId) → Promise<auth | null>`: `sessionAuthFor` del `User` leído ahora.
 - Cambios en `assignment.service.js` (cada `$set`/`$unset` lleva la fecha en una constante `at` que se reutiliza para el evento):
   - `acquireConversation` (ganó): `recordEvent(take)`.
   - `assignConversation`: escritura con `{ new: false }` (ya lo es) → con `previous.transferRequest` en mano; si `valid`: `take` (target = quien asigna), `release` (target `null`) o `assign` + `notifyMembers(assigned)`; y si `previous.transferRequest`: `resolveRequest` `passed` (target = solicitante, `by` = quien asigna) o `gone`.
-  - `requestTransfer`: pasar a `findOneAndUpdate({ … }, { $set }, { new: false })` para saber la solicitud reemplazada → `resolveRequest(gone)` de esa; si `confirmRequester` vale: `recordEvent(request)`, `notifyMembers(requested, requestRecipients(…))`, y **relectura**: si `transferRequest.id` ya no es esta, `resolveRequest(gone)` de esta (spec § 4, revisión de Codex 2).
+  - `requestTransfer`:
+    - la lectura inicial pasa a seleccionar `assignedTo lineId`, porque `requestRecipients` necesita la línea; sin ella, excluiría a quien la atiende y al supervisor (revisión de Codex del plan, 4);
+    - la escritura pasa a `findOneAndUpdate({ … }, { $set }, { new: false })`, para saber qué solicitud reemplazó, y resuelve esa como `gone`;
+    - si `confirmRequester` vale:
+      1. `recordEvent(request)`;
+      2. `createNotifications(requested, requestRecipients(miembros activos de la cuenta, { lineId, assignedTo }, solicitante))`;
+      3. **relectura** de la conversación;
+      4. si `transferRequest.id` ya no es esta, `resolveRequest(gone)` de esta y **no se emite**; si sigue, `emitNotificationsCreated` (spec § 4; revisión de Codex del plan, 3).
   - `answerTransfer` rechazada: `recordEvent(reject, target = solicitante)`, `notifyMembers(rejected)`, `resolveRequest(rejected, by)`. Aceptada y válida: `recordEvent(pass)`, `notifyMembers(passed)`, `resolveRequest(passed, by)`. Solicitante inválido: `resolveRequest(gone)`.
   - `confirmAssignee` y `confirmRequester`: su escritura pasa a `findOneAndUpdate(…, { new: false })`; si quitó una solicitud, `resolveRequest(gone)` de esa.
   - `releaseAssignments`: lee los `_id` candidatos y suelta **una por una** con `findOneAndUpdate({ _id, userId, assignedTo: member._id, ...filter }, …, { new: false })`, en tandas de 20 con `Promise.all`; para las que devolvieron documento, un `revoked` (`targetId = member._id`, `actorId: null`, `at` de esa escritura) con `insertMany` sin SSE por evento, y `resolveRequest(gone)` de su solicitud si tenía. Lo mismo, una por una, con las solicitudes que pidió esa persona. Sigue emitiendo un solo `conversations_updated`.
@@ -176,8 +189,14 @@
   - `'asignar al solicitante resuelve passed; asignar a otro, gone'`.
   - Un test por fila de la tabla de resoluciones de spec § 4 (incluidas `confirmAssignee` y `confirmRequester`, llamadas como en los tests de la Fase 4 con un `User` ya cambiado).
   - `'confirmAssignee deshace: ni evento ni aviso'`.
-  - `'una solicitud aceptada mientras requestTransfer aún no creó sus avisos no deja ninguno pendiente'`: sustituir `Notification.insertMany` (o el método que use `notifyMembers`) para que, antes de insertar, acepte la solicitud con otra sesión; después, `GET /notifications` de todos los destinatarios → `request.pending: false`, `canAnswer: false`.
-  - `'dos reasignaciones con las confirmaciones en orden inverso quedan en orden'`: retener la primera `confirmAssignee` (sustituir `User.findOne` una vez) mientras corre la segunda; el hilo trae `assign → Luis` antes que `assign → Marta`.
+  - `'una solicitud aceptada mientras requestTransfer aún no creó sus avisos no deja ninguno pendiente'`: sustituir `Notification.insertMany` para que, antes de insertar, acepte la solicitud con otra sesión. Después, en la colección, todos los `requested` de esa solicitud tienen `resolution`; con `serializeNotifications` del supervisor, `request.pending: false` y `canAnswer: false`; y con `openStream` de los destinatarios, **ningún** `notification_created` de esa solicitud (revisión de Codex del plan, 3). La comprobación por HTTP va en la Tarea 5 (revisión de Codex del plan, 7).
+  - `'requestTransfer real: el requested lo reciben Ana (la atiende), el supervisor con la línea y el owner'`: por el endpoint, no llamando a `requestRecipients` (revisión de Codex del plan, 4).
+  - `'dos reasignaciones con las confirmaciones en orden inverso quedan en orden'`, con una **barrera** (revisión de Codex del plan, 8):
+    - envolver `Conversation.findOneAndUpdate` para que marque cuándo la petición de A ya escribió;
+    - envolver `User.findOne` para que **solo después de esa marca**, y una vez, retenga la lectura (la de `confirmAssignee` de A) hasta soltarla;
+    - con A retenida, B reasigna a Marta;
+    - comprobar en la colección que la conversación es de Marta, soltar a A y esperarla;
+    - el hilo trae `assign → Luis` antes que `assign → Marta`.
   - `'releaseAssignments no escribe revoked en una conversación que otro movió entre leer y soltar'`: sustituir `Conversation.findOneAndUpdate` para mover una de las candidatas justo antes de su escritura.
   - `'notification_updated le llega al supervisor cuando Ana acepta'` (Review Focus).
 - [ ] **Step 2:** fallan.
@@ -198,15 +217,27 @@
 **Interfaces:**
 - Consumes: Tasks 2 a 4.
 - Produces:
-  - `GET /api/notifications?before=<id>` (`authRequired`) → `{ items, nextCursor: string | null, unseenCount }`: `{ userId: accountId, recipientId: userId, ...(before && { _id: { $lt: before } }) }`, `sort({ _id: -1 })`, `NOTIFICATIONS_PER_PAGE + 1` para saber si hay más; `before` que no es un ObjectId → 400.
+  - `GET /api/notifications?before=<cursor>` (`authRequired`) → `{ items, nextCursor: string | null, unseenCount }`, con el orden del spec § 5.2 (`createdAt` y `_id`; revisión de Codex del plan, 10):
+    - el cursor es opaco, `<createdAt ISO>_<_id>`, del último de la página;
+    - la consulta es `{ userId: accountId, recipientId: userId }` y, con cursor, `$or: [{ createdAt: { $lt: d } }, { createdAt: d, _id: { $lt: id } }]`;
+    - orden `sort({ createdAt: -1, _id: -1 })`, pidiendo `NOTIFICATIONS_PER_PAGE + 1` para saber si hay más;
+    - un cursor mal formado → 400.
+
+    El cursor lo arman y lo leen dos funciones puras de `utils/conversation.events.js`, `encodeCursor(doc)` y `decodeCursor(text) → { createdAt, id } | null`, con test.
   - `POST /api/notifications/seen` (`authRequired`, `notificationsSeenSchema` = `{ ids: string[] (1 a 100, ObjectId) }` o `{ all: true }`) → `{ unseenCount }`; `updateMany` con `{ userId, recipientId, seenAt: null, … }`; emite `notifications_seen` `{ unseenCount }` a la persona.
   - `notifyAssignment({ accountId, conversationId, recipientId, actorName, kind }) → Promise<void>` en `push.service.js`: como `notifyInbound`, con `members` = el destinatario, `pushRecipientIds([member], accountId, meta)` y `String(meta.assignedTo) === String(recipientId)`; payload `buildAssignmentPush`. Se llama sin `await` desde `assignConversation` (tras `assign`, `kind: 'assigned'`) y desde `answerTransfer` aceptada (`kind: 'passed'`), justo después de su `notifyMembers`.
 - [ ] **Step 1: tests que fallan:**
   - `notifications.test.js`: Ana no lee ni marca los de Luis (sus ids en `ids` no cambian nada y `unseenCount` de Luis sigue igual); otra cuenta, igual; sin sesión, 401; con API key, 401.
   - `'35 avisos: dos páginas, sin repetir, y unseenCount 35'`; después de `{ all: true }`, 0 (Review Focus).
+  - `'avisos con el mismo createdAt, o con los _id en otro orden que createdAt, se recorren por createdAt sin perder ninguno'` (revisión de Codex del plan, 10).
+  - `'una solicitud aceptada mientras se creaban sus avisos sale por HTTP con pending y canAnswer falsos'` (la parte HTTP del test de la Tarea 4).
   - `'un aviso de una conversación borrada sale con conversation: null'` (Review Focus).
   - `'canAnswer es falso para un supervisor que perdió la línea'`.
-  - `push.test.js`: asignar a Luis → push solo a sus suscripciones, con el cuerpo de `buildAssignmentPush`; asignárselo a uno mismo, ninguno; `'no sale si le quitaron la línea antes de soltarla'` (guardar el `User` sin la línea sin llamar a `releaseAssignments`, y asignar); `'no sale si ya no es suya al enviar'`.
+  - `push.test.js`: asignar a Luis → push solo a sus suscripciones, con el cuerpo de `buildAssignmentPush`; asignárselo a uno mismo, ninguno; `'no sale si ya no es suya al enviar'`; y `'no sale si le quitaron la línea antes de soltarla'`, llamando **directamente** a `notifyAssignment` con la situación ya guardada (revisión de Codex del plan, 9):
+    - la conversación sigue asignada a Luis;
+    - el `User` de Luis está guardado sin la línea, sin llamar a `releaseAssignments`;
+    - comprobar que sigue asignada y que no sale push;
+    - y como control, con la línea, sí sale.
 - [ ] **Step 2:** fallan.
 - [ ] **Step 3:** implementar.
 - [ ] **Step 4:** `npm test && npm run test:isolation` en verde.
@@ -217,7 +248,7 @@
 ### Task 6: La historia en el hilo (PR 3, rama `avisos-hilo`)
 
 **Files:**
-- Modify: `Frontend/src/models/message.mode.ts` (o un `models/conversation.event.model.ts` nuevo: `ConversationEvent`), `Frontend/src/context/sse.context.ts`, `Frontend/src/services/api.service.ts` (la respuesta de mensajes y el SSE `conversation_event`), `Frontend/src/hooks/useConversationMessages.ts`, `Frontend/src/utils/assignment.ts`, `Frontend/src/components/Chat/ChatThread.tsx`
+- Modify: `Frontend/src/models/message.mode.ts` (o un `models/conversation.event.model.ts` nuevo: `ConversationEvent`), `Frontend/src/context/sse.context.ts`, `Frontend/src/context/sse.provider.tsx` (el `Set` de `conversation_event` en el registro y su `onConversationEvent: dispatch("conversation_event")`; revisión de Codex del plan, 1), `Frontend/src/services/api.service.ts` (pedir los mensajes con `events=1` cuando `hasTeam`, la respuesta con `events` y el handler `onConversationEvent`), `Frontend/src/hooks/useConversationMessages.ts`, `Frontend/src/utils/assignment.ts`, `Frontend/src/components/Chat/ChatThread.tsx`
 - Create: `Frontend/src/components/Chat/Assignment/ConversationEventLine.tsx`
 - Delete: `Frontend/src/components/Chat/Assignment/AssignmentNotice.tsx`
 - Docs: `docs/arquitectura/chat.md` (la historia en la UI; ya no hay aviso flotante en el hilo)
@@ -237,8 +268,8 @@
     - `revoked`: «Esta conversación quedó sin asignar: ya no tienes acceso a la línea» / «Esta conversación quedó sin asignar: {T} ya no tiene acceso a la línea».
 
 - [ ] **Step 1: el hook.** Cada página guarda `events`; `conversation_event` del `conversationId` abierto lo añade a la primera página si su `id` no está. Si llega con la consulta en curso o sin datos, `cancelQueries` y `invalidateQueries`, como `message_updated` (spec § 8.2).
-- [ ] **Step 2: el hilo.** Mezclar mensajes y eventos por fecha (a igual fecha, el evento antes), solo si `hasTeam(user)`. `ConversationEventLine` como 6a: centrada, `max-width: 84%`, mini avatar de 18 px de quien lo hizo (menta `#6fe3ae`/`#06251c` si es quien mira, `#e4e7eb`/`#2e3540` si no; en `revoked`, la casilla punteada de 16 px), texto 12,5 px `#4b5361` y la hora en mono 11 px `#97a1ad`. Los separadores de día cuentan también los eventos.
-- [ ] **Step 3: quitar el aviso flotante y la barra.** Borrar `toast`/`showToast`/`toastText`/`TOAST_MS` y `assignmentNotice` de `ChatThread`, y `AssignmentNotice.tsx`. Pasan a `notify`: el error de reaccionar (`'error'`, el texto de hoy: «No se pudo reaccionar. {motivo} El mensaje quedó como estaba.»), el mensaje muy antiguo (`'error'`, «Este mensaje es muy antiguo: Wasmish no puede ir hasta él.»), «La conversación cambió de manos. Vuelve a intentarlo.», «La solicitud cambió. Revísala de nuevo.» y «Tu mensaje no se envió: la conversación cambió de manos mientras tanto. Lo dejamos en el campo.» (`'info'`). Las confirmaciones de asignar, soltar, tomar, pasar, rechazar y «Respondiste: ahora la atiendes tú.» se quitan sin reemplazo. Los demás `onToast` de `AssigneeControl` desaparecen de su `Props`.
+- [ ] **Step 2: el hilo.** Mezclar mensajes y eventos por fecha (a igual fecha, el evento antes), solo si `hasTeam(user)`. **Una página puede venir sin mensajes** (la recortaron los eventos): «No hay mensajes todavía» solo cuando no hay ni mensajes ni eventos cargados **y** no hay `nextCursor`, y el disparador de cargar los anteriores se monta siempre que haya `nextCursor`, aunque esa página no tenga mensajes (revisión de Codex del plan, 2). `ConversationEventLine` como 6a: centrada, `max-width: 84%`, mini avatar de 18 px de quien lo hizo (menta `#6fe3ae`/`#06251c` si es quien mira, `#e4e7eb`/`#2e3540` si no; en `revoked`, la casilla punteada de 16 px), texto 12,5 px `#4b5361` y la hora en mono 11 px `#97a1ad`. Los separadores de día cuentan también los eventos.
+- [ ] **Step 3: quitar el aviso flotante y la barra.** Borrar `toast`/`showToast`/`toastText`/`TOAST_MS` y `assignmentNotice` de `ChatThread`, y `AssignmentNotice.tsx`. Pasan a `notify`: el error de reaccionar (`'error'`, el texto de hoy: «No se pudo reaccionar. {motivo} El mensaje quedó como estaba.»), el mensaje muy antiguo (`'error'`, «Este mensaje es muy antiguo: Wasmish no puede ir hasta él.»), «La conversación cambió de manos. Vuelve a intentarlo.», «La solicitud cambió. Revísala de nuevo.» y «Tu mensaje no se envió: la conversación cambió de manos mientras tanto. Lo dejamos en el campo.» (`'info'`). Las confirmaciones **de éxito** de asignar, soltar, tomar, pasar, rechazar y «Respondiste: ahora la atiendes tú.» se quitan sin reemplazo. **Los errores generales** se quedan como `notify({ kind: 'error', text: message })` (revisión de Codex del plan, 6): un `invalid_assignee` o un fallo de red en `AssigneeControl` (su `onToast(message)`) y los de `answerRequest` en `ChatThread`. `onToast` de `AssigneeControl` pasa a llamarse `onError`.
 - [ ] **Step 4:** `npm run lint && npm run build`.
 - [ ] **Step 5: navegador:** los siete tipos vistos desde quien lo hizo, quien lo recibe y un tercero (la tabla 6b); recargar no duplica; un evento que llega con el chat recién abierto no se pierde; una cuenta de una persona no enseña eventos; 390 px.
 - [ ] **Step 6: commit** con `chat.md`; PR 3 con su revisión de Codex.
@@ -257,9 +288,9 @@
   - `AppNotification` con la forma de spec § 5.2 (`type: 'assigned' | 'passed' | 'rejected' | 'requested'`).
   - `getNotificationsService(before?: string) → Promise<{ items: AppNotification[]; nextCursor: string | null; unseenCount: number }>`, `markNotificationsSeenService(body: { ids: string[] } | { all: true }) → Promise<{ unseenCount: number }>`.
   - `useNotifications() → { items, unseenCount, hasMore, loadMore(), isLoading, markSeen(ids), markAllSeen(), refresh() }`: `useInfiniteQuery` con la clave `['notifications']`; `unseenCount` en su propia caché (`['notifications', 'unseen']`), que actualizan las respuestas y los SSE. `notification_created` antepone el aviso; `notification_updated` lo reemplaza por `id`; `notifications_seen` fija el contador e invalida la lista. `conversation_assigned`, `conversation_revoked` y `conversations_updated` invalidan la lista (cambia `canOpen`).
-  - `useNotificationToasts()`, montado en `PrivateLayout` en lugar de `useTransferAnswers`: con `notification_created`, `notify({ kind: 'new', text, action })`. Textos (los de 7a y del prototipo, con el contacto): `assigned` «{A} te asignó la conversación con {contacto}.»; `passed` «{A} te pasó la conversación con {contacto}.»; `rejected` «{A} no te pasó la conversación con {contacto}.» (`kind: 'info'`, sin acción); `requested` «{A} pide la conversación con {contacto}.». Acción «Abrir» solo si `canOpen`: marca visto y navega como hoy (`ChatsNavigationState`).
+  - `useNotificationToasts()`, montado en `PrivateLayout` **junto a** `useTransferAnswers`, que sigue montado: le toca escribir el estado de la ficha e invalidar los contactos al aceptar; solo pierde el aviso (revisión de Codex del plan, 5): con `notification_created`, `notify({ kind: 'new', text, action })`. Textos (los de 7a y del prototipo, con el contacto): `assigned` «{A} te asignó la conversación con {contacto}.»; `passed` «{A} te pasó la conversación con {contacto}.»; `rejected` «{A} no te pasó la conversación con {contacto}.» (`kind: 'info'`, sin acción); `requested` «{A} pide la conversación con {contacto}.». Acción «Abrir» solo si `canOpen`: marca visto y navega como hoy (`ChatsNavigationState`).
 - [ ] **Step 1:** tipos, servicios y los cuatro SSE nuevos en `SSEEventMap` y en la lista de `api.service.ts`.
-- [ ] **Step 2:** `useNotifications` y `useNotificationToasts`. `useTransferAnswers` deja de abrir el aviso (sigue escribiendo el estado de la ficha con `transfer_answered`).
+- [ ] **Step 2:** `useNotifications` y `useNotificationToasts`. `useTransferAnswers` sigue montado en `PrivateLayout` y solo deja de abrir el aviso (sigue escribiendo el estado de la ficha e invalidando los contactos con `transfer_answered`). En el navegador: la ficha y «Conversación nueva» se actualizan al aceptar y al rechazar.
 - [ ] **Step 3:** `npm run lint && npm run build`.
 - [ ] **Step 4: commit.**
 
@@ -296,7 +327,7 @@
 ## Decisiones del plan (para revisar)
 
 - **Un cuarto tipo de aviso, `success`,** con los colores de `info` y el icono `Check`: el diseño solo define error, aviso y nuevo, pero hoy hay confirmaciones («ID de la línea copiado.», «Guardado.») que con el icono de «volver a mirar» se leerían mal.
-- **Los avisos se paginan por `_id`** (`before=<id>`, índice `{ recipientId: 1, _id: -1 }`), no por `createdAt` como decía el spec: el `_id` crece con el tiempo y desempata solo.
+- **`events=1` en `GET /chats/:id/messages`:** el spec decía que el endpoint devuelve los eventos sin más; el plan los hace opcionales para que una página recortada no llegue a un frontend que no la entiende (revisión de Codex del plan, 2).
 - **Un `revoked` no se emite por SSE** evento a evento: quitar el acceso ya manda un solo `conversations_updated` (pueden ser cientos), y el hilo lo enseña al volver a cargarse.
 - **`releaseAssignments` en tandas de 20** escrituras en paralelo.
 - **El resultado de etiquetar varios** pasa de una tarjeta con negritas a una frase.
