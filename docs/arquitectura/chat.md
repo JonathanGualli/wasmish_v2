@@ -109,6 +109,21 @@ SSE y sus eventos, no leídos, y la UI del chat: hilo, bandeja, conversación nu
 - **El modelo** (`models/conversation.event.model.js`): `{ userId (la cuenta), conversationId, type, actorId, targetId, at }`, con `type` uno de `take`, `assign`, `release`, `request`, `pass`, `reject` y `revoked`. `at` es la fecha de la **escritura ganadora**, no la de guardar el evento: dos reasignaciones cuyas confirmaciones terminan al revés quedan en su orden (revisión de Codex del spec). El orden es `at` y `_id`. Los nombres no se guardan: se leen con `populate`. Sin caducidad. Las conversaciones anteriores no tienen historia.
 - **Con los mensajes** (`GET /chats/:id/messages?events=1`): cada página trae `events`, los del tramo de esa página (`eventBounds`, `utils/conversation.events.js`): arriba, el cursor (`before`; la primera página no tiene, así que trae también los posteriores al último mensaje); abajo, el mensaje más viejo de la página si hay más (la última trae también los anteriores al primer mensaje). Cerrado abajo y abierto arriba, como los mensajes: un evento no sale en dos páginas. **Como mucho 100** (`EVENTS_PER_PAGE`): si hay más, la página se acorta en la fecha del evento 100 (`eventCutoff`), se queda con lo de esa fecha en adelante (todos los de esa fecha, aunque pasen de 100) y `nextCursor` pasa a ser esa fecha. Por eso una página puede venir sin mensajes. **Sin `events=1`**, la respuesta y las páginas son las de antes: así el frontend que no los pide (el de la 1.0.33 durante un despliegue, o una cuenta de una persona) no recibe páginas recortadas (revisión de Codex del plan). Cada evento: `{ id, type, actor: { id, name } | null, target: { id, name } | null, timestamp }` (`serializeEvent`).
 - **En vivo:** `recordEvent` (`services/assignment.history.service.js`) lo guarda y emite `conversation_event { conversationId, event }` con `sendConversationEvent`, a quien ve la conversación **ahora**: un agente que acaba de perderla no lo recibe. Nunca lanza.
+- **Qué escribe cada camino** (`services/assignment.service.js`, siempre **después** de que la asignación quedó confirmada: si `confirmAssignee` la deshace, no queda nada escrito):
+
+  | Camino | Evento | Aviso en la campanita |
+  |---|---|---|
+  | Responder una sin asignar o «Tomar» (`acquireConversation`) | `take` (sin destinatario) | — |
+  | Asignársela a uno mismo desde el menú | `take` (sin destinatario) | — |
+  | Asignar a otra persona | `assign` | `assigned` al que la recibe |
+  | Soltar | `release` | — |
+  | Pedir (`requestTransfer`) | `request` | `requested` a quien la atiende y a quienes pueden responderla (owner, admin y el supervisor de esa línea; `requestRecipients`), nunca al que la pide |
+  | Aceptar | `pass` | `passed` al que la pidió |
+  | Rechazar | `reject` | `rejected` al que la pidió |
+  | Quitar el acceso (`releaseAssignments`) | `revoked` en cada conversación soltada | — |
+
+- **Cómo termina una solicitud.** Si sigue pendiente lo dice la conversación (`transferRequest.id`), calculado al servir el aviso; `Notification.resolution` solo cuenta cómo terminó, para la nota. Toda escritura que quita o reemplaza `transferRequest` lee la que quitó y resuelve sus avisos `requested` (los que aún no tienen resolución), con `notification_updated` a cada uno: aceptarla o asignársela al que la pidió, `passed` con quién; rechazarla, `rejected`; asignarla a otro, una solicitud nueva que la reemplaza, el solicitante que ya no puede atenderla, `confirmAssignee` o `confirmRequester` que la borran, o quitar el acceso, `gone`. `requestTransfer` crea sus avisos, **relee la conversación y solo los emite si la solicitud sigue siendo esa**: si mientras tanto la aceptaron, la rechazaron o la reemplazaron, los marca `gone` sin emitirlos (revisiones de Codex del spec y del plan).
+- **Quitar el acceso** suelta conversación por conversación con una escritura condicional (en tandas de 20), y escribe `revoked` solo para las que de verdad soltó: una que otro movió entre leer y soltar no lo recibe. Los `revoked` no van por SSE uno a uno (sigue el `conversations_updated` de siempre): el hilo los enseña al volver a cargarse.
 
 ## Frontend
 

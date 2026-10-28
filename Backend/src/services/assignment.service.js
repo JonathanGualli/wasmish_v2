@@ -3,9 +3,12 @@ import Conversation from '../models/conversation.model.js';
 import User from '../models/user.model.js';
 import { sendAssignmentChange, sendToAccount, sendToUser } from '../controllers/stream.controller.js';
 import { conversationLineScope, conversationMeta, conversationScope } from '../utils/permissions.js';
-import { canReassign, isValidAssignee, releaseFilter, replyAcquisition } from '../utils/assignment.js';
+import { canReassign, isValidAssignee, releaseFilter, replyAcquisition, requestRecipients } from '../utils/assignment.js';
 import { contactDisplayName } from '../utils/contact.identity.js';
 import { getWindowExpiry } from '../utils/whatsapp.window.js';
+import {
+    createNotifications, emitNotificationsCreated, notifyMembers, recordEvent, recordRevocations, resolveRequest,
+} from './assignment.history.service.js';
 
 // ---------------------------------------------------------------------------
 // La asignación de conversaciones (Fase 4 de multi-línea). Las reglas puras
@@ -123,10 +126,13 @@ export const confirmAssignee = async (accountId, conversationId, userId) => {
         Conversation.findById(conversationId).select('lineId').lean(),
     ]);
     if (conversation && isValidAssignee(member, conversation.lineId)) return true;
-    await Conversation.updateOne(
+    const undone = await Conversation.findOneAndUpdate(
         { _id: conversationId, assignedTo: userId },
         { $set: { assignedTo: null, assignedAt: new Date(), assignedBy: null }, $unset: { transferRequest: 1 } },
-    );
+        { new: false },
+    ).select('transferRequest').lean();
+    // La solicitud que se llevó al deshacer termina ahí (revisión de Codex del spec, 4).
+    await resolveRequest({ accountId, conversationId, requestId: undone?.transferRequest?.id, status: 'gone' });
     return false;
 };
 
@@ -144,7 +150,8 @@ export const confirmRequester = async (accountId, conversationId, requestId, use
         Conversation.findById(conversationId).select('lineId').lean(),
     ]);
     if (conversation && isValidAssignee(member, conversation.lineId)) return true;
-    await Conversation.updateOne({ _id: conversationId, 'transferRequest.id': requestId }, { $unset: { transferRequest: 1 } });
+    const removed = await Conversation.updateOne({ _id: conversationId, 'transferRequest.id': requestId }, { $unset: { transferRequest: 1 } });
+    if (removed.modifiedCount > 0) await resolveRequest({ accountId, conversationId, requestId, status: 'gone' });
     return false;
 };
 
@@ -164,15 +171,18 @@ export const acquireConversation = async (auth, conversationId, { strict = false
     const me = new mongoose.Types.ObjectId(auth.userId);
     const base = { _id: conversationId, userId: auth.accountId, ...conversationLineScope(auth) };
 
+    const at = new Date();
     const previous = await Conversation.findOneAndUpdate(
         { ...base, assignedTo: null },
-        { $set: { assignedTo: me, assignedAt: new Date(), assignedBy: me }, $unset: { transferRequest: 1 } },
+        { $set: { assignedTo: me, assignedAt: at, assignedBy: me }, $unset: { transferRequest: 1 } },
         { new: false },
     ).lean();
     if (previous) {
         const valid = await confirmAssignee(auth.accountId, conversationId, auth.userId);
         await emitAssignmentChange(auth.accountId, conversationMeta(previous), conversationId);
         if (!valid) throw invalidAssignee();
+        // «Tomaste esta conversación», justo antes del mensaje: se toma antes de llamar a Meta.
+        await recordEvent({ accountId: auth.accountId, conversationId, type: 'take', actorId: auth.userId, at });
         return;
     }
 
@@ -262,16 +272,37 @@ export const assignConversation = async (auth, conversationId, targetUserId) => 
     if (String(conversation.assignedTo ?? null) === String(target)) return serializedConversation(conversationId);
 
     const me = new mongoose.Types.ObjectId(auth.userId);
+    const at = new Date();
     const previous = await Conversation.findOneAndUpdate(
         { _id: conversation._id, userId: auth.accountId, assignedTo: conversation.assignedTo ?? null },
-        { $set: { assignedTo: target, assignedAt: new Date(), assignedBy: me }, $unset: { transferRequest: 1 } },
+        { $set: { assignedTo: target, assignedAt: at, assignedBy: me }, $unset: { transferRequest: 1 } },
         { new: false },
     ).lean();
     if (!previous) throw statusError(409, ASSIGNMENT_CHANGED_MESSAGE, 'assignment_changed');
 
     const valid = target === null || await confirmAssignee(auth.accountId, conversation._id, target);
     await emitAssignmentChange(auth.accountId, conversationMeta(previous), conversation._id);
+    // La solicitud que tenía terminó con esta escritura: pasada, si se la dio a
+    // quien la pidió; si no, ya no está pendiente (spec § 4).
+    const pending = previous.transferRequest;
+    if (pending?.id) {
+        const toRequester = valid && target !== null && String(target) === String(pending.requestedBy);
+        await resolveRequest({
+            accountId: auth.accountId, conversationId: conversation._id, requestId: pending.id,
+            status: toRequester ? 'passed' : 'gone', by: toRequester ? me : null,
+        });
+    }
     if (!valid) throw invalidAssignee();
+
+    const history = { accountId: auth.accountId, conversationId: conversation._id, actorId: me, at };
+    if (target === null) await recordEvent({ ...history, type: 'release' });
+    else if (String(target) === auth.userId) await recordEvent({ ...history, type: 'take' });
+    else {
+        await recordEvent({ ...history, type: 'assign', targetId: target });
+        await notifyMembers({
+            accountId: auth.accountId, recipientIds: [String(target)], type: 'assigned', actorId: me, conversationId: conversation._id,
+        });
+    }
     return serializedConversation(conversationId);
 };
 
@@ -299,7 +330,8 @@ const emitTransferRequest = async (accountId, conversationId) => {
 export const requestTransfer = async (auth, conversationId) => {
     const conversation = mongoose.isValidObjectId(conversationId)
         ? await Conversation.findOne({ _id: conversationId, userId: auth.accountId, ...conversationLineScope(auth) })
-            .select('assignedTo').lean()
+            // La línea, para saber a quién avisar (revisión de Codex del plan, 4).
+            .select('assignedTo lineId').lean()
         : null;
     if (!conversation) throw statusError(404, 'Conversation not found');
     if (!conversation.assignedTo) throw statusError(409, 'Nadie la atiende: respóndela y será tuya.', 'not_assigned');
@@ -310,15 +342,47 @@ export const requestTransfer = async (auth, conversationId) => {
         requestedBy: new mongoose.Types.ObjectId(auth.userId),
         requestedAt: new Date(),
     };
-    const result = await Conversation.updateOne(
+    const previous = await Conversation.findOneAndUpdate(
         { _id: conversation._id, assignedTo: conversation.assignedTo },
         { $set: { transferRequest: request } },
-    );
-    if (result.matchedCount === 0) throw statusError(409, ASSIGNMENT_CHANGED_MESSAGE, 'assignment_changed');
+        { new: false },
+    ).select('transferRequest').lean();
+    if (!previous) throw statusError(409, ASSIGNMENT_CHANGED_MESSAGE, 'assignment_changed');
+    // La que reemplazó ya no está pendiente.
+    await resolveRequest({ accountId: auth.accountId, conversationId: conversation._id, requestId: previous.transferRequest?.id, status: 'gone' });
     if (!(await confirmRequester(auth.accountId, conversation._id, request.id, auth.userId))) {
         throw statusError(409, 'Ya no puedes atender esta línea.', 'invalid_assignee');
     }
     await emitTransferRequest(auth.accountId, conversation._id);
+    await recordEvent({
+        accountId: auth.accountId, conversationId: conversation._id, type: 'request', actorId: request.requestedBy, at: request.requestedAt,
+    });
+    await notifyRequest(auth, conversation, request);
+};
+
+/**
+ * Los avisos de una solicitud recién pedida: se crean, se relee la
+ * conversación y solo se emiten si la solicitud sigue siendo esa. Si mientras
+ * tanto la aceptaron, la rechazaron o la reemplazaron, su resolución no
+ * encontró estos avisos: se marcan como `gone` y no se emite nada (spec § 4;
+ * revisiones de Codex del spec, 2, y del plan, 3). Nunca lanza.
+ */
+const notifyRequest = async (auth, conversation, request) => {
+    try {
+        const members = await User.find({ accountId: auth.accountId, status: { $ne: 'inactive' } }).select(MEMBER_FIELDS).lean();
+        const docs = await createNotifications({
+            accountId: auth.accountId, recipientIds: requestRecipients(members, conversation, auth.userId),
+            type: 'requested', actorId: request.requestedBy, conversationId: conversation._id, requestId: request.id,
+        });
+        const current = await Conversation.findById(conversation._id).select('transferRequest').lean();
+        if (String(current?.transferRequest?.id ?? '') !== String(request.id)) {
+            await resolveRequest({ accountId: auth.accountId, conversationId: conversation._id, requestId: request.id, status: 'gone' });
+            return;
+        }
+        await emitNotificationsCreated(auth.accountId, docs);
+    } catch (error) {
+        console.error('No se pudieron crear los avisos de una solicitud:', { error: error.message });
+    }
 };
 
 /**
@@ -349,35 +413,54 @@ export const answerTransfer = async (auth, conversationId, requestId, accept) =>
         });
     };
 
+    const me = new mongoose.Types.ObjectId(auth.userId);
+    const resolved = (status, by = me) => resolveRequest({
+        accountId: auth.accountId, conversationId: conversation._id, requestId: pending.id, status, by,
+    });
+    const history = { accountId: auth.accountId, conversationId: conversation._id, actorId: me, targetId: requester };
+
     if (!accept) {
+        const at = new Date();
         const result = await Conversation.updateOne(ofThisRequest, { $unset: { transferRequest: 1 } });
         if (result.matchedCount === 0) throw statusError(409, 'La solicitud cambió. Revísala de nuevo.', 'transfer_request_changed');
         await emitTransferRequest(auth.accountId, conversation._id);
         await answered(false);
+        await recordEvent({ ...history, type: 'reject', at });
+        await notifyMembers({
+            accountId: auth.accountId, recipientIds: [String(requester)], type: 'rejected', actorId: me, conversationId: conversation._id,
+        });
+        await resolved('rejected');
         return null;
     }
 
     const member = await User.findOne({ _id: requester, accountId: auth.accountId }).select(MEMBER_FIELDS).lean();
     if (!isValidAssignee(member, conversation.lineId)) {
-        await Conversation.updateOne(ofThisRequest, { $unset: { transferRequest: 1 } });
+        const removed = await Conversation.updateOne(ofThisRequest, { $unset: { transferRequest: 1 } });
         await emitTransferRequest(auth.accountId, conversation._id);
+        if (removed.modifiedCount > 0) await resolved('gone', null);
         throw statusError(409, 'Quien la pidió ya no puede atender esta línea.', 'invalid_assignee');
     }
 
+    const at = new Date();
     const previous = await Conversation.findOneAndUpdate(
         { ...ofThisRequest, assignedTo: conversation.assignedTo ?? null },
-        {
-            $set: { assignedTo: requester, assignedAt: new Date(), assignedBy: new mongoose.Types.ObjectId(auth.userId) },
-            $unset: { transferRequest: 1 },
-        },
+        { $set: { assignedTo: requester, assignedAt: at, assignedBy: me }, $unset: { transferRequest: 1 } },
         { new: false },
     ).lean();
     if (!previous) throw statusError(409, ASSIGNMENT_CHANGED_MESSAGE, 'assignment_changed');
 
     const valid = await confirmAssignee(auth.accountId, conversation._id, requester);
     await emitAssignmentChange(auth.accountId, conversationMeta(previous), conversation._id);
-    if (!valid) throw invalidAssignee();
+    if (!valid) {
+        await resolved('gone', null);
+        throw invalidAssignee();
+    }
     await answered(true);
+    await recordEvent({ ...history, type: 'pass', at });
+    await notifyMembers({
+        accountId: auth.accountId, recipientIds: [String(requester)], type: 'passed', actorId: me, conversationId: conversation._id,
+    });
+    await resolved('passed');
     return serializedConversation(conversation._id);
 };
 
@@ -392,18 +475,47 @@ export const answerTransfer = async (auth, conversationId, requestId, accept) =>
 export const releaseAssignments = async (accountId, member) => {
     const filter = releaseFilter(member);
     if (filter === null) return 0;
-    const [freed, dropped] = await Promise.all([
-        Conversation.updateMany(
-            { userId: accountId, assignedTo: member._id, ...filter },
-            { $set: { assignedTo: null, assignedAt: new Date(), assignedBy: null }, $unset: { transferRequest: 1 } },
-        ),
-        Conversation.updateMany(
-            { userId: accountId, 'transferRequest.requestedBy': member._id, ...filter },
-            { $unset: { transferRequest: 1 } },
-        ),
+    const held = { userId: accountId, assignedTo: member._id, ...filter };
+    const asked = { userId: accountId, 'transferRequest.requestedBy': member._id, ...filter };
+    const [heldIds, askedIds] = await Promise.all([
+        Conversation.find(held).select('_id').lean(),
+        Conversation.find(asked).select('_id').lean(),
     ]);
-    if (freed.modifiedCount + dropped.modifiedCount > 0) sendToAccount(String(accountId), 'conversations_updated', {});
-    return freed.modifiedCount;
+    // Una por una y condicional: así se sabe cuáles soltó esta llamada, y una
+    // que otro movió entre leer y soltar no se toca ni recibe un `revoked`
+    // (revisión de Codex del spec, 3). Quitar el acceso es raro: va en tandas.
+    const freed = await inBatches(heldIds, async ({ _id }) => {
+        const at = new Date();
+        const previous = await Conversation.findOneAndUpdate(
+            { _id, ...held },
+            { $set: { assignedTo: null, assignedAt: at, assignedBy: null }, $unset: { transferRequest: 1 } },
+            { new: false },
+        ).select('transferRequest').lean();
+        return previous ? { conversationId: _id, at, requestId: previous.transferRequest?.id } : null;
+    });
+    const dropped = await inBatches(askedIds, async ({ _id }) => {
+        const previous = await Conversation.findOneAndUpdate({ _id, ...asked }, { $unset: { transferRequest: 1 } }, { new: false })
+            .select('transferRequest').lean();
+        return previous ? { conversationId: _id, requestId: previous.transferRequest?.id } : null;
+    });
+
+    await recordRevocations(accountId, member._id, freed);
+    for (const { conversationId, requestId } of [...freed, ...dropped]) {
+        await resolveRequest({ accountId, conversationId, requestId, status: 'gone' });
+    }
+    if (freed.length + dropped.length > 0) sendToAccount(String(accountId), 'conversations_updated', {});
+    return freed.length;
+};
+
+const RELEASE_BATCH = 20;
+
+// `fn` sobre cada elemento, de `RELEASE_BATCH` en `RELEASE_BATCH`; los resultados no nulos.
+const inBatches = async (items, fn) => {
+    const results = [];
+    for (let i = 0; i < items.length; i += RELEASE_BATCH) {
+        results.push(...await Promise.all(items.slice(i, i + RELEASE_BATCH).map(fn)));
+    }
+    return results.filter(Boolean);
 };
 
 /** El cuerpo de error de un envío desde el chat: con el código y lo que haga falta para el 409 de la asignación. */
