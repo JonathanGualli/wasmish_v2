@@ -229,6 +229,12 @@ export const updateMember = async (req, res) => {
             }
             const saved = await User.findOneAndUpdate({ _id: target._id, accountId }, { $set: set }, { new: true })
                 .select('name email role lineIds status createdAt').lean();
+            // Su SSE se cierra ya: con el acceso de antes seguiría recibiendo
+            // eventos mientras se sueltan sus conversaciones y se escribe su
+            // historia. Lo demás (HTTP) ya lee el `User` nuevo en cada petición,
+            // y si vuelve a conectarse lo hace con este acceso (revisión de
+            // Codex del PR #154, 1).
+            disconnectUser(String(target._id));
             // Lo que ya no puede atender vuelve a sin asignar (Fase 4), con el
             // acceso que se acaba de guardar y dentro del candado: un cambio
             // posterior (reactivarlo) no puede colarse entre guardar y soltar, y
@@ -241,8 +247,6 @@ export const updateMember = async (req, res) => {
         // Todo cambio de un miembro, con el candado del equipo: activar ocupa
         // una plaza, y cualquier cambio de acceso suelta conversaciones.
         const updated = await withTeamLock(accountId, apply);
-
-        disconnectUser(String(target._id));
         return res.json(serializeMember(updated));
     } catch (error) {
         return sendError(res, error);

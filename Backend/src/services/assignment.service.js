@@ -182,8 +182,10 @@ export const acquireConversation = async (auth, conversationId, { strict = false
         const valid = await confirmAssignee(auth.accountId, conversationId, auth.userId);
         await emitAssignmentChange(auth.accountId, conversationMeta(previous), conversationId);
         if (!valid) throw invalidAssignee();
-        // «Tomaste esta conversación», justo antes del mensaje: se toma antes de llamar a Meta.
-        await recordEvent({ accountId: auth.accountId, conversationId, type: 'take', actorId: auth.userId, at });
+        // «Tomaste esta conversación», justo antes del mensaje: se toma antes de
+        // llamar a Meta. Sin esperarlo: guardar la historia no frena el envío, y
+        // `recordEvent` nunca lanza (revisión de Codex del PR #154, 2).
+        void recordEvent({ accountId: auth.accountId, conversationId, type: 'take', actorId: auth.userId, at });
         return;
     }
 

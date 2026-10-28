@@ -159,6 +159,16 @@ test('conversation_event: le llega a quien la ve, no al agente que la perdió', 
 
 // --- Tarea 4: lo que escribe cada camino -------------------------------------
 
+/** Espera hasta que se cumple `predicate`, o 2 s. */
+const eventually = async (predicate, ms = 2000) => {
+    const deadline = Date.now() + ms;
+    while (Date.now() < deadline) {
+        if (await predicate()) return true;
+        await new Promise(resolve => setTimeout(resolve, 20));
+    }
+    return Boolean(await predicate());
+};
+
 const fresh = (assignedTo = null) => seedThread({ messageMinutes: [0], eventMinutes: [], assignedTo });
 const eventsOf = async (conversation) => (await ConversationEvent.find({ conversationId: conversation._id }).sort({ at: 1, _id: 1 }).lean())
     .map(event => ({ type: event.type, actor: event.actorId ? String(event.actorId) : null, target: event.targetId ? String(event.targetId) : null }));
@@ -184,6 +194,8 @@ test('responder una sin asignar escribe take, sin destinatario ni avisos', async
     await Conversation.updateOne({ _id: conversation._id }, { $set: { lastInboundAt: new Date() } });
     const res = await reply(ana, conversation);
     assert.equal(res.status, 201, res.text);
+    // El take se guarda sin esperarlo (no frena el envío).
+    assert.ok(await eventually(async () => (await eventsOf(conversation)).length > 0));
     assert.deepEqual(await eventsOf(conversation), [{ type: 'take', actor: ana.userId, target: null }]);
     assert.deepEqual(await noticesOf(conversation), []);
 });
@@ -442,3 +454,59 @@ test('dos reasignaciones con las confirmaciones en orden inverso quedan en el hi
     assert.deepEqual(res.body.events.map(e => e.target.id), [marta.userId, luis.userId], 'el hilo (del más nuevo al más viejo)');
 });
 
+
+// --- Revisión de Codex del PR #154 -------------------------------------------
+
+// Vigila que guardar la historia no frene el envío: `acquireConversation`
+// esperaba a `recordEvent` antes de llamar a Meta (revisión de Codex del PR #154, 2).
+test('responder no espera a que se guarde el evento take', async () => {
+    const conversation = await fresh();
+    await Conversation.updateOne({ _id: conversation._id }, { $set: { lastInboundAt: new Date() } });
+    const original = ConversationEvent.create;
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    ConversationEvent.create = async function (...args) { await gate; return original.apply(this, args); };
+    let res;
+    try {
+        res = await Promise.race([
+            reply(ana, conversation),
+            new Promise(resolve => setTimeout(() => resolve(null), 3000)),
+        ]);
+    } finally {
+        release();
+        ConversationEvent.create = original;
+    }
+    assert.ok(res, 'el envío se quedó esperando a la historia');
+    assert.equal(res.status, 201, res.text);
+    assert.ok(await eventually(async () => (await eventsOf(conversation)).length === 1), 'el take no se guardó');
+});
+
+// Vigila que la conexión SSE de quien pierde el acceso se cierre al guardar el
+// acceso nuevo, no después de soltar sus conversaciones y escribir su historia
+// (revisión de Codex del PR #154, 1).
+test('quitar el acceso desconecta su SSE antes de escribir la historia', async () => {
+    const leaving = await seedMember(a, { role: 'agent', lineIds: [l1], label: 'AHGONE7' });
+    await fresh(leaving.userId);
+    const other = await fresh();
+    const stream = await openStream(leaving);
+    const original = ConversationEvent.insertMany;
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    let held;
+    const isHeld = new Promise(resolve => { held = resolve; });
+    ConversationEvent.insertMany = async function (...args) { held(); await gate; return original.apply(this, args); };
+    try {
+        const patching = request(a, 'PATCH', `/team/members/${leaving.userId}`, { status: 'inactive' });
+        await isHeld;
+        // Con la historia todavía escribiéndose, un evento de otra conversación de su antigua línea.
+        await recordEvent({ accountId: a.accountId, conversationId: other._id, type: 'take', actorId: ana.userId, at: new Date() });
+        await new Promise(resolve => setTimeout(resolve, 300));
+        assert.equal(stream.count('event: conversation_event'), 0, 'siguió recibiendo eventos ya sin acceso');
+        release();
+        assert.equal((await patching).status, 200);
+    } finally {
+        release();
+        ConversationEvent.insertMany = original;
+        await stream.close();
+    }
+});
