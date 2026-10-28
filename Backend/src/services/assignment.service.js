@@ -9,6 +9,7 @@ import { getWindowExpiry } from '../utils/whatsapp.window.js';
 import {
     createNotifications, emitNotificationsCreated, notifyMembers, recordEvent, recordRevocations, resolveRequest,
 } from './assignment.history.service.js';
+import { notifyAssignment } from './push.service.js';
 
 // ---------------------------------------------------------------------------
 // La asignación de conversaciones (Fase 4 de multi-línea). Las reglas puras
@@ -302,6 +303,9 @@ export const assignConversation = async (auth, conversationId, targetUserId) => 
         await notifyMembers({
             accountId: auth.accountId, recipientIds: [String(target)], type: 'assigned', actorId: me, conversationId: conversation._id,
         });
+        void notifyAssignment({
+            accountId: auth.accountId, conversationId: conversation._id, recipientId: target, actorName: auth.name, kind: 'assigned',
+        });
     }
     return serializedConversation(conversationId);
 };
@@ -459,6 +463,9 @@ export const answerTransfer = async (auth, conversationId, requestId, accept) =>
     await recordEvent({ ...history, type: 'pass', at });
     await notifyMembers({
         accountId: auth.accountId, recipientIds: [String(requester)], type: 'passed', actorId: me, conversationId: conversation._id,
+    });
+    void notifyAssignment({
+        accountId: auth.accountId, conversationId: conversation._id, recipientId: requester, actorName: auth.name, kind: 'passed',
     });
     await resolved('passed');
     return serializedConversation(conversation._id);

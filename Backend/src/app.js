@@ -20,6 +20,7 @@ import lineRoutes from './routes/line.routes.js';
 import teamRoutes from './routes/team.routes.js';
 import pushRoutes from './routes/push.routes.js';
 import autoReplyRoutes from './routes/auto.reply.routes.js';
+import notificationRoutes from './routes/notification.routes.js';
 
 import { APP_VERSION } from './config.js';
 
@@ -80,6 +81,7 @@ app.use("/api", lineRoutes);
 app.use("/api", teamRoutes);
 app.use("/api", pushRoutes);
 app.use("/api", autoReplyRoutes);
+app.use("/api", notificationRoutes);
 app.use("/api", campaignRoutes);
 
 export default app; 
