@@ -3,7 +3,7 @@ import { AlertCircle, ArrowLeft, ArrowRight, ChevronRight, Reply, Send, X } from
 import { useAutoReplies } from "../../../hooks/useAutoReplies";
 import { PHONE_QUERY, useMediaQuery } from "../../../hooks/useMediaQuery";
 import { useLeaveGuard } from "../../../components/Layout/NavigationGuardContext";
-import { useNoticeContext } from "../../../components/Notice/context/UseNoticeContext";
+import { useNotice } from "../../../components/Notice/context/useNotice";
 import { CustomButton } from "../../../components/Button/Button";
 import { Callout } from "../../../components/Callout/Callout";
 import { BlankState } from "../../../components/BlankState/BlankState";
@@ -67,23 +67,18 @@ export const AutoRepliesPage = () => {
 };
 
 const AutoRepliesEditorView = ({ data }: { data: AutoRepliesResponse }) => {
-    const { setState, setContent } = useNoticeContext();
+    const { notify } = useNotice();
     const phone = useMediaQuery(PHONE_QUERY);
     const wide = useMediaQuery('(min-width: 1024px)');
 
-    const notify = (content: ReactNode) => {
-        setContent(content);
-        setState(true);
-    };
-    const onSaved = (saved: AutoRepliesResponse, kind: SaveKind) => notify(
-        <p className="text-brand-accent-strong">
-            {kind === 'switch'
-                ? (saved.enabled ? 'Respuestas automáticas encendidas.' : 'Respuestas automáticas apagadas: no sale ninguna.')
-                : (saved.enabled ? 'Respuestas guardadas. Ya están funcionando.' : 'Guardado. Las respuestas automáticas siguen apagadas.')}
-        </p>,
-    );
+    const onSaved = (saved: AutoRepliesResponse, kind: SaveKind) => notify({
+        kind: 'success',
+        text: kind === 'switch'
+            ? (saved.enabled ? 'Respuestas automáticas encendidas.' : 'Respuestas automáticas apagadas: no sale ninguna.')
+            : (saved.enabled ? 'Respuestas guardadas. Ya están funcionando.' : 'Guardado. Las respuestas automáticas siguen apagadas.'),
+    });
     const onSaveError = (error: unknown) =>
-        notify(<p className="text-brand-danger">{apiErrorOf(error, 'No se pudo guardar. Inténtalo de nuevo.').message}</p>);
+        notify({ kind: 'error', text: apiErrorOf(error, 'No se pudo guardar. Inténtalo de nuevo.').message });
 
     const editor = useAutoReplyEditor(data, onSaved, onSaveError);
     const [confirmEnable, setConfirmEnable] = useState(false);

@@ -87,6 +87,28 @@
     to { transform: translateX(340%); }
   }
 
+  /* ── Aviso de arriba ───────────────────────────────────────────────────
+     Del diseño «Avisos de la asignación» (Claude Design, 7a): el fondo es el
+     color del tipo. El rojo es algo más oscuro que brand-danger para que el
+     texto blanco se lea; estos cuatro no tenían token. El fondo del icono del
+     error es el blanco al 16 % del diseño sobre ese rojo, ya mezclado. */
+  --color-brand-notice-error:      #b4321f;
+  --color-brand-notice-error-icon: #c05343;
+  --color-brand-notice-error-x:    #f6d3cc;
+  --color-brand-notice-info-x:     #a9cdbd;
+
+  --animate-notice-in: notice-in 0.3s ease-out;
+  --animate-notice-out: notice-out 0.3s ease-in forwards;
+
+  @keyframes notice-in {
+    from { opacity: 0; transform: translateY(-16px) scale(0.96); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  @keyframes notice-out {
+    from { opacity: 1; transform: translateY(0) scale(1); }
+    to   { opacity: 0; transform: translateY(-16px) scale(0.96); }
+  }
+
   /* ── Rampa verde ───────────────────────────────────────────────────────── */
   --color-brand-green-50:  #effcf5;
   --color-brand-green-100: #d6f8e7;

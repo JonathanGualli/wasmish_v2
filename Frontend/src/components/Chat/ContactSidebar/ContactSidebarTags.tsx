@@ -4,7 +4,7 @@ import { contactError, useContactMutations } from "../../../hooks/useContacts";
 import { useTagMutations, useTags } from "../../../hooks/useTags";
 import type { ContactDetail } from "../../../models/contact.model";
 import { MAX_TAGS_PER_CONTACT, tagsFromIds } from "../../../utils/tags";
-import { useNoticeContext } from "../../Notice/context/UseNoticeContext";
+import { useNotice } from "../../Notice/context/useNotice";
 import { TagChip } from "../../Tag/TagChip";
 import { TagSelector, type TagSelection } from "../../Tag/TagSelector";
 
@@ -18,7 +18,7 @@ export const ContactSidebarTags = ({ contact }: { contact: ContactDetail }) => {
     const { data: allTags = [] } = useTags();
     const { setTags } = useContactMutations();
     const { createMissing } = useTagMutations();
-    const { setState, setContent } = useNoticeContext();
+    const { notify } = useNotice();
     const [editing, setEditing] = useState(false);
     const tags = tagsFromIds(allTags, contact.tagIds);
 
@@ -28,8 +28,7 @@ export const ContactSidebarTags = ({ contact }: { contact: ContactDetail }) => {
             const tagIds = [...new Set([...ids, ...created.map(tag => tag.id)])];
             await setTags.mutateAsync({ id: contact.id, tagIds });
         } catch (err) {
-            setContent(<div className="text-brand-danger text-sm"><p>{contactError(err).message}</p></div>);
-            setState(true);
+            notify({ kind: 'error', text: contactError(err).message });
         }
     };
 

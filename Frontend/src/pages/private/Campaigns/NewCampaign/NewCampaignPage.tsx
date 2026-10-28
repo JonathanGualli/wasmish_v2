@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { Check, Send } from "lucide-react";
 import { WizardFooter } from "../../../../components/Wizard/WizardFooter";
-import { useNoticeContext } from "../../../../components/Notice/context/UseNoticeContext";
+import { useNotice } from "../../../../components/Notice/context/useNotice";
 import { campaignErrors, useCampaignMutations } from "../../../../hooks/useCampaigns";
 import { CampaignPaths } from "../../../../models/routes.models";
 import type { CampaignDraft } from "../../../../utils/campaignDraft";
@@ -52,7 +52,7 @@ export const NewCampaignPage = () => {
     const navigate = useNavigate();
     const wizard = useCampaignWizard();
     const { create } = useCampaignMutations();
-    const { setState: showNotice, setContent: setNoticeContent } = useNoticeContext();
+    const { notify } = useNotice();
     const { draft, preview, template, update, isPreviewUpdating } = wizard;
     // La campaña recién creada. Redirigir desde aquí y no con navigate(): React
     // Router 7 navega dentro de una transición, el borrador se borra antes y
@@ -74,11 +74,6 @@ export const NewCampaignPage = () => {
     if (createdId) return <Navigate to={CampaignPaths.detail(createdId)} replace />;
     if (!draft) return <Navigate to={CampaignPaths.list} replace />;
 
-    const notify = (content: React.ReactNode) => {
-        setNoticeContent(content);
-        showNotice(true);
-    };
-
     const goToStep = (step: Step) => {
         wizard.setShowErrors(false);
         update({ step });
@@ -97,18 +92,9 @@ export const NewCampaignPage = () => {
                 onSuccess: (campaign) => {
                     setCreatedId(campaign.id);
                     wizard.discard();
-                    notify(
-                        <div className="text-sm">
-                            <p className="font-semibold text-brand-text">Campaña iniciada.</p>
-                            <p className="text-brand-muted mt-0.5">Avanza en segundo plano: puedes seguir trabajando o cerrar la pantalla.</p>
-                        </div>,
-                    );
+                    notify({ kind: 'success', text: 'Campaña iniciada. Avanza en segundo plano: puedes seguir trabajando o cerrar la pantalla.' });
                 },
-                onError: (err) => notify(
-                    <div className="text-sm text-brand-danger grid gap-1">
-                        {campaignErrors(err).map(e => <p key={`${e.field}-${e.message}`}>{e.message}</p>)}
-                    </div>,
-                ),
+                onError: (err) => notify({ kind: 'error', text: campaignErrors(err).map(e => e.message).join(' ') }),
             },
         );
     };

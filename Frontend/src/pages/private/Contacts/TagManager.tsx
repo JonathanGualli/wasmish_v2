@@ -4,7 +4,7 @@ import { AlertCircle, ChevronLeft, Pencil, Tag as TagIcon, Trash2, Users, X } fr
 import { CustomButton } from '../../../components/Button/Button';
 import { ConfirmDialog } from '../../../components/Dialog/ConfirmDialog';
 import { TagChip } from '../../../components/Tag/TagChip';
-import { useNoticeContext } from '../../../components/Notice/context/UseNoticeContext';
+import { useNotice } from '../../../components/Notice/context/useNotice';
 import { tagError, useTagMutations, useTags } from '../../../hooks/useTags';
 import type { Tag } from '../../../models/tag.model';
 import { TAG_NAME_MAX, cleanTagName, findTagByName } from '../../../utils/tags';
@@ -24,7 +24,7 @@ export const TagManager = ({ open, onClose, onShowContacts }: {
     onShowContacts: (tag: Tag) => void;
 }) => {
     const { data: tags, isLoading, isError } = useTags();
-    const { state: noticeVisible } = useNoticeContext();
+    const { visible: noticeVisible } = useNotice();
     const [editingId, setEditingId] = useState<string | null>(null);
     const [deleting, setDeleting] = useState<Tag | null>(null);
 
@@ -198,7 +198,7 @@ const RenameRow = ({ tag, tags, onDone }: { tag: Tag; tags: Tag[]; onDone: () =>
 
 const DeleteTagDialog = ({ tag, onClose }: { tag: Tag | null; onClose: () => void }) => {
     const { remove } = useTagMutations();
-    const { setState, setContent } = useNoticeContext();
+    const { notify } = useNotice();
 
     const handleDelete = async () => {
         if (!tag) return;
@@ -207,8 +207,7 @@ const DeleteTagDialog = ({ tag, onClose }: { tag: Tag | null; onClose: () => voi
             onClose();
         } catch (err) {
             onClose();
-            setContent(<div className="text-brand-danger text-sm"><p>{tagError(err, 'No se pudo borrar la etiqueta. Inténtalo de nuevo.')}</p></div>);
-            setState(true);
+            notify({ kind: 'error', text: tagError(err, 'No se pudo borrar la etiqueta. Inténtalo de nuevo.') });
         }
     };
 

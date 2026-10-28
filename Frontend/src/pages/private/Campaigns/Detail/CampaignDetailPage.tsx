@@ -8,7 +8,7 @@ import { CustomButton } from "../../../../components/Button/Button";
 import { ConfirmDialog } from "../../../../components/Dialog/ConfirmDialog";
 import { DataTable } from "../../../../components/DataTable/DataTable";
 import { CategoryPill } from "../../../../components/Chat/TemplateFields";
-import { useNoticeContext } from "../../../../components/Notice/context/UseNoticeContext";
+import { useNotice } from "../../../../components/Notice/context/useNotice";
 import {
     campaignErrors, useCampaign, useCampaignFailures, useCampaignMutations, useCampaignRecipients,
 } from "../../../../hooks/useCampaigns";
@@ -111,12 +111,9 @@ export const CampaignDetailPage = () => {
     const recipients = useCampaignRecipients(id, stateFilter, pagination.pageIndex, pagination.pageSize);
     const { data: failureReasons } = useCampaignFailures(id, (campaign?.stats.failed ?? 0) > 0);
     const { pause, resume, cancel } = useCampaignMutations();
-    const { setState: showNotice, setContent: setNoticeContent } = useNoticeContext();
+    const { notify } = useNotice();
 
-    const notifyError = (err: unknown) => {
-        setNoticeContent(<p className="text-sm text-brand-danger">{campaignErrors(err)[0].message}</p>);
-        showNotice(true);
-    };
+    const notifyError = (err: unknown) => notify({ kind: 'error', text: campaignErrors(err)[0].message });
 
     if (isError && !campaign) {
         return (
