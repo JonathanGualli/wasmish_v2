@@ -15,8 +15,8 @@ interface Props {
     userId: string;
     /** Tiene `conversations.assign`: puede mover cualquiera. */
     canAssignAny: boolean;
-    /** Un aviso dentro del hilo («Ahora la atiende Ana.»). */
-    onToast: (text: string) => void;
+    /** Un error que no es un cambio de manos (`invalid_assignee`, la red): al aviso de arriba. */
+    onError: (text: string) => void;
     /** Quien mira se la va a pasar a otra persona: la va a perder (antes de enviar, porque el SSE llega antes que la respuesta). */
     onHandOff: (toName: string | null) => void;
     /** Otra persona la movió antes: «La conversación cambió de manos» (diseño, 2c). */
@@ -29,7 +29,7 @@ interface Props {
  * `conversations.assign`, o el agente con la suya) abre la lista de quienes
  * pueden atender esa línea; en el celular, la lista sube desde abajo (m3).
  */
-export const AssigneeControl = ({ conversation, userId, canAssignAny, onToast, onHandOff, onChanged }: Props) => {
+export const AssigneeControl = ({ conversation, userId, canAssignAny, onError, onHandOff, onChanged }: Props) => {
     const [open, setOpen] = useState(false);
     const phone = useMediaQuery(PHONE_QUERY);
     const { lineById } = useLines();
@@ -54,7 +54,7 @@ export const AssigneeControl = ({ conversation, userId, canAssignAny, onToast, o
     const handleError = (error: unknown) => {
         const { code, message } = assignmentError(error);
         if (code === 'assignment_changed' || code === 'assigned_to_other') onChanged();
-        else onToast(message);
+        else onError(message);
     };
 
     const pick = (targetId: string | null, targetName: string | null) => {
@@ -63,13 +63,9 @@ export const AssigneeControl = ({ conversation, userId, canAssignAny, onToast, o
         // El agente que la pasa a otra persona deja de verla.
         const losesIt = !canAssignAny && targetId !== null && targetId !== userId;
         if (losesIt) onHandOff(targetName);
+        // Lo que cambió lo cuenta la historia del hilo: sin confirmación aparte
+        // (diseño «Avisos de la asignación», 7b).
         assign.mutate(targetId, {
-            onSuccess: () => {
-                if (losesIt) return;
-                if (targetId === null) onToast('Ahora está sin asignar.');
-                else if (targetId === userId) onToast('Ahora la atiendes tú.');
-                else onToast(`Ahora la atiende ${firstName({ id: targetId, name: targetName })}.`);
-            },
             onError: (error) => {
                 if (losesIt) onHandOff(null);
                 handleError(error);
@@ -77,10 +73,7 @@ export const AssigneeControl = ({ conversation, userId, canAssignAny, onToast, o
         });
     };
 
-    const takeIt = () => take.mutate(undefined, {
-        onSuccess: () => onToast('Ahora la atiendes tú.'),
-        onError: handleError,
-    });
+    const takeIt = () => take.mutate(undefined, { onError: handleError });
 
     const options = [
         ...(assignees.data ?? []).map(person => ({

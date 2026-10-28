@@ -1,4 +1,5 @@
 import type { Conversation, ConversationPerson } from "../models/conversation.mode";
+import type { ConversationEvent } from "../models/conversation.event.model";
 
 // ---------------------------------------------------------------------------
 // La asignación de conversaciones en la UI (Fase 4; diseño «Wasmish Chats -
@@ -58,3 +59,36 @@ export const saveAssignmentTab = (userId: string, tab: AssignmentTab) => {
         localStorage.setItem(TAB_STORAGE + userId, tab);
     } catch { /* sin almacenamiento: se recuerda solo mientras dure la página */ }
 };
+
+/**
+ * Lo que dice una línea de la historia según quién mira (diseño «Avisos de la
+ * asignación», 6b): «tú» si fue quien mira, su nombre si no.
+ */
+export const eventText = (event: ConversationEvent, viewerId: string): string => {
+    const byMe = event.actor?.id === viewerId;
+    const toMe = event.target?.id === viewerId;
+    const actor = firstName(event.actor);
+    const target = firstName(event.target);
+    switch (event.type) {
+        case 'take':
+            return byMe ? 'Tomaste esta conversación' : `${actor} tomó esta conversación`;
+        case 'assign':
+            if (byMe) return `Le asignaste esta conversación a ${target}`;
+            return toMe ? `${actor} te asignó esta conversación` : `${actor} le asignó esta conversación a ${target}`;
+        case 'release':
+            return byMe ? 'Dejaste esta conversación sin asignar' : `${actor} dejó esta conversación sin asignar`;
+        case 'request':
+            return byMe ? 'Pediste esta conversación' : `${actor} pidió esta conversación`;
+        case 'pass':
+            if (byMe) return `Se la pasaste a ${target}`;
+            return toMe ? `${actor} te la pasó` : `${actor} se la pasó a ${target}`;
+        case 'reject':
+            if (byMe) return `Rechazaste pasársela a ${target}`;
+            return toMe ? `${actor} rechazó pasártela` : `${actor} rechazó pasársela a ${target}`;
+        case 'revoked':
+            return toMe
+                ? 'Esta conversación quedó sin asignar: ya no tienes acceso a la línea'
+                : `Esta conversación quedó sin asignar: ${target} ya no tiene acceso a la línea`;
+    }
+};
+
