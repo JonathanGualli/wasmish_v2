@@ -326,7 +326,7 @@
 
 ## Decisiones del plan (para revisar)
 
-- **Un cuarto tipo de aviso, `success`,** con los colores de `info` y el icono `Check`: el diseño solo define error, aviso y nuevo, pero hoy hay confirmaciones («ID de la línea copiado.», «Guardado.») que con el icono de «volver a mirar» se leerían mal.
+- **Un cuarto tipo de aviso, `success`** (confirmado por Jonathan el 2026-10-28, tras la revisión de Codex del plan, 11), con los colores de `info` y el icono `Check`: el diseño solo define error, aviso y nuevo, pero hoy hay confirmaciones («ID de la línea copiado.», «Guardado.») que con el icono de «volver a mirar» se leerían mal.
 - **`events=1` en `GET /chats/:id/messages`:** el spec decía que el endpoint devuelve los eventos sin más; el plan los hace opcionales para que una página recortada no llegue a un frontend que no la entiende (revisión de Codex del plan, 2).
 - **Un `revoked` no se emite por SSE** evento a evento: quitar el acceso ya manda un solo `conversations_updated` (pueden ser cientos), y el hilo lo enseña al volver a cargarse.
 - **`releaseAssignments` en tandas de 20** escrituras en paralelo.
