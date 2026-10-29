@@ -52,7 +52,11 @@ export const NotificationItem = ({ notification, onOpen, markSeen, refresh }: Pr
             role={canOpen ? 'button' : undefined}
             tabIndex={canOpen ? 0 : undefined}
             onClick={() => onOpen(notification)}
-            onKeyDown={(event) => { if (canOpen && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onOpen(notification); } }}
+            // Solo la fila: Enter o Espacio en «Rechazar» o «Pasársela» no la abren (revisión de Codex del PR #157).
+            onKeyDown={(event) => {
+                if (event.target !== event.currentTarget || !canOpen) return;
+                if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onOpen(notification); }
+            }}
             className={`relative flex gap-3 px-[18px] max-md:px-4 py-3.5 max-md:py-4 border-b border-brand-bg transition-colors
                 ${notification.seen ? 'bg-brand-surface' : 'bg-brand-green-50'}
                 ${canOpen ? 'cursor-pointer hover:bg-brand-bg' : 'cursor-default'}`}

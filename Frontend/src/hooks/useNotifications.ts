@@ -68,11 +68,15 @@ const markSeenInCache = async (queryClient: QueryClient, target: { ids: string[]
     if ('ids' in target && fresh === 0 && target.ids.every(id => cached.some(item => item.id === id))) return;
     const unseen = queryClient.getQueryData<number>(UNSEEN_KEY) ?? 0;
     setUnseen(queryClient, 'all' in target ? 0 : unseen - fresh);
+    const version = unseenVersion;
     void applyToNotifications(queryClient, data =>
         mapItems(data, list => list.map(item => (pick(item) ? { ...item, seen: true } : item))));
     try {
         const result = await markNotificationsSeenService(target);
-        setUnseen(queryClient, result.unseenCount);
+        // Si mientras tanto llegó un aviso nuevo (u otro cambio), su número manda: la
+        // respuesta lo devolvería al de antes (revisión de Codex del PR #157). El de
+        // esta respuesta no se pierde: llega también por `notifications_seen`.
+        if (version === unseenVersion) setUnseen(queryClient, result.unseenCount);
     } catch {
         void refreshNotifications(queryClient);
     }
