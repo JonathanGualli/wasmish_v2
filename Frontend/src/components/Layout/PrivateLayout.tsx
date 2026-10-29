@@ -9,6 +9,7 @@ import { MobileMenuContext } from './MobileMenuContext';
 import { NavigationGuardContext, useNavigationGuardValue } from './NavigationGuardContext';
 import { useTransferAnswers } from '../../hooks/useTransferRequest';
 import { useNotificationToasts } from '../../hooks/useNotifications';
+import { NotificationBell } from '../Notifications/NotificationBell';
 
 /**
  * Sin barra de título: la maqueta «Sidebar y Chats» da toda la altura al
@@ -93,6 +94,7 @@ export const PrivateLayout = ({ children }: { children: ReactNode }) => {
               <Menu size={20} />
             </button>
             <LogoLockup size="sm" />
+            <span className="ml-auto -mr-2 flex"><NotificationBell variant="bar" /></span>
           </header>
         )}
 

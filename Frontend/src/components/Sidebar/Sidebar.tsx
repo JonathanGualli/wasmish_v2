@@ -11,6 +11,7 @@ import { initials } from '../../utils/initials';
 import { APP_VERSION } from '../../config/version';
 import { ROLE_LABEL, hasTeam } from "../../utils/roleDisplay";
 import { useGuardedNavigation } from '../Layout/NavigationGuardContext';
+import { NotificationBell } from '../Notifications/NotificationBell';
 
 interface Props {
   collapsed: boolean;
@@ -90,6 +91,7 @@ export const Sidebar = ({ collapsed, toggle, isMobile }: Props) => {
 
   return (
     <div
+      data-sidebar
       className={`
         bg-brand-deep flex flex-col px-[14px] pt-[calc(20px+var(--safe-top))] pb-[calc(16px+var(--safe-bottom))]
         transition-all duration-300
@@ -143,6 +145,9 @@ export const Sidebar = ({ collapsed, toggle, isMobile }: Props) => {
           columna no crece con el texto: «Owner · Nombre largo del negocio» se corta. */}
       <div className="mt-auto grid grid-cols-[minmax(0,1fr)] gap-[3px] shrink-0">
         <div className="h-px bg-brand-deep-active mx-2 mb-3" />
+
+        {/* La campanita de los avisos (solo con equipo). En el teléfono va en la barra de arriba. */}
+        {!isMobile && <NotificationBell variant="sidebar" collapsed={collapsed} tooltip />}
 
         <SidebarItem
           icon={<Settings size={18} />}

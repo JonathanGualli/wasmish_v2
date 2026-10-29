@@ -13,6 +13,7 @@ import { SkeletonLine } from "../Skeleton/Skeleton";
 import { LineChip } from "../Line/LineChip";
 import { ALL_LINES, LineFilter } from "./LineFilter";
 import { useOpenMobileMenu } from "../Layout/MobileMenuContext";
+import { NotificationBell } from "../Notifications/NotificationBell";
 import { useAuthContext } from "../../context/auth.context";
 import { hasTeam } from "../../utils/roleDisplay";
 import {
@@ -219,16 +220,21 @@ export const ChatconversationList = ({ onSelect, selectedId, onNewConversation, 
                             ? <SkeletonLine soft width="64px" />
                             : unread > 0 ? `${unread} sin leer` : 'Todo al día'}
                     </span>
-                    <button
-                        type="button"
-                        onClick={onNewConversation}
-                        title="Conversación nueva"
-                        className="self-center w-8 h-8 max-md:w-11 max-md:h-11 max-md:ml-auto rounded-lg max-md:rounded-xl
-                            bg-brand-accent hover:bg-brand-accent-hover
-                            flex items-center justify-center cursor-pointer transition-colors flex-none"
-                    >
-                        <Plus size={17} strokeWidth={2.4} className="text-brand-ink max-md:size-[22px]" />
-                    </button>
+                    {/* En el teléfono, la campanita de los avisos (m1) junto a la conversación
+                        nueva; en la computadora va en la barra. */}
+                    <div className="self-center flex items-center gap-1 max-md:ml-auto flex-none">
+                        {openMenu && <span className="md:hidden flex empty:hidden"><NotificationBell variant="bar" /></span>}
+                        <button
+                            type="button"
+                            onClick={onNewConversation}
+                            title="Conversación nueva"
+                            className="w-8 h-8 max-md:w-11 max-md:h-11 rounded-lg max-md:rounded-xl
+                                bg-brand-accent hover:bg-brand-accent-hover
+                                flex items-center justify-center cursor-pointer transition-colors flex-none"
+                        >
+                            <Plus size={17} strokeWidth={2.4} className="text-brand-ink max-md:size-[22px]" />
+                        </button>
+                    </div>
                 </div>
 
                 {showAssignment && (
