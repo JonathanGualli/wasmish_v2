@@ -56,6 +56,9 @@ const isAppWindow = (client) => {
 // Con Wasmish abierto, lo enfoca y le pide que abra la conversación (sin
 // recargar); si no, lo abre en ella. Si enfocar falla (la ventana se cerró
 // entretanto, o iOS lo rechaza al arrancar la app), también se abre en ella.
+// Un aviso sin conversación (un rechazo, o te quitaron una que ya no ves) lleva
+// a la bandeja: solo enfocar dejaría la app donde estaba (revisión de Codex del
+// PR #163).
 const openFromNotification = async ({ url, conversationId }) => {
     const target = url || CHATS_URL;
     const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
@@ -63,7 +66,7 @@ const openFromNotification = async ({ url, conversationId }) => {
     if (open) {
         try {
             const focused = await open.focus();
-            if (conversationId) (focused ?? open).postMessage({ type: 'open-conversation', conversationId });
+            (focused ?? open).postMessage(conversationId ? { type: 'open-conversation', conversationId } : { type: 'open-chats' });
             return;
         } catch {
             // Cae a abrir la URL.
