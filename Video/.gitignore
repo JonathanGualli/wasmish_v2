@@ -1,0 +1,3 @@
+node_modules
+# Los renders y los cuadros sueltos: no se suben.
+/out

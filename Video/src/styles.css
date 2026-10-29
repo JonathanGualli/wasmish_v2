@@ -1,0 +1,15 @@
+@import "tailwindcss";
+@import "../../Site/src/theme.css";
+
+/* Las imitaciones de la app que se importan de la página. */
+@source "../../Site/src/components";
+
+/* Remotion pinta cada cuadro por separado: una animación o una transición CSS
+   saldría en un punto distinto en cada render. Todo movimiento sale del número
+   de cuadro (useCurrentFrame); lo de Site/ queda en su estado final. */
+*,
+*::before,
+*::after {
+  animation: none !important;
+  transition: none !important;
+}

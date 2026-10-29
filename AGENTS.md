@@ -6,13 +6,13 @@ Este archivo es para **cualquier agente**: Claude Code lo importa desde `CLAUDE.
 
 ## Comandos de desarrollo
 
-Monorepo con tres workspaces independientes: `Backend/` y `Frontend/` (la app) y `Site/` (la página pública `wasmish.com`). Cada uno tiene su propio `package.json` y `node_modules`.
+Monorepo con cuatro workspaces independientes: `Backend/` y `Frontend/` (la app), `Site/` (la página pública `wasmish.com`) y `Video/` (el video para las ventas). Cada uno tiene su propio `package.json` y `node_modules`.
 
-| | Backend (`Backend/`) | Frontend (`Frontend/`) | Página (`Site/`) |
-|---|---|---|---|
-| Stack | Express 5 + MongoDB (Mongoose) + Zod | React 19 + TypeScript + Vite + Tailwind v4 + React Query | React 19 + Vite + Tailwind v4, pre-renderizado |
-| Arrancar | `npm run dev` (puerto 3001) | `npm run dev` (puerto 5173, proxy de `/api` al 3001) | `npm run build && npm run preview` |
-| Comprobar | `npm test` y `npm run test:isolation` | `npm run lint` y `npm run build` | `npm run lint`, `npm run build` y `npm test` |
+| | Backend (`Backend/`) | Frontend (`Frontend/`) | Página (`Site/`) | Video (`Video/`) |
+|---|---|---|---|---|
+| Stack | Express 5 + MongoDB (Mongoose) + Zod | React 19 + TypeScript + Vite + Tailwind v4 + React Query | React 19 + Vite + Tailwind v4, pre-renderizado | Remotion + React 19 + Tailwind v4 |
+| Arrancar | `npm run dev` (puerto 3001) | `npm run dev` (puerto 5173, proxy de `/api` al 3001) | `npm run build && npm run preview` | `npm run dev` (Remotion Studio) |
+| Comprobar | `npm test` y `npm run test:isolation` | `npm run lint` y `npm run build` | `npm run lint`, `npm run build` y `npm test` | `npm run lint` y `npm test` |
 
 **Antes de tocar `Backend/`, leer [Backend/AGENTS.md](Backend/AGENTS.md); antes de tocar `Frontend/`, [Frontend/AGENTS.md](Frontend/AGENTS.md).** Claude Code los carga solo al trabajar en esa carpeta; Codex, si se arranca en la raíz, no.
 
@@ -127,6 +127,7 @@ Cada archivo de `docs/arquitectura/` empieza con su índice. Las secciones son t
 | Decisiones de producto | [docs/decisiones.md](docs/decisiones.md) | lo que Jonathan decidió y por qué, con fecha |
 | Diseños y briefs | `Design/*.html`, `docs/superpowers/specs/` | diseños exportados de Claude Design; briefs de UI y specs técnicas de cada módulo |
 | Página pública | [pagina-publica.md](docs/arquitectura/pagina-publica.md) | `Site/`, pre-renderizado (`prerender.mjs`, `renderHead`), agregar un nicho, huecos (`<Pending>`, `data-pending`, `LAUNCHED`), vista previa en WhatsApp (`og:`), Cloudflare Pages, el DNS en Cloudflare, `hola@wasmish.com` |
+| Video para las ventas | [video.md](docs/arquitectura/video.md) | `Video/` con Remotion, el storyboard en la memoria privada, `AppChat`, los cues (`sceneCues`, `localFrame`), animaciones CSS apagadas, `remotion still`, `render:whatsapp` |
 | Producción | `deploy/README.md` y la skill `deploy` | compose, Traefik, despliegue con `git archive` paso a paso, etiquetas `vX.Y.Z`, volver a una versión anterior |
 
 **Para buscar algo concreto:** `grep -rn "<palabra>" AGENTS.md Backend/AGENTS.md Frontend/AGENTS.md docs/`. El nombre de una función o un código de error de Meta (`131047`, `132012`…) suele llevar directo a su sección.

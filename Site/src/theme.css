@@ -1,0 +1,72 @@
+/* Los tokens de marca, aparte para que también los use el video (Video/src/styles.css). */
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Tokens copiados de Frontend/src/App.css (Manual de marca v1.0 · «Barra
+   oscura»). Si cambian allí, se cambian aquí. Solo los que usa la página.
+   ───────────────────────────────────────────────────────────────────────────── */
+@theme {
+  /* Superficies — gris frío */
+  --color-brand-surface: #ffffff;
+  --color-brand-bg:      #f4f6f8;
+  --color-brand-raised:  #eef1f4;
+
+  /* Bordes */
+  --color-brand-border:        #e4e7eb;
+  --color-brand-border-strong: #c4cbd4;
+
+  /* Texto */
+  --color-brand-text:   #0e1116;
+  --color-brand-strong: #2e3540;
+  --color-brand-muted:  #6b7684;
+  --color-brand-subtle: #97a1ad;
+
+  /* Verde profundo — la estructura */
+  --color-brand-deep:          #0b3b2e;
+  --color-brand-deep-hover:    #12523f;
+  --color-brand-deep-active:   #17503f;
+  --color-brand-ink:           #06251c;
+  --color-brand-on-deep:       #cfe3da;
+  --color-brand-on-deep-muted: #7fa596;
+
+  /* Menta — el acento (un solo elemento menta por vista: el botón principal) */
+  --color-brand-accent:        #6fe3ae;
+  --color-brand-accent-hover:  #45c892;
+  --color-brand-accent-active: #2aa675;
+  --color-brand-accent-strong: #12523f;
+  --color-brand-accent-soft:   #d6f8e7;
+
+  /* Estados */
+  --color-brand-success:      #1c8560;
+  --color-brand-warning:      #b4540a;
+  --color-brand-warning-soft: #fdf7f0;
+  --color-brand-danger:       #c0392b;
+
+  /* De las rampas del manual que la app ya tiene (brand-green-200, brand-gray-600) */
+  --color-brand-green-200: #a8f0ce;
+  --color-brand-gray-600:  #4b5361;
+
+  /* Del diseño de la página (Claude Design, «Wasmish Inicio v3 - Calma con
+     vida»): las sombras «de tecla», las líneas sobre la banda oscura y algunos
+     tonos de las pantallas de ejemplo. Solo para la página: la app no los usa. */
+  --color-site-deep-line:      #2c6a56;  /* Bordes y barras apagadas sobre verde profundo */
+  --color-site-deep-shadow:    #062a20;  /* Sombra bajo lo verde profundo */
+  --color-site-card-shadow:    #dfe3e8;  /* Sombra bajo las tarjetas blancas */
+  --color-site-mint-shadow:    #2f9e70;  /* Sombra bajo el botón menta */
+  --color-site-mint-hover:     #5fd9a2;
+  --color-site-pressed:        #e7f6ee;  /* Botón «Ficha» apretado */
+  --color-site-field:          #f8f9fa;  /* Campo de la nota en reposo */
+  --color-site-step-off:       #d5dae0;  /* Tramos apagados de la barra de pasos */
+  --color-site-device:         #dfe5ea;  /* Pantalla del celular de ejemplo */
+  --color-site-on-deep-strong: #e3efe9;  /* Párrafos sobre verde profundo */
+  --color-site-on-deep-legal:  #a8c9bb;  /* La línea legal del pie */
+  --color-site-pending-border: #e0b48a;  /* Borde punteado de «pendiente» */
+  --color-site-tag-border:     #c3c9d1;  /* Etiquetas de la ficha de ejemplo */
+
+  /* Tipografía */
+  --font-sans: 'Inter Variable', 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Radios */
+  --radius-brand-field: 8px;
+  --radius-brand-card:  12px;
+}
