@@ -45,6 +45,7 @@ export const capacitacion: Niche = {
     { before: 'El interesado vuelve semanas después y alguien pregunta: «¿Qué curso le ofrecimos?»', after: 'Lo ve en la conversación, en el temario enviado y en la ficha del contacto.' },
     { before: 'Preguntan el precio del curso a las 22:00 y nadie contesta hasta mañana.', after: 'La respuesta que usted preparó sale al momento.' },
     { before: 'Abre un grupo nuevo y nadie vuelve a escribirles a los interesados del anterior.', after: 'Les avisa a todos de una vez, con un aviso a su etiqueta.' },
+    { before: 'Dos personas le responden lo mismo al interesado, o ninguna.', after: 'Cada conversación tiene a quien la atiende.' },
     { before: 'Para atender desde la computadora hay que dejar la app.', after: 'Sigue con su app de WhatsApp Business y su número.' },
   ],
   features: [

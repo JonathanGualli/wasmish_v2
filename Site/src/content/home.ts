@@ -34,17 +34,22 @@ export const APP_CHANGES: (string | { strong: string })[][] = [
   ['En la app se apagan las ', { strong: 'listas de difusión' }, ' (las de antes quedan de solo lectura; en Wasmish se usan los avisos a un grupo), los mensajes temporales, «ver una vez» y la ubicación en tiempo real.'],
   [{ strong: 'WhatsApp para Windows' }, ' deja de servir para ese número: en la computadora se usa WhatsApp Web o Wasmish.'],
   ['Hay que ', { strong: 'abrir la app de vez en cuando' }, ': Meta desconecta si pasan unas dos semanas sin abrirla.'],
-  [{ strong: 'Las conversaciones anteriores se quedan en la app.' }, ' Wasmish muestra lo que llega desde que se conecta.'],
+  ['Al conectar, puede traer a Wasmish ', { strong: 'sus chats de los últimos 6 meses' }, ' y los nombres de su agenda. De los archivos llegan los que le enviaron sus clientes en las últimas dos semanas; los demás se siguen viendo en la app.'],
   ['Si prefiere no tocar su app, puede usar un número nuevo solo para Wasmish.'],
 ]
 
 // Preguntas frecuentes (brief, § 3.7), en ese orden. «¿Qué pasa si cancelo?»
-// sigue lo que decidió Jonathan el 2026-10-17.
+// sigue lo que decidió Jonathan el 2026-10-17; «¿Cómo se reparten…?», la
+// asignación de conversaciones (1.0.33 y sus avisos, 1.0.34).
 export const FAQ: { q: string; a: Rich }[] = [
   {
     q: '¿Tengo que dejar la app de WhatsApp Business?',
-    a: ['No. Sigue con su app y su número, y además atiende desde Wasmish. En la app se apagan algunas funciones, como las listas de difusión, y las conversaciones anteriores se quedan en ella. Vea ',
+    a: ['No. Sigue con su app y su número, y además atiende desde Wasmish. En la app se apagan algunas funciones, como las listas de difusión, y al conectar puede traer a Wasmish sus chats de los últimos 6 meses. Vea ',
       { href: '#cambios', text: 'lo que cambia en su WhatsApp' }, '.'],
+  },
+  {
+    q: '¿Cómo se reparten las conversaciones?',
+    a: ['Cada conversación puede tener a una persona que la atiende. Quien responde primero la toma, y luego se puede pasar a otro o pedirla, con un aviso para quien la recibe. Cada uno ve las suyas y las que nadie atiende; el dueño las ve todas. Cada cambio de manos queda anotado en la conversación.'],
   },
   {
     q: '¿Puedo escribirle a un cliente cuando quiera?',

@@ -20,8 +20,11 @@ test('el inicio lleva sus datos estructurados', () => {
 // Las preguntas se abren sin JavaScript, en el orden del brief.
 test('las preguntas frecuentes', () => {
   const home = read('index.html')
-  assert.equal((home.match(/<details/g) ?? []).length, 9)
+  assert.equal((home.match(/<details/g) ?? []).length, 10)
   assert.ok(home.indexOf('¿Tengo que dejar la app de WhatsApp Business?') < home.indexOf('¿Responde solo?'))
+  // La asignación (1.0.33), justo después de la primera.
+  assert.ok(home.indexOf('¿Tengo que dejar la app de WhatsApp Business?') < home.indexOf('¿Cómo se reparten las conversaciones?'))
+  assert.ok(home.indexOf('¿Cómo se reparten las conversaciones?') < home.indexOf('¿Puedo escribirle a un cliente cuando quiera?'))
   // Lo que decidió Jonathan al cancelar, no el borrador del diseño.
   assert.match(home, /se los entregamos en Excel/)
 })

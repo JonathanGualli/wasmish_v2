@@ -43,6 +43,7 @@ export const inicio: Niche = {
     { before: 'Otra persona retoma el chat y pregunta: «¿Qué le ofrecimos?»', after: 'Lo ve en la conversación y en la ficha del contacto.' },
     { before: 'Preguntan el precio a las 22:00 y nadie contesta hasta mañana.', after: 'La respuesta que usted preparó sale al momento.' },
     { before: 'Un empleado se va y se lleva las conversaciones.', after: 'El historial se queda en el negocio.' },
+    { before: 'Dos personas le responden lo mismo al cliente, o ninguna.', after: 'Cada conversación tiene a quien la atiende.' },
     { before: 'Para atender desde la computadora hay que dejar la app.', after: 'Sigue con su app de WhatsApp Business y su número.' },
   ],
   features: [
