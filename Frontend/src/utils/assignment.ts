@@ -111,7 +111,23 @@ export const notificationToast = (notification: AppNotification): { kind: 'new' 
             return { kind: 'info', text: `${actor} no te pasó ${conversation}.` };
         case 'requested':
             return { kind: 'new', text: `${actor} pide ${conversation}.` };
+        case 'lost': {
+            const mode = lostMode(notification);
+            if (mode === 'took') return { kind: 'info', text: `${actor} tomó ${conversation}.` };
+            if (mode === 'passed') return { kind: 'info', text: `${actor} le pasó a ${firstName(notification.target)} ${conversation}.` };
+            return { kind: 'info', text: `${actor} dejó sin asignar ${conversation}.` };
+        }
     }
+};
+
+/**
+ * Cómo perdió la conversación quien recibe un `lost`: se la quedó quien la
+ * movió (`took`), se la dio a otra persona (`passed`) o la dejó sin asignar
+ * (`released`). El mismo criterio que `lostMode` del backend.
+ */
+const lostMode = (notification: AppNotification): 'took' | 'passed' | 'released' => {
+    if (!notification.target) return 'released';
+    return notification.target.id === notification.actor?.id ? 'took' : 'passed';
 };
 
 /**
@@ -144,10 +160,19 @@ export const notificationText = (notification: AppNotification, viewerId: string
             else if (resolution || !request?.pending) note = 'Ya no está pendiente.';
             break;
         }
+        case 'lost': {
+            const mode = lostMode(notification);
+            if (mode === 'took') rest = 'tomó tu conversación';
+            else if (mode === 'passed') rest = `le pasó tu conversación a ${firstName(notification.target)}`;
+            else rest = 'dejó sin asignar tu conversación';
+            break;
+        }
     }
     if (!conversation?.canOpen) {
         const holder = assignee ? (assignee.id === viewerId ? 'tú' : firstName(assignee)) : null;
         if (notification.type === 'rejected') note = holder ? `La sigue atendiendo ${holder}.` : '';
+        // Quien la tiene ya lo dice el texto («tomó tu conversación», «le pasó… a Ana»).
+        else if (notification.type === 'lost' && assignee?.id === notification.target?.id) note = 'Ya no la puedes abrir.';
         else note = holder ? `Ahora la atiende ${holder}. Ya no la puedes abrir.` : 'Ya no la puedes abrir.';
     }
     return { who, rest, note };

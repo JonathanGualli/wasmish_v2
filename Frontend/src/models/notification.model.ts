@@ -4,14 +4,17 @@ import type { ConversationPerson } from "./conversation.mode";
  * Un aviso de la campanita (avisos de la asignación, spec § 5.2): algo de la
  * asignación que le pasó a quien mira. Los sirve el backend ya pensados para
  * esa persona: `canOpen` y `canAnswer` son los suyos, leídos al servirlos.
+ * `lost`: otra persona le quitó una conversación que atendía.
  */
-export type NotificationType = 'assigned' | 'passed' | 'rejected' | 'requested';
+export type NotificationType = 'assigned' | 'passed' | 'rejected' | 'requested' | 'lost';
 
 export interface AppNotification {
     id: string;
     type: NotificationType;
     /** Quien lo hizo (asignó, pasó, rechazó o pidió). */
     actor: ConversationPerson | null;
+    /** Solo en `lost`: quién la tiene ahora (`null`, si quedó sin asignar). */
+    target: ConversationPerson | null;
     /** `null` si la conversación ya no existe: el aviso se pinta sin abrir. */
     conversation: {
         id: string;
