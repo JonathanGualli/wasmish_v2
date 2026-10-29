@@ -8,6 +8,8 @@ import type { ChatsNavigationState } from '../../models/conversation.mode';
 import { MobileMenuContext } from './MobileMenuContext';
 import { NavigationGuardContext, useNavigationGuardValue } from './NavigationGuardContext';
 import { useTransferAnswers } from '../../hooks/useTransferRequest';
+import { useNotificationToasts } from '../../hooks/useNotifications';
+import { NotificationBell } from '../Notifications/NotificationBell';
 
 /**
  * Sin barra de título: la maqueta «Sidebar y Chats» da toda la altura al
@@ -31,8 +33,10 @@ export const PrivateLayout = ({ children }: { children: ReactNode }) => {
   const { pathname } = useLocation();
   const inChats = pathname.startsWith(ChatsPath);
   const navigationGuard = useNavigationGuardValue();
-  // La respuesta a una solicitud de transferencia, en cualquier página (Fase 4).
+  // La respuesta a una solicitud de transferencia, en cualquier página (Fase 4),
+  // y los avisos de la campanita en vivo, con su aviso de arriba.
   useTransferAnswers();
+  useNotificationToasts();
 
   // Tocar el aviso de un mensaje con Wasmish ya abierta: el service worker
   // enfoca esta ventana y pide abrir la conversación, sin recargar (public/sw.js).
@@ -90,6 +94,7 @@ export const PrivateLayout = ({ children }: { children: ReactNode }) => {
               <Menu size={20} />
             </button>
             <LogoLockup size="sm" />
+            <span className="ml-auto -mr-2 flex"><NotificationBell variant="bar" /></span>
           </header>
         )}
 

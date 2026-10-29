@@ -1,5 +1,6 @@
 import type { Conversation, ConversationPerson } from "../models/conversation.mode";
 import type { ConversationEvent } from "../models/conversation.event.model";
+import type { AppNotification } from "../models/notification.model";
 
 // ---------------------------------------------------------------------------
 // La asignación de conversaciones en la UI (Fase 4; diseño «Wasmish Chats -
@@ -92,3 +93,62 @@ export const eventText = (event: ConversationEvent, viewerId: string): string =>
     }
 };
 
+/**
+ * El aviso de arriba de un aviso nuevo de la campanita (diseño 7a, con el
+ * contacto): «nuevo» con «Abrir», salvo el rechazo, que solo informa.
+ */
+export const notificationToast = (notification: AppNotification): { kind: 'new' | 'info'; text: string } => {
+    const actor = firstName(notification.actor);
+    const conversation = notification.conversation
+        ? `la conversación con ${notification.conversation.title}`
+        : 'una conversación';
+    switch (notification.type) {
+        case 'assigned':
+            return { kind: 'new', text: `${actor} te asignó ${conversation}.` };
+        case 'passed':
+            return { kind: 'new', text: `${actor} te pasó ${conversation}.` };
+        case 'rejected':
+            return { kind: 'info', text: `${actor} no te pasó ${conversation}.` };
+        case 'requested':
+            return { kind: 'new', text: `${actor} pide ${conversation}.` };
+    }
+};
+
+/**
+ * Lo que dice un aviso en la campanita según quién mira (diseño 5a y m2, el
+ * `notifView` del prototipo): «**who** rest» y, debajo, la nota de cómo terminó
+ * o de por qué ya no se puede abrir.
+ */
+export const notificationText = (notification: AppNotification, viewerId: string): { who: string; rest: string; note: string } => {
+    const who = firstName(notification.actor);
+    const { conversation, request, resolution } = notification;
+    const assignee = conversation?.assignedTo ?? null;
+    let rest = '';
+    let note = '';
+    switch (notification.type) {
+        case 'assigned':
+            rest = 'te asignó una conversación';
+            break;
+        case 'passed':
+            rest = 'te pasó la conversación';
+            note = 'Aceptó tu solicitud.';
+            break;
+        case 'rejected':
+            rest = 'rechazó pasarte la conversación';
+            break;
+        case 'requested': {
+            rest = assignee?.id === viewerId ? 'pide que le pases la conversación' : 'pide que le pasen la conversación';
+            const byMe = resolution?.by?.id === viewerId;
+            if (resolution?.status === 'passed') note = byMe ? `Se la pasaste a ${who}.` : `${firstName(resolution.by)} se la pasó a ${who}.`;
+            else if (resolution?.status === 'rejected') note = byMe ? 'La rechazaste.' : `${firstName(resolution.by)} la rechazó.`;
+            else if (resolution || !request?.pending) note = 'Ya no está pendiente.';
+            break;
+        }
+    }
+    if (!conversation?.canOpen) {
+        const holder = assignee ? (assignee.id === viewerId ? 'tú' : firstName(assignee)) : null;
+        if (notification.type === 'rejected') note = holder ? `La sigue atendiendo ${holder}.` : '';
+        else note = holder ? `Ahora la atiende ${holder}. Ya no la puedes abrir.` : 'Ya no la puedes abrir.';
+    }
+    return { who, rest, note };
+};

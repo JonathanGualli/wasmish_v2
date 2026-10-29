@@ -3,6 +3,7 @@ import type { Message } from "../models/message.mode";
 import type { Campaign } from "../models/campaign.model";
 import type { Conversation, ConversationPerson, TransferRequest } from "../models/conversation.mode";
 import type { ConversationEvent } from "../models/conversation.event.model";
+import type { AppNotification } from "../models/notification.model";
 
 // Lo que trae cada evento que emite el backend (`sendUser`)
 export interface SSEEventMap {
@@ -40,6 +41,12 @@ export interface SSEEventMap {
     conversations_updated: Record<string, never>;
     // Un cambio de manos para la historia del hilo, a quien ve la conversación (avisos de la asignación)
     conversation_event: { conversationId: string; event: ConversationEvent };
+    // Un aviso nuevo en la campanita de quien mira, con cuántos le quedan sin ver
+    notification_created: { notification: AppNotification; unseenCount: number };
+    // Se resolvió la solicitud de ese aviso: el aviso entero, ya con su resolución
+    notification_updated: { notification: AppNotification };
+    // Marcó avisos como vistos en otra pestaña o dispositivo
+    notifications_seen: { unseenCount: number };
 }
 
 export type SSEEventType = keyof SSEEventMap;

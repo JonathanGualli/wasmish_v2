@@ -36,6 +36,9 @@ export const SSEProvider = ({ children }: { children: ReactNode }) => {
         transfer_requested: new Set(),
         transfer_answered: new Set(),
         conversations_updated: new Set(),
+        notification_created: new Set(),
+        notification_updated: new Set(),
+        notifications_seen: new Set(),
     });
 
     // Abrir UNA conexión SSE, solo cuando hay sesión.
@@ -81,6 +84,9 @@ export const SSEProvider = ({ children }: { children: ReactNode }) => {
                 onTransferRequested: dispatch("transfer_requested"),
                 onTransferAnswered: dispatch("transfer_answered"),
                 onConversationsUpdated: dispatch("conversations_updated"),
+                onNotificationCreated: dispatch("notification_created"),
+                onNotificationUpdated: dispatch("notification_updated"),
+                onNotificationsSeen: dispatch("notifications_seen"),
                 onAccessChanged: () => accessChanged.current(),
                 onOpen: () => {
                     attempt = 0;

@@ -8,6 +8,7 @@ import type { CampaignAudienceInput, CampaignDraftInput, CampaignRecipientsInput
 import type { Message } from '../models/message.mode';
 import type { Assignee, Conversation } from '../models/conversation.mode';
 import type { ConversationEvent } from '../models/conversation.event.model';
+import type { NotificationsPage } from '../models/notification.model';
 import type { Line, LineUpdate, LinesResponse } from '../models/line.model';
 import type { InvitationInfo, InvitationInput, MemberChange, TeamInvitation, TeamMember, TeamResponse } from '../models/team.model';
 import type { User } from '../models/user.mode';
@@ -34,6 +35,10 @@ interface SSEHandlers {
     onTransferRequested?: (event: MessageEvent) => void;
     onTransferAnswered?: (event: MessageEvent) => void;
     onConversationsUpdated?: (event: MessageEvent) => void;
+    // Los avisos de la campanita (avisos de la asignación).
+    onNotificationCreated?: (event: MessageEvent) => void;
+    onNotificationUpdated?: (event: MessageEvent) => void;
+    onNotificationsSeen?: (event: MessageEvent) => void;
     /** Le cambiaron el acceso (rol, líneas, estado): el servidor cierra justo después (Fase 3). */
     onAccessChanged?: () => void;
     onError?: (err: ErrorEvent) => void;
@@ -183,6 +188,18 @@ export const answerTransferService = async (conversationId: string, requestId: s
     return accept ? data : null;
 }
 
+/** Los avisos de la campanita de quien mira, 30 por página; `before`, el `nextCursor` de la anterior. */
+export const getNotificationsService = async (before?: string): Promise<NotificationsPage> => {
+    const { data } = await axios.get(`${API_URL}/notifications`, { params: before ? { before } : {}, withCredentials: true });
+    return data;
+}
+
+/** Marcar avisos como vistos (`ids`) o todos (`all`). Devuelve cuántos quedan sin ver. */
+export const markNotificationsSeenService = async (body: { ids: string[] } | { all: true }): Promise<{ unseenCount: number }> => {
+    const { data } = await axios.post(`${API_URL}/notifications/seen`, body, { withCredentials: true });
+    return data;
+}
+
 /** Reaccionar a un mensaje del contacto; `''` quita la reacción. Devuelve el mensaje. */
 export const setReactionService = async (conversationId: string, messageId: string, emoji: string): Promise<Message> => {
     const { data } = await axios.put(`${API_URL}/chats/${conversationId}/messages/${messageId}/reaction`, { emoji }, { withCredentials: true });
@@ -238,6 +255,9 @@ export const createSSEConnection = (
         ["transfer_requested", handlers.onTransferRequested],
         ["transfer_answered", handlers.onTransferAnswered],
         ["conversations_updated", handlers.onConversationsUpdated],
+        ["notification_created", handlers.onNotificationCreated],
+        ["notification_updated", handlers.onNotificationUpdated],
+        ["notifications_seen", handlers.onNotificationsSeen],
     ] as const;
     for (const [event, handler] of assignmentEvents) {
         if (handler) source.addEventListener(event, handler);
