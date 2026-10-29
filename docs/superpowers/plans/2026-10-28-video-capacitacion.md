@@ -79,26 +79,26 @@ docs/decisiones.md, docs/estado.md
 **Interfaces:**
 - Produces: `Site/src/theme.css` con el bloque `@theme` entero (sin `@import "tailwindcss"`); `ChatHeader({ contact, pressed?, action? }: { …; action?: ReactNode })`, que pinta `action` en lugar del botón «Ficha» si llega; `Highlight({ …, mint? }: { …; mint?: boolean })`: pastilla menta (`bg-brand-accent text-brand-ink`), para ir sobre tinta o noche.
 
-- [ ] **Paso 1:** `npm run build` en `Site/` y copiar `Site/dist/` a una carpeta del scratchpad, para comparar después.
+- [ ] **Paso 1:** `npm run build` en `Site/` y copiar `Site/dist/` a una carpeta del scratchpad, para comparar después. Con `playwright-core` (ya está en `Site/`) y `npm run preview`, capturas de `/` y `/capacitacion` a 1280 y a 390 px de ancho, con `reducedMotion: 'reduce'` (se ven los estados finales de las animaciones, también los de `ChatHeader` y `Highlight`).
 - [ ] **Paso 2:** mover el bloque `@theme { … }` de `styles.css` a `theme.css`, con su comentario, y en `styles.css` poner `@import "./theme.css";` después de las fuentes. Añadir `action` a `ChatHeader` y `mint` a `Highlight` (cuando `mint` e `inverse` vienen juntos, gana `mint`). Los valores por defecto dejan la página igual.
 - [ ] **Paso 3:** `npm run lint && npm run build && npm test` en `Site/`. Esperado: todo en verde.
-- [ ] **Paso 4:** `diff -r` del `dist/` nuevo contra la copia: **los HTML, idénticos**; el CSS puede cambiar solo de orden. Si cambia algo más, la página cambió y hay que corregirlo.
+- [ ] **Paso 4:** comparar contra la copia. **Los HTML, idénticos** después de normalizar los nombres con hash de `/assets/` (el JavaScript cambia, y con él su hash). **El CSS**, con el mismo normalizado: cualquier diferencia se revisa una por una (un cambio de orden puede cambiar la cascada). **Las capturas** del Paso 1, otra vez, y `cmp` contra las de antes: idénticas. Si algo cambia, la página cambió y hay que corregirlo. (Revisión de Codex del plan.)
 - [ ] **Paso 5:** commit «Site: los tokens en theme.css, y ChatHeader y Highlight para el video».
 
 ### Tarea 2: El workspace `Video/` y su primer cuadro
 
 **Files:**
-- Create: `Video/package.json`, `Video/tsconfig.json`, `Video/eslint.config.js`, `Video/remotion.config.ts`, `Video/src/index.ts`, `Video/src/Root.tsx`, `Video/src/styles.css`, `Video/src/fonts.ts`, `Video/.gitignore` (`node_modules`, `out`)
+- Create: `Video/package.json`, `Video/tsconfig.json`, `Video/eslint.config.js`, `Video/remotion.config.ts`, `Video/src/index.ts`, `Video/src/Root.tsx`, `Video/src/styles.css`, `Video/src/fonts.ts`, `Video/src/assets.d.ts`, `Video/.gitignore` (`node_modules`, `out`)
 - Modify: `.github/workflows/ci.yml`
 
 **Interfaces:**
 - Consumes: `Site/src/theme.css`; `ChatItemView`, `Composer` de `Site/src/components/app/Chat.tsx`.
 - Produces: los scripts `npm run dev` (Remotion Studio), `npm run lint` (`tsc --noEmit && eslint .`), `npm test` (`node --experimental-strip-types --test tests/*.test.ts`), `npm run render` (`out/capacitacion.mp4`) y `npm run render:whatsapp` (`--scale=0.6667 --crf=28`, `out/capacitacion-whatsapp.mp4`). `loadFonts(): void` en `fonts.ts`, que se llama una vez en `Root.tsx`.
 
-- [ ] **Paso 1:** `package.json` con las dependencias de Global Constraints, `lucide-react` en la misma versión que `Site/`, y como desarrollo las de lint de `Site/` (eslint, typescript-eslint, plugins de React). `tsconfig.json` como el de `Site/` (incluye `src` y `tests`). `eslint.config.js` como el de `Site/` sin `react-refresh`.
-- [ ] **Paso 2:** `remotion.config.ts`: `Config.overrideWebpackConfig(enableTailwind)` y, encadenado, un alias de webpack para que **`react`, `react-dom` y `lucide-react` resuelvan siempre a `Video/node_modules`** (si no, lo importado desde `Site/` trae su propia copia de React).
+- [ ] **Paso 1:** `package.json` con las dependencias de Global Constraints, `lucide-react` en la misma versión que `Site/`, y como desarrollo las de lint de `Site/` (eslint, typescript-eslint, plugins de React). `tsconfig.json` como el de `Site/` (incluye `src` y `tests`); como no hay Vite, **`src/assets.d.ts` declara `*.woff2` (exporta por defecto la URL, un `string`) y `*.css`**, que `noUncheckedSideEffectImports` exige (el `vite-env.d.ts` de `Site/` no llega aquí). `eslint.config.js` como el de `Site/` sin `react-refresh`. **`npm install`** para generar `package-lock.json`, que se sube; desde ahí, `npm ci`.
+- [ ] **Paso 2:** `remotion.config.ts`: una sola función en `Config.overrideWebpackConfig` que aplica `enableTailwind` y después añade, **conservando los alias que ya trae Remotion**, alias para que **`react`, `react-dom` (con sus subrutas, como `react/jsx-runtime`) y `lucide-react` resuelvan siempre a `Video/node_modules`** (si no, lo importado desde `Site/` trae su propia copia de React).
 - [ ] **Paso 3:** `src/styles.css`: `@import "tailwindcss";`, `@import "../../Site/src/theme.css";`, `@source "../../Site/src/components";` y una regla que apague `animation` y `transition` en todo (`*, *::before, *::after`, con `!important`). Comentario de por qué. `fonts.ts`: Inter y JetBrains Mono variables con `loadFont` de `@remotion/fonts`, desde los `.woff2` de `@fontsource-variable/*` (dependencias de `Video/`) importados como URL.
-- [ ] **Paso 4:** en `Root.tsx`, una composición provisional `capacitacion` (1080 × 1920, 30 fps, 30 cuadros) que pinta, sobre gris claro y escalado ×2,77, un `ChatItemView` de cada tipo y un `Composer`. `npm ci` y `npx remotion still capacitacion out/a.png --frame=15`. Esperado: el PNG con las burbujas en Inter (no la fuente de reserva) y el ícono de enviar del `Composer`; sin «Invalid hook call» en la salida.
+- [ ] **Paso 4:** en `Root.tsx`, una composición provisional `capacitacion` (1080 × 1920, 30 fps, 30 cuadros) que pinta, sobre gris claro y escalado ×2,77, un `ChatItemView` de cada tipo y un `Composer`. Borrar `node_modules`, `npm ci`, `npm run lint` y `npx remotion still capacitacion out/a.png --frame=15`. Esperado: el PNG con las burbujas en Inter (no la fuente de reserva) y el ícono de enviar del `Composer`; sin «Invalid hook call» en la salida.
 - [ ] **Paso 5:** lo mismo a `out/b.png` y `cmp out/a.png out/b.png`. Esperado: idénticos.
 - [ ] **Paso 6:** en `ci.yml`, el trabajo «Video · lint, tipos y tests», como el de `Site/`: Node 22, caché de npm con `Video/package-lock.json` y `Site/package-lock.json`, `npm ci` en `Site/` (los componentes que importa se tipan desde allí) y en `Video/`, y `npm run lint` y `npm test` en `Video/`. **El CI no renderiza.**
 - [ ] **Paso 7:** `npm run lint` en verde. Commit «Video: el workspace con Remotion y su primer cuadro».
@@ -110,12 +110,12 @@ docs/decisiones.md, docs/estado.md
 
 **Interfaces:**
 - Produces:
-  - `FPS = 30`; `toFrames(seconds: number, fps = FPS): number` (redondea); `type Scene = { id: string; from: number; to: number }` (segundos); `sceneFrames(scenes: Scene[], fps = FPS): { id: string; from: number; durationInFrames: number }[]`; `totalFrames(scenes: Scene[], fps = FPS): number`; `checkScenes(scenes: Scene[]): string[]` (errores en español: escenas desordenadas, con hueco o solapadas, o que no empiezan en 0).
+  - `FPS = 30`; `toFrames(seconds: number, fps = FPS): number` (redondea); `type Scene = { id: string; from: number; to: number }` (segundos); `sceneFrames(scenes: Scene[], fps = FPS): { id: string; from: number; durationInFrames: number }[]`; `totalFrames(scenes: Scene[], fps = FPS): number`; `checkScenes(scenes: Scene[]): string[]` (errores en español: escenas desordenadas, con hueco o solapadas, o que no empiezan en 0); `localFrame(cue: number, scene: Scene, fps = FPS): number` = `toFrames(cue) - toFrames(scene.from)`: los `cues` se guardan en **segundos desde el inicio del video** y cada escena los pasa a **cuadros de su propio `<Sequence>`** con esta función.
   - `type Subtitle = { text: string; highlight?: string; from: number; to: number }`; `subtitleAt(subs: Subtitle[], seconds: number): Subtitle | null`; `checkSubtitles(subs: Subtitle[], scenes: Scene[]): string[]` (solapados, fuera de su escena o cruzando dos, `highlight` que no está en `text`, más de `SUBTITLE_MAX_CHARS = 60` caracteres).
   - `EASE` (`Easing.bezier(0.45, 0, 0.2, 1)` de Remotion); `progress(frame: number, start: number, duration: number): number` (0 a 1 con `EASE`, acotado); `type CameraKey = { at: number; scale: number; x: number; y: number }` (`at` en cuadros; `x`, `y`, el punto del lienzo que queda al centro); `cameraAt(frame: number, keys: CameraKey[]): { scale: number; x: number; y: number }` (cada llave se alcanza en 30 cuadros con `EASE`; antes de la primera, la primera; `scale` acotada a `MAX_ZOOM = 1.5`).
 
 - [ ] **Paso 1: los tests.**
-  - `toFrames(0.5) === 15`, `toFrames(72) === 2160`; `sceneFrames` de dos escenas `0–6` y `6–25` da `[{ from: 0, durationInFrames: 180 }, { from: 180, durationInFrames: 570 }]`; `checkScenes` con un hueco (`0–6`, `7–25`) da un error que nombra las dos escenas; con escenas contiguas desde 0, `[]`.
+  - `toFrames(0.5) === 15`, `toFrames(72) === 2160`; `sceneFrames` de dos escenas `0–6` y `6–25` da `[{ from: 0, durationInFrames: 180 }, { from: 180, durationInFrames: 570 }]`; `checkScenes` con un hueco (`0–6`, `7–25`) da un error que nombra las dos escenas; con escenas contiguas desde 0, `[]`. `localFrame(6.8, { id: 'recap', from: 6, to: 25 }) === 24` (el cuadro absoluto 204).
   - `subtitleAt` en el borde: `from` incluido, `to` excluido; entre dos subtítulos, `null`. `checkSubtitles`: uno que cruza de la escena 1 a la 2 → error; `highlight: 'cero'` con `text` sin «cero» → error; uno de 61 caracteres → error; los correctos → `[]`.
   - `progress(10, 10, 15) === 0`, `progress(25, 10, 15) === 1`, `progress(40, 10, 15) === 1`, `progress(5, 10, 15) === 0`; a mitad, distinto de 0,5 (la curva no es lineal). `cameraAt` antes de la primera llave devuelve la primera; 30 cuadros después de una llave, exactamente esa llave; una llave con `scale: 2` sale en `1.5`.
 - [ ] **Paso 2:** `npm test`. Esperado: fallan por no existir los módulos.
@@ -184,7 +184,7 @@ Los `cues` son los momentos del storyboard que las escenas usan por nombre (segu
 - Modify: `Video/src/Root.tsx` (la composición `capacitacion` de verdad, con `totalFrames`; se quitan la provisional y `piezas`), `AGENTS.md`, `docs/decisiones.md`, `docs/estado.md`
 
 **Interfaces:**
-- Consumes: todo lo anterior. Produces: `Capacitacion({ story }: { story: Story })`, que monta cada escena en un `<Sequence>` con `sceneFrames`; cada escena recibe `{ story }` y lee sus tiempos de `story.cues` (en cuadros absolutos, restando el inicio de su escena).
+- Consumes: todo lo anterior. Produces: `Capacitacion({ story }: { story: Story })`, que monta cada escena en un `<Sequence>` con `sceneFrames`; cada escena recibe `{ story }` y pasa sus `story.cues` (segundos absolutos) a cuadros locales con `localFrame`.
 
 Lo que hace cada escena (notas de los cuadros del storyboard):
 - **`Hook` (tinta):** cuadro 0 = la burbuja de Kevin ya en pantalla, grande (la miniatura de WhatsApp), con nombre y «ahora»; sube 40 px y se asienta en 12 cuadros; el titular entra a los 0,6 s; «Seríamos 3 personas» se marca en menta a 1,5 s. A 3,5 s la burbuja se encoge hasta su sitio en el chat (1 s, `EASE`) y encima el historial aparece como siluetas grises, sin texto.
