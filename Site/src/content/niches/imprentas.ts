@@ -45,6 +45,7 @@ export const imprentas: Niche = {
     { before: 'El cliente vuelve con el arte y alguien pregunta: «¿Qué papel y qué precio le dimos?»', after: 'Lo ve en la conversación, en la cotización enviada y en la ficha del contacto.' },
     { before: '«¿Cuánto cuestan 1.000 volantes?», «¿hacen tarjetas?». Y a las 22:00 nadie contesta.', after: 'La respuesta que usted preparó sale al momento.' },
     { before: 'Un empleado se va y se lleva las cotizaciones.', after: 'El historial se queda en la imprenta.' },
+    { before: 'Dos personas le cotizan lo mismo al cliente, o ninguna.', after: 'Cada conversación tiene a quien la atiende.' },
     { before: 'Para atender desde la computadora hay que dejar la app.', after: 'Sigue con su app de WhatsApp Business y su número.' },
   ],
   features: [
