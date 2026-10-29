@@ -162,6 +162,8 @@ Los `cues` son los momentos del storyboard que las escenas usan por nombre (segu
 
 ### Tarea 5: Las piezas comunes
 
+> **Cambio al ejecutarla (Video 1):** el storyboard resultó ser un componente con parámetros (`VideoCuadro`) con las medidas de cada pieza a 1080 px y estados que las imitaciones de `Site/` no tienen (de silueta a mensaje, el nombre y el PDF resaltados, la nota). `AppChat` copia el storyboard en lugar de escalar `ChatItemView`, y la cámara va dentro de `AppChat` (`camera`, con `valueAt`/`cameraAt`) en vez de un componente aparte. De `Site/` quedan `theme.css`, `Highlight` (con `mint`) y los tipos; el `action` de `ChatHeader` se deshizo. Ver [video.md](../../arquitectura/video.md).
+
 **Files:**
 - Create: `Video/src/components/Stage.tsx`, `Headline.tsx`, `Subtitle.tsx`, `Camera.tsx`, `AppChat.tsx`
 
