@@ -67,23 +67,85 @@ export const buildInboundPush = ({ conversationId, contact, text, type = null, c
 // Quién lo hizo, por su nombre de pila; sin nombre, «Alguien».
 const actorFirstName = (name) => String(name ?? '').trim().split(/\s+/)[0] || 'Alguien';
 
-const ASSIGNMENT_VERBS = { assigned: 'te asignó', passed: 'te pasó' };
+/**
+ * Cómo perdió una conversación quien la tenía (el aviso `lost`): `took`, si se
+ * la quedó quien la movió; `passed`, si se la dio a un tercero; `released`, si
+ * la dejó sin asignar.
+ */
+export const lostMode = ({ actorId, targetId }) => {
+    if (targetId == null) return 'released';
+    return String(targetId) === String(actorId) ? 'took' : 'passed';
+};
+
+const assignmentBody = ({ kind, actor, targetName, actorId, targetId }) => {
+    switch (kind) {
+        case 'assigned': return `${actor} te asignó esta conversación.`;
+        case 'passed': return `${actor} te pasó esta conversación.`;
+        case 'rejected': return `${actor} no te pasó esta conversación.`;
+        case 'requested': return `${actor} pide esta conversación.`;
+        case 'lost': {
+            const mode = lostMode({ actorId, targetId });
+            if (mode === 'took') return `${actor} tomó esta conversación.`;
+            if (mode === 'passed') return `${actor} le pasó esta conversación a ${actorFirstName(targetName)}.`;
+            return `${actor} dejó sin asignar esta conversación.`;
+        }
+        default: return '';
+    }
+};
 
 /**
- * El aviso de «te asignaron» o «te la pasaron» (avisos de la asignación, spec
- * § 7 y diseño m3): el título del de un entrante (el contacto, y la línea con
- * más de una) y el cuerpo «Carla te asignó esta conversación.». Tocarlo abre
- * la conversación, como el de un entrante.
+ * El aviso push de la asignación (avisos de la asignación, spec § 7 y diseño
+ * m3): el título del de un entrante (el contacto, y la línea con más de una) y
+ * el cuerpo «Carla te asignó esta conversación.». Con `open`, tocarlo abre la
+ * conversación, como el de un entrante; sin él (quien lo recibe no la puede
+ * abrir: un rechazo, o se la quitaron), abre la bandeja, y el aviso no se
+ * agrupa con los de esa conversación.
  */
-export const buildAssignmentPush = ({ conversationId, contact, lineName = null, actorName, kind }) => {
+export const buildAssignmentPush = ({
+    conversationId, contact, lineName = null, actorName, kind, actorId = null, targetId = null, targetName = null, open = true,
+}) => {
     const id = String(conversationId);
     const suffix = lineName ? ` · ${lineName}` : '';
     return {
         title: truncate(contactDisplayName(contact), TITLE_MAX - suffix.length) + suffix,
-        body: `${actorFirstName(actorName)} ${ASSIGNMENT_VERBS[kind]} esta conversación.`,
-        conversationId: id,
-        url: `/private/chats?c=${id}`,
+        body: truncate(assignmentBody({ kind, actor: actorFirstName(actorName), targetName, actorId, targetId }), BODY_MAX),
+        conversationId: open ? id : null,
+        url: open ? `/private/chats?c=${id}` : '/private/chats',
     };
+};
+
+/**
+ * Si el push de la asignación (`kind`) todavía le toca a `auth` (el de quien
+ * lo recibe, leído ahora; `null` si ya no está activo) con la conversación
+ * como está al enviar (`conversation`: `lineId`, `assignedTo` y
+ * `transferRequest`), y si podrá abrirla: `{ open }`, o `null` si no se manda.
+ * Siempre con la línea a su alcance: `updateMember` guarda el acceso nuevo
+ * antes de soltar sus conversaciones (revisión de Codex del spec, 1).
+ * - `assigned` y `passed`: que siga siendo suya.
+ * - `requested`: que la solicitud (`requestId`) siga pendiente y que la vea.
+ * - `rejected` y `lost`: que no sea suya ahora (si mientras tanto se la dieron,
+ *   el aviso ya no dice la verdad); la abre solo si la sigue viendo.
+ */
+export const assignmentPushTarget = (kind, auth, conversation, { requestId = null } = {}) => {
+    if (!auth || !conversation) return null;
+    const meta = { lineId: conversation.lineId ?? null, assignedTo: conversation.assignedTo ?? null };
+    if (!canReceive(auth, { lineId: meta.lineId })) return null;
+    const isMine = meta.assignedTo != null && String(meta.assignedTo) === auth.userId;
+    const sees = canReceive(auth, meta);
+    switch (kind) {
+        case 'assigned':
+        case 'passed':
+            return isMine ? { open: true } : null;
+        case 'requested': {
+            const pending = requestId != null && String(conversation.transferRequest?.id ?? '') === String(requestId);
+            return pending && sees ? { open: true } : null;
+        }
+        case 'rejected':
+        case 'lost':
+            return isMine ? null : { open: kind === 'lost' && sees };
+        default:
+            return null;
+    }
 };
 
 /** El nombre de la línea para el aviso: solo si la cuenta tiene más de una activa. */

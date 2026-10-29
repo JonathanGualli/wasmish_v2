@@ -106,7 +106,7 @@ export const unseenCountOf = (accountId, recipientId) =>
 export const serializeNotifications = async (auth, docs) => {
     if (docs.length === 0) return [];
     const conversationIds = [...new Set(docs.map(doc => String(doc.conversationId)))];
-    const personIds = [...new Set(docs.flatMap(doc => [doc.actorId, doc.resolution?.by]).filter(Boolean).map(String))];
+    const personIds = [...new Set(docs.flatMap(doc => [doc.actorId, doc.targetId, doc.resolution?.by]).filter(Boolean).map(String))];
     const [conversations, people] = await Promise.all([
         populateConversation(Conversation.find({ _id: { $in: conversationIds }, userId: auth.accountId })).lean(),
         User.find({ _id: { $in: personIds }, accountId: auth.accountId }).select(PERSON_FIELDS).lean(),
@@ -124,6 +124,8 @@ export const serializeNotifications = async (auth, docs) => {
             id: String(doc._id),
             type: doc.type,
             actor: person(doc.actorId),
+            // Solo en `lost`: quién la tiene ahora.
+            target: person(doc.targetId),
             conversation: shown
                 ? { id: shown.id, title: shown.title, lineId: shown.lineId, assignedTo: shown.assignedTo, canOpen }
                 : null,
@@ -151,11 +153,11 @@ const emitToRecipients = async (accountId, docs, event, withCount) => {
 };
 
 /** Crea los avisos sin emitirlos (una solicitud relee antes de emitir). Nunca lanza: `[]` si falla. */
-export const createNotifications = async ({ accountId, recipientIds, type, actorId, conversationId, requestId = null }) => {
+export const createNotifications = async ({ accountId, recipientIds, type, actorId, conversationId, requestId = null, targetId = null }) => {
     if (recipientIds.length === 0) return [];
     try {
         const docs = await Notification.insertMany(recipientIds.map(recipientId => ({
-            userId: accountId, recipientId, type, actorId, conversationId, requestId,
+            userId: accountId, recipientId, type, actorId, conversationId, requestId, targetId,
         })));
         return docs.map(doc => doc.toObject());
     } catch (error) {

@@ -2,7 +2,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    buildAssignmentPush, buildInboundPush, isAllowedPushEndpoint, isGonePushError, pushLineName, pushRecipientIds,
+    assignmentPushTarget, buildAssignmentPush, buildInboundPush, isAllowedPushEndpoint, isGonePushError, lostMode, pushLineName,
+    pushRecipientIds,
 } from '../src/utils/push.js';
 
 test('isAllowedPushEndpoint acepta los servicios de push conocidos', () => {
@@ -144,3 +145,81 @@ test('buildAssignmentPush: sin nombre, «Alguien»; con varias líneas, la líne
         'Marisol Ruiz · Ventas');
 });
 
+// Lo que salió de probar la 1.0.34 (decisiones del 2026-10-29): rechazar,
+// pedir y quitar la conversación también suenan en el celular.
+test('buildAssignmentPush: rechazar y pedir', () => {
+    const contact = { name: 'Marisol Ruiz', phone: '593981112233' };
+    const rejected = buildAssignmentPush({ conversationId: 'c1', contact, actorName: 'Ana Vera', kind: 'rejected', open: false });
+    assert.equal(rejected.body, 'Ana no te pasó esta conversación.');
+    const requested = buildAssignmentPush({ conversationId: 'c1', contact, actorName: 'Luis', kind: 'requested' });
+    assert.equal(requested.body, 'Luis pide esta conversación.');
+    assert.equal(requested.url, '/private/chats?c=c1');
+});
+
+test('buildAssignmentPush: te quitaron la conversación, según quién la tiene ahora', () => {
+    const contact = { name: 'Juan', phone: '593981112233' };
+    const lost = (targetId, targetName = null) => buildAssignmentPush({
+        conversationId: 'c1', contact, actorName: 'Carla Ríos', actorId: 'carla', kind: 'lost', targetId, targetName,
+    }).body;
+    assert.equal(lost('carla', 'Carla Ríos'), 'Carla tomó esta conversación.');
+    assert.equal(lost('ana', 'Ana Vera'), 'Carla le pasó esta conversación a Ana.');
+    assert.equal(lost(null), 'Carla dejó sin asignar esta conversación.');
+});
+
+// Quien ya no la puede abrir (un rechazo, o se la quitaron): tocar el aviso
+// lleva a la bandeja, no a una conversación que daría 404, y no se agrupa con
+// los avisos de esa conversación (el `tag` del service worker).
+test('buildAssignmentPush: sin `open`, ni conversación ni enlace a ella', () => {
+    const push = buildAssignmentPush({ conversationId: 'c1', contact: { name: 'Juan' }, actorName: 'Ana', kind: 'rejected', open: false });
+    assert.equal(push.conversationId, null);
+    assert.equal(push.url, '/private/chats');
+});
+
+test('lostMode: la tomó, se la pasó a otro o la dejó sin asignar', () => {
+    assert.equal(lostMode({ actorId: 'm', targetId: 'm' }), 'took');
+    assert.equal(lostMode({ actorId: 'm', targetId: 'a' }), 'passed');
+    assert.equal(lostMode({ actorId: 'm', targetId: null }), 'released');
+});
+
+const authOf = (userId, role, lineIds = ['l1']) => ({ userId, accountId: 'acc-1', role, lineIds });
+const pushConversation = (assignedTo, extra = {}) => ({ lineId: 'l1', assignedTo, transferRequest: null, ...extra });
+
+test('assignmentPushTarget: asignar y pasar, solo si sigue siendo suya y con la línea', () => {
+    const ana = authOf('ana', 'agent');
+    assert.deepEqual(assignmentPushTarget('assigned', ana, pushConversation('ana')), { open: true });
+    assert.equal(assignmentPushTarget('passed', ana, pushConversation('luis')), null);
+    assert.equal(assignmentPushTarget('assigned', authOf('ana', 'agent', ['l2']), pushConversation('ana')), null);
+    assert.equal(assignmentPushTarget('assigned', null, pushConversation('ana')), null);
+    assert.equal(assignmentPushTarget('assigned', ana, null), null);
+});
+
+// Los owner y admin que responden una solicitud no la tienen asignada: la
+// regla de «que siga siendo suya» los dejaría sin aviso.
+test('assignmentPushTarget: pedir, mientras la solicitud siga pendiente y la vea', () => {
+    const owner = authOf('owner', 'owner', []);
+    const pending = pushConversation('ana', { transferRequest: { id: 'r1' } });
+    assert.deepEqual(assignmentPushTarget('requested', authOf('ana', 'agent'), pending, { requestId: 'r1' }), { open: true });
+    assert.deepEqual(assignmentPushTarget('requested', owner, pending, { requestId: 'r1' }), { open: true });
+    assert.equal(assignmentPushTarget('requested', owner, pushConversation('ana'), { requestId: 'r1' }), null, 'ya respondida');
+    assert.equal(assignmentPushTarget('requested', owner, pushConversation('ana', { transferRequest: { id: 'r2' } }), { requestId: 'r1' }),
+        null, 'reemplazada');
+    assert.equal(assignmentPushTarget('requested', owner, pending), null, 'sin requestId');
+    // Un agente que no la atiende no la ve.
+    assert.equal(assignmentPushTarget('requested', authOf('marta', 'agent'), pending, { requestId: 'r1' }), null);
+});
+
+test('assignmentPushTarget: rechazar, sin abrir la conversación; nada si mientras tanto se la dieron', () => {
+    const luis = authOf('luis', 'agent');
+    assert.deepEqual(assignmentPushTarget('rejected', luis, pushConversation('ana')), { open: false });
+    assert.equal(assignmentPushTarget('rejected', luis, pushConversation('luis')), null);
+    assert.equal(assignmentPushTarget('rejected', authOf('luis', 'agent', ['l2']), pushConversation('ana')), null);
+});
+
+test('assignmentPushTarget: te la quitaron; la abre solo si la sigue viendo', () => {
+    const ana = authOf('ana', 'agent');
+    assert.deepEqual(assignmentPushTarget('lost', ana, pushConversation('carla')), { open: false });
+    assert.deepEqual(assignmentPushTarget('lost', ana, pushConversation(null)), { open: true }, 'sin asignar, el agente la ve');
+    assert.deepEqual(assignmentPushTarget('lost', authOf('sup', 'supervisor'), pushConversation('carla')), { open: true });
+    assert.equal(assignmentPushTarget('lost', ana, pushConversation('ana')), null, 'se la devolvieron');
+    assert.equal(assignmentPushTarget('lost', authOf('ana', 'agent', ['l2']), pushConversation(null)), null, 'sin la línea');
+});

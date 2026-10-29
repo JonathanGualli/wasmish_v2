@@ -221,6 +221,55 @@ test('soltar escribe release, sin avisos', async () => {
     assert.deepEqual(await noticesOf(conversation), []);
 });
 
+// Lo que salió de probar la 1.0.34 (decisión del 2026-10-29): en la prueba,
+// el owner se quedó la que acababa de pasarle a un agente y él no se enteró.
+const lostOf = async (conversation) => (await Notification.find({ conversationId: conversation._id, type: 'lost' }).lean())
+    .map(doc => ({ to: String(doc.recipientId), actor: String(doc.actorId), target: doc.targetId ? String(doc.targetId) : null }));
+
+test('te la quitaron: lost a quien la tenía cuando otra persona la toma, la pasa a un tercero o la suelta', async () => {
+    const taken = await fresh(ana.userId);
+    assert.equal((await assign(supervisor, taken, supervisor.userId)).status, 200);
+    assert.deepEqual(await lostOf(taken), [{ to: ana.userId, actor: supervisor.userId, target: supervisor.userId }]);
+
+    const passed = await fresh(ana.userId);
+    assert.equal((await assign(supervisor, passed, luis.userId)).status, 200);
+    assert.deepEqual(await lostOf(passed), [{ to: ana.userId, actor: supervisor.userId, target: luis.userId }]);
+    assert.deepEqual((await noticesOf(passed)).filter(n => n.type === 'assigned').map(n => n.to), [luis.userId]);
+
+    const released = await fresh(ana.userId);
+    assert.equal((await assign(supervisor, released, null)).status, 200);
+    assert.deepEqual(await lostOf(released), [{ to: ana.userId, actor: supervisor.userId, target: null }]);
+});
+
+test('te la quitaron: nada si lo hizo quien la tenía', async () => {
+    const conversation = await fresh(ana.userId);
+    assert.equal((await assign(ana, conversation, luis.userId)).status, 200);
+    assert.deepEqual(await lostOf(conversation), []);
+});
+
+test('te la quitaron: el supervisor acepta la solicitud de una que atiende Ana; si acepta Ana, nada', async () => {
+    const bySupervisor = await fresh(ana.userId);
+    await ask(luis, bySupervisor);
+    assert.equal((await answer(supervisor, bySupervisor, 'accept', await pendingId(bySupervisor))).status, 200);
+    assert.deepEqual(await lostOf(bySupervisor), [{ to: ana.userId, actor: supervisor.userId, target: luis.userId }]);
+
+    const byAna = await fresh(ana.userId);
+    await ask(luis, byAna);
+    assert.equal((await answer(ana, byAna, 'accept', await pendingId(byAna))).status, 200);
+    assert.deepEqual(await lostOf(byAna), []);
+});
+
+test('te la quitaron: la campanita dice quién la tiene ahora', async () => {
+    const conversation = await fresh(ana.userId);
+    await assign(supervisor, conversation, luis.userId);
+    const docs = await Notification.find({ conversationId: conversation._id, type: 'lost' }).lean();
+    const [notice] = await serializeNotifications(await memberAuth(a.accountId, ana.userId), docs);
+    assert.equal(notice.type, 'lost');
+    assert.equal(notice.actor.id, supervisor.userId);
+    assert.equal(notice.target.id, luis.userId);
+    assert.equal(notice.conversation.canOpen, false, 'el agente ya no la ve');
+});
+
 test('requestTransfer real: request, y el requested lo reciben Ana (la atiende), el supervisor y el owner, no Luis', async () => {
     const conversation = await fresh(ana.userId);
     assert.equal((await ask(luis, conversation)).status, 202);
@@ -319,6 +368,8 @@ test('quitar el acceso: revoked en la que tenía y gone en lo que pidió', async
     assert.deepEqual((await eventsOf(his)).at(-1), { type: 'revoked', actor: null, target: leaving.userId });
     assert.ok((await noticesOf(his)).every(n => n.resolution === 'gone'));
     assert.ok((await noticesOf(asked)).every(n => n.resolution === 'gone'));
+    // Quitarle el acceso no es que otra persona se la quite.
+    assert.deepEqual(await lostOf(his), []);
 });
 
 test('releaseAssignments no escribe revoked en una conversación que otro movió entre leer y soltar', async () => {

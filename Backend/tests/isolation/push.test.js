@@ -345,3 +345,73 @@ test('notifyAssignment no avisa a quien le quitaron la línea antes de soltarla;
     assert.equal(sentTo(endpoint).length, 1);
     assert.match(sentTo(endpoint)[0].payload.body, / te pasó esta conversación\.$/);
 });
+
+// --- Lo que salió de probar la 1.0.34 (decisiones del 2026-10-29): rechazar,
+// pedir y quitar la conversación también suenan en el celular ---
+
+const askFor = (account, conversation) => request(account, 'POST', `/chats/${conversation._id}/transfer-request`);
+const requestIdOf = async (conversation) => String((await Conversation.findById(conversation._id).lean()).transferRequest.id);
+const endpointsFor = async (accounts) => {
+    const endpoints = {};
+    for (const [name, account] of Object.entries(accounts)) {
+        endpoints[name] = newEndpoint();
+        assert.equal((await subscribe(account, endpoints[name])).status, 200, name);
+    }
+    return endpoints;
+};
+
+test('pedir avisa por push a quien la atiende y al owner, no a quien la pide; rechazar, a quien la pidió', async () => {
+    pushCalls.length = 0;
+    const endpoints = await endpointsFor({ owner: pc, attends: assignedAgent, asks: agent1 });
+    const conversation = await assignConversationOf(assignedAgent.userId);
+
+    assert.equal((await askFor(agent1, conversation)).status, 202);
+    assert.ok(await waitFor(() => sentTo(endpoints.owner).length && sentTo(endpoints.attends).length), 'no avisó del pedido');
+    for (const name of ['owner', 'attends']) {
+        const [call] = sentTo(endpoints[name]);
+        assert.match(call.payload.body, / pide esta conversación\.$/, name);
+        assert.equal(call.payload.conversationId, String(conversation._id), name);
+    }
+    await new Promise(resolve => setTimeout(resolve, 200));
+    assert.equal(sentTo(endpoints.asks).length, 0, 'avisó a quien la pide');
+
+    const res = await request(pc, 'POST', `/chats/${conversation._id}/transfer-request/reject`, { requestId: await requestIdOf(conversation) });
+    assert.equal(res.status, 204, res.text);
+    assert.ok(await waitFor(() => sentTo(endpoints.asks).length), 'no avisó del rechazo');
+    const [rejected] = sentTo(endpoints.asks);
+    assert.match(rejected.payload.body, / no te pasó esta conversación\.$/);
+    // No la puede abrir: el aviso lleva a la bandeja.
+    assert.equal(rejected.payload.conversationId, null);
+    assert.equal(rejected.payload.url, '/private/chats');
+});
+
+test('te la quitaron: push a quien la tenía si otra persona la toma, la pasa o la suelta; nunca si fue él', async () => {
+    const endpoints = await endpointsFor({ had: agent1, other: assignedAgent });
+
+    pushCalls.length = 0;
+    const passed = await assignConversationOf(agent1.userId);
+    assert.equal((await request(pc, 'POST', `/chats/${passed._id}/assign`, { userId: assignedAgent.userId })).status, 200);
+    assert.ok(await waitFor(() => sentTo(endpoints.had).length), 'no avisó al que se la quitaron');
+    assert.match(sentTo(endpoints.had)[0].payload.body, / le pasó esta conversación a PCASIG\.$/);
+    assert.equal(sentTo(endpoints.had)[0].payload.conversationId, null, 'el agente ya no la ve');
+
+    pushCalls.length = 0;
+    const taken = await assignConversationOf(agent1.userId);
+    assert.equal((await request(pc, 'POST', `/chats/${taken._id}/assign`, { userId: pc.userId })).status, 200);
+    assert.ok(await waitFor(() => sentTo(endpoints.had).length));
+    assert.match(sentTo(endpoints.had)[0].payload.body, / tomó esta conversación\.$/);
+
+    pushCalls.length = 0;
+    const released = await assignConversationOf(agent1.userId);
+    assert.equal((await request(pc, 'POST', `/chats/${released._id}/assign`, { userId: null })).status, 200);
+    assert.ok(await waitFor(() => sentTo(endpoints.had).length));
+    assert.match(sentTo(endpoints.had)[0].payload.body, / dejó sin asignar esta conversación\.$/);
+    assert.equal(sentTo(endpoints.had)[0].payload.conversationId, String(released._id), 'sin asignar la sigue viendo');
+
+    pushCalls.length = 0;
+    const own = await assignConversationOf(agent1.userId);
+    assert.equal((await request(agent1, 'POST', `/chats/${own._id}/assign`, { userId: assignedAgent.userId })).status, 200);
+    assert.ok(await waitFor(() => sentTo(endpoints.other).length), 'no avisó a quien la recibe');
+    await new Promise(resolve => setTimeout(resolve, 200));
+    assert.equal(sentTo(endpoints.had).length, 0, 'avisó al que la pasó él mismo');
+});

@@ -265,12 +265,14 @@ export const assignConversation = async (auth, conversationId, targetUserId) => 
     }
 
     let target = null;
+    let targetName = null;
     if (targetUserId !== null) {
         const member = mongoose.isValidObjectId(targetUserId)
             ? await User.findOne({ _id: targetUserId, accountId: auth.accountId }).select(MEMBER_FIELDS).lean()
             : null;
         if (!isValidAssignee(member, conversation.lineId)) throw statusError(400, INVALID_ASSIGNEE_MESSAGE, 'invalid_assignee');
         target = member._id;
+        targetName = member.name ?? null;
     }
     if (String(conversation.assignedTo ?? null) === String(target)) return serializedConversation(conversationId);
 
@@ -309,7 +311,28 @@ export const assignConversation = async (auth, conversationId, targetUserId) => 
             accountId: auth.accountId, conversationId: conversation._id, recipientId: target, actorName: auth.name, kind: 'assigned',
         });
     }
+    await notifyLost(auth, conversation._id, previous.assignedTo, { targetId: target, targetName });
     return serializedConversation(conversationId);
+};
+
+/**
+ * «Te quitaron la conversación» (decisión del 2026-10-29): a quien la tenía
+ * (`previousId`), cuando otra persona (`auth`) se la queda, se la da a un
+ * tercero (`targetId`, que no es él) o la deja sin asignar (`targetId` null).
+ * Nunca si lo hizo él mismo, ni al quitarle el acceso (`releaseAssignments`
+ * no pasa por aquí). En la campanita y por push.
+ */
+const notifyLost = async (auth, conversationId, previousId, { targetId, targetName }) => {
+    if (previousId == null || String(previousId) === auth.userId) return;
+    if (targetId != null && String(targetId) === String(previousId)) return;
+    const me = new mongoose.Types.ObjectId(auth.userId);
+    await notifyMembers({
+        accountId: auth.accountId, recipientIds: [String(previousId)], type: 'lost', actorId: me, conversationId, targetId,
+    });
+    void notifyAssignment({
+        accountId: auth.accountId, conversationId, recipientId: previousId, actorId: auth.userId, actorName: auth.name, kind: 'lost',
+        targetId, targetName,
+    });
 };
 
 /** Quiénes pueden atender una conversación: los activos de la cuenta con su línea, en orden de alta. */
@@ -386,6 +409,12 @@ const notifyRequest = async (auth, conversation, request) => {
             return;
         }
         await emitNotificationsCreated(auth.accountId, docs);
+        for (const doc of docs) {
+            void notifyAssignment({
+                accountId: auth.accountId, conversationId: conversation._id, recipientId: doc.recipientId,
+                actorName: auth.name, kind: 'requested', requestId: request.id,
+            });
+        }
     } catch (error) {
         console.error('No se pudieron crear los avisos de una solicitud:', { error: error.message });
     }
@@ -435,6 +464,9 @@ export const answerTransfer = async (auth, conversationId, requestId, accept) =>
         await notifyMembers({
             accountId: auth.accountId, recipientIds: [String(requester)], type: 'rejected', actorId: me, conversationId: conversation._id,
         });
+        void notifyAssignment({
+            accountId: auth.accountId, conversationId: conversation._id, recipientId: requester, actorName: auth.name, kind: 'rejected',
+        });
         await resolved('rejected');
         return null;
     }
@@ -469,6 +501,8 @@ export const answerTransfer = async (auth, conversationId, requestId, accept) =>
     void notifyAssignment({
         accountId: auth.accountId, conversationId: conversation._id, recipientId: requester, actorName: auth.name, kind: 'passed',
     });
+    // Si la pasó quien supervisa, quien la atendía la perdió.
+    await notifyLost(auth, conversation._id, previous.assignedTo, { targetId: requester, targetName: member.name ?? null });
     await resolved('passed');
     return serializedConversation(conversation._id);
 };
