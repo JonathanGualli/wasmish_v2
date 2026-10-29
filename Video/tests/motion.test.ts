@@ -40,3 +40,12 @@ test('valueAt va de una llave a la siguiente en 30 cuadros, desde donde estaba',
   assert.ok(atEarlyKey > 0 && atEarlyKey < 420)
   assert.equal(valueAt(55, early), 110)
 })
+
+// Revisión de Codex (PR «Video 1»): con las llaves desordenadas, valueAt se
+// quedaba en la primera; sin llaves, fallaba con un TypeError sin explicación.
+test('valueAt ordena las llaves y pide al menos una', () => {
+  const unordered = [{ at: 0, value: 1 }, { at: 120, value: 3 }, { at: 60, value: 2 }]
+  assert.equal(valueAt(90, unordered), 2)
+  assert.throws(() => valueAt(10, []), /al menos una llave/)
+  assert.throws(() => cameraAt(10, []), /al menos una llave/)
+})

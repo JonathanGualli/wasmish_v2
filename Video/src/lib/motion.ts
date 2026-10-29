@@ -19,13 +19,19 @@ export function progress(frame: number, start: number, duration: number): number
 
 // Un valor que va de llave en llave: cada una se alcanza en `duration` cuadros
 // con EASE, desde donde estaba el valor al llegarle (aunque la anterior no
-// hubiera terminado). Antes de la primera llave, la primera.
+// hubiera terminado). Antes de la primera llave, la primera. Las llaves se
+// ordenan por `at`; sin ninguna no hay valor que dar.
 export type ValueKey = { at: number; value: number }
 
 export function valueAt(frame: number, keys: ValueKey[], duration = CAMERA_FRAMES): number {
+  if (keys.length === 0) throw new Error('valueAt necesita al menos una llave.')
+  return reach(frame, [...keys].sort((a, b) => a.at - b.at), duration)
+}
+
+function reach(frame: number, keys: ValueKey[], duration: number): number {
   let value = keys[0].value
   for (let i = 1; i < keys.length && frame >= keys[i].at; i++) {
-    const from = valueAt(keys[i].at, keys.slice(0, i), duration)
+    const from = reach(keys[i].at, keys.slice(0, i), duration)
     value = from + (keys[i].value - from) * progress(frame, keys[i].at, duration)
   }
   return value

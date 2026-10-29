@@ -48,7 +48,10 @@ export function Recap({ story }: { story: Story }) {
     { at: at('zoomName'), scale: 1.45, x: 820, y: 520 },
     { at: at('toPdf'), scale: 1.45, x: 700, y: 660 },
     { at: at('noteUp'), ...CENTER },
-    { at: at('zoomNote'), scale: 1.28, x: 480, y: 700 },
+    // El storyboard pedía ×1,28, pero recortaba el principio de cada renglón de
+    // la nota (revisión de Codex): con el chat entero escalado, el texto cabe
+    // hasta ×1,1.
+    { at: at('zoomNote'), scale: 1.1, x: 480, y: 700 },
     { at: at('backToToday'), ...CENTER },
   ])
 
