@@ -3,8 +3,10 @@ import mongoose from 'mongoose';
 // Los avisos de la campanita (avisos de la asignación, spec § 3.2): lo que le
 // toca a cada persona la espera hasta que lo ve. Una fila por destinatario.
 // Caducan a los 30 días (decisión del 2026-10-28); lo que pasó de verdad queda
-// en la historia de la conversación (`ConversationEvent`).
-export const NOTIFICATION_TYPES = ['assigned', 'passed', 'rejected', 'requested'];
+// en la historia de la conversación (`ConversationEvent`). `lost`: otra persona
+// le quitó una conversación que atendía (la tomó, se la pasó a un tercero o la
+// dejó sin asignar; decisión del 2026-10-29).
+export const NOTIFICATION_TYPES = ['assigned', 'passed', 'rejected', 'requested', 'lost'];
 export const NOTIFICATION_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 const notificationSchema = new mongoose.Schema({
@@ -14,6 +16,9 @@ const notificationSchema = new mongoose.Schema({
     type: { type: String, enum: NOTIFICATION_TYPES, required: true },
     actorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     conversationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Conversation', required: true },
+    // Solo en `lost`: quién la tiene ahora (quien la movió, si se la quedó;
+    // `null`, si la dejó sin asignar).
+    targetId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     // Solo en `requested`: la solicitud (`transferRequest.id`). Si sigue
     // pendiente se calcula al servirlo, mirando la conversación.
     requestId: { type: mongoose.Schema.Types.ObjectId, default: null },

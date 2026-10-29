@@ -40,9 +40,14 @@ export const PrivateLayout = ({ children }: { children: ReactNode }) => {
 
   // Tocar el aviso de un mensaje con Wasmish ya abierta: el service worker
   // enfoca esta ventana y pide abrir la conversación, sin recargar (public/sw.js).
+  // Un aviso sin conversación pide la bandeja (`open-chats`).
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
     const onMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'open-chats') {
+        navigate(ChatsPath);
+        return;
+      }
       if (event.data?.type !== 'open-conversation' || typeof event.data.conversationId !== 'string') return;
       const state: ChatsNavigationState = { conversationId: event.data.conversationId };
       navigate(ChatsPath, { state });
