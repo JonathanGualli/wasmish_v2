@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { checkSubtitles, subtitleAt } from '../src/lib/subtitles.ts'
+import { checkSubtitles, splitHighlight, subtitleAt } from '../src/lib/subtitles.ts'
 
 const scenes = [{ id: 'hook', from: 0, to: 6 }, { id: 'recap', from: 6, to: 25 }]
 const a = { text: 'Un interesado vuelve a escribir.', from: 0.5, to: 3 }
@@ -26,4 +26,10 @@ test('checkSubtitles encuentra lo que se vería mal', () => {
   assert.equal(checkSubtitles([{ text: 'Sin empezar de nuevo', highlight: 'cero', from: 7, to: 8 }], scenes).length, 1)
   // Más de 60 caracteres: no cabe en dos líneas a 48 px.
   assert.equal(checkSubtitles([{ text: 'x'.repeat(61), from: 7, to: 8 }], scenes).length, 1)
+})
+
+test('splitHighlight parte el texto alrededor de la frase clave', () => {
+  assert.deepEqual(splitHighlight('Sin empezar de cero.', 'de cero'), ['Sin empezar ', 'de cero', '.'])
+  assert.deepEqual(splitHighlight('Sin empezar de cero.'), ['Sin empezar de cero.', '', ''])
+  assert.deepEqual(splitHighlight('Sin empezar de cero.', 'nada'), ['Sin empezar de cero.', '', ''])
 })

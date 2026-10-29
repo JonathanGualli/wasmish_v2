@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { cameraAt, progress } from '../src/lib/motion.ts'
+import { cameraAt, progress, valueAt } from '../src/lib/motion.ts'
 
 test('progress va de 0 a 1 en su tramo y se queda ahí', () => {
   assert.equal(progress(5, 10, 15), 0)
@@ -27,4 +27,16 @@ test('cameraAt llega a cada llave en 30 cuadros', () => {
 
 test('cameraAt no acerca más de ×1,5', () => {
   assert.equal(cameraAt(200, keys).scale, 1.5)
+})
+
+test('valueAt va de una llave a la siguiente en 30 cuadros, desde donde estaba', () => {
+  const scroll = [{ at: 0, value: 420 }, { at: 10, value: 0 }, { at: 60, value: 110 }]
+  assert.equal(valueAt(5, scroll), 420)
+  assert.equal(valueAt(40, scroll), 0)
+  assert.equal(valueAt(90, scroll), 110)
+  // Una llave que llega antes de que termine la anterior arranca desde el punto intermedio.
+  const early = [{ at: 0, value: 420 }, { at: 10, value: 0 }, { at: 25, value: 110 }]
+  const atEarlyKey = valueAt(25, early)
+  assert.ok(atEarlyKey > 0 && atEarlyKey < 420)
+  assert.equal(valueAt(55, early), 110)
 })

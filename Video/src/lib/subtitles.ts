@@ -6,6 +6,14 @@ export const SUBTITLE_MAX_CHARS = 60
 
 export type Subtitle = { text: string; highlight?: string; from: number; to: number }
 
+// El texto en tres partes para pintar la frase clave aparte. Sin frase clave,
+// o si no está en el texto, todo va en la primera.
+export function splitHighlight(text: string, highlight?: string): [string, string, string] {
+  const at = highlight ? text.indexOf(highlight) : -1
+  if (!highlight || at < 0) return [text, '', '']
+  return [text.slice(0, at), highlight, text.slice(at + highlight.length)]
+}
+
 export function subtitleAt(subtitles: Subtitle[], seconds: number): Subtitle | null {
   return subtitles.find((sub) => seconds >= sub.from && seconds < sub.to) ?? null
 }

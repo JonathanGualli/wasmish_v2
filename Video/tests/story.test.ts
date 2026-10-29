@@ -4,6 +4,7 @@ import { capacitacion as story } from '../src/story/capacitacion.ts'
 import { checkScenes, totalFrames } from '../src/lib/timeline.ts'
 import { checkSubtitles } from '../src/lib/subtitles.ts'
 import type { VideoChatItem } from '../src/story/types.ts'
+import { sceneCues } from '../src/story/cues.ts'
 
 const textOf = (item: VideoChatItem) => ('text' in item ? item.text : '')
 const timeOf = (item: VideoChatItem) => ('time' in item ? item.time : '')
@@ -64,4 +65,16 @@ test('ningún texto habla de IA ni de precios', () => {
   assert.doesNotMatch(all, /\bIA\b/)
   assert.doesNotMatch(all, /chatbot/i)
   assert.doesNotMatch(all, /USD|\$/)
+})
+
+test('sceneCues da los cues de una escena en sus cuadros, y falla con un nombre que no existe', () => {
+  const at = sceneCues(story, 'recap')
+  assert.equal(at('question'), 24)
+  assert.throws(() => at('nada'), /recap\.nada/)
+})
+
+test('las frases que se marcan están en sus textos', () => {
+  const back = story.kevin.thread.find((item) => item.id === 'back')
+  assert.ok(back && textOf(back).includes(story.kevin.hookMark))
+  assert.ok(story.kevin.note.text.includes(story.kevin.note.highlight))
 })

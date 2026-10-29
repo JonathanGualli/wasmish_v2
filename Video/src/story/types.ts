@@ -24,7 +24,11 @@ export type Story = {
   kevin: {
     contact: ExampleContact
     thread: VideoChatItem[]
-    note: { text: string; author: string; date: string }
+    // La parte del mensaje de hoy que se marca en el gancho.
+    hookMark: string
+    // Quien lo atendió la primera vez, y a quien se le asigna.
+    agent: string
+    note: { text: string; highlight: string; author: string; date: string }
   }
   notification: { title: string; body: string; time: string; date: string }
   afterHours: { contact: ExampleContact; thread: VideoChatItem[] }

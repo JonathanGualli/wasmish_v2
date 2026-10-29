@@ -17,22 +17,25 @@ export function progress(frame: number, start: number, duration: number): number
   })
 }
 
-// `at`, en cuadros; `x` e `y`, el punto del lienzo que queda al centro.
-export type CameraKey = { at: number; scale: number; x: number; y: number }
-type CameraState = Omit<CameraKey, 'at'>
+// Un valor que va de llave en llave: cada una se alcanza en `duration` cuadros
+// con EASE, desde donde estaba el valor al llegarle (aunque la anterior no
+// hubiera terminado). Antes de la primera llave, la primera.
+export type ValueKey = { at: number; value: number }
 
-const lerp = (a: number, b: number, t: number) => a + (b - a) * t
-const clampZoom = ({ scale, x, y }: CameraState): CameraState => ({ scale: Math.min(scale, MAX_ZOOM), x, y })
-
-// Desde donde estaba la cámara al llegar la llave (aunque la anterior no hubiera
-// terminado), hasta la llave, en CAMERA_FRAMES.
-export function cameraAt(frame: number, keys: CameraKey[]): CameraState {
-  let state = clampZoom(keys[0])
+export function valueAt(frame: number, keys: ValueKey[], duration = CAMERA_FRAMES): number {
+  let value = keys[0].value
   for (let i = 1; i < keys.length && frame >= keys[i].at; i++) {
-    const from = cameraAt(keys[i].at, keys.slice(0, i))
-    const to = clampZoom(keys[i])
-    const t = progress(frame, keys[i].at, CAMERA_FRAMES)
-    state = { scale: lerp(from.scale, to.scale, t), x: lerp(from.x, to.x, t), y: lerp(from.y, to.y, t) }
+    const from = valueAt(keys[i].at, keys.slice(0, i), duration)
+    value = from + (keys[i].value - from) * progress(frame, keys[i].at, duration)
   }
-  return state
+  return value
+}
+
+// La cámara de un chat: `scale` y el punto de origen del acercamiento (`x`,
+// `y`, en píxeles del chat), como `transform-origin` en el storyboard.
+export type CameraKey = { at: number; scale: number; x: number; y: number }
+
+export function cameraAt(frame: number, keys: CameraKey[]): { scale: number; x: number; y: number } {
+  const channel = (pick: (key: CameraKey) => number) => valueAt(frame, keys.map((key) => ({ at: key.at, value: pick(key) })))
+  return { scale: Math.min(channel((key) => key.scale), MAX_ZOOM), x: channel((key) => key.x), y: channel((key) => key.y) }
 }
