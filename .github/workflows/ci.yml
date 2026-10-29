@@ -77,6 +77,29 @@ jobs:
       # Funciones puras y el HTML generado (head, sitemap, huecos)
       - run: npm test
 
+  video:
+    name: Video · lint, tipos y tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Video
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            Video/package-lock.json
+            Site/package-lock.json
+      # Los componentes que el video importa de Site/ se tipan con sus dependencias
+      - run: npm ci
+        working-directory: Site
+      - run: npm ci
+      - run: npm run lint
+      # Tiempos, subtítulos, movimiento y los datos de la historia. No renderiza.
+      - run: npm test
+
   docs:
     name: Docs · enlaces y mapa
     runs-on: ubuntu-latest
