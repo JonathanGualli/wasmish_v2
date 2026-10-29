@@ -7,7 +7,8 @@ import type { ChatItem, ExampleContact } from '../../content/types.ts'
 
 const enter = 'motion-safe:animate-[wm-in_0.45s_cubic-bezier(0.2,0.7,0.2,1)_both]'
 
-export function ChatHeader({ contact, pressed = false }: { contact: ExampleContact; pressed?: boolean }) {
+// `action`: lo que va a la derecha en lugar del botón «Ficha» (el video pone «Asignar»).
+export function ChatHeader({ contact, pressed = false, action }: { contact: ExampleContact; pressed?: boolean; action?: ReactNode }) {
   return (
     <div className="flex flex-none items-center gap-[11px] border-b border-brand-border px-3.5 py-3">
       <div className="flex h-9 w-9 flex-none items-center justify-center rounded-[9px] bg-brand-accent-soft text-xs font-bold text-brand-accent-strong">
@@ -17,10 +18,12 @@ export function ChatHeader({ contact, pressed = false }: { contact: ExampleConta
         <div className="text-[14.5px] font-semibold">{contact.name}</div>
         <div className="font-mono text-[11px] text-brand-muted">{contact.phone}</div>
       </div>
-      <div className={`ml-auto flex h-8 items-center gap-1.5 rounded-lg border px-[11px] text-[12.5px] font-semibold transition-colors duration-200 ${
-        pressed ? 'border-brand-accent-strong bg-site-pressed text-brand-accent-strong' : 'border-brand-border bg-white text-brand-strong'}`}>
-        <PanelRight size={14} aria-hidden />Ficha
-      </div>
+      {action ? <div className="ml-auto">{action}</div> : (
+        <div className={`ml-auto flex h-8 items-center gap-1.5 rounded-lg border px-[11px] text-[12.5px] font-semibold transition-colors duration-200 ${
+          pressed ? 'border-brand-accent-strong bg-site-pressed text-brand-accent-strong' : 'border-brand-border bg-white text-brand-strong'}`}>
+          <PanelRight size={14} aria-hidden />Ficha
+        </div>
+      )}
     </div>
   )
 }
