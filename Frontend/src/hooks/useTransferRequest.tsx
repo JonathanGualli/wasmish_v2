@@ -1,13 +1,10 @@
 import { useCallback, useEffect, useSyncExternalStore } from "react";
-import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuthContext } from "../context/auth.context";
 import { useSSE } from "../context/sse.context";
 import { useNotice } from "../components/Notice/context/useNotice";
 import { requestTransferService } from "../services/api.service";
-import type { ChatsNavigationState, ConversationPerson } from "../models/conversation.mode";
-import { ChatsPath } from "../models/routes.models";
-import { firstName } from "../utils/assignment";
+import type { ConversationPerson } from "../models/conversation.mode";
 import { assignmentError } from "./useConversationAssignment";
 
 /** Cómo va la solicitud de quien mira para que le pasen una conversación ajena (Fase 4). */
@@ -61,6 +58,14 @@ const subscribeStates = (listener: () => void) => {
 };
 
 /**
+ * Ya la abrió desde un aviso (el de arriba o la campanita): la ficha deja de
+ * decir «te pasó la conversación» o «no te la pasó» (revisión de Codex del plan
+ * de los avisos, 13).
+ */
+export const resetTransferState = (userId: string, conversationId: string) =>
+    writeState(stateKey(userId, conversationId), IDLE);
+
+/**
  * Pedir que le pasen una conversación que atiende un compañero, desde la ficha,
  * «Conversación nueva» o el chat que ganó otro (diseño, 3a a 3c). Si mientras
  * tanto se quedó sin nadie, o ya es suya, la bandeja y la ficha vuelven a leer.
@@ -107,30 +112,20 @@ export const useTransferRequest = (conversationId: string) => {
 };
 
 /**
- * La respuesta a una solicitud, esté donde esté en Wasmish (diseño, 3d): el
- * aviso global, con «Abrir» si se la pasaron, y el estado de la solicitud para
- * la ficha o el chat que la enseñen. Se monta una vez, en el layout privado.
+ * La respuesta a una solicitud, esté donde esté en Wasmish (diseño de la Fase 4,
+ * 3d): el estado de la solicitud para la ficha o el chat que la enseñen. Se
+ * monta una vez, en el layout privado. El aviso de arriba ya no lo abre esto:
+ * la respuesta llega también como aviso de la campanita (`useNotificationToasts`).
  */
 export const useTransferAnswers = () => {
     const queryClient = useQueryClient();
     const { user } = useAuthContext();
     const userId = user?.id ?? '';
     const { subscribe } = useSSE();
-    const { notify } = useNotice();
-    const navigate = useNavigate();
 
     useEffect(() => subscribe("transfer_answered", (payload) => {
-        const key = stateKey(userId, payload.id);
-        writeState(key, { status: payload.accepted ? 'accepted' : 'rejected', answeredBy: payload.answeredBy });
+        writeState(stateKey(userId, payload.id), { status: payload.accepted ? 'accepted' : 'rejected', answeredBy: payload.answeredBy });
         // La ficha (también la que usa «Conversación nueva») deja de verla ajena.
         if (payload.accepted) void queryClient.invalidateQueries({ queryKey: ['contacts'] });
-        const who = firstName(payload.answeredBy);
-        const open = () => {
-            writeState(key, IDLE);
-            navigate(ChatsPath, { state: { conversationId: payload.id } satisfies ChatsNavigationState });
-        };
-        notify(payload.accepted
-            ? { kind: 'new', text: `${who} te pasó la conversación con ${payload.contactName}.`, action: { label: 'Abrir', onClick: open } }
-            : { kind: 'info', text: `${who} no te pasó la conversación con ${payload.contactName}.` });
-    }), [subscribe, queryClient, userId, notify, navigate]);
+    }), [subscribe, queryClient, userId]);
 };
