@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { checkSubtitles, splitHighlight, subtitleAt, timeSubtitles } from '../src/lib/subtitles.ts'
+import { activeWord, checkSubtitles, splitHighlight, splitPunctuation, subtitleAt, timeSubtitles } from '../src/lib/subtitles.ts'
 import { scenes as voiceScenes, voice, word } from './fixtures.ts'
 
 const scenes = [{ id: 'hook', from: 0, to: 6 }, { id: 'recap', from: 6, to: 25 }]
@@ -53,4 +53,30 @@ test('timeSubtitles: una frase seguida de palabras sin subtítulo termina 0,3 s 
 
 test('timeSubtitles falla nombrando la frase que no está en la voz', () => {
   assert.throws(() => timeSubtitles([{ scene: 'x', text: 'y a Kevin le llega el aviso' }], voiceScenes, voice), /a Kevin le llega/)
+})
+
+test('timeSubtitles guarda cada palabra con el momento en que suena', () => {
+  const [sub] = timeSubtitles([{ scene: 'x', text: 'Si debe seguir Gabriela,' }], voiceScenes, voice)
+  assert.deepEqual(sub.words, [
+    { text: 'Si', from: 10 + word('Si').start },
+    { text: 'debe', from: 10 + word('debe').start },
+    { text: 'seguir', from: 10 + word('seguir').start },
+    { text: 'Gabriela,', from: 10 + word('Gabriela').start },
+  ])
+})
+
+test('activeWord: la palabra que suena sigue marcada hasta que empieza la siguiente', () => {
+  const sub = { text: 'a b c', from: 1, to: 4, words: [{ text: 'a', from: 1.2 }, { text: 'b', from: 2 }, { text: 'c', from: 3 }] }
+  assert.equal(activeWord(sub, 1.1), -1)
+  assert.equal(activeWord(sub, 1.2), 0)
+  assert.equal(activeWord(sub, 2.5), 1)
+  assert.equal(activeWord(sub, 3.9), 2)
+  assert.equal(activeWord({ text: 'sin voz', from: 0, to: 1 }, 0.5), -1)
+})
+
+test('splitPunctuation separa los signos de la palabra para no pintarlos', () => {
+  assert.deepEqual(splitPunctuation('«quizá'), ['«', 'quizá', ''])
+  assert.deepEqual(splitPunctuation('más».'), ['', 'más', '».'])
+  assert.deepEqual(splitPunctuation('¿Su'), ['¿', 'Su', ''])
+  assert.deepEqual(splitPunctuation('Gabriela,'), ['', 'Gabriela', ','])
 })

@@ -5,7 +5,10 @@ import { normalizeWord, type VoiceScene } from './voice.ts'
 
 export const SUBTITLE_MAX_CHARS = 60
 
-export type Subtitle = { text: string; highlight?: string; from: number; to: number }
+// `words`: cada palabra del texto con el segundo en que la dice la voz, para
+// marcarlas una a una. Sin voz no hay palabras y se marca la frase clave.
+export type SubtitleWord = { text: string; from: number }
+export type Subtitle = { text: string; highlight?: string; from: number; to: number; words?: SubtitleWord[] }
 
 // El texto en tres partes para pintar la frase clave aparte. Sin frase clave,
 // o si no está en el texto, todo va en la primera.
@@ -13,6 +16,22 @@ export function splitHighlight(text: string, highlight?: string): [string, strin
   const at = highlight ? text.indexOf(highlight) : -1
   if (!highlight || at < 0) return [text, '', '']
   return [text.slice(0, at), highlight, text.slice(at + highlight.length)]
+}
+
+// La palabra que suena: la última que ya empezó (se queda marcada hasta que
+// empieza la siguiente), o -1 si todavía no empieza ninguna o no hay palabras.
+export function activeWord(subtitle: Subtitle, seconds: number): number {
+  const words = subtitle.words ?? []
+  let index = -1
+  while (index + 1 < words.length && words[index + 1].from <= seconds) index++
+  return index
+}
+
+// Los signos pegados a una palabra («quizá, más»., ¿Su) van aparte, para
+// marcar solo la palabra.
+export function splitPunctuation(token: string): [string, string, string] {
+  const match = token.match(/^([^\p{L}\p{N}]*)(.*?)([^\p{L}\p{N}]*)$/u)
+  return match ? [match[1], match[2], match[3]] : ['', token, '']
 }
 
 export function subtitleAt(subtitles: Subtitle[], seconds: number): Subtitle | null {
@@ -59,7 +78,8 @@ export function timeSubtitles(phrases: SubtitlePhrase[], scenes: Scene[], voice:
     const scene = scenes.find((s) => s.id === phrase.scene)
     const words = voice[phrase.scene]?.words
     if (!scene || !words) throw new Error(`La frase «${phrase.text}» nombra una escena sin voz: «${phrase.scene}».`)
-    const tokens = phrase.text.split(/\s+/).map(normalizeWord).filter(Boolean)
+    const pieces = phrase.text.split(/\s+/).filter((piece) => normalizeWord(piece) !== '')
+    const tokens = pieces.map(normalizeWord)
     const spoken = words.map((w) => normalizeWord(w.text))
     let first = -1
     for (let i = cursor[scene.id] ?? 0; i + tokens.length <= spoken.length && first < 0; i++) {
@@ -68,13 +88,19 @@ export function timeSubtitles(phrases: SubtitlePhrase[], scenes: Scene[], voice:
     if (first < 0) throw new Error(`La frase «${phrase.text}» no está en la voz de la escena «${scene.id}».`)
     const last = first + tokens.length - 1
     cursor[scene.id] = last + 1
-    return { phrase, scene, first, last, words }
+    return { phrase, scene, first, last, words, pieces }
   })
-  return placed.map(({ phrase, scene, first, last, words }, i) => {
+  return placed.map(({ phrase, scene, first, last, words, pieces }, i) => {
     const next = placed[i + 1]
     const to = next && next.scene.id === scene.id && next.first === last + 1
       ? scene.from + words[next.first].start
       : Math.min(scene.to, scene.from + words[last].end + SUBTITLE_TAIL)
-    return { text: phrase.text, ...(phrase.highlight ? { highlight: phrase.highlight } : {}), from: cents(scene.from + words[first].start), to: cents(to) }
+    return {
+      text: phrase.text,
+      ...(phrase.highlight ? { highlight: phrase.highlight } : {}),
+      from: cents(scene.from + words[first].start),
+      to: cents(to),
+      words: pieces.map((piece, k) => ({ text: piece, from: cents(scene.from + words[first + k].start) })),
+    }
   })
 }
