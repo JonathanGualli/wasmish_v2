@@ -217,7 +217,7 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
     2. `maxLines: 2` en una cuenta de prueba desde el panel.
   - La **Fase 3** (equipo, roles y acceso por línea) está en producción desde la 1.0.18. **Encender equipos en una cuenta real** (subir su `maxUsers`) ya no espera ningún ensayo: Jonathan probó el equipo y no hace falta ensayar la vuelta atrás (ver `decisiones.md`, 2026-10-19). Lo que queda en pie: una imagen anterior a la Fase 3 (`:1.0.16` o antes) no conoce los permisos, así que con una cuenta de varios usuarios no se vuelve a ella.
   - La **Fase 4** (asignar conversaciones y transferirlas) está en producción desde la 1.0.33 y probada; sus avisos, en producción desde la 1.0.34, y sus mejoras, desde la 1.0.35 (ver «En curso»).
-- **Respuestas automáticas:** quitar la forma vieja de `POST /api/auto-replies/preview` (`{ settings, text }`), que solo seguía para las pestañas abiertas durante el despliegue de la 1.0.23. Y más adelante, las mejoras del spec, § 2: «un mensaje por regla», fotos en las respuestas, agrupar ráfagas, reglas por línea, feriados; y luego menús con botones o IA.
+- **Respuestas automáticas:** más adelante, las mejoras del spec, § 2: «un mensaje por regla», fotos en las respuestas, agrupar ráfagas, reglas por línea, feriados; y luego menús con botones o IA.
 - El campo de archivo de cabecera al enviar una plantilla a **un solo contacto** (`SendTemplateDialog` y `NewConversationPanel`); hoy solo existe en las campañas.
 - En la API pública: el campo `header`, la cabecera de texto con variable y las plantillas de carrusel. Toca al cliente de la API: con cuidado.
 - Más adelante: programar campañas para una hora.
