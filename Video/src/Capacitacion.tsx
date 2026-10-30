@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react'
-import { Sequence } from 'remotion'
+import { Audio, getStaticFiles, Sequence, staticFile } from 'remotion'
 import { sceneFrames } from './lib/timeline.ts'
 import { AfterHours } from './scenes/AfterHours.tsx'
 import { Assign } from './scenes/Assign.tsx'
@@ -7,7 +7,7 @@ import { Broadcast } from './scenes/Broadcast.tsx'
 import { Closing } from './scenes/Closing.tsx'
 import { Hook } from './scenes/Hook.tsx'
 import { Recap } from './scenes/Recap.tsx'
-import type { SceneId, Story } from './story/types.ts'
+import { voiceFile, type SceneId, type Story } from './story/types.ts'
 
 type SceneProps = { story: Story }
 
@@ -20,15 +20,20 @@ const SCENES: Record<SceneId, ComponentType<SceneProps>> = {
   closing: Closing,
 }
 
-// El video entero: cada escena en su <Sequence>, una tras otra.
+// El video entero: cada escena en su <Sequence>, una tras otra, con su voz.
+// La voz no está en el repo (la copia `npm run voice:import`): sin ella, en el
+// CI o en un clon nuevo, el video sale mudo en vez de fallar.
 export function Capacitacion({ story }: SceneProps) {
+  const files = new Set(getStaticFiles().map((file) => file.name))
   return (
     <>
       {sceneFrames(story.scenes).map(({ id, from, durationInFrames }) => {
-        const Scene = SCENES[id as SceneId]
+        const sceneId = id as SceneId
+        const Scene = SCENES[sceneId]
         return (
           <Sequence key={id} from={from} durationInFrames={durationInFrames} name={id}>
             <Scene story={story} />
+            {files.has(voiceFile(sceneId)) && <Audio src={staticFile(voiceFile(sceneId))} />}
           </Sequence>
         )
       })}
