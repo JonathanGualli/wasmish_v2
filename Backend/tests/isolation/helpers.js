@@ -47,6 +47,13 @@ const { encrypt } = await import('../../src/utils/crypto.js');
 const { whatsappApi } = await import('../../src/libs/whatsapp.js');
 const { applyConnection } = await import('../../src/services/line.service.js');
 
+// Los índices, antes del primer test. Mongoose los crea en segundo plano al
+// registrar cada modelo, y un test que depende de uno (el único de un acuse,
+// el TTL, el del eco duplicado) podía correr antes de que existiera: fallaba
+// a veces en una máquina cargada (con todos los archivos a la vez), nunca en
+// el CI. `init()` espera a que estén.
+await Promise.all(mongoose.modelNames().map((name) => mongoose.model(name).init()));
+
 // Meta falso. Todas las llamadas a Meta pasan por `whatsappApi`, así que
 // cambiarle el transporte basta para que ningún test llegue a la red, ni
 // siquiera si una regresión mueve una comprobación por detrás de la llamada.
