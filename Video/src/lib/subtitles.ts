@@ -1,4 +1,5 @@
 import type { Scene } from './timeline.ts'
+import { normalizeWord, type VoiceScene } from './voice.ts'
 
 // Los subtítulos de la voz: una frase a la vez, con su parte clave en menta.
 
@@ -35,4 +36,45 @@ export function checkSubtitles(subtitles: Subtitle[], scenes: Scene[]): string[]
     if (next && next.from < sub.to) errors.push(`${label} se pisa con el siguiente.`)
   })
   return errors
+}
+
+// Una frase del subtítulo tal como se escribe en la historia: su escena y su
+// texto, sin tiempos. Los pone `timeSubtitles`, buscándola en la voz.
+export type SubtitlePhrase = { scene: string; text: string; highlight?: string }
+
+// Lo que se queda una frase en pantalla después de su última palabra, si no
+// viene otra justo detrás.
+const SUBTITLE_TAIL = 0.3
+
+const cents = (seconds: number) => Math.round(seconds * 100) / 100
+
+// Cada frase empieza en su primera palabra y dura hasta que empieza la
+// siguiente de su escena; si no hay otra justo detrás (es la última, o vienen
+// palabras sin subtítulo, como en el cierre), hasta 0,3 s después de su última
+// palabra, sin salirse de la escena. Las palabras de una frase se buscan
+// seguidas y en orden, después de las de la frase anterior.
+export function timeSubtitles(phrases: SubtitlePhrase[], scenes: Scene[], voice: Record<string, VoiceScene>): Subtitle[] {
+  const cursor: Record<string, number> = {}
+  const placed = phrases.map((phrase) => {
+    const scene = scenes.find((s) => s.id === phrase.scene)
+    const words = voice[phrase.scene]?.words
+    if (!scene || !words) throw new Error(`La frase «${phrase.text}» nombra una escena sin voz: «${phrase.scene}».`)
+    const tokens = phrase.text.split(/\s+/).map(normalizeWord).filter(Boolean)
+    const spoken = words.map((w) => normalizeWord(w.text))
+    let first = -1
+    for (let i = cursor[scene.id] ?? 0; i + tokens.length <= spoken.length && first < 0; i++) {
+      if (tokens.every((token, k) => spoken[i + k] === token)) first = i
+    }
+    if (first < 0) throw new Error(`La frase «${phrase.text}» no está en la voz de la escena «${scene.id}».`)
+    const last = first + tokens.length - 1
+    cursor[scene.id] = last + 1
+    return { phrase, scene, first, last, words }
+  })
+  return placed.map(({ phrase, scene, first, last, words }, i) => {
+    const next = placed[i + 1]
+    const to = next && next.scene.id === scene.id && next.first === last + 1
+      ? scene.from + words[next.first].start
+      : Math.min(scene.to, scene.from + words[last].end + SUBTITLE_TAIL)
+    return { text: phrase.text, ...(phrase.highlight ? { highlight: phrase.highlight } : {}), from: cents(scene.from + words[first].start), to: cents(to) }
+  })
 }
