@@ -1,5 +1,5 @@
 node_modules
 # Los renders y los cuadros sueltos: no se suben.
 /out
-# La voz de Jonathan: la copia `npm run voice:import` desde la memoria privada.
-/public/voz
+# La voz y la música: las copia `npm run voice:import` desde la memoria privada.
+/public

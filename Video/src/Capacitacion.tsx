@@ -1,13 +1,14 @@
 import type { ComponentType } from 'react'
 import { Audio, getStaticFiles, Sequence, staticFile } from 'remotion'
-import { sceneFrames } from './lib/timeline.ts'
+import { musicVolume } from './lib/music.ts'
+import { FPS, sceneFrames, toFrames } from './lib/timeline.ts'
 import { AfterHours } from './scenes/AfterHours.tsx'
 import { Assign } from './scenes/Assign.tsx'
 import { Broadcast } from './scenes/Broadcast.tsx'
 import { Closing } from './scenes/Closing.tsx'
 import { Hook } from './scenes/Hook.tsx'
 import { Recap } from './scenes/Recap.tsx'
-import { voiceFile, type SceneId, type Story } from './story/types.ts'
+import { MUSIC_FILE, voiceFile, type SceneId, type Story } from './story/types.ts'
 
 type SceneProps = { story: Story }
 
@@ -20,9 +21,10 @@ const SCENES: Record<SceneId, ComponentType<SceneProps>> = {
   closing: Closing,
 }
 
-// El video entero: cada escena en su <Sequence>, una tras otra, con su voz.
-// La voz no está en el repo (la copia `npm run voice:import`): sin ella, en el
-// CI o en un clon nuevo, el video sale mudo en vez de fallar.
+// El video entero: cada escena en su <Sequence>, una tras otra, con su voz, y
+// la música de fondo debajo. El audio no está en el repo (lo copia
+// `npm run voice:import`): sin él, en el CI o en un clon nuevo, el video sale
+// mudo en vez de fallar.
 export function Capacitacion({ story }: SceneProps) {
   const files = new Set(getStaticFiles().map((file) => file.name))
   return (
@@ -37,6 +39,11 @@ export function Capacitacion({ story }: SceneProps) {
           </Sequence>
         )
       })}
+      {files.has(MUSIC_FILE) && (
+        <Sequence from={toFrames(story.music.start)} name="música">
+          <Audio src={staticFile(MUSIC_FILE)} volume={(frame) => musicVolume(story.music.start + frame / FPS, story.speech, story.music.start)} />
+        </Sequence>
+      )}
     </>
   )
 }

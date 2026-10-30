@@ -42,7 +42,11 @@ El guion, el brief y el **storyboard de Claude Design** son comerciales y viven 
 
 **Al cambiar la voz** (otra toma, otra voz o una escena regenerada): se deja a −16 LUFS, se alinea con su texto exacto, se corta por escenas si viene en un archivo y se deja en la memoria privada. Después, `npm run voice:import` y `npm test`. Si dijo algo distinto, el test nombra la frase o el cue que no encuentra su palabra: se corrige el texto (la frase de más se agrega, no se corta del audio) o el ancla. Por último, los cuadros de esa escena.
 
-**La música** todavía no está. Se agrega como un `<Audio>` más, a nivel del video.
+**La música** es una pista generada con Eleven Music (decisión de Jonathan, 2026-10-30): «alegre y dinámica, para vender», con ukelele, guitarra, glockenspiel y palmas, a unos 110 BPM, sin voces. Está a −16 LUFS, como la voz, y vive en la misma carpeta privada (`musica.flac`), que `voice:import` copia a `public/`.
+- **Cuándo empieza:** `music` en la historia dice en qué segundo de la pista suena su golpe final (`hit: 59.9`) y en qué cue tiene que caer (`closing.musicHit`, justo al terminar la última palabra). `resolveStory` calcula el inicio (`story.music.start`, hoy 2,6 s) para que coincidan. Así no hay que cortarla ni estirarla: el acorde final se apaga durante los 3 s del logo.
+- **El volumen** lo da `musicVolume` (`lib/music.ts`), segundo a segundo: −20 dB debajo de la voz, −12 dB en las pausas entre escenas y 0 dB después de la última palabra. Cambia en rampa (0,25 s, en dB) junto a cada tramo de voz, y entra con un fundido de 0,5 s. Los tramos de voz (`story.speech`) van de la primera a la última palabra de cada escena: las pausas dentro de una escena no suben la música.
+- **Sin `musica.flac`**, el video sale solo con la voz.
+- **Otra pista:** se mide en qué segundo suena su golpe final (el último pico antes de que el nivel caiga) y se cambia `hit`.
 
 ### Otro nicho
 
@@ -52,7 +56,7 @@ Para imprentas (Gráfica Andina) se escribe otro archivo en `src/story/` con la 
 
 Desde `Video/` (necesita `npm ci` también en `Site/`, por los tipos de lo que importa):
 
-- `npm run voice:import -- <carpeta>`: trae la voz (ver arriba), con la carpeta `comercial/video-voz-elevenlabs/` de la memoria privada. Sin ella, el video sale mudo.
+- `npm run voice:import -- <carpeta>`: trae la voz y la música (ver arriba), con la carpeta `comercial/video-voz-elevenlabs/` de la memoria privada. Sin ella, el video sale mudo.
 - `npm run dev`: Remotion Studio, para ver y recorrer el video.
 - `npm run lint` (`tsc` y eslint) y `npm test` (tiempos, subtítulos, movimiento y los datos de la historia). Es lo que corre el CI, que **no renderiza**.
 - `npx remotion still capacitacion out/<nombre>.png --frame=<n>`: un cuadro suelto, para compararlo con el storyboard.
@@ -60,3 +64,4 @@ Desde `Video/` (necesita `npm ci` también en `Site/`, por los tipos de lo que i
 - `npm run render:whatsapp`: la que se manda, `out/capacitacion-whatsapp.mp4` (720 × 1280; con la voz, unos 4,8 MB). Remotion no puede renderizar a 720 directo: `--scale=0.6667` da una altura de 1280,06 y exige un entero (2/3 no es exacto). Por eso renderiza una maestra casi sin pérdida (`out/capacitacion-hq.mp4`, `--crf=12`) y la reduce con el ffmpeg que trae Remotion (`remotion ffmpeg`, `lanczos`, `crf` 18). El plan esperaba de 8 a 12 MB, pero los fondos lisos se comprimen mucho: con `crf` 18 el texto queda nítido y pesa menos. Si hiciera falta más calidad, se baja el `crf`.
 - **Comprobado** (2026-10-29): el mismo cuadro, renderizado dos veces, da el mismo PNG (cuadros 880, 1200, 1560 y 1990), y a 720 se leen el nombre de quien respondió, el mensaje del bot, la línea del permiso y los subtítulos.
 - **Comprobado con la voz** (2026-10-30): la pista de audio dura lo mismo que el video (65,7 s), cada escena empieza a hablar en su sitio, y sin `public/voz/` el render sale sin pista de audio y sin error.
+- **Comprobado con la música** (2026-10-30): la mezcla queda en −16 LUFS con picos a −3,8 dB; la voz sola ronda los −15 dB y, con la música debajo, los −16 (no la tapa); en las pausas, la música sube a unos −25 dB, y el acorde final suena a −23 dB al terminar la voz y se apaga hasta −49 dB al final del video.

@@ -1,4 +1,5 @@
 import type { ChatItem, ExampleContact, HighlightedText } from '../../../Site/src/content/types.ts'
+import type { Span } from '../lib/music.ts'
 import type { Subtitle, SubtitlePhrase } from '../lib/subtitles.ts'
 import type { Scene } from '../lib/timeline.ts'
 import type { VoiceScene } from '../lib/voice.ts'
@@ -15,6 +16,9 @@ export const SCENE_ORDER: SceneId[] = ['hook', 'recap', 'assign', 'afterHours', 
 // `npm run voice:import`; no está en el repo).
 export const voiceFile = (id: SceneId) => `voz/escena-${SCENE_ORDER.indexOf(id) + 1}.flac`
 
+// La música de fondo, también dentro de public/ y fuera del repo.
+export const MUSIC_FILE = 'musica.flac'
+
 // Los mensajes de la página, más lo que el video necesita: un evento del hilo
 // («Mónica le asignó…», no es un mensaje) y lo enviado desde la app de WhatsApp
 // Business (sale sin el nombre de quién).
@@ -28,6 +32,10 @@ export type Story = {
   // Segundos desde el inicio del video, con nombre `escena.momento`.
   cues: Record<string, number>
   subtitles: Subtitle[]
+  // Cuándo se habla (un tramo por escena, de su primera a su última palabra),
+  // para bajar la música debajo de la voz, y cuándo empieza la música.
+  speech: Span[]
+  music: { start: number }
   headlines: Record<SceneId, HighlightedText>
   kevin: {
     contact: ExampleContact
@@ -56,9 +64,12 @@ export type Story = {
 // más un respiro (`holds` para la que necesite más), los cues se atan a la voz
 // y las frases de los subtítulos se buscan en ella. `resolveStory` la vuelve un
 // `Story`, que es lo que reciben las escenas.
-export type StoryDraft = Omit<Story, 'scenes' | 'cues' | 'subtitles'> & {
+export type StoryDraft = Omit<Story, 'scenes' | 'cues' | 'subtitles' | 'speech' | 'music'> & {
   voice: Record<SceneId, VoiceScene>
   holds: Partial<Record<SceneId, number>>
   cues: Record<string, CueAnchor>
   phrases: SubtitlePhrase[]
+  // El segundo de la pista en que suena su golpe final, y el cue en que debe
+  // caer: la música empieza lo justo para que coincidan.
+  music: { hit: number; cue: string }
 }

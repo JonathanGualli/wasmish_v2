@@ -8,9 +8,20 @@ import { SCENE_ORDER, type Story, type StoryDraft } from './types.ts'
 export const DEFAULT_HOLD = 0.8
 
 // De la historia escrita (anclas y frases) a la que reciben las escenas
-// (segundos): las escenas, los cues y los subtítulos salen de la voz.
+// (segundos): las escenas, los cues y los subtítulos salen de la voz, y la
+// música empieza para que su golpe final caiga en su cue.
 export function resolveStory(draft: StoryDraft): Story {
-  const { voice, holds, cues, phrases, ...story } = draft
+  const { voice, holds, cues: anchors, phrases, music, ...story } = draft
   const scenes = scenesFromVoice(SCENE_ORDER, voice, holds, DEFAULT_HOLD)
-  return { ...story, scenes, cues: resolveCues(cues, scenes, voice), subtitles: timeSubtitles(phrases, scenes, voice) }
+  const cues = resolveCues(anchors, scenes, voice)
+  if (cues[music.cue] === undefined) throw new Error(`La música espera el cue «${music.cue}».`)
+  const speech = scenes.map((scene) => ({ from: scene.from + voice[scene.id].words[0].start, to: scene.from + voice[scene.id].end }))
+  return {
+    ...story,
+    scenes,
+    cues,
+    subtitles: timeSubtitles(phrases, scenes, voice),
+    speech,
+    music: { start: Math.max(0, Math.round((cues[music.cue] - music.hit) * 100) / 100) },
+  }
 }
