@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { cameraAt, progress, valueAt } from '../src/lib/motion.ts'
+import { cameraAt, countUp, dropOffset, DROP_FROM, MAX_BOUNCE, progress, valueAt } from '../src/lib/motion.ts'
 
 test('progress va de 0 a 1 en su tramo y se queda ahí', () => {
   assert.equal(progress(5, 10, 15), 0)
@@ -48,4 +48,19 @@ test('valueAt ordena las llaves y pide al menos una', () => {
   assert.equal(valueAt(90, unordered), 2)
   assert.throws(() => valueAt(10, []), /al menos una llave/)
   assert.throws(() => cameraAt(10, []), /al menos una llave/)
+})
+
+test('dropOffset cae desde arriba, rebota sin pasarse de 20 px y se asienta en su sitio', () => {
+  assert.equal(dropOffset(0, 10, 30), -DROP_FROM)
+  assert.equal(dropOffset(10, 10, 30), -DROP_FROM)
+  const after = Array.from({ length: 60 }, (_, i) => dropOffset(10 + i, 10, 30))
+  assert.ok(Math.max(...after) > 0, 'tiene que rebotar')
+  assert.ok(Math.max(...after) <= MAX_BOUNCE)
+  assert.ok(Math.abs(dropOffset(10 + 30, 10, 30)) < 1, 'en 1 s ya está en su sitio')
+})
+
+test('countUp cuenta en enteros de 0 al total', () => {
+  assert.equal(countUp(0, 10, 12, 48), 0)
+  assert.equal(countUp(22, 10, 12, 48), 48)
+  assert.ok(Number.isInteger(countUp(15, 10, 12, 31)))
 })

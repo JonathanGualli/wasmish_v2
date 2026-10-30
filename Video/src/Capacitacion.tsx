@@ -4,6 +4,8 @@ import { Headline } from './components/Headline.tsx'
 import { Stage } from './components/Stage.tsx'
 import type { Tone } from './components/tones.ts'
 import { sceneFrames } from './lib/timeline.ts'
+import { AfterHours } from './scenes/AfterHours.tsx'
+import { Assign } from './scenes/Assign.tsx'
 import { Hook } from './scenes/Hook.tsx'
 import { Recap } from './scenes/Recap.tsx'
 import type { SceneId, Story } from './story/types.ts'
@@ -19,8 +21,8 @@ const placeholder = (id: SceneId, tone: Tone): ComponentType<SceneProps> =>
 const SCENES: Record<SceneId, ComponentType<SceneProps>> = {
   hook: Hook,
   recap: Recap,
-  assign: placeholder('assign', 'light'),
-  afterHours: placeholder('afterHours', 'night'),
+  assign: Assign,
+  afterHours: AfterHours,
   broadcast: placeholder('broadcast', 'mint'),
   closing: placeholder('closing', 'light'),
 }

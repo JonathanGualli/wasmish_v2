@@ -6,7 +6,9 @@ import { TONES, type Tone } from './tones.ts'
 export type Kicker = { text: string; icon?: 'moon' | 'sun'; shown: number }
 
 // El titular de la escena, con su palabra en la pastilla de wasmish.com.
-// `shown` (0 a 1) lo hace entrar desde abajo; `leaving` (0 a 1), salir hacia arriba.
+// `shown` (0 a 1) lo hace entrar desde abajo; `leaving` (0 a 1), salir hacia
+// arriba con la pastilla de debajo (`kicker`), que entra por su cuenta: puede
+// verse antes que el titular («Otro ejemplo»).
 export function Headline({ text, tone, shown = 1, leaving = 0, kicker }: {
   text: HighlightedText
   tone: Tone
@@ -19,10 +21,10 @@ export function Headline({ text, tone, shown = 1, leaving = 0, kicker }: {
     <div style={{
       position: 'absolute', left: LAYOUT.headline.side, right: LAYOUT.headline.side, top: LAYOUT.headline.top,
       display: 'grid', gap: 24, justifyItems: 'start',
-      opacity: shown * (1 - leaving),
-      transform: `translateY(${(1 - shown) * 30 - leaving * 30}px)`,
+      opacity: 1 - leaving,
+      transform: `translateY(${-leaving * 30}px)`,
     }}>
-      <div style={{ fontSize: 88, lineHeight: 1.04, letterSpacing: '-0.045em', fontWeight: 800, color: colors.headline, textWrap: 'balance' }}>
+      <div style={{ opacity: shown, transform: `translateY(${(1 - shown) * 30}px)`, fontSize: 88, lineHeight: 1.04, letterSpacing: '-0.045em', fontWeight: 800, color: colors.headline, textWrap: 'balance' }}>
         {text.before}
         <Highlight mint={colors.mintPill}>{text.highlight}</Highlight>
         {text.after}

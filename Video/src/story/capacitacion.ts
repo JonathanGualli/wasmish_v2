@@ -6,9 +6,11 @@ import type { Story } from './types.ts'
 // (borrador 2) y los tiempos, los del storyboard de Claude Design, hasta que se
 // grabe la voz. Las cuatro correcciones del storyboard tienen su test.
 
+// Las respuestas de la demostración, resumidas (el guion lo permite): enteras
+// eran diez líneas y no cabían en el chat.
 const bot = {
-  requirements: 'Para inscribirse necesita: copia de cédula, el pago del curso (transferencia o tarjeta) y llenar la ficha que le enviamos por aquí. ¡Es muy fácil! 😊',
-  closed: '¡Hola! Gracias por escribir a Academia Horizonte 📚 Atendemos de lunes a viernes de 8:30 a 18:00 y los sábados de 8:00 a 12:00. Le respondemos apenas abramos.',
+  requirements: 'Para inscribirse necesita: copia de cédula, el pago del curso y llenar la ficha que le enviamos por aquí. 😊',
+  closed: 'Atendemos de lunes a viernes de 8:30 a 18:00. Le respondemos apenas abramos.',
 }
 
 export const capacitacion: Story = {
@@ -40,11 +42,14 @@ export const capacitacion: Story = {
     'recap.backToToday': 20,
     'recap.reply': 20.8,
     'recap.send': 23.8,
+    'assign.headline': 25.2,
     'assign.pill': 25.5,
     'assign.event': 26,
     'assign.lock': 28.5,
     'assign.notification': 29,
+    'afterHours.headline': 32.2,
     'afterHours.clock': 32.4,
+    'afterHours.chat': 32.8,
     'afterHours.question': 33.5,
     'afterHours.bot': 34.3,
     'afterHours.dawn': 39.5,
