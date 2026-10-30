@@ -10,7 +10,7 @@ import {
 } from '../services/assignment.service.js';
 import { freeTextBlockReason } from "../utils/whatsapp.window.js";
 import { processTemplateSending } from "./template.controller.js";
-import { getSendingRecipient, getSendingConversation, conversationLineFilter } from "./contact.controller.js";
+import { getSendingRecipient, conversationLineFilter } from "./contact.controller.js";
 import {
     CAPTION_MAX, buildMediaObject, captionAllowed, outboundMediaIssue, outboundMediaKind, outboundMediaText,
 } from "../utils/outbound.media.js";
@@ -19,9 +19,10 @@ import { cleanFilename } from "../services/template.media.service.js";
 import { MEDIA_DIR } from "../config.js";
 import { findConversationLine, findStartLine } from "../services/line.service.js";
 import { canSeeConversation, conversationScope } from "../utils/permissions.js";
-import { messageOrigin, messageSender } from "../utils/message.origin.js";
-import { serializeMessageChange } from "../utils/message.change.js";
-import { canReactTo, canReplyTo, serializeQuoted, serializeReactions } from "../utils/message.actions.js";
+import { canReactTo } from "../utils/message.actions.js";
+import { serializeMessage } from "../utils/message.serialize.js";
+import { metaSendOutcome } from "../utils/outbound.send.js";
+import { recordOutboundMessage } from "../services/outbound.message.service.js";
 import { findReplyTarget, loadQuotedMessages, quotedMapOf } from "../services/message.reply.service.js";
 import { sendReaction } from "../services/reaction.service.js";
 import { applyHeldStatuses } from "../services/message.status.service.js";
@@ -29,50 +30,6 @@ import { markHumanReply } from "../services/auto.reply.service.js";
 import Campaign from "../models/campaign.model.js";
 import { EVENTS_PER_PAGE, eventBounds, eventCutoff } from "../utils/conversation.events.js";
 import { listPageEvents, serializeEvent } from "../services/assignment.history.service.js";
-
-/**
- * Un mensaje tal como lo ve el frontend: la lista del chat, la respuesta de un
- * envío y su `message_created`. Del archivo solo se dice si lo hay: se pide por
- * /api/media/<id del mensaje>, que comprueba de quién es.
- */
-// `campaignNames` (id → nombre): para decir de qué campaña salió (ver `messageOrigin`).
-// `quoted` (id → mensaje, `loadQuotedMessages`): los citados, para el resumen de la cita.
-export const serializeMessage = (msg, { campaignNames, quoted } = {}) => ({
-    id: String(msg._id),
-    conversationId: String(msg.conversationId),
-    sender: msg.sender,
-    // Los mensajes anteriores al campo no lo tienen: 'text' por defecto.
-    type: msg.type || 'text',
-    text: msg.text,
-    hasMedia: Boolean(msg.mediaFile),
-    caption: msg.caption ?? null,
-    mediaFilename: msg.mediaFilename ?? null,
-    mediaSize: msg.mediaSize ?? null,
-    timestamp: (msg.timestamp || msg.createdAt).toISOString(),
-    status: msg.status || 'sent',
-    deliveredAt: msg.deliveredAt ? msg.deliveredAt.toISOString() : null,
-    readAt: msg.readAt ? msg.readAt.toISOString() : null,
-    failedAt: msg.failedAt ? msg.failedAt.toISOString() : null,
-    errorCode: msg.errorCode,
-    errorDetail: msg.errorDetail,
-    waMessageId: msg.waMessageId || null,
-    // Con él la UI pinta «Plantilla · nombre» y los botones de la plantilla.
-    templateName: msg.templateName ?? null,
-    // Con él la UI optimista reconoce su mensaje cuando vuelve por el SSE.
-    temporalId: msg.temporalId ?? undefined,
-    // Quién lo envió y de dónde salió (Fase 3): con varias personas, el chat lo dice.
-    sentBy: messageSender(msg),
-    origin: messageOrigin(msg, campaignNames),
-    // Borrado o editado (coexistencia): lo mismo que trae `message_updated`.
-    ...serializeMessageChange(msg),
-    // Citas y reacciones (spec 2026-10-20): a qué responde (resumen leído al
-    // servir), si es un reenvío, las reacciones y qué se puede hacer con él.
-    replyTo: serializeQuoted(msg.replyTo, msg.replyTo?.messageId ? quoted?.get(String(msg.replyTo.messageId)) : null),
-    forwarded: msg.forwarded ?? null,
-    reactions: serializeReactions(msg),
-    canReact: canReactTo(msg),
-    canReply: canReplyTo(msg),
-});
 
 // A Meta: un texto o, si hay archivo, el archivo. El archivo se sube primero
 // (el id que devuelve es del número que lo subió) y se envía por ese id.
@@ -136,59 +93,26 @@ export const processMessageSending = async ({
 
     const recipient = await getSendingRecipient(conversation, destinationNumber);
 
-    let waMessageId = null;
-    let status = 'sent';
-    let errorCode = null;
-    let errorDetail = null;
+    const context = replyTarget ? { message_id: replyTarget.waMessageId } : null;
+    const outcome = await metaSendOutcome(() => sendToMeta({ token, phoneNumberId, recipient, text, attachment, context }));
 
-    try {
-        const context = replyTarget ? { message_id: replyTarget.waMessageId } : null;
-        const apiRes = await sendToMeta({ token, phoneNumberId, recipient, text, attachment, context });
-        waMessageId = apiRes?.data?.messages?.[0]?.id || null;
-    } catch (error) {
-        status = 'failed';
-        errorCode = error.waErrorCode ? String(error.waErrorCode) : null;
-        errorDetail = error.waErrorDetail || error.message;
-    }
-
-    // Lo que se ve en la bandeja: el texto, o lo escrito junto al archivo (o su etiqueta).
-    const messageText = attachment ? outboundMediaText(attachment.kind, attachment) : text;
-
-    // Si no hay conversación (mensaje nuevo), la creamos; si existe, la actualizamos
-    const now = new Date();
-    const targetConversation = await getSendingConversation({
-        userId: line.accountId, conversation, recipient, line, contactName, source: 'manual',
+    const { msg, serialized } = await recordOutboundMessage({
+        line, conversation, recipient, contactName, source: 'manual',
+        // Lo que se ve en la bandeja: el texto, o lo escrito junto al archivo (o su etiqueta).
+        text: attachment ? outboundMediaText(attachment.kind, attachment) : text,
+        outcome,
+        fields: {
+            sentBy: sender?.userId ?? null,
+            sentByName: sender?.name ?? null,
+            origin,
+            temporalId,
+            ...(attachment && attachmentFields(attachment)),
+            ...(replyTarget && { replyTo: { waMessageId: replyTarget.waMessageId, messageId: replyTarget._id } }),
+        },
+        quoted: quotedMapOf(replyTarget),
     });
-    targetConversation.lastMessage = messageText;
-    targetConversation.lastMessageAt = now;
-    await targetConversation.save();
 
-    // Creamos el mensaje con su estado REAL (sent o failed)
-    let msg = await Message.create({
-        conversationId: targetConversation._id,
-        direction: 'outbound',
-        sender: 'me',
-        sentBy: sender?.userId ?? null,
-        sentByName: sender?.name ?? null,
-        origin,
-        waMessageId,
-        text: messageText,
-        ...(attachment && attachmentFields(attachment)),
-        ...(replyTarget && { replyTo: { waMessageId: replyTarget.waMessageId, messageId: replyTarget._id } }),
-        timestamp: now,
-        temporalId,
-        status,
-        errorCode,
-        errorDetail,
-        failedAt: status === 'failed' ? now : null,
-    });
-    // Un acuse que se adelantó a este mensaje (`PendingStatus`): antes de avisar.
-    if (await applyHeldStatuses(waMessageId)) msg = await Message.findById(msg._id);
-
-    const serialized = serializeMessage(msg, { quoted: quotedMapOf(replyTarget) });
-    await sendConversationEvent(line.accountId, targetConversation._id, 'message_created', serialized);
-
-    return { msg, serialized, waMessageId, status, errorCode, errorDetail };
+    return { msg, serialized, ...outcome };
 };
 
 // Lo que se le dice al usuario según `freeTextBlockReason`.

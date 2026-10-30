@@ -1,11 +1,9 @@
 import fs from "node:fs";
 import mongoose from "mongoose";
 import Template from "../models/template.model.js";
-import Message from "../models/message.model.js";
 import { decrypt } from "../utils/crypto.js";
 import { getTemplates, sendTemplateMessage } from "../libs/whatsapp.js";
-import { sendConversationEvent } from "../services/assignment.service.js";
-import { getSendingRecipient, getSendingConversation } from "./contact.controller.js";
+import { getSendingRecipient } from "./contact.controller.js";
 import { MARKETING_OPT_OUT_ERROR } from "../utils/marketing.preference.js";
 import TemplateMedia from "../models/template.media.model.js";
 import { buildHeaderComponent, extractTemplateHeader, headerMediaFileIssue, headerMediaRule, templateHeaderIssue } from "../utils/template.header.js";
@@ -15,14 +13,13 @@ import {
 import { MEDIA_DIR } from "../config.js";
 import { mimeParaServir, rutaDeArchivo } from "../utils/media.storage.js";
 import { findAccountWabas, findSendingLine, templateScopeFor } from "../services/line.service.js";
-import { applyHeldStatuses } from "../services/message.status.service.js";
+import { recordOutboundMessage } from "../services/outbound.message.service.js";
 import Line from "../models/line.model.js";
 import Waba from "../models/waba.model.js";
 import { LINE_NOT_FOUND_MESSAGE } from "../utils/whatsapp.line.js";
 import { resolveApiLine } from "../utils/line.js";
 import { inLineScope, lineScope } from "../utils/permissions.js";
-import { messageOrigin, messageSender } from "../utils/message.origin.js";
-import { canReplyTo, serializeReactions } from "../utils/message.actions.js";
+import { metaSendOutcome } from "../utils/outbound.send.js";
 
 
 // ---------------------------------------------------------------------------
@@ -540,88 +537,51 @@ export const processTemplateSending = async ({
     // Lanza 400 si el botón es inválido — antes de gastar la llamada a Meta.
     components.push(...buildButtonComponents(buttons, template?.buttons ?? []));
 
-    // 4. Enviar a Meta (capturamos el fallo para persistirlo como 'failed')
-    let waMessageId = null, status = 'sent', errorCode = null, errorDetail = null;
-    try {
+    // 4. Enviar a Meta (un rechazo no lanza: se guarda como 'failed')
+    const outcome = await metaSendOutcome(async () => {
         // El archivo de la cabecera se sube a Meta la primera vez (y cuando su
-        // id caduca); dentro del try, para que un token caducado quede como
+        // id caduca); dentro del envío, para que un token caducado quede como
         // cualquier rechazo. En modo de prueba no se sube nada.
         if (headerMedia && !dryRun) {
             const mediaId = await ensureMetaMediaId(headerMedia, { token, phoneNumberId });
             components.unshift(buildHeaderComponent(template.header.format, { mediaId, filename: headerMedia.filename }));
         }
-        const apiRes = dryRun
+        return dryRun
             ? fakeTemplateSend({ contact, template })
-            : await sendTemplateMessage({ token, phoneNumberId, recipient, templateName, language: templateLanguage, components });
-        waMessageId = apiRes?.data?.messages?.[0]?.id || null;
-    } catch (error) {
-        status = 'failed';
-        errorCode = error.waErrorCode ? String(error.waErrorCode) : null;
-        errorDetail = error.waErrorDetail || error.message;
-    }
+            : sendTemplateMessage({ token, phoneNumberId, recipient, templateName, language: templateLanguage, components });
+    });
 
     // 5. Texto real que recibe el contacto
     const storedText = renderTemplateBody(template?.bodyText, parameters)
         || `Plantilla: ${templateName}${storedParamsString ? ` | Datos: [${storedParamsString}]` : ''}`;
 
-    // 6. Guardar conversación + mensaje
-    // Un único `now` para los dos: el orden de la bandeja sale de
-    // conversation.lastMessageAt y el cursor de paginación de message.timestamp;
-    // con dos relojes distintos quedan desfasados unos milisegundos.
-    const now = new Date();
-
-    const targetConversation = await getSendingConversation({
-        userId: accountId, conversation, contact, recipient, line, contactName, source,
-    });
-    targetConversation.lastMessage = storedText;
-    targetConversation.lastMessageAt = now;
-    await targetConversation.save();
-
-    let msg = await Message.create({
-        conversationId: targetConversation._id, direction: 'outbound', sender: 'me',
-        sentBy: sender?.userId ?? null, sentByName: sender?.name ?? null,
-        origin: origin ?? (campaignId ? 'campaign' : null),
-        waMessageId, text: storedText, timestamp: now,
-        status, errorCode, errorDetail, failedAt: status === 'failed' ? now : null,
-        templateName,
-        templateParams: parameters.length > 0 ? parameters : undefined,
-        campaignId: campaignId ?? undefined,
-        // El archivo de la cabecera, para que el chat lo enseñe como lo vio
-        // el contacto. Es el mismo archivo de la plantilla, no una copia.
-        ...(headerMedia && {
-            type: template.header.format.toLowerCase(),
-            mediaFile: headerMedia.file,
-            mimeType: headerMedia.mimeType,
-            mediaFilename: headerMedia.filename,
-            mediaSize: headerMedia.size,
-        }),
+    // 6. Guardar conversación + mensaje y avisar por SSE. `campaignId` en el
+    //    evento deja al frontend agrupar los cientos de una campaña.
+    const { msg, conversation: targetConversation } = await recordOutboundMessage({
+        line, conversation, contact, recipient, contactName, source,
+        text: storedText,
+        outcome,
+        fields: {
+            sentBy: sender?.userId ?? null,
+            sentByName: sender?.name ?? null,
+            origin: origin ?? (campaignId ? 'campaign' : null),
+            templateName,
+            templateParams: parameters.length > 0 ? parameters : undefined,
+            campaignId: campaignId ?? undefined,
+            // El archivo de la cabecera, para que el chat lo enseñe como lo vio
+            // el contacto. Es el mismo archivo de la plantilla, no una copia.
+            ...(headerMedia && {
+                type: template.header.format.toLowerCase(),
+                mediaFile: headerMedia.file,
+                mimeType: headerMedia.mimeType,
+                mediaFilename: headerMedia.filename,
+                mediaSize: headerMedia.size,
+            }),
+        },
+        eventExtra: campaignId ? { campaignId: String(campaignId) } : {},
     });
 
-    // Un acuse que se adelantó a este mensaje (`PendingStatus`): antes de avisar.
-    if (await applyHeldStatuses(waMessageId)) msg = await Message.findById(msg._id);
-
-    // 7. SSE en vivo → aparece en la UI de wasmish. `campaignId` deja al
-    //    frontend agrupar los cientos de eventos de una campaña.
-    await sendConversationEvent(accountId, targetConversation._id, 'message_created', {
-        id: String(msg._id), conversationId: String(targetConversation._id), sender: 'me',
-        text: storedText, timestamp: msg.timestamp.toISOString(),
-        status: msg.status, errorCode: msg.errorCode, errorDetail: msg.errorDetail, templateName,
-        type: msg.type, hasMedia: Boolean(msg.mediaFile),
-        mediaFilename: msg.mediaFilename, mediaSize: msg.mediaSize,
-        ...(campaignId && { campaignId: String(campaignId) }),
-        sentBy: messageSender(msg),
-        origin: messageOrigin(msg),
-        // Lo de citas y reacciones, como `serializeMessage`: sin esto, «Responder»
-        // no salía hasta recargar (revisión de Codex del plan de citas y
-        // reacciones, 9). Solo en el SSE: la respuesta de /v1 no cambia.
-        replyTo: null,
-        forwarded: null,
-        reactions: serializeReactions(msg),
-        canReact: false,
-        canReply: canReplyTo(msg),
-    });
-
-    return { msg, conversation: targetConversation, waMessageId, status, errorCode, errorDetail };
+    return { msg, conversation: targetConversation, ...outcome };
 
 };
 

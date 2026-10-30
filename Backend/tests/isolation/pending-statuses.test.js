@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
 import {
-    seedAccount, connectWhatsapp, request, onMeta, postWebhook, Contact, Conversation, Message,
+    seedAccount, connectWhatsapp, request, onMeta, postWebhook, openStream, Contact, Conversation, Message,
 } from './helpers.js';
 
 const { default: PendingStatus } = await import('../../src/models/pending.status.model.js');
@@ -128,6 +128,27 @@ test('si el saliente se guarda mientras se guarda el acuse, el webhook lo aplica
     assert.ok(crossed, 'el test no forzó el cruce');
     assert.equal((await Message.findOne({ waMessageId }).lean()).status, 'read');
     assert.equal(await PendingStatus.countDocuments({ waMessageId }), 0);
+});
+
+// Regresión que vigila: el `message_created` de una plantilla se armaba a mano,
+// sin `deliveredAt` ni `readAt` ni `waMessageId`: con un acuse adelantado, el
+// evento decía «entregado» sin la hora. Ahora es `serializeMessage`, como el del texto.
+test('el message_created de una plantilla con un acuse adelantado trae su hora', async () => {
+    const conversation = await openChat();
+    const waMessageId = nextWamid();
+    metaRacesWith(waMessageId, async () => {
+        assert.equal((await postStatus('14101', waMessageId, 'delivered')).status, 200);
+    });
+    const stream = await openStream(a);
+    try {
+        const res = await request(a, 'POST', `/chats/${conversation._id}/template`, { templateName: a.templateName, language: 'es' });
+        assert.equal(res.status, 200, res.text);
+        assert.ok(await stream.waitFor(`"waMessageId":"${waMessageId}"`, 2000), 'el message_created de la plantilla no trae su waMessageId');
+        assert.ok(await stream.waitFor('"status":"delivered"', 0));
+        assert.ok(await stream.waitFor('"deliveredAt":"', 0), 'el message_created de la plantilla no trae deliveredAt');
+    } finally {
+        await stream.close();
+    }
 });
 
 // Un acuse que nunca encuentra su mensaje (otra herramienta en el número) se

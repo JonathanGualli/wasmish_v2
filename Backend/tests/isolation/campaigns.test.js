@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    seedAccount, request, assertNoLeak, assertHasOwn, connectWhatsapp,
+    seedAccount, request, assertNoLeak, assertHasOwn, connectWhatsapp, openStream,
     Account, Campaign, CampaignRecipient, Conversation, Line, Message, Template,
 } from './helpers.js';
 
@@ -140,6 +140,27 @@ test('el worker envía la campaña de una cuenta cuyo _id no es el del owner', a
     // tiene `lineId` (anterior a las líneas) y sale por la línea del número actual.
     const line = await Line.findOne({ accountId: c.accountId, phoneNumberId: `99${c.seq}` }).lean();
     assert.equal(String((await Conversation.findById(sent.conversationId).lean()).lineId), String(line._id));
+});
+
+// El `message_created` de una campaña es el mensaje de siempre (`serializeMessage`)
+// más `campaignId`, con el que la bandeja y Contactos agrupan los cientos de una
+// campaña. Regresión que vigila: el final del envío se unificó con el del chat
+// (`recordOutboundMessage`), y el `campaignId` del evento va aparte del mensaje.
+test('el message_created de una campaña lleva su campaignId y su origen', async () => {
+    const d = await seedAccount('D', { seq: 11 });
+    await connectWhatsapp(d);
+    const stream = await openStream(d);
+    try {
+        let campaign = await Campaign.findById(d.campaignId).lean();
+        for (let i = 0; i < 5; i++) {
+            if (await processNext(campaign) === 'idle') break;
+            campaign = await Campaign.findById(d.campaignId).lean();
+        }
+        assert.ok(await stream.waitFor(`"campaignId":"${d.campaignId}"`, 2000), 'el message_created de la campaña no trae su campaignId');
+        assert.ok(await stream.waitFor('"origin":{"kind":"campaign"', 0));
+    } finally {
+        await stream.close();
+    }
 });
 
 test('una campaña de una línea desconectada se pausa con whatsapp_disconnected', async () => {

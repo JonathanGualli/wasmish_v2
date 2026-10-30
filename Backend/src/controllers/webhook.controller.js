@@ -26,7 +26,7 @@ import { applyMessageChange } from '../services/message.change.service.js';
 import { applyReaction } from '../services/reaction.service.js';
 import { receiveStatus, avisarPreferencia } from '../services/message.status.service.js';
 import { findQuotedMessage, quotedMapOf } from '../services/message.reply.service.js';
-import { serializeMessage } from './chat.controller.js';
+import { serializeMessage } from '../utils/message.serialize.js';
 import { storeHistoryChunks, storeHistoryMedia } from '../services/history.intake.service.js';
 import { storeAgendaSync } from '../services/agenda.service.js';
 import { isTransientDbError } from '../utils/db.errors.js';
