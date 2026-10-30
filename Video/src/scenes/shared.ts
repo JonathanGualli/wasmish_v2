@@ -18,3 +18,6 @@ export function useSceneTime(story: Story, id: SceneId): { frame: number; second
 
 // El cursor del campo de texto parpadea cada medio segundo.
 export const caretOn = (frame: number) => Math.floor(frame / (FPS / 2)) % 2 === 0
+
+// Mónica escribe su respuesta a este ritmo (escena 2).
+export const TYPING_CHARS_PER_SECOND = 17

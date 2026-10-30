@@ -1,6 +1,8 @@
 import type { ChatItem, ExampleContact, HighlightedText } from '../../../Site/src/content/types.ts'
-import type { Subtitle } from '../lib/subtitles.ts'
+import type { Subtitle, SubtitlePhrase } from '../lib/subtitles.ts'
 import type { Scene } from '../lib/timeline.ts'
+import type { VoiceScene } from '../lib/voice.ts'
+import type { CueAnchor } from './cues.ts'
 
 // La forma de una historia del video. Las escenas son las mismas en cada nicho;
 // cambian los datos (capacitación hoy, imprentas después).
@@ -48,4 +50,15 @@ export type Story = {
     reply: { name: string; text: string }
   }
   closing: { first: string; second: HighlightedText; url: string }
+}
+
+// La historia como se escribe: sin segundos. Las escenas duran lo que su voz
+// más un respiro (`holds` para la que necesite más), los cues se atan a la voz
+// y las frases de los subtítulos se buscan en ella. `resolveStory` la vuelve un
+// `Story`, que es lo que reciben las escenas.
+export type StoryDraft = Omit<Story, 'scenes' | 'cues' | 'subtitles'> & {
+  voice: Record<SceneId, VoiceScene>
+  holds: Partial<Record<SceneId, number>>
+  cues: Record<string, CueAnchor>
+  phrases: SubtitlePhrase[]
 }
