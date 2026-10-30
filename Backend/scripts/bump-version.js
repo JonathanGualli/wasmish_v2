@@ -1,5 +1,6 @@
 // Sube la versión de la app en un solo comando, escribiéndola en los dos
-// package.json a la vez (Backend y Frontend). Es la ÚNICA forma de cambiarla:
+// package.json a la vez (Backend y Frontend), y en sus package-lock.json para
+// que el siguiente `npm install` no deje un diff. Es la ÚNICA forma de cambiarla:
 // el resto la deriva sola — el front la inyecta al compilar (define de Vite) y
 // el back la lee de su package.json al arrancar.
 //
@@ -15,8 +16,16 @@ const SEMVER = /^(\d+)\.(\d+)\.(\d+)$/;
 
 // Rutas relativas a este archivo, no al cwd: así funciona desde donde sea.
 const PAQUETES = [
-    { nombre: 'Backend',  url: new URL('../package.json', import.meta.url) },
-    { nombre: 'Frontend', url: new URL('../../Frontend/package.json', import.meta.url) },
+    {
+        nombre: 'Backend',
+        url: new URL('../package.json', import.meta.url),
+        lock: new URL('../package-lock.json', import.meta.url),
+    },
+    {
+        nombre: 'Frontend',
+        url: new URL('../../Frontend/package.json', import.meta.url),
+        lock: new URL('../../Frontend/package-lock.json', import.meta.url),
+    },
 ];
 
 // Un error aquí es de uso, no un fallo del programa: el stack trace de Node
@@ -43,11 +52,13 @@ const siguiente = (actual, arg) => {
 const arg = process.argv[2];
 if (!arg) morir('Falta la versión.  Uso: npm run version:bump 1.0.4  (o patch | minor | major)');
 
-// Leemos los dos ANTES de escribir ninguno: si el segundo falla, no queremos
+// Leemos los cuatro ANTES de escribir ninguno: si el último falla, no queremos
 // dejar el Backend en 1.0.4 y el Frontend en 1.0.3.
-const paquetes = PAQUETES.map(({ nombre, url }) => {
+const paquetes = PAQUETES.map(({ nombre, url, lock }) => {
     const texto = readFileSync(url, 'utf8');
-    return { nombre, url, texto, json: JSON.parse(texto) };
+    const lockJson = JSON.parse(readFileSync(lock, 'utf8'));
+    if (!lockJson.packages?.['']) morir(`El package-lock.json de ${nombre} no tiene la entrada del propio paquete ("packages" → "").`);
+    return { nombre, url, texto, json: JSON.parse(texto), lock, lockJson };
 });
 
 const versiones = new Set(paquetes.map(p => p.json.version));
@@ -57,7 +68,7 @@ if (versiones.size > 1) {
 
 const nueva = siguiente(paquetes[0].json.version, arg);
 
-for (const { nombre, url, texto, json } of paquetes) {
+for (const { nombre, url, texto, json, lock, lockJson } of paquetes) {
     const anterior = json.version;
 
     // Reemplazo textual sobre la línea de "version" en vez de reescribir el
@@ -69,6 +80,15 @@ for (const { nombre, url, texto, json } of paquetes) {
     }
 
     writeFileSync(url, actualizado);
+
+    // El lock lleva la versión en dos sitios: arriba y en la entrada del propio
+    // paquete. npm lo escribe como JSON.stringify con 2 espacios y un salto de
+    // línea final, así que reescribirlo entero deja el formato igual y el diff
+    // en esas dos líneas.
+    lockJson.version = nueva;
+    lockJson.packages[''].version = nueva;
+    writeFileSync(lock, `${JSON.stringify(lockJson, null, 2)}\n`);
+
     console.log(`  ${nombre.padEnd(9)} ${anterior} → ${nueva}`);
 }
 
