@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { checkScenes, localFrame, sceneFrames, toFrames, totalFrames } from '../src/lib/timeline.ts'
+import { checkScenes, localFrame, sceneFrames, scenesFromVoice, toFrames, totalFrames } from '../src/lib/timeline.ts'
 
 test('toFrames pasa segundos a cuadros a 30 fps', () => {
   assert.equal(toFrames(0.5), 15)
@@ -31,4 +31,15 @@ test('checkScenes encuentra huecos, solapes y un inicio que no es 0', () => {
 // unidades hacía aparecer las cosas antes de tiempo).
 test('localFrame pasa un cue a cuadros de su escena', () => {
   assert.equal(localFrame(6.8, { id: 'recap', from: 6, to: 25 }), 24)
+})
+
+test('scenesFromVoice encadena las escenas con su respiro', () => {
+  const voice = { a: { words: [], end: 5.14 }, b: { words: [], end: 4.94 } }
+  const scenes = scenesFromVoice(['a', 'b'], voice, { b: 1.2 }, 0.8)
+  assert.deepEqual(scenes, [{ id: 'a', from: 0, to: 5.94 }, { id: 'b', from: 5.94, to: 12.08 }])
+  assert.deepEqual(checkScenes(scenes), [])
+})
+
+test('scenesFromVoice falla si falta la voz de una escena', () => {
+  assert.throws(() => scenesFromVoice(['a', 'c'], { a: { words: [], end: 1 } } as never, {}, 0.8), /c/)
 })

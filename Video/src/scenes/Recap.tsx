@@ -5,12 +5,11 @@ import { Subtitle } from '../components/Subtitle.tsx'
 import { cameraAt, progress, valueAt } from '../lib/motion.ts'
 import { sceneCues } from '../story/cues.ts'
 import type { Story } from '../story/types.ts'
-import { caretOn, rowsFor, useSceneTime } from './shared.ts'
+import { caretOn, rowsFor, TYPING_CHARS_PER_SECOND, useSceneTime } from './shared.ts'
 
 // Escena 2 (6–25 s, gris claro): Mónica abre el chat y lo ve todo, sin
 // preguntarle a nadie. Es la escena animada del storyboard, momento a momento.
 const CENTER = { scale: 1, x: 480, y: 437 }
-const TYPING_CHARS_PER_SECOND = 17
 
 export function Recap({ story }: { story: Story }) {
   const { frame, seconds } = useSceneTime(story, 'recap')

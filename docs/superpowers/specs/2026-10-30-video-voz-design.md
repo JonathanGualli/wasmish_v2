@@ -86,3 +86,4 @@ Un solo PR: el plan como primer commit, la revisión de Codex del plan, el códi
 - **Primero solo la voz**; la música, después.
 - **Los tiempos de cada palabra van al repo; el audio no.**
 - Las frases de la voz que no estaban en el guion se agregan al guion y al subtítulo, no se cortan del audio (escena 5).
+- **Después, al escucharlo (2026-10-30):** los subtítulos marcan la palabra que suena (la opción «palabra por palabra» del storyboard), y **la voz pasa a ser una generada en ElevenLabs** con el guion entero, más expresiva que la de Jonathan. El mecanismo es el mismo: el archivo se alinea, se corta por escenas y entra con `voice:import`. Esa voz no dice «por medio de una campaña», así que la frase de la escena 5 vuelve a la del guion. Detalle en [video.md](../../arquitectura/video.md#los-tiempos-y-la-voz).

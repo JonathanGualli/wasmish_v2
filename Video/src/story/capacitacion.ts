@@ -1,10 +1,13 @@
+import { capacitacionVoice } from './capacitacion.voice.ts'
+import { resolveStory } from './resolve.ts'
 import type { Story } from './types.ts'
 
 // Academia Horizonte, la cuenta de demostración de capacitación
 // (Backend/scripts/fixtures/demo.scenarios.js): el video muestra lo mismo que
 // Jonathan enseña en una videollamada. Los textos de la voz son los del guion
-// (borrador 2) y los tiempos, los del storyboard de Claude Design, hasta que se
-// grabe la voz. Las cuatro correcciones del storyboard tienen su test.
+// (borrador 2) y los tiempos salen de la voz (capacitacion.voice.ts), generada
+// en ElevenLabs: cada momento se ata a una palabra que dice. Las cuatro correcciones del
+// storyboard tienen su test.
 
 // Las respuestas de la demostración, resumidas (el guion lo permite): enteras
 // eran diez líneas y no cabían en el chat.
@@ -13,88 +16,89 @@ const bot = {
   closed: 'Atendemos de lunes a viernes de 8:30 a 18:00. Le respondemos apenas abramos.',
 }
 
-export const capacitacion: Story = {
-  scenes: [
-    { id: 'hook', from: 0, to: 6 },
-    { id: 'recap', from: 6, to: 25 },
-    { id: 'assign', from: 25, to: 32 },
-    { id: 'afterHours', from: 32, to: 43 },
-    { id: 'broadcast', from: 43, to: 56 },
-    { id: 'closing', from: 56, to: 72 },
-  ],
+export const capacitacion: Story = resolveStory({
+  voice: capacitacionVoice,
+  // Más respiro donde una animación lo necesita: Mónica termina de escribir
+  // (recap), el aviso se queda en la pantalla bloqueada (assign) y el logo,
+  // quieto 3 s al final (closing).
+  holds: { recap: 1.2, assign: 1.2, closing: 3.3 },
 
   cues: {
-    'hook.headline': 0.6,
-    'hook.mark': 1.5,
-    'hook.shrink': 3.5,
-    'hook.headlineOut': 5.6,
-    'recap.change': 6,
-    'recap.headline': 6.35,
-    'recap.question': 6.8,
-    'recap.answer': 8.3,
-    'recap.pdf': 9.8,
-    'recap.zoomName': 11.2,
-    'recap.markName': 11.8,
-    'recap.toPdf': 13.4,
-    'recap.noteUp': 15.4,
-    'recap.zoomNote': 16.6,
-    'recap.markNote': 17.4,
-    'recap.backToToday': 20,
-    'recap.reply': 20.8,
-    'recap.send': 23.8,
-    'assign.headline': 25.2,
-    'assign.pill': 25.5,
-    'assign.event': 26,
-    'assign.lock': 28.5,
-    'assign.notification': 29,
-    'afterHours.headline': 32.2,
-    'afterHours.clock': 32.4,
-    'afterHours.chat': 32.8,
-    'afterHours.question': 33.5,
-    'afterHours.bot': 34.3,
-    'afterHours.dawn': 39.5,
-    'afterHours.reply': 40.5,
-    'broadcast.sweep': 43,
-    'broadcast.label': 43.4,
-    'broadcast.headline': 43.7,
-    'broadcast.card': 44,
-    'broadcast.tag': 47,
-    'broadcast.consent': 48.2,
-    'broadcast.stats': 50,
-    'broadcast.reply': 52,
-    'closing.devices': 56,
-    'closing.headline': 56.4,
-    'closing.pillNumber': 58.6,
-    'closing.pillOfficial': 61,
-    'closing.zoomPhone': 64,
-    'closing.appMessage': 64.6,
-    'closing.ink': 68,
-    'closing.second': 69,
-    'closing.logo': 69.8,
+    'hook.headline': { at: 0.6 },
+    'hook.mark': { word: 'después' },
+    'hook.shrink': { word: 'equipo' },
+    'hook.headlineOut': { beforeEnd: 0.4 },
+    'recap.change': { at: 0 },
+    'recap.headline': { at: 0.35 },
+    'recap.question': { word: 'cada' },
+    'recap.answer': { word: 'usuario' },
+    'recap.pdf': { word: 'WhatsApp' },
+    'recap.zoomName': { word: 'Mónica' },
+    'recap.markName': { word: 'Gabriela' },
+    'recap.toPdf': { word: 'temario', shift: -0.2 },
+    'recap.noteUp': { word: 'nota', shift: -0.6 },
+    'recap.zoomNote': { word: 'quizá', shift: -0.4 },
+    'recap.markNote': { word: 'quizá' },
+    'recap.backToToday': { word: 'más', edge: 'end', shift: 0.4 },
+    'recap.reply': { word: 'Así' },
+    'recap.send': { beforeEnd: 0.6 },
+    'assign.headline': { at: 0.2 },
+    // Entre «asigna» y «y a Gabriela» hay menos de 1 s: la pastilla cambia
+    // antes, con «Mónica», para que el chat asignado se vea antes del corte.
+    'assign.pill': { word: 'Mónica' },
+    'assign.event': { word: 'asigna' },
+    'assign.lock': { word: 'Gabriela', nth: 2, edge: 'end' },
+    'assign.notification': { word: 'aviso', shift: -0.3 },
+    'afterHours.headline': { at: 0.2 },
+    'afterHours.clock': { at: 0.4 },
+    'afterHours.chat': { at: 0.8 },
+    'afterHours.question': { word: 'requisitos', shift: 0.3 },
+    'afterHours.bot': { word: 'responde' },
+    'afterHours.dawn': { word: 'abrir', shift: -0.2 },
+    'afterHours.reply': { word: 'equipo' },
+    'broadcast.sweep': { at: 0 },
+    'broadcast.label': { at: 0.4 },
+    'broadcast.headline': { at: 0.7 },
+    'broadcast.card': { at: 1 },
+    'broadcast.tag': { word: 'interesados' },
+    'broadcast.consent': { word: 'curso' },
+    'broadcast.stats': { word: 'Ve' },
+    'broadcast.reply': { word: 'respuestas', shift: -0.2 },
+    'closing.devices': { at: 0 },
+    'closing.headline': { at: 0.4 },
+    'closing.pillNumber': { word: 'número' },
+    'closing.pillOfficial': { word: 'oficial' },
+    'closing.zoomPhone': { word: 'Puede', shift: -0.3 },
+    'closing.appMessage': { word: 'app' },
+    'closing.ink': { word: 'Soy', shift: -0.5 },
+    'closing.second': { word: 'Si' },
+    'closing.logo': { word: 'funcionando' },
   },
 
-  subtitles: [
-    { text: 'Un interesado vuelve a escribir después de dos semanas.', highlight: 'dos semanas', from: 0, to: 3.2 },
-    { text: '¿Su equipo sabe qué le ofrecieron?', highlight: 'qué le ofrecieron', from: 3.2, to: 5.6 },
-    { text: 'Con Wasmish, cada persona atiende con su usuario', highlight: 'con su usuario', from: 6.2, to: 8.2 },
-    { text: 'en el mismo WhatsApp.', highlight: 'mismo WhatsApp', from: 8.2, to: 10.6 },
-    { text: 'Mónica abre el chat', from: 10.8, to: 12 },
-    { text: 'y ve lo que respondió Gabriela,', highlight: 'Gabriela', from: 12, to: 13.4 },
-    { text: 'el temario que le mandó', highlight: 'el temario', from: 13.4, to: 15.3 },
-    { text: 'y su nota: «quizá inscriba a dos compañeros más».', highlight: 'quizá inscriba a dos compañeros más', from: 15.4, to: 19.8 },
-    { text: 'Así retoma la conversación sin empezar de cero.', highlight: 'sin empezar de cero', from: 20, to: 24.7 },
-    { text: 'Si debe seguir Gabriela, Mónica se lo asigna,', highlight: 'se lo asigna', from: 25.3, to: 28.3 },
-    { text: 'y a Gabriela le llega el aviso al celular.', highlight: 'el aviso', from: 28.5, to: 31.6 },
-    { text: '¿Le preguntan los requisitos a las diez de la noche?', highlight: 'a las diez de la noche', from: 32.3, to: 35 },
-    { text: 'Wasmish responde solo, con lo que usted dejó preparado,', highlight: 'responde solo', from: 35, to: 39.3 },
-    { text: 'y al abrir, su equipo sigue la conversación.', highlight: 'su equipo', from: 39.5, to: 42.6 },
-    { text: 'Y cuando abre otro grupo, les avisa de una vez', highlight: 'de una vez', from: 43.6, to: 47 },
-    { text: 'a los interesados de ese curso.', from: 47, to: 49.8 },
-    { text: 'Ve cuántos lo leyeron, y las respuestas llegan al chat.', highlight: 'cuántos lo leyeron', from: 50, to: 55.6 },
-    { text: 'Funciona en la computadora', from: 56.4, to: 58 },
-    { text: 'y en el celular, con su mismo número', highlight: 'su mismo número', from: 58, to: 60.6 },
-    { text: 'y la conexión oficial de WhatsApp.', from: 60.6, to: 63.6 },
-    { text: 'Puede seguir usando su app de WhatsApp Business.', highlight: 'su app de WhatsApp Business', from: 64, to: 67.6 },
+  // Lo que dice la voz, frase a frase. «Soy Jonathan…» no lleva subtítulo: ya
+  // está escrito en pantalla.
+  phrases: [
+    { scene: 'hook', text: 'Un interesado vuelve a escribir después de dos semanas.', highlight: 'dos semanas' },
+    { scene: 'hook', text: '¿Su equipo sabe qué le ofrecieron?', highlight: 'qué le ofrecieron' },
+    { scene: 'recap', text: 'Con Wasmish, cada persona atiende con su usuario', highlight: 'con su usuario' },
+    { scene: 'recap', text: 'en el mismo WhatsApp.', highlight: 'mismo WhatsApp' },
+    { scene: 'recap', text: 'Mónica abre el chat' },
+    { scene: 'recap', text: 'y ve lo que respondió Gabriela,', highlight: 'Gabriela' },
+    { scene: 'recap', text: 'el temario que le mandó', highlight: 'el temario' },
+    { scene: 'recap', text: 'y su nota: «quizá inscriba a dos compañeros más».', highlight: 'quizá inscriba a dos compañeros más' },
+    { scene: 'recap', text: 'Así retoma la conversación sin empezar de cero.', highlight: 'sin empezar de cero' },
+    { scene: 'assign', text: 'Si debe seguir Gabriela, Mónica se lo asigna,', highlight: 'se lo asigna' },
+    { scene: 'assign', text: 'y a Gabriela le llega el aviso al celular.', highlight: 'el aviso' },
+    { scene: 'afterHours', text: '¿Le preguntan los requisitos a las diez de la noche?', highlight: 'a las diez de la noche' },
+    { scene: 'afterHours', text: 'Wasmish responde solo, con lo que usted dejó preparado,', highlight: 'responde solo' },
+    { scene: 'afterHours', text: 'y al abrir, su equipo sigue la conversación.', highlight: 'su equipo' },
+    { scene: 'broadcast', text: 'Y cuando abre otro grupo, les avisa de una vez', highlight: 'de una vez' },
+    { scene: 'broadcast', text: 'a los interesados de ese curso.' },
+    { scene: 'broadcast', text: 'Ve cuántos lo leyeron, y las respuestas llegan al chat.', highlight: 'cuántos lo leyeron' },
+    { scene: 'closing', text: 'Funciona en la computadora' },
+    { scene: 'closing', text: 'y en el celular, con su mismo número', highlight: 'su mismo número' },
+    { scene: 'closing', text: 'y la conexión oficial de WhatsApp.' },
+    { scene: 'closing', text: 'Puede seguir usando su app de WhatsApp Business.', highlight: 'su app de WhatsApp Business' },
   ],
 
   headlines: {
@@ -160,4 +164,4 @@ export const capacitacion: Story = {
     second: { before: 'Si le sirve, yo se lo dejo ', highlight: 'funcionando', after: '.' },
     url: 'wasmish.com/capacitacion',
   },
-}
+})
