@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import Contact from "../models/contact.model.js";
 import ContactNote from "../models/contact.note.model.js";
 import { canEditNote, cleanNoteText } from "../utils/contact.notes.js";
 import { createContactNote, serializeNotes } from "../services/contact.note.service.js";
@@ -79,7 +80,11 @@ export const editContactNote = async (req, res) => {
     }
 };
 
-// DELETE /contacts/:id/notes/:noteId — el autor, o owner y admin.
+// DELETE /contacts/:id/notes/:noteId — el autor, o owner y admin. Borrar la
+// nota de antes borra también el texto del que salió (`Contact.notes`, directo
+// en la colección: ya no está en el modelo). Si no, mientras quede en la BD
+// (hasta que `migrate:notes -- --drop-text` corre al desplegar),
+// `migrate:notes` la volvería a crear (revisión de Codex del PR #170).
 export const removeContactNote = async (req, res) => {
     try {
         const found = await findOwnedNote(req, res);
@@ -87,6 +92,9 @@ export const removeContactNote = async (req, res) => {
 
         const accountId = req.auth.accountId;
         await ContactNote.deleteOne({ _id: found.note._id, userId: accountId });
+        if (found.note.source === 'legacy') {
+            await Contact.collection.updateOne({ _id: found.contact._id, userId: found.contact.userId }, { $unset: { notes: '' } });
+        }
         notifyContactChanged(accountId, found.contact._id);
         return res.sendStatus(204);
     } catch (error) {

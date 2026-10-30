@@ -3,7 +3,10 @@
 // suyas y owner y admin, cualquiera (403 si no).
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import mongoose from 'mongoose';
 import { seedAccount, seedMember, request, openStream, assertNoLeak, Contact, ContactNote, User } from './helpers.js';
+
+const { runNoteMigration } = await import('../../src/services/note.migration.service.js');
 
 const a = await seedAccount('A', { seq: 1 });
 const b = await seedAccount('B', { seq: 2 });
@@ -107,11 +110,21 @@ test('PATCH /contacts/:id descarta notes: guarda lo demás y no toca las notas',
     assert.equal(await ContactNote.countDocuments({ contactId: a.contactId }), before);
 });
 
+// Regresión que vigila (revisión de Codex del PR #170): con el texto de antes
+// todavía en la BD (entre que arranca la imagen nueva y corre `--drop-text`),
+// borrar la nota `legacy` la dejaba sin su texto pasado, y `migrate:notes` la
+// volvía a crear.
 test('la nota de antes (sin autor) solo la borran owner y admin, y borrada no vuelve', async () => {
+    const contactId = new mongoose.Types.ObjectId(a.contactId);
+    await Contact.collection.updateOne({ _id: contactId }, { $set: { notes: 'la de antes' } });
     const legacy = await ContactNote.create({ userId: a.accountId, contactId: a.contactId, text: 'la de antes', source: 'legacy' });
     assert.equal((await notesOf(a, a.contactId)).filter(note => note.source === 'legacy').length, 1);
     assert.equal((await request(agent, 'DELETE', `/contacts/${a.contactId}/notes/${legacy._id}`)).status, 403);
+    assert.equal((await Contact.collection.findOne({ _id: contactId })).notes, 'la de antes', 'un 403 no toca el texto');
     assert.equal((await request(a, 'DELETE', `/contacts/${a.contactId}/notes/${legacy._id}`)).status, 204);
+
+    assert.equal((await Contact.collection.findOne({ _id: contactId })).notes, undefined);
+    assert.deepEqual(await runNoteMigration({}), { pending: 0, migrated: 0 });
     assert.equal((await notesOf(a, a.contactId)).some(note => note.source === 'legacy'), false);
 });
 
