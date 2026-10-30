@@ -1,4 +1,4 @@
-import { Easing, interpolate } from 'remotion'
+import { Easing, interpolate, spring } from 'remotion'
 
 // El movimiento del storyboard: una sola curva para la cámara y las entradas.
 
@@ -44,4 +44,20 @@ export type CameraKey = { at: number; scale: number; x: number; y: number }
 export function cameraAt(frame: number, keys: CameraKey[]): { scale: number; x: number; y: number } {
   const channel = (pick: (key: CameraKey) => number) => valueAt(frame, keys.map((key) => ({ at: key.at, value: pick(key) })))
   return { scale: Math.min(channel((key) => key.scale), MAX_ZOOM), x: channel((key) => key.x), y: channel((key) => key.y) }
+}
+
+// Algo que cae desde arriba con un rebote corto (el aviso en la pantalla
+// bloqueada): `DROP_FROM` px más arriba al empezar y 0 al asentarse, en unos
+// 0,6 s. Se pasa como mucho `MAX_BOUNCE` px por debajo de su sitio.
+export const DROP_FROM = 160
+export const MAX_BOUNCE = 20
+
+export function dropOffset(frame: number, start: number, fps: number): number {
+  if (frame < start) return -DROP_FROM
+  return -DROP_FROM * (1 - spring({ frame: frame - start, fps, config: { damping: 12 } }))
+}
+
+// Un contador que va de 0 a `to` en `duration` cuadros, en enteros.
+export function countUp(frame: number, start: number, duration: number, to: number): number {
+  return Math.round(to * progress(frame, start, duration))
 }

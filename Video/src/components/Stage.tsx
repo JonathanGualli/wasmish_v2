@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react'
 import { AbsoluteFill, interpolateColors, useCurrentFrame } from 'remotion'
+import { progress } from '../lib/motion.ts'
 import { TONES, type Tone } from './tones.ts'
 
 // El lienzo de 1080 × 1920 y sus tres capas fijas (storyboard, «Zonas y capas»):
@@ -24,19 +25,27 @@ export const contentLayer: CSSProperties = {
 }
 
 // El fondo pasa de `from` a `tone` en 0,7 s desde `changeAt` (cuadro de la escena).
-export function Stage({ tone, from, changeAt = 0, zones = false, children }: {
+// Con `sweep`, en vez de fundirse, el nuevo entra barriendo en 0,6 s: de
+// izquierda a derecha (`right`) o desde abajo (`up`).
+export function Stage({ tone, from, changeAt = 0, sweep, zones = false, children }: {
   tone: Tone
   from?: Tone
   changeAt?: number
+  sweep?: 'right' | 'up'
   zones?: boolean
   children: ReactNode
 }) {
   const frame = useCurrentFrame()
-  const background = from
-    ? interpolateColors(frame, [changeAt, changeAt + 21], [TONES[from].bg, TONES[tone].bg])
-    : TONES[tone].bg
+  const swept = from && sweep ? progress(frame, changeAt, 18) : 0
+  const background = !from
+    ? TONES[tone].bg
+    : sweep
+      ? TONES[from].bg
+      : interpolateColors(frame, [changeAt, changeAt + 21], [TONES[from].bg, TONES[tone].bg])
+  const hidden = `${(1 - swept) * 100}%`
   return (
     <AbsoluteFill style={{ background, overflow: 'hidden', fontFamily: 'var(--font-sans)', color: '#0e1116' }}>
+      {sweep && from && <AbsoluteFill style={{ background: TONES[tone].bg, clipPath: sweep === 'right' ? `inset(0 ${hidden} 0 0)` : `inset(${hidden} 0 0 0)` }} />}
       {children}
       {zones && <Zones />}
     </AbsoluteFill>
