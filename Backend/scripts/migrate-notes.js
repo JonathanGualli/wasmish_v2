@@ -5,17 +5,21 @@
 //   node scripts/migrate-notes.js --dry-run   ← solo informa, no escribe
 //   node scripts/migrate-notes.js --check     ← igual, y sale con 1 si queda alguna
 //   node scripts/migrate-notes.js             ← aplica los cambios
+//   node scripts/migrate-notes.js --drop-text ← aplica y después borra `Contact.notes`
+//                                               (con --dry-run, solo cuenta)
 //
-// Idempotente, y se puede correr con la API en marcha: mientras tanto, la ficha
-// lee la nota de antes al vuelo. No borra `Contact.notes`.
+// Idempotente. Sin `--drop-text` no borra `Contact.notes`; con él, solo donde
+// ya no se pierde nada (texto vacío o ya pasado a la lista): ver
+// `runNoteTextDrop`. Borrar no tiene vuelta atrás: antes, `mongodump`.
 import 'dotenv/config';
 import mongoose from 'mongoose';
 
 import ContactNote from '../src/models/contact.note.model.js';
-import { runNoteMigration } from '../src/services/note.migration.service.js';
+import { runNoteMigration, runNoteTextDrop } from '../src/services/note.migration.service.js';
 
 const dryRun = process.argv.includes('--dry-run');
 const check = process.argv.includes('--check');
+const dropText = process.argv.includes('--drop-text');
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/wasmish';
 
 // Misma precaución que backfill-last-inbound.js: la URI lleva la contraseña.
@@ -37,6 +41,12 @@ const main = async () => {
         console.log(`Notas creadas: ${migrated}`);
         const after = await runNoteMigration({ dryRun: true });
         console.log(`Comprobación: quedan ${after.pending}`);
+    }
+
+    if (dropText) {
+        const { dropped, kept } = await runNoteTextDrop({ dryRun: readOnly });
+        console.log(`${readOnly ? 'Contactos a los que se les borraría' : 'Contactos a los que se les borró'} el texto de antes: ${dropped}`);
+        if (kept > 0) console.log(`Se quedan con el texto, porque no tienen su nota en la lista: ${kept}`);
     }
 
     await mongoose.disconnect();

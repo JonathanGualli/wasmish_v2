@@ -208,7 +208,7 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
 
 ## Lo siguiente
 
-- **Cerrar la transición de las notas** en una versión posterior, cuando nadie tenga abierta una pestaña de la 1.0.25: quitar `notes` (texto) de las respuestas de contactos, el 400 `notes_moved` de `PATCH /contacts/:id` y la lectura al vuelo de la nota de antes, y borrar `Contact.notes` con su propio paso (spec de las notas, § 3 y § 8).
+- **Al desplegar la próxima versión** (la que lleve el PR `limpieza-backend`): `mongodump` antes y, con la imagen nueva ya arrancada, `npm run migrate:notes -- --drop-text`, que borra `Contact.notes` (en producción, 2 contactos, los dos con su nota ya en la lista). Volver atrás a la 1.0.35 sigue siendo seguro; a una anterior a la 1.0.26, esas notas ya no se ven.
 
 - **Avisar al cliente real** de que ya puede usar Wasmish en el celular, con los avisos: la app ya está en `app.wasmish.com` (desde la 1.0.24), que es donde tiene que instalarla. Cuando le convenga, que cambie la URL de su integración a `app.wasmish.com`; la vieja sigue funcionando.
 - **Multi-línea y multi-agente, fases 1 a 4** (diseño aprobado, sin preguntas abiertas: `docs/superpowers/specs/2026-10-11-multi-linea-multi-agente-design.md`). Fases 1, 2a y 2b en producción (la 2b, enrutar por línea, desde la 1.0.14). La **Fase 2c** está en producción desde la 1.0.15.

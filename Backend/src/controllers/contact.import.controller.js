@@ -26,13 +26,13 @@ const cleanExtraTags = (names = []) =>
 /**
  * Los contactos de la cuenta con esos teléfonos, por teléfono, cada uno con
  * sus etiquetas: las claves (el plan compara por clave, no por id) y los
- * nombres (la muestra los enseña). Y sus notas: los textos (con la de antes,
- * `Contact.notes`), para no repetir la del archivo, y cuántas tiene.
+ * nombres (la muestra los enseña). Y sus notas: los textos, para no repetir la
+ * del archivo, y cuántas tiene.
  */
 const loadExistingByPhone = async (userId, phones) => {
     const [contacts, tags] = await Promise.all([
         Contact.find({ userId, phone: { $in: phones } })
-            .select('phone name email company notes tags marketingOptOut').lean(),
+            .select('phone name email company tags marketingOptOut').lean(),
         Tag.find({ userId }).select('key name').lean(),
     ]);
     const notes = contacts.length === 0 ? [] : await ContactNote.aggregate([
@@ -48,7 +48,7 @@ const loadExistingByPhone = async (userId, phones) => {
             ...contact,
             tagKeys: contactTags.map(tag => tag.key),
             tagNames: contactTags.map(tag => tag.name),
-            noteTexts: [...(contactNotes?.texts ?? []), ...(contact.notes ? [contact.notes] : [])],
+            noteTexts: contactNotes?.texts ?? [],
             noteCount: contactNotes?.count ?? 0,
         }];
     }));

@@ -106,7 +106,7 @@ No se aplica a `/api/webhook` (Meta manda ráfagas) ni a `/api/stream` (conexió
 | GET | `/api/contacts` | JWT | Contactos paginados (`?search`, `?filter=all\|with_conversation\|without_conversation\|opted_out`, `?tags=id,id` —alguna de—, `?page`, `?limit` máx 50), ordenados por actividad |
 | GET | `/api/contacts/:id` | JWT | Ficha: contacto + `activity` (primer mensaje, enviados, recibidos, fallidos) + `noteList` (las notas, de la más nueva a la más vieja: [contactos.md § Notas del contacto](contactos.md#notas-del-contacto-contactnote-contactnotecontrollerjs)) |
 | POST | `/api/contacts` | JWT | Alta manual (`phone` obligatorio). No envía nada. 409 con `contactId` si el teléfono ya existe. `notes`, si viene, es la primera nota, a nombre de quien lo crea |
-| PATCH | `/api/contacts/:id` | JWT | Editar `phone`, `name`, `email`, `company`. El teléfono **no** cambia si hay conversación (409). `notes` ya no se cambia aquí: igual a la de antes se ignora; distinta, 400 `notes_moved` (pestañas con el frontend anterior) |
+| PATCH | `/api/contacts/:id` | JWT | Editar `phone`, `name`, `email`, `company`. El teléfono **no** cambia si hay conversación (409). `notes` ya no se cambia aquí (son una lista: `/contacts/:id/notes`): si llega, se descarta |
 | DELETE | `/api/contacts/:id` | JWT | Borrar, **solo si nunca hubo conversación** (409 si la hay), con sus notas |
 | POST | `/api/contacts/:id/notes` | JWT | Nota nueva `{ text }` (1 a 1000), a nombre de quien la escribe. 409 `notes_limit` con 500 |
 | PATCH | `/api/contacts/:id/notes/:noteId` | JWT | Editar `{ text }`: el autor, o owner y admin (403 `note_not_yours`) |

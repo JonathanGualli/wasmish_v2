@@ -27,9 +27,8 @@ test('una nota nueva sale a nombre de quien la escribe, la primera de la lista',
     assert.equal(detail.body.noteList[0].id, created.body.id);
     // El owner la ve, y puede cambiarla aunque no sea suya.
     assert.equal(detail.body.noteList[0].canEdit, true);
-    // Regresión que vigila (revisión de Codex del plan): una pestaña con el
-    // frontend anterior recibía una lista donde esperaba texto en `notes`.
-    assert.equal(typeof detail.body.notes === 'string' || detail.body.notes === null, true);
+    // La transición se cerró (2026-10-30): el texto de antes ya no se devuelve.
+    assert.equal('notes' in detail.body, false);
 });
 
 test('B no lee, crea, edita ni borra notas de A', async () => {
@@ -96,37 +95,23 @@ test('un contacto con 500 notas no admite otra', async () => {
     await ContactNote.deleteMany({ contactId: a.loneContactId });
 });
 
-test('una pestaña vieja que manda notes sin tocarlas guarda lo demás; si las cambió, 400 y nada', async () => {
-    await Contact.updateOne({ _id: a.contactId }, { $set: { notes: 'la de antes' } });
-
-    const untouched = await request(a, 'PATCH', `/contacts/${a.contactId}`, { name: 'Nombre nuevo', notes: ' la de antes ' });
-    assert.equal(untouched.status, 200, untouched.text);
-    assert.equal((await Contact.findById(a.contactId).lean()).name, 'Nombre nuevo');
-
-    const changed = await request(a, 'PATCH', `/contacts/${a.contactId}`, { name: 'Otro nombre', notes: 'distinta' });
-    assert.equal(changed.status, 400);
-    assert.equal(changed.body[0].code, 'notes_moved');
+// La transición se cerró (2026-10-30): `PATCH /contacts/:id` ya no mira `notes`
+// (antes, si cambiaba, daba 400 `notes_moved`). Lo descarta y guarda lo demás.
+test('PATCH /contacts/:id descarta notes: guarda lo demás y no toca las notas', async () => {
+    const before = await ContactNote.countDocuments({ contactId: a.contactId });
+    const res = await request(a, 'PATCH', `/contacts/${a.contactId}`, { name: 'Nombre nuevo', notes: 'distinta' });
+    assert.equal(res.status, 200, res.text);
     const contact = await Contact.findById(a.contactId).lean();
     assert.equal(contact.name, 'Nombre nuevo');
-    assert.equal(contact.notes, 'la de antes');
+    assert.equal(contact.notes, undefined);
+    assert.equal(await ContactNote.countDocuments({ contactId: a.contactId }), before);
 });
 
-test('la nota de antes se lee al vuelo sin poder cambiarla, y borrada no reaparece', async () => {
-    await Contact.updateOne({ _id: a.contactId }, { $set: { notes: 'la de antes' } });
-    await ContactNote.deleteMany({ contactId: a.contactId, source: 'legacy' });
-
-    const virtual = (await notesOf(a, a.contactId)).find(note => note.source === 'legacy');
-    assert.deepEqual({ id: virtual.id, author: virtual.author, canEdit: virtual.canEdit, text: virtual.text },
-        { id: 'legacy', author: null, canEdit: false, text: 'la de antes' });
-    assert.equal((await request(a, 'PATCH', `/contacts/${a.contactId}/notes/legacy`, { text: 'x' })).status, 404);
-
-    // Ya migrada: el owner la borra.
+test('la nota de antes (sin autor) solo la borran owner y admin, y borrada no vuelve', async () => {
     const legacy = await ContactNote.create({ userId: a.accountId, contactId: a.contactId, text: 'la de antes', source: 'legacy' });
     assert.equal((await notesOf(a, a.contactId)).filter(note => note.source === 'legacy').length, 1);
     assert.equal((await request(agent, 'DELETE', `/contacts/${a.contactId}/notes/${legacy._id}`)).status, 403);
     assert.equal((await request(a, 'DELETE', `/contacts/${a.contactId}/notes/${legacy._id}`)).status, 204);
-    // Regresión que vigila: la lectura al vuelo resucitaba la nota borrada.
-    assert.equal((await Contact.findById(a.contactId).lean()).notes, null);
     assert.equal((await notesOf(a, a.contactId)).some(note => note.source === 'legacy'), false);
 });
 

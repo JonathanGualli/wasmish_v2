@@ -41,7 +41,7 @@ export const formatNoteFullDate = (iso: string) => {
 
 /**
  * Por qué falló guardar o borrar una nota: el mensaje del backend si lo hay
- * (`note_not_yours`, `notes_limit`, `notes_moved`); sin respuesta, la conexión.
+ * (`note_not_yours`, `notes_limit`); sin respuesta, la conexión.
  */
 export const noteErrorText = (error: unknown) => {
     const response = (error as AxiosError<{ message?: string }[]>)?.response;

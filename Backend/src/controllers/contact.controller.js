@@ -349,10 +349,6 @@ const serializeContact = (contact, conversations = [], restricted = []) => {
         username: contact.username ?? null,
         email: contact.email ?? null,
         company: contact.company ?? null,
-        // El texto de antes (`Contact.notes`), para las pestañas abiertas con el
-        // frontend anterior durante el despliegue; las notas van en `noteList`
-        // (solo la ficha). Se quita junto con `Contact.notes`.
-        notes: contact.notes ?? null,
         source: contact.source ?? null,
         referral: contact.referral ?? null,
         // Solo los ids: los nombres los tiene el front con GET /tags.
@@ -561,13 +557,6 @@ export const updateContact = async (req, res) => {
     try {
         const contact = await findOwnedContact(userId, req.params.id);
         if (!contact) return sendContactError(res, 404, 'Contacto no encontrado');
-
-        // Las notas ya no se cambian aquí (son una lista: /contacts/:id/notes).
-        // Una pestaña con el frontend anterior las sigue mandando: si no las
-        // tocó, se ignoran y se guarda lo demás; si las cambió, que recargue.
-        if (req.body.notes !== undefined && cleanNoteText(req.body.notes) !== cleanNoteText(contact.notes)) {
-            return sendContactError(res, 400, 'Las notas cambiaron: recarga la página.', { code: 'notes_moved' });
-        }
 
         // Con conversación en cualquier línea, el número ya no cambia.
         const conversations = await findContactConversations(userId, contact._id);

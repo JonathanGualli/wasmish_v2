@@ -1,5 +1,4 @@
 import mongoose from "mongoose";
-import Contact from "../models/contact.model.js";
 import ContactNote from "../models/contact.note.model.js";
 import { canEditNote, cleanNoteText } from "../utils/contact.notes.js";
 import { createContactNote, serializeNotes } from "../services/contact.note.service.js";
@@ -80,9 +79,7 @@ export const editContactNote = async (req, res) => {
     }
 };
 
-// DELETE /contacts/:id/notes/:noteId — el autor, o owner y admin. Borrar la
-// nota de antes vacía también `Contact.notes`: si no, la lectura al vuelo
-// (`listContactNotes`) la haría reaparecer.
+// DELETE /contacts/:id/notes/:noteId — el autor, o owner y admin.
 export const removeContactNote = async (req, res) => {
     try {
         const found = await findOwnedNote(req, res);
@@ -90,9 +87,6 @@ export const removeContactNote = async (req, res) => {
 
         const accountId = req.auth.accountId;
         await ContactNote.deleteOne({ _id: found.note._id, userId: accountId });
-        if (found.note.source === 'legacy') {
-            await Contact.updateOne({ _id: found.contact._id, userId: accountId }, { $set: { notes: null } });
-        }
         notifyContactChanged(accountId, found.contact._id);
         return res.sendStatus(204);
     } catch (error) {
