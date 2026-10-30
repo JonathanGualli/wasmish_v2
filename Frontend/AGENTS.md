@@ -39,7 +39,9 @@ QueryClientProvider
 - Protegido: `/*` → `PrivateGuard` → `PrivateRouter` → páginas bajo `PrivateLayout`
 - Constantes de rutas en `models/routes.models.ts` (`AppRoutes`) — **no hardcodear strings de rutas**.
 
-**Páginas privadas:** `quickStart` (destino de `/`), `chats`, `contacts`, `campaigns` (Campañas: lista, `campaigns/new` el asistente y `campaigns/:id` el detalle — rutas completas en `CampaignPaths`), `templates`, `auto-replies` (Respuestas automáticas, solo con `autoReplies.manage`: `AutoRepliesPath`), `docs` (documentación de la API pública), `settings`, y `admin` — esta última solo se registra en `PrivateRouter` si `user.rol === 'superadmin'`. `AppRoutes.private.dashboard` y `pages/private/DashboardPage` existen pero no están enrutados.
+**Páginas privadas:** `quickStart` (destino de `/`), `chats`, `contacts`, `campaigns` (Campañas: lista, `campaigns/new` el asistente y `campaigns/:id` el detalle — rutas completas en `CampaignPaths`), `templates`, `auto-replies` (Respuestas automáticas, solo con `autoReplies.manage`: `AutoRepliesPath`), `docs` (documentación de la API pública), `settings`, y `admin` — esta última solo se registra en `PrivateRouter` si `user.rol === 'superadmin'`.
+
+**Cada página privada se descarga al entrar en ella** (`lazyPage` en `PrivateRouter`, con un solo `Suspense` dentro de `PrivateLayout`), **salvo Chats**, que va en el paquete principal: es la más usada y a la que lleva un aviso push. Una página nueva entra igual, con `lazyPage`. Tras un despliegue, una pestaña abierta desde antes que pide un trozo que ya no existe recarga una vez (`reloadOnStaleChunk`, `libs/staleChunks.ts`, con `vite:preloadError`; como mucho una vez por minuto, para no entrar en bucle).
 
 **Flujo de datos:**
 - Todas las llamadas HTTP van por `services/api.service.ts` (base URL `http://localhost:3001/api`, `withCredentials: true`)

@@ -129,7 +129,7 @@ cd Backend && npm run migrate:notes                  # aplica
 ```bash
 cd Backend && npm run version:bump 1.0.4    # o patch | minor | major
 ```
-Escribe el campo `version` de los **dos** `package.json` a la vez (los lee y valida antes de tocar ninguno, para no dejarlos desparejados). De ahí sale todo lo demás y **no hay que tocar nada más**: `vite.config.ts` inyecta `pkg.version` como `__APP_VERSION__` al compilar y `src/config/version.ts` solo lo reexporta (nunca escribir un literal ahí); el Backend lee su propio `package.json` al arrancar (`APP_VERSION` en `config.js`) y lo publica en `GET /api/version`, que sirve para comprobar qué código corre en producción: `curl https://app.wasmish.com/api/version`. La versión se ve en el pie del sidebar.
+Escribe el campo `version` de los **dos** `package.json` a la vez, y también el de sus `package-lock.json` (arriba y en `packages[""]`), para que el siguiente `npm install` no deje un diff. Lee y valida los cuatro antes de tocar ninguno, para no dejarlos desparejados. De ahí sale todo lo demás y **no hay que tocar nada más**: `vite.config.ts` inyecta `pkg.version` como `__APP_VERSION__` al compilar y `src/config/version.ts` solo lo reexporta (nunca escribir un literal ahí); el Backend lee su propio `package.json` al arrancar (`APP_VERSION` en `config.js`) y lo publica en `GET /api/version`, que sirve para comprobar qué código corre en producción: `curl https://app.wasmish.com/api/version`. La versión se ve en el pie del sidebar.
 
 No se usa un archivo `VERSION` en la raíz del repo a propósito: el deploy sube `Backend/` y `Frontend/` por separado con `git archive`, así que un archivo de la raíz nunca llegaría al servidor.
 

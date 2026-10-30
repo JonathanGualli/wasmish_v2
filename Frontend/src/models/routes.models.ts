@@ -5,7 +5,6 @@ export const AppRoutes = {
     invite: '/invite',
     private: {
         root: '/private',
-        dashboard: 'dashboard',
         quickStart: 'quickStart',
         settings: 'settings',
         chats: 'chats',

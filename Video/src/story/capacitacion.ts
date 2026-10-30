@@ -6,9 +6,11 @@ import type { Story } from './types.ts'
 // (borrador 2) y los tiempos, los del storyboard de Claude Design, hasta que se
 // grabe la voz. Las cuatro correcciones del storyboard tienen su test.
 
+// Las respuestas de la demostración, resumidas (el guion lo permite): enteras
+// eran diez líneas y no cabían en el chat.
 const bot = {
-  requirements: 'Para inscribirse necesita: copia de cédula, el pago del curso (transferencia o tarjeta) y llenar la ficha que le enviamos por aquí. ¡Es muy fácil! 😊',
-  closed: '¡Hola! Gracias por escribir a Academia Horizonte 📚 Atendemos de lunes a viernes de 8:30 a 18:00 y los sábados de 8:00 a 12:00. Le respondemos apenas abramos.',
+  requirements: 'Para inscribirse necesita: copia de cédula, el pago del curso y llenar la ficha que le enviamos por aquí. 😊',
+  closed: 'Atendemos de lunes a viernes de 8:30 a 18:00. Le respondemos apenas abramos.',
 }
 
 export const capacitacion: Story = {
@@ -40,21 +42,28 @@ export const capacitacion: Story = {
     'recap.backToToday': 20,
     'recap.reply': 20.8,
     'recap.send': 23.8,
+    'assign.headline': 25.2,
     'assign.pill': 25.5,
     'assign.event': 26,
     'assign.lock': 28.5,
     'assign.notification': 29,
+    'afterHours.headline': 32.2,
     'afterHours.clock': 32.4,
+    'afterHours.chat': 32.8,
     'afterHours.question': 33.5,
     'afterHours.bot': 34.3,
     'afterHours.dawn': 39.5,
     'afterHours.reply': 40.5,
     'broadcast.sweep': 43,
     'broadcast.label': 43.4,
+    'broadcast.headline': 43.7,
     'broadcast.card': 44,
+    'broadcast.tag': 47,
+    'broadcast.consent': 48.2,
     'broadcast.stats': 50,
     'broadcast.reply': 52,
     'closing.devices': 56,
+    'closing.headline': 56.4,
     'closing.pillNumber': 58.6,
     'closing.pillOfficial': 61,
     'closing.zoomPhone': 64,
@@ -94,7 +103,8 @@ export const capacitacion: Story = {
     assign: { before: 'Asignada a ', highlight: 'Gabriela', after: '' },
     afterHours: { before: 'Responde aunque estén ', highlight: 'cerrados', after: '' },
     broadcast: { before: 'Grupo nuevo: avíseles ', highlight: 'de una vez', after: '' },
-    closing: { before: 'Su mismo número · ', highlight: 'Conexión oficial', after: '' },
+    // El espacio duro deja el «·» al final del renglón, no al principio del siguiente.
+    closing: { before: 'Su mismo número\u00a0· ', highlight: 'Conexión oficial', after: '' },
   },
 
   kevin: {
