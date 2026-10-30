@@ -11,7 +11,7 @@ import Conversation from '../models/conversation.model.js';
 import HistoryMedia from '../models/history.media.model.js';
 import { resolveContact, findOrCreateConversation } from '../controllers/contact.controller.js';
 import { descargarAdjunto, advanceConversationPreview } from '../controllers/webhook.controller.js';
-import { serializeMessage } from '../controllers/chat.controller.js';
+import { serializeMessage } from '../utils/message.serialize.js';
 import { sendConversationEvent } from './assignment.service.js';
 import { applyReaction } from './reaction.service.js';
 import { findQuotedMessage } from './message.reply.service.js';
