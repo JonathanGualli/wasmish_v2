@@ -166,7 +166,9 @@ test('GET /templates sin lineId: las de los WABA con línea activa, cada una con
 });
 
 // Revisión de Codex del plan de citas y reacciones, 9: el `message_created` de
-// una plantilla se arma a mano y no traía `canReply`: «Responder» no salía hasta recargar.
+// una plantilla se armaba a mano y no traía `canReply`: «Responder» no salía hasta
+// recargar. Desde que el final del envío es uno solo (`recordOutboundMessage`), es
+// `serializeMessage`, como el de un texto.
 test('el message_created de una plantilla enviada trae canReply', async () => {
     onMeta(async (config) => (config.method === 'post' && config.url === `/99${tr.seq}/messages`
         ? { data: { messages: [{ id: `wamid.plantilla.${Date.now()}` }] } } : undefined));
