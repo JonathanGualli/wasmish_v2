@@ -56,10 +56,14 @@ export const capacitacion: Story = {
     'afterHours.reply': 40.5,
     'broadcast.sweep': 43,
     'broadcast.label': 43.4,
+    'broadcast.headline': 43.7,
     'broadcast.card': 44,
+    'broadcast.tag': 47,
+    'broadcast.consent': 48.2,
     'broadcast.stats': 50,
     'broadcast.reply': 52,
     'closing.devices': 56,
+    'closing.headline': 56.4,
     'closing.pillNumber': 58.6,
     'closing.pillOfficial': 61,
     'closing.zoomPhone': 64,
@@ -99,7 +103,8 @@ export const capacitacion: Story = {
     assign: { before: 'Asignada a ', highlight: 'Gabriela', after: '' },
     afterHours: { before: 'Responde aunque estén ', highlight: 'cerrados', after: '' },
     broadcast: { before: 'Grupo nuevo: avíseles ', highlight: 'de una vez', after: '' },
-    closing: { before: 'Su mismo número · ', highlight: 'Conexión oficial', after: '' },
+    // El espacio duro deja el «·» al final del renglón, no al principio del siguiente.
+    closing: { before: 'Su mismo número\u00a0· ', highlight: 'Conexión oficial', after: '' },
   },
 
   kevin: {
