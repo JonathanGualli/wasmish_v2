@@ -8,7 +8,15 @@ Qué está en producción, qué hay en curso, qué viene y qué cabos sueltos se
 
 **La página pública `wasmish.com`**, en el aire desde el 2026-10-19: el inicio, `/capacitacion`, `/imprentas`, Privacidad y Términos (PRs #93 a #100, cada uno con su revisión de Codex; spec `docs/superpowers/specs/2026-10-17-pagina-publica-design.md`, plan `docs/superpowers/plans/2026-10-17-pagina-publica.md`, detalle en [pagina-publica.md](arquitectura/pagina-publica.md)). Vive en Cloudflare Pages y **se publica al unir un PR que toca `Site/`**, sin desplegar la app. `www` redirige a `wasmish.com` con una regla de Cloudflare (301, con la ruta y los parámetros), y `hola@wasmish.com` llega al Gmail de Jonathan. Probado el 2026-10-19: las páginas, la 404, las redirecciones de `www` y de `http://`, la vista previa en WhatsApp y el correo; Lighthouse en celular, rendimiento de 94 a 97. La app, el webhook y la API siguieron en 200. **Desde el PR `pagina-asignacion-historial`** las tres páginas hablan de la asignación de conversaciones (una pregunta frecuente y una fila en «Lo que pasa hoy») y del historial de la app al conectar (los chats de los últimos 6 meses, la agenda y los archivos de dos semanas), que antes decía que se quedaba en la app.
 
-**Versión 1.0.35**, desplegada el 2026-10-29 (etiqueta `v1.0.35`; comprobar con `curl https://app.wasmish.com/api/version`). Lleva:
+**Versión 1.0.36** (etiqueta `v1.0.36` al desplegarla; comprobar con `curl https://app.wasmish.com/api/version`). Lleva limpieza, sin funcionalidades nuevas:
+
+- **Cada página se descarga al entrar en ella** (PR #167), salvo Chats: el paquete principal baja de 1.105 kB a 712 kB (331 a 229 kB con gzip). Tras un despliegue, una pestaña o la app del celular abiertas desde antes que piden una página que ya no está recargan una vez (`reloadOnStaleChunk`). También fuera el código muerto del frontend, y `version:bump` escribe los `package-lock.json`.
+- **Un solo final para todos los envíos** (PR #168): el texto, los archivos, las plantillas, las campañas y la API pública guardan y avisan con `recordOutboundMessage`. El `message_created` de una plantilla o una campaña trae los mismos campos que el de un texto (antes le faltaban `deliveredAt`, `readAt`, `waMessageId`…). Lo que devuelve `/v1` no cambia.
+- **La transición de las notas, cerrada** (PR #170): las respuestas de contactos ya no traen `notes` (texto), `PATCH /contacts/:id` lo descarta sin error, y `Contact.notes` sale del modelo y de la BD (decisión del 2026-10-30). Y `POST /auto-replies/preview` ya no acepta la forma vieja (`text`).
+- Los cuatro PRs con su revisión de Codex (en el #170, un hallazgo aceptado). Probado con los tests (unitarios y de aislamiento) y, las páginas, en el navegador.
+- **Al desplegar:** se reconstruyen `wasmish-api` y `wasmish-web`. Sin variables ni índices nuevos. Se borraron tres archivos del frontend (`useSendMessage.ts`, `index.js` y `DashboardPage`). **`mongodump` antes** y, con la imagen nueva ya arrancada, **`npm run migrate:notes -- --drop-text`** (se puede mirar antes con `--drop-text --dry-run`): borra `Contact.notes`, que en producción tienen 2 contactos, los dos con su nota ya en la lista (consulta del 2026-10-30). **Volver atrás** a la 1.0.35 es seguro (su frontend no lee `notes` y prueba con `messages`); a una anterior a la 1.0.26, esas 2 notas ya no se ven.
+
+La 1.0.35 (desplegada el 2026-10-29) llevó:
 
 - **Más avisos de la asignación** (PR #163, con su revisión de Codex; decisiones del 2026-10-29 en `decisiones.md`), lo que salió de probar la 1.0.34 en producción:
   - **Push al rechazar y al pedir:** «Ana no te pasó esta conversación.» le suena al agente que la pidió, y «Luis pide esta conversación.» a los que ven la solicitud en la campanita (quien la atiende y quienes pueden responderla).
@@ -208,7 +216,6 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
 
 ## Lo siguiente
 
-- **Al desplegar la próxima versión** (la que lleve el PR `limpieza-backend`): `mongodump` antes y, con la imagen nueva ya arrancada, `npm run migrate:notes -- --drop-text`, que borra `Contact.notes` (en producción, 2 contactos, los dos con su nota ya en la lista). Volver atrás a la 1.0.35 sigue siendo seguro; a una anterior a la 1.0.26, esas notas ya no se ven.
 
 - **Avisar al cliente real** de que ya puede usar Wasmish en el celular, con los avisos: la app ya está en `app.wasmish.com` (desde la 1.0.24), que es donde tiene que instalarla. Cuando le convenga, que cambie la URL de su integración a `app.wasmish.com`; la vieja sigue funcionando.
 - **Multi-línea y multi-agente, fases 1 a 4** (diseño aprobado, sin preguntas abiertas: `docs/superpowers/specs/2026-10-11-multi-linea-multi-agente-design.md`). Fases 1, 2a y 2b en producción (la 2b, enrutar por línea, desde la 1.0.14). La **Fase 2c** está en producción desde la 1.0.15.
