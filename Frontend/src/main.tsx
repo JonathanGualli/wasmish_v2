@@ -9,6 +9,7 @@ import { SSEProvider } from './context/sse.provider.tsx';
 import { registerServiceWorker } from './libs/serviceWorker.ts';
 import { captureInstallPrompt } from './libs/installPrompt.ts';
 import { trackVisualViewport } from './libs/viewport.ts';
+import { reloadOnStaleChunk } from './libs/staleChunks.ts';
 
 // App instalable y avisos push (app móvil). Tras el `load`, para no competir
 // con la carga de la página.
@@ -17,6 +18,8 @@ window.addEventListener('load', () => { void registerServiceWorker(); });
 captureInstallPrompt();
 // El alto de la app con el teclado del teléfono abierto.
 trackVisualViewport();
+// Una página de la versión anterior que ya no está en el servidor: recargar.
+reloadOnStaleChunk();
 
 const queryClient = new QueryClient();
 
