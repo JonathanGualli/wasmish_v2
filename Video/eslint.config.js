@@ -16,7 +16,7 @@ export default tseslint.config([
     },
   },
   {
-    files: ['tests/**/*.ts', 'remotion.config.ts'],
+    files: ['tests/**/*.ts', 'remotion.config.ts', 'voice-import.ts'],
     extends: [js.configs.recommended, tseslint.configs.recommended],
     languageOptions: {
       ecmaVersion: 2022,

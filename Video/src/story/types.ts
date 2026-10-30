@@ -7,6 +7,12 @@ import type { Scene } from '../lib/timeline.ts'
 
 export type SceneId = 'hook' | 'recap' | 'assign' | 'afterHours' | 'broadcast' | 'closing'
 
+export const SCENE_ORDER: SceneId[] = ['hook', 'recap', 'assign', 'afterHours', 'broadcast', 'closing']
+
+// El audio de la voz de cada escena, dentro de public/ (la importa
+// `npm run voice:import`; no está en el repo).
+export const voiceFile = (id: SceneId) => `voz/escena-${SCENE_ORDER.indexOf(id) + 1}.flac`
+
 // Los mensajes de la página, más lo que el video necesita: un evento del hilo
 // («Mónica le asignó…», no es un mensaje) y lo enviado desde la app de WhatsApp
 // Business (sale sin el nombre de quién).
