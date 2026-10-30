@@ -11,7 +11,7 @@
     "lint": "tsc -p . && eslint .",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "render": "remotion render src/index.ts capacitacion out/capacitacion.mp4",
-    "render:whatsapp": "remotion render src/index.ts capacitacion out/capacitacion-whatsapp.mp4 --scale=0.6667 --crf=28"
+    "render:whatsapp": "remotion render src/index.ts capacitacion out/capacitacion-hq.mp4 --crf=12 && remotion ffmpeg -y -loglevel error -i out/capacitacion-hq.mp4 -vf scale=720:1280:flags=lanczos -c:v libx264 -crf 18 -pix_fmt yuv420p -movflags +faststart out/capacitacion-whatsapp.mp4"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.6",
