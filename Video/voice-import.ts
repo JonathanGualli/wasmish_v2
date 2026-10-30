@@ -5,8 +5,8 @@ import { SCENE_ORDER, voiceFile } from './src/story/types.ts'
 
 // npm run voice:import -- <carpeta>
 // Lleva la voz grabada al video: desde la carpeta con escena-1.flac + escena-1.json
-// … escena-6 (en la memoria privada, comercial/video-voz/), copia el audio a
-// public/voz/ (ignorada por git: la voz de Jonathan no va al repo público) y
+// … escena-6 (en la memoria privada, comercial/video-voz-elevenlabs/), copia el
+// audio a public/voz/ (ignorada por git: el audio no va al repo público) y
 // escribe las palabras con sus tiempos en src/story/capacitacion.voice.ts.
 
 const folder = process.argv[2]
@@ -37,7 +37,7 @@ const scenes = SCENE_ORDER.map((id) => {
 }).join('\n')
 
 writeFileSync('src/story/capacitacion.voice.ts', `// Generado por \`npm run voice:import\`: no se edita a mano. Las palabras de la
-// voz de Jonathan en cada escena, con sus tiempos en segundos desde el inicio de
+// voz en cada escena, con sus tiempos en segundos desde el inicio de
 // su archivo (alineación de ElevenLabs). El audio no está en el repo.
 import type { VoiceScene } from '../lib/voice.ts'
 import type { SceneId } from './types.ts'

@@ -1,4 +1,4 @@
-// Las palabras de la voz de Jonathan con sus tiempos, como las da el «forced
+// Las palabras de la voz del video con sus tiempos, como las da el «forced
 // alignment» de ElevenLabs (el audio y el texto exacto de cada escena). Los
 // tiempos van en segundos desde el inicio del archivo de la escena.
 

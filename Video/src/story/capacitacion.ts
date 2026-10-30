@@ -5,8 +5,8 @@ import type { Story } from './types.ts'
 // Academia Horizonte, la cuenta de demostración de capacitación
 // (Backend/scripts/fixtures/demo.scenarios.js): el video muestra lo mismo que
 // Jonathan enseña en una videollamada. Los textos de la voz son los del guion
-// (borrador 2) y los tiempos salen de la voz de Jonathan (capacitacion.voice.ts):
-// cada momento se ata a una palabra que dice. Las cuatro correcciones del
+// (borrador 2) y los tiempos salen de la voz (capacitacion.voice.ts), generada
+// en ElevenLabs: cada momento se ata a una palabra que dice. Las cuatro correcciones del
 // storyboard tienen su test.
 
 // Las respuestas de la demostración, resumidas (el guion lo permite): enteras
@@ -61,7 +61,7 @@ export const capacitacion: Story = resolveStory({
     'broadcast.headline': { at: 0.7 },
     'broadcast.card': { at: 1 },
     'broadcast.tag': { word: 'interesados' },
-    'broadcast.consent': { word: 'campaña' },
+    'broadcast.consent': { word: 'curso' },
     'broadcast.stats': { word: 'Ve' },
     'broadcast.reply': { word: 'respuestas', shift: -0.2 },
     'closing.devices': { at: 0 },
@@ -93,7 +93,7 @@ export const capacitacion: Story = resolveStory({
     { scene: 'afterHours', text: 'Wasmish responde solo, con lo que usted dejó preparado,', highlight: 'responde solo' },
     { scene: 'afterHours', text: 'y al abrir, su equipo sigue la conversación.', highlight: 'su equipo' },
     { scene: 'broadcast', text: 'Y cuando abre otro grupo, les avisa de una vez', highlight: 'de una vez' },
-    { scene: 'broadcast', text: 'a los interesados de ese curso, por medio de una campaña.', highlight: 'una campaña' },
+    { scene: 'broadcast', text: 'a los interesados de ese curso.' },
     { scene: 'broadcast', text: 'Ve cuántos lo leyeron, y las respuestas llegan al chat.', highlight: 'cuántos lo leyeron' },
     { scene: 'closing', text: 'Funciona en la computadora' },
     { scene: 'closing', text: 'y en el celular, con su mismo número', highlight: 'su mismo número' },
