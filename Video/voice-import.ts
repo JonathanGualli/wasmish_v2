@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { parseAlignment, type VoiceScene } from './src/lib/voice.ts'
 import { MUSIC_FILE, SCENE_ORDER, voiceFile } from './src/story/types.ts'
@@ -31,10 +31,14 @@ SCENE_ORDER.forEach((id, i) => {
   copyFileSync(`${base}.flac`, target)
 })
 
-// La música de fondo, si está en la misma carpeta.
+// La música de fondo, si está en la misma carpeta. Si no, se borra la de una
+// importación anterior: si no, el video seguiría sonando con ella (revisión de Codex).
 const music = path.join(folder, MUSIC_FILE)
 if (existsSync(music)) copyFileSync(music, path.join('public', MUSIC_FILE))
-else console.warn(`Sin ${MUSIC_FILE} en ${folder}: el video saldrá sin música.`)
+else {
+  rmSync(path.join('public', MUSIC_FILE), { force: true })
+  console.warn(`Sin ${MUSIC_FILE} en ${folder}: el video saldrá sin música.`)
+}
 
 const scenes = SCENE_ORDER.map((id) => {
   const words = voice[id].words.map((w) => `      { text: ${JSON.stringify(w.text)}, start: ${w.start}, end: ${w.end} },`).join('\n')
