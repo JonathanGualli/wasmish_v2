@@ -1,3 +1,5 @@
+import type { VoiceScene } from './voice.ts'
+
 // Los tiempos del video. Las escenas y los cues se escriben en segundos (como
 // los da el storyboard y, más adelante, la voz) y Remotion trabaja en cuadros.
 
@@ -41,4 +43,18 @@ export function checkScenes(scenes: Scene[]): string[] {
 // Un cue (segundos desde el inicio del video), en cuadros del <Sequence> de su escena.
 export function localFrame(cue: number, scene: Scene, fps = FPS): number {
   return toFrames(cue, fps) - toFrames(scene.from, fps)
+}
+
+// Las escenas una tras otra, cada una tan larga como su voz más un respiro
+// (`holds` para la que necesite más; si no, `defaultHold`), en centésimas.
+export function scenesFromVoice<T extends string>(order: T[], voice: Record<T, VoiceScene>, holds: Partial<Record<T, number>>, defaultHold: number): (Scene & { id: T })[] {
+  let from = 0
+  return order.map((id) => {
+    const scene = voice[id]
+    if (!scene) throw new Error(`No hay voz para la escena «${id}».`)
+    const to = Math.round((from + scene.end + (holds[id] ?? defaultHold)) * 100) / 100
+    const result = { id, from, to }
+    from = to
+    return result
+  })
 }
