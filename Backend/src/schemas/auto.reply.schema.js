@@ -84,16 +84,10 @@ const previewMessageSchema = z.string().trim()
     .max(PREVIEW_TEXT_MAX, `Máximo ${PREVIEW_TEXT_MAX} caracteres`);
 
 // POST /auto-replies/preview — qué respondería esta configuración, sin guardarla,
-// a una conversación (`messages`). `text`, un solo mensaje, es la forma de antes:
-// la manda una pestaña abierta con la página anterior mientras dura un
-// despliegue, y se quita en el PR siguiente a la versión 1.0.23.
+// a una conversación (`messages`).
 export const autoReplyPreviewSchema = z.object({
     settings: autoReplySettingsSchema,
-    text: previewMessageSchema.optional(),
     messages: z.array(previewMessageSchema)
         .min(1, 'Escribe un mensaje de prueba')
-        .max(PREVIEW_MESSAGES_MAX, `Como mucho ${PREVIEW_MESSAGES_MAX} mensajes: reinicia la conversación`)
-        .optional(),
-}).refine(body => (body.text === undefined) !== (body.messages === undefined), {
-    message: 'Manda la conversación (`messages`) o, de antes, un mensaje (`text`), no los dos',
+        .max(PREVIEW_MESSAGES_MAX, `Como mucho ${PREVIEW_MESSAGES_MAX} mensajes: reinicia la conversación`),
 });

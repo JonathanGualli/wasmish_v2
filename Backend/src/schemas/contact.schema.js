@@ -25,8 +25,9 @@ export const createContactSchema = z.object({
 });
 
 // Mismo formulario, todo opcional. El teléfono no se puede quitar (un contacto
-// sin teléfono ni BSUID no existe), solo cambiar, y solo sin conversación.
-export const updateContactSchema = createContactSchema.partial();
+// sin teléfono ni BSUID no existe), solo cambiar, y solo sin conversación. Las
+// notas son una lista aparte (/contacts/:id/notes): `notes` solo vale al crear.
+export const updateContactSchema = createContactSchema.omit({ notes: true }).partial();
 
 /**
  * Una selección de contactos: los marcados uno a uno, o «todos los que

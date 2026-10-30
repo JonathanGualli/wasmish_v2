@@ -88,7 +88,7 @@ test('solo owner y admin: supervisor y agente reciben 403; sin sesión, 401', as
     for (const member of [supervisor, agent]) {
         assert.equal((await getSettings(member)).status, 403);
         assert.equal((await saveSettings(member, settingsBody())).status, 403);
-        assert.equal((await request(member, 'POST', '/auto-replies/preview', { settings: settingsBody(), text: 'hola' })).status, 403);
+        assert.equal((await request(member, 'POST', '/auto-replies/preview', { settings: settingsBody(), messages: ['hola'] })).status, 403);
     }
     assert.equal((await getSettings(ANONYMOUS)).status, 401);
 });
@@ -145,19 +145,21 @@ test('lo que no es una configuración válida da 400', async () => {
 
 test('probar responde con la configuración sin guardar', async () => {
     const a = await newAccount('ARH');
-    const response = await request(a, 'POST', '/auto-replies/preview', { settings: settingsBody(), text: '¿Cuánto cuesta?' });
+    const response = await request(a, 'POST', '/auto-replies/preview', { settings: settingsBody(), messages: ['¿Cuánto cuesta?'] });
 
     assert.equal(response.status, 200);
-    assert.deepEqual(response.body.parts, ['¡Hola! Gracias por escribir', 'Cuesta $10']);
-    assert.equal(response.body.reply, '¡Hola! Gracias por escribir\n\nCuesta $10');
-    assert.deepEqual(response.body.matchedRuleIndexes, [0]);
-    assert.equal(response.body.outOfHours, false);
+    const [turn] = response.body.turns;
+    assert.deepEqual(turn.parts.map(part => part.text), ['¡Hola! Gracias por escribir', 'Cuesta $10']);
+    assert.equal(turn.reply, '¡Hola! Gracias por escribir\n\nCuesta $10');
+    assert.deepEqual(turn.parts.filter(part => part.kind === 'keyword').map(part => part.ruleIndex), [0]);
+    assert.equal(turn.parts.some(part => part.kind === 'outOfHours'), false);
     assert.equal((await getSettings(a)).body.enabled, false, 'probar no guarda');
 
     const nothing = await request(a, 'POST', '/auto-replies/preview', {
-        settings: settingsBody({ welcome: { enabled: false, text: '', returnAfterDays: 30 } }), text: 'gracias',
+        settings: settingsBody({ welcome: { enabled: false, text: '', returnAfterDays: 30 } }), messages: ['gracias'],
     });
-    assert.deepEqual(nothing.body, { reply: null, parts: [], matchedRuleIndexes: [], outOfHours: false, fallback: false });
+    assert.equal(nothing.body.turns[0].reply, null);
+    assert.deepEqual(nothing.body.turns[0].parts, []);
 });
 
 // --- La pausa por respuesta manual -----------------------------------------
@@ -772,8 +774,9 @@ test('probar una conversación valida los mensajes', async () => {
         ['más de 1.000 caracteres', { settings, messages: ['a'.repeat(1001)] }],
         ['un número', { settings, messages: [42] }],
         ['más de 20', { settings, messages: Array.from({ length: 21 }, () => 'hola') }],
-        ['text y messages a la vez', { settings, text: 'hola', messages: ['hola'] }],
-        ['ni text ni messages', { settings }],
+        ['sin messages', { settings }],
+        // La forma de antes (un solo mensaje en `text`) se quitó tras la 1.0.23.
+        ['solo text, la forma de antes', { settings, text: 'hola' }],
     ]) {
         assert.equal((await preview(a, body)).status, 400, label);
     }

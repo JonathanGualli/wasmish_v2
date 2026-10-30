@@ -1,20 +1,16 @@
 import ContactNote from '../models/contact.note.model.js';
 import User from '../models/user.model.js';
-import { NOTES_PER_CONTACT_MAX, legacyNoteFrom, serializeNote } from '../utils/contact.notes.js';
+import { NOTES_PER_CONTACT_MAX, serializeNote } from '../utils/contact.notes.js';
 
 export const NOTES_LIMIT_MESSAGE = `Este contacto ya tiene ${NOTES_PER_CONTACT_MAX} notas.`;
 
 /**
  * Las notas de un contacto para la persona de la sesión, de la más nueva a la
- * más vieja. Si `migrate:notes` aún no pasó por él, la nota de antes se lee al
- * vuelo de `Contact.notes` (sin poder editarla): así no falta durante el
- * despliegue.
+ * más vieja.
  */
 export const listContactNotes = async (contact, auth) => {
     const notes = await ContactNote.find({ userId: contact.userId, contactId: contact._id })
         .sort({ createdAt: -1 }).limit(NOTES_PER_CONTACT_MAX + 1).lean();
-    const legacy = notes.some(note => note.source === 'legacy') ? null : legacyNoteFrom(contact);
-    if (legacy) notes.push(legacy);
     return serializeNotes(notes, auth);
 };
 

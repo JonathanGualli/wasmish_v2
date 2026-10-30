@@ -74,10 +74,6 @@ const contactSchema = new mongoose.Schema({
         default: null,
         trim: true,
     },
-    notes: {
-        type: String,
-        default: null,
-    },
     // Etiquetas de la cuenta (`Tag`), como mucho MAX_TAGS_PER_CONTACT.
     tags: {
         type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Tag' }],

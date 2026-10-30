@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
 
 import {
-    NOTE_TEXT_MAX, canEditNote, serializeNote, cleanNoteText, importKeyFor, pickImportNote, legacyNoteFrom,
+    NOTE_TEXT_MAX, canEditNote, serializeNote, cleanNoteText, importKeyFor, pickImportNote,
 } from '../src/utils/contact.notes.js';
 
 const ownerId = new mongoose.Types.ObjectId();
@@ -25,11 +25,10 @@ test('canEditNote: owner y admin, cualquiera', () => {
     assert.equal(canEditNote(session(new mongoose.Types.ObjectId(), 'admin'), note()), true);
 });
 
-test('canEditNote: la nota de antes (sin autor) solo owner y admin; la leída al vuelo, nadie', () => {
+test('canEditNote: la nota de antes (sin autor) solo owner y admin', () => {
     const legacy = note({ authorId: null, authorName: null, source: 'legacy' });
     assert.equal(canEditNote(session(ownerId, 'owner'), legacy), true);
     assert.equal(canEditNote(session(agentId, 'agent'), legacy), false);
-    assert.equal(canEditNote(session(ownerId, 'owner'), { ...legacy, _id: undefined, id: 'legacy' }), false);
 });
 
 test('canEditNote: sin persona en la sesión (API key), nunca', () => {
@@ -62,15 +61,6 @@ test('pickImportNote: vacía o ya escrita (sin mirar espacios ni mayúsculas), n
     assert.equal(pickImportNote('', []), null);
     assert.equal(pickImportNote('Paga a 30 días', ['paga a 30 DÍAS ']), null);
     assert.equal(pickImportNote(' Paga a 30 días ', []), 'Paga a 30 días');
-});
-
-test('legacyNoteFrom: la nota de antes, leída al vuelo de Contact.notes', () => {
-    const createdAt = new Date('2026-01-02T00:00:00Z');
-    assert.equal(legacyNoteFrom({ notes: '  ', createdAt }), null);
-    assert.equal(legacyNoteFrom({ notes: null, createdAt }), null);
-    assert.deepEqual(legacyNoteFrom({ notes: ' vieja ', createdAt }), {
-        id: 'legacy', text: 'vieja', authorId: null, authorName: null, source: 'legacy', createdAt, editedAt: null,
-    });
 });
 
 test('serializeNote: quien ya no está en la cuenta y quién la editó', () => {

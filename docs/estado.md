@@ -208,7 +208,7 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
 
 ## Lo siguiente
 
-- **Cerrar la transición de las notas** en una versión posterior, cuando nadie tenga abierta una pestaña de la 1.0.25: quitar `notes` (texto) de las respuestas de contactos, el 400 `notes_moved` de `PATCH /contacts/:id` y la lectura al vuelo de la nota de antes, y borrar `Contact.notes` con su propio paso (spec de las notas, § 3 y § 8).
+- **Al desplegar la próxima versión** (la que lleve el PR `limpieza-backend`): `mongodump` antes y, con la imagen nueva ya arrancada, `npm run migrate:notes -- --drop-text`, que borra `Contact.notes` (en producción, 2 contactos, los dos con su nota ya en la lista). Volver atrás a la 1.0.35 sigue siendo seguro; a una anterior a la 1.0.26, esas notas ya no se ven.
 
 - **Avisar al cliente real** de que ya puede usar Wasmish en el celular, con los avisos: la app ya está en `app.wasmish.com` (desde la 1.0.24), que es donde tiene que instalarla. Cuando le convenga, que cambie la URL de su integración a `app.wasmish.com`; la vieja sigue funcionando.
 - **Multi-línea y multi-agente, fases 1 a 4** (diseño aprobado, sin preguntas abiertas: `docs/superpowers/specs/2026-10-11-multi-linea-multi-agente-design.md`). Fases 1, 2a y 2b en producción (la 2b, enrutar por línea, desde la 1.0.14). La **Fase 2c** está en producción desde la 1.0.15.
@@ -217,7 +217,7 @@ La 1.0.22 (desplegada el 2026-10-15) llevó:
     2. `maxLines: 2` en una cuenta de prueba desde el panel.
   - La **Fase 3** (equipo, roles y acceso por línea) está en producción desde la 1.0.18. **Encender equipos en una cuenta real** (subir su `maxUsers`) ya no espera ningún ensayo: Jonathan probó el equipo y no hace falta ensayar la vuelta atrás (ver `decisiones.md`, 2026-10-19). Lo que queda en pie: una imagen anterior a la Fase 3 (`:1.0.16` o antes) no conoce los permisos, así que con una cuenta de varios usuarios no se vuelve a ella.
   - La **Fase 4** (asignar conversaciones y transferirlas) está en producción desde la 1.0.33 y probada; sus avisos, en producción desde la 1.0.34, y sus mejoras, desde la 1.0.35 (ver «En curso»).
-- **Respuestas automáticas:** quitar la forma vieja de `POST /api/auto-replies/preview` (`{ settings, text }`), que solo seguía para las pestañas abiertas durante el despliegue de la 1.0.23. Y más adelante, las mejoras del spec, § 2: «un mensaje por regla», fotos en las respuestas, agrupar ráfagas, reglas por línea, feriados; y luego menús con botones o IA.
+- **Respuestas automáticas:** más adelante, las mejoras del spec, § 2: «un mensaje por regla», fotos en las respuestas, agrupar ráfagas, reglas por línea, feriados; y luego menús con botones o IA.
 - El campo de archivo de cabecera al enviar una plantilla a **un solo contacto** (`SendTemplateDialog` y `NewConversationPanel`); hoy solo existe en las campañas.
 - En la API pública: el campo `header`, la cabecera de texto con variable y las plantillas de carrusel. Toca al cliente de la API: con cuidado.
 - Más adelante: programar campañas para una hora.
