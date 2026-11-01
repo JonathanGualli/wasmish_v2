@@ -22,6 +22,10 @@ export const capacitacion: Story = resolveStory({
   // (recap), el aviso se queda en la pantalla bloqueada (assign) y el logo,
   // quieto 3 s al final (closing).
   holds: { recap: 1.2, assign: 1.2, closing: 3.3 },
+  // La pista de ElevenLabs (alegre, ~110 BPM) termina con un golpe a los 59,9 s
+  // y un acorde que se apaga en 4 s: el golpe suena justo al terminar la voz
+  // (debajo de ella no se oiría) y el acorde se apaga con el logo.
+  music: { hit: 59.9, cue: 'closing.musicHit' },
 
   cues: {
     'hook.headline': { at: 0.6 },
@@ -73,6 +77,7 @@ export const capacitacion: Story = resolveStory({
     'closing.ink': { word: 'Soy', shift: -0.5 },
     'closing.second': { word: 'Si' },
     'closing.logo': { word: 'funcionando' },
+    'closing.musicHit': { word: 'funcionando', edge: 'end', shift: 0.1 },
   },
 
   // Lo que dice la voz, frase a frase. «Soy Jonathan…» no lleva subtítulo: ya

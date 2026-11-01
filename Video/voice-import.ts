@@ -1,12 +1,12 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { parseAlignment, type VoiceScene } from './src/lib/voice.ts'
-import { SCENE_ORDER, voiceFile } from './src/story/types.ts'
+import { MUSIC_FILE, SCENE_ORDER, voiceFile } from './src/story/types.ts'
 
 // npm run voice:import -- <carpeta>
 // Lleva la voz grabada al video: desde la carpeta con escena-1.flac + escena-1.json
-// … escena-6 (en la memoria privada, comercial/video-voz-elevenlabs/), copia el
-// audio a public/voz/ (ignorada por git: el audio no va al repo público) y
+// … escena-6 y musica.flac (en la memoria privada, comercial/video-voz-elevenlabs/),
+// copia el audio a public/ (ignorada por git: el audio no va al repo público) y
 // escribe las palabras con sus tiempos en src/story/capacitacion.voice.ts.
 
 const folder = process.argv[2]
@@ -30,6 +30,15 @@ SCENE_ORDER.forEach((id, i) => {
   mkdirSync(path.dirname(target), { recursive: true })
   copyFileSync(`${base}.flac`, target)
 })
+
+// La música de fondo, si está en la misma carpeta. Si no, se borra la de una
+// importación anterior: si no, el video seguiría sonando con ella (revisión de Codex).
+const music = path.join(folder, MUSIC_FILE)
+if (existsSync(music)) copyFileSync(music, path.join('public', MUSIC_FILE))
+else {
+  rmSync(path.join('public', MUSIC_FILE), { force: true })
+  console.warn(`Sin ${MUSIC_FILE} en ${folder}: el video saldrá sin música.`)
+}
 
 const scenes = SCENE_ORDER.map((id) => {
   const words = voice[id].words.map((w) => `      { text: ${JSON.stringify(w.text)}, start: ${w.start}, end: ${w.end} },`).join('\n')

@@ -49,6 +49,17 @@ test('el aviso se queda al menos 2 s en la pantalla bloqueada', () => {
   assert.ok(sceneEnd('assign') - story.cues['assign.notification'] >= 2)
 })
 
+// La música empieza para que su golpe final suene al terminar la voz (debajo
+// de ella no se oiría), y se baja debajo de la voz en cada escena.
+test('el golpe final de la música suena al terminar la voz', () => {
+  const hit = story.music.start + 59.9
+  assert.ok(story.music.start >= 0)
+  assert.ok(Math.abs(hit - story.cues['closing.musicHit']) < 0.01)
+  assert.ok(hit > story.speech[story.speech.length - 1].to && hit < sceneEnd('closing') - 3)
+  assert.equal(story.speech.length, story.scenes.length)
+  story.speech.forEach((span, i) => assert.ok(span.from >= story.scenes[i].from && span.to <= story.scenes[i].to))
+})
+
 test('el logo queda quieto 3 s al final', () => {
   assert.ok(sceneEnd('closing') - (story.cues['closing.logo'] + 0.6) >= 3)
 })
