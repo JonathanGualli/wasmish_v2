@@ -10,10 +10,6 @@ import { getWindowExpiry } from '../utils/whatsapp.window.js';
 import { describeInboundMessage, describeUnsupportedReason, describeReaction, describeMessageContext } from '../utils/inbound.message.js';
 import { describeInboundContact, hasContactIdentity, describeUserIdUpdate } from '../utils/contact.identity.js';
 import { describeUserPreference } from '../utils/marketing.preference.js';
-import { TIPOS_CON_ARCHIVO, nombreDeArchivo, guardarArchivo } from '../utils/media.storage.js';
-import { getMediaInfo, downloadMedia } from '../libs/whatsapp.js';
-import { decrypt } from '../utils/crypto.js';
-import { MEDIA_DIR, MEDIA_MAX_BYTES } from '../config.js';
 import { disconnectRemovedWaba, findInboundLine, rememberDisplayPhoneNumber } from '../services/line.service.js';
 import { notifyInbound } from '../services/push.service.js';
 import { sendConversationEvent } from '../services/assignment.service.js';
@@ -30,68 +26,8 @@ import { serializeMessage } from '../utils/message.serialize.js';
 import { storeHistoryChunks, storeHistoryMedia } from '../services/history.intake.service.js';
 import { storeAgendaSync } from '../services/agenda.service.js';
 import { isTransientDbError } from '../utils/db.errors.js';
-
-// Baja el adjunto y lo deja en disco. Devuelve SIEMPRE un objeto: si algo falla
-// —token caducado, archivo enorme, Meta caída— sale con mediaFile en null y el
-// mensaje se guarda igual con su etiqueta. Perder la foto es un problema;
-// perder el mensaje entero sería mucho peor.
-export const descargarAdjunto = async (inbound, entrante) => {
-    const vacio = { mediaFile: null, mediaFilename: null, mediaSize: null, mimeType: entrante.mimeType };
-
-    if (!entrante.mediaId || !TIPOS_CON_ARCHIVO.has(entrante.type)) return vacio;
-    // El token es el del WABA de la línea; sin él no hay con qué pedir el archivo.
-    if (!inbound.tokenWhatsapp) return vacio;
-
-    try {
-        const token = decrypt(inbound.tokenWhatsapp);
-        if (!token) return vacio;
-
-        const info = await getMediaInfo({ token, mediaId: entrante.mediaId });
-
-        // El tamaño se comprueba ANTES de bajar: si no, el tope solo actuaría
-        // después de habernos tragado los bytes.
-        const tamano = Number(info?.file_size ?? 0);
-        if (tamano > MEDIA_MAX_BYTES) {
-            console.warn('Adjunto omitido por tamaño:', { mediaId: entrante.mediaId, tamano, tope: MEDIA_MAX_BYTES });
-            return vacio;
-        }
-
-        // El mime de la descarga manda sobre el del webhook: es el que Meta usa
-        // de verdad para el archivo.
-        const mimeType = info?.mime_type ?? entrante.mimeType;
-        const nombre = nombreDeArchivo(entrante.mediaId, mimeType);
-        if (!nombre) return vacio;
-
-        const contenido = await downloadMedia({ token, url: info.url, maxBytes: MEDIA_MAX_BYTES });
-        await guardarArchivo(MEDIA_DIR, nombre, contenido);
-
-        return { mediaFile: nombre, mediaFilename: entrante.filename ?? null, mediaSize: contenido.length, mimeType };
-    } catch (error) {
-        console.error('No se pudo descargar el adjunto:', {
-            mediaId: entrante.mediaId, type: entrante.type,
-            error: error.waErrorDetail ?? error.message,
-        });
-        return vacio;
-    }
-};
-
-/**
- * Adelanta la vista previa de la conversación con un mensaje que no es un
- * entrante en vivo (un eco, lo traído del historial). Nunca retrocede, porque
- * Meta no garantiza el orden: solo si el mensaje es más nuevo o si la
- * conversación acaba de nacer (sin vista previa, con `lastMessageAt` = ahora).
- * `sameTime` también la cambia con la misma hora: lo usa el entrante en vivo,
- * porque Meta da la hora en segundos y, de dos mensajes del mismo segundo
- * («hola», «necesito ayuda»), el último que se procesa es el que va.
- * @returns {Promise<boolean>} si la cambió.
- */
-export const advanceConversationPreview = async (conversationId, { text, timestamp }, { sameTime = false } = {}) => {
-    const result = await Conversation.updateOne(
-        { _id: conversationId, $or: [{ lastMessage: { $in: ['', null] } }, { lastMessageAt: { [sameTime ? '$lte' : '$lt']: timestamp } }] },
-        { $set: { lastMessage: text, lastMessageAt: timestamp } },
-    );
-    return result.modifiedCount > 0;
-};
+import { descargarAdjunto } from '../services/inbound.media.service.js';
+import { advanceConversationPreview } from '../services/conversation.preview.service.js';
 
 export const verifyWebhook = (req, res) => { 
     const mode = req.query['hub.mode'];
