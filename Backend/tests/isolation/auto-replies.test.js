@@ -847,6 +847,14 @@ test('menús: lo que no es un menú válido da 400 y no guarda nada', async () =
     const withWelcomeOptions = (options) => ({ ...base, welcome: { ...base.welcome, options } });
     const eleven = Array.from({ length: 11 }, (_, i) => ({ title: `Opción ${i + 1}`, target: 'start' }));
 
+    // Revisión de Codex del PR #181, 2: sin `ruleId` la validación lanzaba un
+    // TypeError y el 400 decía «Cannot read properties of null».
+    for (const option of [{ title: 'Sin destino', target: 'rule' }, { title: 'Sin destino', target: 'rule', ruleId: null }]) {
+        const response = await saveSettings(a, withWelcomeOptions([option]));
+        assert.equal(response.status, 400);
+        assert.ok(response.body.some(issue => issue.message === 'Elige a qué respuesta lleva'), JSON.stringify(response.body));
+    }
+
     for (const [name, body] of Object.entries({
         destinoDesconocido: withWelcomeOptions([{ title: 'Otra', target: 'rule', ruleId: '6729a1b2c3d4e5f6a7b8c9ff' }]),
         // La respuesta existe, pero en otra cuenta.

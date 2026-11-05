@@ -536,6 +536,16 @@ test('un toque nunca saluda, ni a un contacto nuevo', () => {
     assert.equal(result.claims.welcomed, false);
 });
 
+// Revisión de Codex del PR #181, 1: un toque viejo seguía el camino de un texto
+// escrito y saludaba (y marcaba el saludo) a quien volvía tras `returnAfterDays`.
+test('un toque viejo tampoco saluda a quien vuelve tras returnAfterDays', () => {
+    const back = hoursBefore(OPEN, 24 * 31);
+    const result = decideMenu({ message: tap('wasmish:r:6729a1b2c3d4e5f6a7b8c9ff', 'precio'), previousInboundAt: back, welcomedAt: back });
+    assert.deepEqual(result.parts, ['Cuesta $10']);
+    assert.equal(result.claims.welcomed, false);
+    assert.equal(result.explain.welcome, false);
+});
+
 test('«volver al inicio» responde la bienvenida con sus opciones, sin marcar el saludo', () => {
     const result = decideMenu({ message: tap('wasmish:start', 'Volver'), previousInboundAt: null });
     assert.deepEqual(result.parts, ['¡Hola!']);

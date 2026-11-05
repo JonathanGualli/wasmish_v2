@@ -289,7 +289,8 @@ const decideWritten = (settings, state, welcomedAt, message, previousInboundAt, 
     // Una sola ventana para no repetirse: las horas de «Cuándo se calla».
     const windowMs = settings.handoffHours * HOUR_MS;
     const parts = [];
-    const welcomed = shouldWelcome(settings, previousInboundAt, welcomedAt, now);
+    // Un toque, aunque sea viejo, nunca saluda (revisión de Codex del PR #181).
+    const welcomed = message?.type !== 'interactive' && shouldWelcome(settings, previousInboundAt, welcomedAt, now);
     if (welcomed) parts.push(settings.welcome.text);
 
     const keywords = matchingKeywordRules(settings, state, message, lineId, now, windowMs);

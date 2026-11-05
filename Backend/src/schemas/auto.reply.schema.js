@@ -84,7 +84,8 @@ const checkMenus = (settings, ctx) => {
     for (const [where, options] of groups) {
         options.forEach((option, index) => {
             if (option.target === 'person') person = true;
-            if (option.target === 'rule' && !ruleIds.has(option.ruleId.toLowerCase())) {
+            // Sin `ruleId`, ya lo dice el refine de la opción (y zod sigue hasta aquí).
+            if (option.target === 'rule' && option.ruleId && !ruleIds.has(option.ruleId.toLowerCase())) {
                 ctx.addIssue({ code: 'custom', message: 'Esa respuesta no existe', path: [...where.split('.'), 'options', index, 'ruleId'] });
             }
         });
