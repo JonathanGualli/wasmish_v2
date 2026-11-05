@@ -273,8 +273,12 @@ test('con el endpoint reasignado a B, un entrante de PC ya no llega a ese dispos
     await subscribe(b, shared);
 
     assert.equal((await postWebhook('631', textMessage('593990006306', 'navegador compartido'))).status, 200);
-    assert.ok(await waitFor(() => sentTo(ownerOther).length), 'no se avisó al otro dispositivo del owner');
-    assert.equal(sentTo(shared).length, 0, 'el dispositivo ahora de B recibió un aviso de PC');
+    // Solo los avisos de ESTE mensaje: el «push lento» del test anterior se
+    // calcula sin esperar y, si busca las suscripciones después de que aquí se
+    // suscribió `shared` a PC, le llegaba a él (falló así en el CI del PR #182).
+    const ofThisMessage = (endpoint) => sentTo(endpoint).filter(call => call.payload.body === 'navegador compartido');
+    assert.ok(await waitFor(() => ofThisMessage(ownerOther).length), 'no se avisó al otro dispositivo del owner');
+    assert.equal(ofThisMessage(shared).length, 0, 'el dispositivo ahora de B recibió un aviso de PC');
 });
 
 // --- Avisos de la asignación: «te asignaron» y «te la pasaron» (spec § 7) ---
