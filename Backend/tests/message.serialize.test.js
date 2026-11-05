@@ -26,6 +26,18 @@ test('serializeMessage: un mensaje anterior a los campos sale con sus valores po
     assert.equal(out.waMessageId, null);
     assert.equal(out.templateName, null);
     assert.equal(out.replyTo, null);
+    assert.equal(out.choiceId, null);
+    assert.equal(out.options, null);
+    assert.equal(out.optionsFormat, null);
+});
+
+test('serializeMessage: el toque lleva su id y el mensaje del bot sus opciones', () => {
+    const tap = serializeMessage({ ...base, sender: 'them', type: 'interactive', choiceId: 'wasmish:start' });
+    assert.equal(tap.choiceId, 'wasmish:start');
+
+    const menu = serializeMessage({ ...base, options: [{ id: 'wasmish:person', title: 'Hablar con alguien' }], optionsFormat: 'buttons' });
+    assert.deepEqual(menu.options, [{ id: 'wasmish:person', title: 'Hablar con alguien' }]);
+    assert.equal(menu.optionsFormat, 'buttons');
 });
 
 test('serializeMessage: de qué campaña salió, con su nombre si se conoce', () => {

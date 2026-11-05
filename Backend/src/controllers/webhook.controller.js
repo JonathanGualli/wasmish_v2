@@ -165,6 +165,8 @@ const procesarEntrante = async (inbound, messageData, contacts) => {
             mediaFilename: adjunto.mediaFilename,
             mediaSize: adjunto.mediaSize,
             caption: entrante.caption,
+            // El toque de una opción de un menú (bot con menús).
+            ...(entrante.choiceId && { choiceId: entrante.choiceId }),
             timestamp,
             status: 'delivered',
             deliveredAt: timestamp,

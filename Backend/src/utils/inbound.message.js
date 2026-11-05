@@ -2,7 +2,7 @@
 //
 // Meta manda una forma distinta por cada tipo (`image.caption`, `button.text`,
 // `interactive.button_reply.title`…). Este archivo es el único sitio que conoce
-// esas formas: el controller solo recibe { type, text, mediaId, mimeType }.
+// esas formas: el controller solo recibe { type, text, mediaId, mimeType, choiceId… }.
 //
 // Regla que no se puede romper: `text` NUNCA sale vacío. `Message.text` es
 // required en el modelo, y un throw dentro del webhook hace que Meta reintente
@@ -122,8 +122,13 @@ const describirInteractivo = (interactive) =>
     ?? conTexto(interactive?.list_reply?.title)
     ?? ETIQUETA_DESCONOCIDO;
 
+// El id de la opción tocada en un botón o una fila de lista: el bot con menús
+// lo lee para saber adónde lleva (`parseOptionId`).
+const idDeLaOpcion = (interactive) =>
+    conTexto(interactive?.button_reply?.id) ?? conTexto(interactive?.list_reply?.id);
+
 /**
- * @returns {{type: string, text: string, mediaId: string|null, mimeType: string|null, filename: string|null}|null}
+ * @returns {{type: string, text: string, mediaId: string|null, mimeType: string|null, filename: string|null, caption: string|null, choiceId: string|null}|null}
  *          null si el mensaje no debe guardarse ni abrir la ventana.
  */
 export const describeInboundMessage = (messageData) => {
@@ -146,6 +151,8 @@ export const describeInboundMessage = (messageData) => {
         // `text`, que cae a la etiqueta («Imagen») cuando no hay caption. La UI
         // lo necesita para no poner «Imagen» debajo de una imagen que ya se ve.
         caption: conTexto(contenido?.caption),
+        // La opción que tocó, en un `interactive` (bot con menús).
+        choiceId: type === 'interactive' ? idDeLaOpcion(contenido) : null,
     });
 
     switch (type) {

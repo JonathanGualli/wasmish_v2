@@ -42,6 +42,14 @@ test('inboundMatchText ignora la etiqueta de un adjunto sin texto', () => {
     assert.equal(inboundMatchText({ type: 'audio', text: 'Nota de voz' }), null);
 });
 
+// Bot con menús: un toque viejo (su respuesta ya no existe) se trata como si el
+// contacto hubiera escrito el título del botón (spec 2026-11-05 § 4.3). Los
+// botones de una plantilla siguen sin disparar palabras clave.
+test('inboundMatchText usa el título de un toque, no el de un botón de plantilla', () => {
+    assert.equal(inboundMatchText({ type: 'interactive', text: 'Precios', caption: null }), 'Precios');
+    assert.equal(inboundMatchText({ type: 'button', text: 'Confirmar', caption: null }), null);
+});
+
 // --- decideAutoReply -------------------------------------------------------
 
 const ecuador = (localIso) => new Date(`${localIso}-05:00`);

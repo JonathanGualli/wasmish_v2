@@ -44,4 +44,8 @@ export const serializeMessage = (msg, { campaignNames, quoted } = {}) => ({
     reactions: serializeReactions(msg),
     canReact: canReactTo(msg),
     canReply: canReplyTo(msg),
+    // Bot con menús: la opción que tocó el contacto, y las que mandó el bot.
+    choiceId: msg.choiceId ?? null,
+    options: msg.options ?? null,
+    optionsFormat: msg.optionsFormat ?? null,
 });

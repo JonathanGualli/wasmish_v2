@@ -54,10 +54,12 @@ export const matchesKeyword = (normalizedText, keyword) => {
 /**
  * Lo que escribió el contacto, para buscar palabras clave: el cuerpo de un
  * texto o lo escrito junto a un archivo. Nunca la etiqueta automática
- * («Imagen»): esa no la escribió nadie.
+ * («Imagen»): esa no la escribió nadie. De un toque en un menú, su título: un
+ * toque viejo se trata como si lo hubiera escrito (spec del bot con menús,
+ * § 4.3). Los botones de una plantilla (`button`) no.
  */
 export const inboundMatchText = ({ type, text, caption }) => {
-    if (type === 'text') return text ?? null;
+    if (type === 'text' || type === 'interactive') return text ?? null;
     return caption ?? null;
 };
 
