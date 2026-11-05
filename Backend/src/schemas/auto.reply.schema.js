@@ -138,11 +138,18 @@ const previewMessageSchema = z.string().trim()
     .min(1, 'Escribe un mensaje de prueba')
     .max(PREVIEW_TEXT_MAX, `Máximo ${PREVIEW_TEXT_MAX} caracteres`);
 
+// El toque de una opción en la prueba (bot con menús): su id y su título, que
+// es lo que cuenta si el toque ya no lleva a ningún sitio (un toque viejo).
+const previewTapSchema = z.object({
+    optionId: z.string().max(256, 'Id de opción no válido'),
+    title: z.string().trim().min(1, 'Falta el título de la opción').max(24, 'Título de opción no válido'),
+});
+
 // POST /auto-replies/preview — qué respondería esta configuración, sin guardarla,
-// a una conversación (`messages`).
+// a una conversación (`messages`): textos escritos o toques de opciones.
 export const autoReplyPreviewSchema = z.object({
     settings: autoReplySettingsSchema,
-    messages: z.array(previewMessageSchema)
+    messages: z.array(z.union([previewMessageSchema, previewTapSchema]))
         .min(1, 'Escribe un mensaje de prueba')
         .max(PREVIEW_MESSAGES_MAX, `Como mucho ${PREVIEW_MESSAGES_MAX} mensajes: reinicia la conversación`),
 });

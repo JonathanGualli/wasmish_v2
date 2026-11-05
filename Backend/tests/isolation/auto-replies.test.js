@@ -940,3 +940,26 @@ test('menús: una configuración guardada antes de los menús se completa al lee
     const [reply] = await botMessagesOf(inbound.conversationId);
     assert.equal(reply.text, WELCOME);
 });
+
+test('menús: probar con toques, sin guardar nada', async () => {
+    const a = await newAccount('MNI');
+    const response = await preview(a, {
+        settings: menuBody(),
+        messages: ['hola', { optionId: `wasmish:r:${RULE_A}`, title: 'Precios' }, { optionId: 'wasmish:person', title: 'Hablar con alguien' }, 'precio'],
+    });
+    assert.equal(response.status, 200, response.text);
+    const { turns } = response.body;
+    assert.equal(turns[0].optionsFormat, 'buttons');
+    assert.deepEqual(turns[0].options, [
+        { id: `wasmish:r:${RULE_A}`, title: 'Precios' },
+        { id: 'wasmish:person', title: 'Hablar con alguien' },
+    ]);
+    assert.deepEqual(turns[1].parts, [{ kind: 'option', text: 'Cuesta $10', ruleIndex: 0 }]);
+    assert.deepEqual(turns[2].parts, [{ kind: 'handoff', text: 'Ya te atiende alguien' }]);
+    assert.equal(turns[3].skip, 'handoff');
+    assert.equal((await getSettings(a)).body.configured, false);
+
+    for (const bad of [{ optionId: 'x'.repeat(257), title: 'A' }, { optionId: 'wasmish:start', title: '' }, { optionId: 'wasmish:start' }]) {
+        assert.equal((await preview(a, { settings: menuBody(), messages: [bad] })).status, 400, JSON.stringify(bad).slice(0, 60));
+    }
+});

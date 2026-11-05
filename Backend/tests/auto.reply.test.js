@@ -485,3 +485,159 @@ test('withAutoReplyDefaults completa una configuración de la v1 sin tocar lo qu
     assert.deepEqual(withAutoReplyDefaults(withMenus).handoff, { text: 'Ya va' });
     assert.equal(withAutoReplyDefaults(withMenus).welcome.options.length, 1);
 });
+
+// --- Bot con menús: toques y opciones (spec 2026-11-05) --------------------
+
+const PRECIOS = '6729a1b2c3d4e5f6a7b8c901';
+const ENVIOS = '6729a1b2c3d4e5f6a7b8c902';
+const INICIO = '6729a1b2c3d4e5f6a7b8c903';
+const MENU = {
+    ...SETTINGS,
+    welcome: {
+        enabled: true, text: '¡Hola!', returnAfterDays: 30,
+        options: [{ title: 'Precios', target: 'rule', ruleId: PRECIOS }, { title: 'Hablar con alguien', target: 'person', ruleId: null }],
+    },
+    keywordRules: [
+        rule(PRECIOS, ['precio'], 'Cuesta $10', {
+            options: [{ title: 'Envíos', target: 'rule', ruleId: ENVIOS }, { title: 'Hablar con alguien', target: 'person', ruleId: null }],
+        }),
+        rule(ENVIOS, [], 'Enviamos en 48 h', { options: [] }),
+        rule(INICIO, ['inicio'], 'Escribiste inicio', { options: [] }),
+    ],
+    fallback: { enabled: true, text: 'No te entendí', options: [{ title: 'Volver', target: 'start', ruleId: null }] },
+    handoff: { text: 'Ya te atiende alguien' },
+};
+const tap = (choiceId, title) => ({ type: 'interactive', text: title, caption: null, choiceId });
+const decideMenu = (overrides = {}) => decide({ settings: MENU, previousInboundAt: KNOWN, ...overrides });
+
+test('un toque a otra respuesta la responde con sus opciones, aunque haya salido hace una hora', () => {
+    const result = decideMenu({
+        message: tap(`wasmish:r:${ENVIOS}`, 'Envíos'),
+        state: { keywordRepliedAt: { [ENVIOS]: hoursBefore(OPEN, 1) } },
+    });
+    assert.deepEqual(result.parts, ['Enviamos en 48 h']);
+    assert.deepEqual(result.options, []);
+    // Decisión D del spec: el toque cuenta como que esa respuesta salió.
+    assert.deepEqual(result.claims.keywordRuleIds, [ENVIOS]);
+    assert.equal(result.claims.welcomed, false);
+    assert.equal(result.handoffRequested, undefined);
+    assert.equal(result.explain.choice, 'rule');
+
+    const precios = decideMenu({ message: tap(`wasmish:r:${PRECIOS}`, 'Precios') });
+    assert.deepEqual(precios.options, [
+        { id: `wasmish:r:${ENVIOS}`, title: 'Envíos' },
+        { id: 'wasmish:person', title: 'Hablar con alguien' },
+    ]);
+});
+
+test('un toque nunca saluda, ni a un contacto nuevo', () => {
+    const result = decideMenu({ message: tap(`wasmish:r:${ENVIOS}`, 'Envíos'), previousInboundAt: null });
+    assert.deepEqual(result.parts, ['Enviamos en 48 h']);
+    assert.equal(result.claims.welcomed, false);
+});
+
+test('«volver al inicio» responde la bienvenida con sus opciones, sin marcar el saludo', () => {
+    const result = decideMenu({ message: tap('wasmish:start', 'Volver'), previousInboundAt: null });
+    assert.deepEqual(result.parts, ['¡Hola!']);
+    assert.deepEqual(result.options.map(option => option.id), [`wasmish:r:${PRECIOS}`, 'wasmish:person']);
+    assert.equal(result.claims.welcomed, false);
+    assert.equal(result.explain.choice, 'start');
+});
+
+// Un toque viejo (spec § 4.3): se trata como si hubiera escrito el título.
+test('«volver al inicio» con la bienvenida apagada se trata como texto escrito', () => {
+    const settings = { ...MENU, welcome: { ...MENU.welcome, enabled: false } };
+    const result = decideMenu({ settings, message: tap('wasmish:start', 'Inicio') });
+    assert.deepEqual(result.parts, ['Escribiste inicio']);
+    assert.equal(result.explain.choice, null);
+});
+
+test('un toque a una respuesta borrada o apagada se trata como texto escrito', () => {
+    const borrada = decideMenu({ message: tap('wasmish:r:6729a1b2c3d4e5f6a7b8c9ff', 'Colores') });
+    assert.deepEqual(borrada.parts, ['No te entendí']);
+    assert.deepEqual(borrada.options, [{ id: 'wasmish:start', title: 'Volver' }]);
+
+    const apagada = { ...MENU, keywordRules: MENU.keywordRules.map(r => (r._id === ENVIOS ? { ...r, enabled: false } : r)) };
+    assert.deepEqual(decideMenu({ settings: apagada, message: tap(`wasmish:r:${ENVIOS}`, 'precio') }).parts, ['Cuesta $10']);
+
+    const otraLinea = { ...MENU, keywordRules: MENU.keywordRules.map(r => (r._id === ENVIOS ? { ...r, lineIds: ['l9'] } : r)) };
+    assert.deepEqual(decideMenu({ settings: otraLinea, message: tap(`wasmish:r:${ENVIOS}`, 'Envíos') }).parts, ['No te entendí']);
+
+    // Un id que no es de Wasmish (otra integración).
+    assert.deepEqual(decideMenu({ message: tap('b1', 'precio') }).parts, ['Cuesta $10']);
+});
+
+test('«hablar con una persona» responde su texto, sin opciones, y pide marcar', () => {
+    const result = decideMenu({ message: tap('wasmish:person', 'Hablar con alguien') });
+    assert.deepEqual(result.parts, ['Ya te atiende alguien']);
+    assert.deepEqual(result.options, []);
+    assert.equal(result.handoffRequested, true);
+    assert.equal(result.explain.choice, 'person');
+
+    const cerrado = decideMenu({ message: tap('wasmish:person', 'Hablar con alguien'), now: CLOSED });
+    assert.deepEqual(cerrado.parts, ['Ya te atiende alguien', 'Estamos cerrados']);
+    assert.ok(cerrado.claims.outOfHoursKey);
+
+    // Sin `handoff` (la prueba de una página de antes): el texto por defecto.
+    const { handoff, ...withoutHandoff } = MENU;
+    assert.deepEqual(decideMenu({ settings: withoutHandoff, message: tap('wasmish:person', 'Hablar') }).parts, ['Enseguida te atiende alguien del equipo']);
+});
+
+// Decisión C del spec: la pausa o el freno callan la respuesta, no el aviso.
+test('«hablar con una persona» con el bot callado: no responde, pero pide marcar', () => {
+    const human = decideMenu({ message: tap('wasmish:person', 'Hablar'), state: { humanRepliedAt: hoursBefore(OPEN, 1) } });
+    assert.deepEqual(human, { skip: 'human', handoffRequested: true });
+
+    const recent = [1, 2, 3].map(minutes => minutesBefore(OPEN, minutes));
+    const burst = decideMenu({ message: tap('wasmish:person', 'Hablar'), state: { recentReplies: recent } });
+    assert.deepEqual(burst, { skip: 'burst', handoffRequested: true });
+});
+
+test('con la conversación marcada el bot se calla: textos y toques', () => {
+    const handoffRequest = { at: hoursBefore(OPEN, 30), messageId: 'm1' };
+    assert.deepEqual(decideMenu({ handoffRequest, message: text('precio') }), { skip: 'handoff' });
+    assert.deepEqual(decideMenu({ handoffRequest, message: tap(`wasmish:r:${ENVIOS}`, 'Envíos') }), { skip: 'handoff' });
+    assert.deepEqual(decideMenu({ handoffRequest, message: tap('wasmish:person', 'Hablar') }), { skip: 'handoff' });
+    // Apagado sigue ganando.
+    assert.deepEqual(decideMenu({ handoffRequest, settings: { ...MENU, enabled: false } }), { skip: 'disabled' });
+});
+
+test('las opciones de un texto escrito: las de la primera respuesta que las tenga; si no, las de la bienvenida', () => {
+    const conPrecios = decideMenu({ message: text('hola, precio'), previousInboundAt: null });
+    assert.deepEqual(conPrecios.parts, ['¡Hola!', 'Cuesta $10']);
+    assert.deepEqual(conPrecios.options.map(option => option.title), ['Envíos', 'Hablar con alguien']);
+
+    const sinOpciones = { ...MENU, keywordRules: MENU.keywordRules.map(r => ({ ...r, options: [] })) };
+    const bienvenida = decideMenu({ settings: sinOpciones, message: text('hola, precio'), previousInboundAt: null });
+    assert.deepEqual(bienvenida.options.map(option => option.title), ['Precios', 'Hablar con alguien']);
+
+    // Ya saludado y sin opciones en la regla: sin opciones.
+    assert.deepEqual(decideMenu({ settings: sinOpciones, message: text('precio') }).options, []);
+    // El «no entiendo» trae las suyas.
+    assert.deepEqual(decideMenu({ message: text('me gusta el café') }).options, [{ id: 'wasmish:start', title: 'Volver' }]);
+});
+
+test('simulateConversation con toques: «hablar con una persona» deja callado al bot', () => {
+    const turns = simulate(MENU, ['hola', { optionId: `wasmish:r:${PRECIOS}`, title: 'Precios' }, { optionId: 'wasmish:person', title: 'Hablar con alguien' }, 'precio']);
+
+    assert.equal(turns[0].reply, '¡Hola!');
+    assert.equal(turns[0].optionsFormat, 'buttons');
+    assert.deepEqual(turns[0].options.map(option => option.title), ['Precios', 'Hablar con alguien']);
+    assert.deepEqual(turns[1].parts, [{ kind: 'option', text: 'Cuesta $10', ruleIndex: 0 }]);
+    assert.deepEqual(turns[2].parts, [{ kind: 'handoff', text: 'Ya te atiende alguien' }]);
+    assert.equal(turns[2].options.length, 0);
+    assert.equal(turns[2].optionsFormat, null);
+    assert.equal(turns[3].skip, 'handoff');
+    assert.equal(turns[3].reply, null);
+});
+
+test('simulateConversation: una respuesta nueva sin id y una de 4 opciones como lista', () => {
+    const settings = {
+        ...MENU,
+        welcome: { ...MENU.welcome, options: ['A', 'B', 'C', 'D'].map(title => ({ title, target: 'start', ruleId: null })) },
+        keywordRules: [{ enabled: true, keywords: ['nuevo'], text: 'Regla sin id', lineIds: [], options: [] }],
+    };
+    const turns = simulate(settings, ['hola', 'nuevo']);
+    assert.equal(turns[0].optionsFormat, 'list');
+    assert.deepEqual(turns[1].parts, [{ kind: 'keyword', text: 'Regla sin id', ruleIndex: 0, keyword: 'nuevo' }]);
+});

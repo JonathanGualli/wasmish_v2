@@ -6,7 +6,7 @@
 // ---------------------------------------------------------------------------
 
 import { closedPeriodKey } from './business.hours.js';
-import { DEFAULT_HANDOFF_TEXT } from './auto.reply.options.js';
+import { DEFAULT_HANDOFF_TEXT, buildInteractivePayload, optionId, parseOptionId } from './auto.reply.options.js';
 
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -140,12 +140,12 @@ const shouldWelcome = ({ welcome }, previousInboundAt, welcomedAt, now) => {
 // respondida. `matched` y `repeated` dicen, para explicarlo, qué regla salió o
 // se calló por repetida, y con qué frase.
 const matchingKeywordRules = (settings, state, message, lineId, now, windowMs) => {
-    const empty = { texts: [], ruleIds: [], matched: [], repeated: [] };
+    const empty = { texts: [], ruleIds: [], matched: [], repeated: [], rules: [] };
     const matchText = inboundMatchText(message);
     if (!hasText(matchText)) return empty;
     const normalized = normalizeForMatch(matchText);
 
-    const { texts, ruleIds, matched, repeated } = empty;
+    const { texts, ruleIds, matched, repeated, rules } = empty;
     // Lleno (tres textos), se sigue mirando solo para contar las calladas por repetidas.
     let full = false;
     for (const rule of settings.keywordRules ?? []) {
@@ -171,28 +171,111 @@ const matchingKeywordRules = (settings, state, message, lineId, now, windowMs) =
         }
         if (id) ruleIds.push(id);
         matched.push({ id, keyword });
+        rules.push(rule);
     }
-    return { texts, ruleIds, matched, repeated };
+    return { texts, ruleIds, matched, repeated, rules };
+};
+
+// Las opciones como van a Meta: `{ id, title }`, con el id que dice adónde llevan.
+const wireOptions = (options = []) => options.map(option => ({
+    id: optionId({ target: option.target, ruleId: option.ruleId != null ? String(option.ruleId) : null }),
+    title: option.title,
+}));
+
+const appliesToLine = (rule, lineId) => {
+    const lineIds = (rule.lineIds ?? []).map(String);
+    return lineIds.length === 0 || lineIds.includes(String(lineId));
+};
+
+const handoffTextOf = (settings) => settings.handoff?.text ?? DEFAULT_HANDOFF_TEXT;
+
+/**
+ * El toque de un menú (`choiceId`), si todavía lleva a algún sitio: una regla
+ * que existe, encendida, con texto y de esta línea; el inicio con la
+ * bienvenida encendida; una persona con su texto. Si no, null: un toque viejo
+ * se trata como un texto escrito con su título (spec del bot con menús, § 4.3).
+ */
+const resolveChoice = (settings, choiceId, lineId) => {
+    const choice = parseOptionId(choiceId);
+    if (!choice) return null;
+    if (choice.target === 'start') {
+        return settings.welcome?.enabled && hasText(settings.welcome.text) ? choice : null;
+    }
+    if (choice.target === 'person') return hasText(handoffTextOf(settings)) ? choice : null;
+    const wanted = choice.ruleId.toLowerCase();
+    const rule = (settings.keywordRules ?? []).find(candidate => String(ruleIdOf(candidate)).toLowerCase() === wanted);
+    if (!rule?.enabled || !hasText(rule.text) || !appliesToLine(rule, lineId)) return null;
+    return { ...choice, rule };
+};
+
+// El fuera de horario, si está cerrado y ese tramo no se avisó: su clave, o null.
+const pendingOutOfHoursKey = (settings, state, now) => {
+    const { outOfHours } = settings;
+    if (!outOfHours?.enabled || !hasText(outOfHours.text)) return null;
+    const key = closedPeriodKey(outOfHours.schedule, settings.timezone, now);
+    return key && key !== state.outOfHoursNotified ? key : null;
+};
+
+// Lo que responde un toque válido: su texto y sus opciones, más el fuera de
+// horario. Una regla tocada responde aunque haya salido hace poco (el contacto
+// la pidió) y cuenta como salida (decisión D del spec). Nunca saluda.
+const replyToChoice = (settings, state, choice, now) => {
+    let parts;
+    let options = [];
+    if (choice.target === 'rule') {
+        parts = [choice.rule.text];
+        options = choice.rule.options;
+    } else if (choice.target === 'start') {
+        parts = [settings.welcome.text];
+        options = settings.welcome.options;
+    } else {
+        parts = [handoffTextOf(settings)];
+    }
+    const outOfHoursKey = pendingOutOfHoursKey(settings, state, now);
+    if (outOfHoursKey) parts.push(settings.outOfHours.text);
+
+    const ruleId = choice.target === 'rule' ? ruleIdOf(choice.rule) : null;
+    return {
+        parts,
+        text: parts.join(PART_SEPARATOR),
+        options: wireOptions(options),
+        claims: { welcomed: false, outOfHoursKey, keywordRuleIds: ruleId ? [ruleId] : [], fallback: false },
+        explain: {
+            welcome: false, keywords: [], repeatedKeywords: [], outOfHours: outOfHoursKey !== null,
+            fallback: false, fallbackRepeated: false, choice: choice.target, choiceRuleId: ruleId,
+        },
+        ...(choice.target === 'person' && { handoffRequested: true }),
+    };
 };
 
 /**
  * Qué responder a un entrante, o por qué no. `state` es `Conversation.bot`;
  * `welcomedAt`, el de `Contact.autoReply` (la bienvenida es de la cuenta);
- * `previousInboundAt`, cuándo había escrito antes el contacto en la cuenta.
+ * `previousInboundAt`, cuándo había escrito antes el contacto en la cuenta;
+ * `handoffRequest`, la marca de «pide una persona» de la conversación.
  * Las partes van en orden: bienvenida, palabras clave y fuera de horario; el
  * «no entiendo», solo si no saldría nada más y el contacto escribió algo.
+ * Un toque de un menú (`message.choiceId`) responde lo que eligió (spec del
+ * bot con menús, § 4.3). `options` son las opciones del mensaje, ya con su id.
  * `claims` es lo que se marca SOLO si Meta acepta el envío. `explain` dice qué
  * salió y qué se calló por repetido (lo usa la prueba de la página), también
- * en un `skip: 'no_match'`.
+ * en un `skip: 'no_match'`. `handoffRequested: true` (solo entonces está) pide
+ * marcar la conversación, también con un `skip` por la pausa o el freno: el
+ * contacto pidió una persona y eso se avisa igual (decisión C del spec).
  */
-export const decideAutoReply = ({ settings, state = {}, welcomedAt = null, message, previousInboundAt = null, lineId = null, now = new Date() }) => {
+export const decideAutoReply = ({ settings, state = {}, welcomedAt = null, message, previousInboundAt = null, lineId = null, handoffRequest = null, now = new Date() }) => {
     state ??= {};
     if (!settings?.enabled) return { skip: 'disabled' };
+    // Pide una persona: el bot se calla hasta que alguien responda o la quite.
+    if (handoffRequest) return { skip: 'handoff' };
+    const choice = resolveChoice(settings, message?.choiceId, lineId);
+    const handoff = choice?.target === 'person' ? { handoffRequested: true } : {};
     if (state.humanRepliedAt && !olderThan(state.humanRepliedAt, settings.handoffHours * HOUR_MS, now)) {
-        return { skip: 'human' };
+        return { skip: 'human', ...handoff };
     }
-    if (recentRepliesOf(state, now).length >= BURST_MAX) return { skip: 'burst' };
+    if (recentRepliesOf(state, now).length >= BURST_MAX) return { skip: 'burst', ...handoff };
     if (IGNORED_TYPES.has(message?.type)) return { skip: 'ignored_type' };
+    if (choice) return replyToChoice(settings, state, choice, now);
 
     // Una sola ventana para no repetirse: las horas de «Cuándo se calla».
     const windowMs = settings.handoffHours * HOUR_MS;
@@ -203,15 +286,8 @@ export const decideAutoReply = ({ settings, state = {}, welcomedAt = null, messa
     const keywords = matchingKeywordRules(settings, state, message, lineId, now, windowMs);
     parts.push(...keywords.texts);
 
-    let outOfHoursKey = null;
-    const { outOfHours } = settings;
-    if (outOfHours?.enabled && hasText(outOfHours.text)) {
-        const key = closedPeriodKey(outOfHours.schedule, settings.timezone, now);
-        if (key && key !== state.outOfHoursNotified) {
-            outOfHoursKey = key;
-            parts.push(outOfHours.text);
-        }
-    }
+    const outOfHoursKey = pendingOutOfHoursKey(settings, state, now);
+    if (outOfHoursKey) parts.push(settings.outOfHours.text);
 
     // «Si no entiende»: sin `fallback` (una configuración de antes) está apagado.
     let fallback = false;
@@ -233,11 +309,20 @@ export const decideAutoReply = ({ settings, state = {}, welcomedAt = null, messa
         outOfHours: outOfHoursKey !== null,
         fallback,
         fallbackRepeated,
+        choice: null,
     };
     if (parts.length === 0) return { skip: 'no_match', explain };
+
+    // Un mensaje lleva un solo juego de opciones: las de la primera respuesta
+    // por palabra clave que tenga; si no, las de la bienvenida o las del «no
+    // entiendo», si salieron (spec del bot con menús, § 4.2).
+    const optionsSource = keywords.rules.find(rule => rule.options?.length > 0)?.options
+        ?? (welcomed && settings.welcome.options?.length > 0 ? settings.welcome.options : null)
+        ?? (fallback ? fallbackSettings.options : null);
     return {
         parts,
         text: parts.join(PART_SEPARATOR),
+        options: wireOptions(optionsSource ?? []),
         claims: { welcomed, outOfHoursKey, keywordRuleIds: keywords.ruleIds, fallback },
         explain,
     };
@@ -278,27 +363,35 @@ export const PREVIEW_MESSAGES_MAX = 20;
  * contacto nuevo que escribe `messages` ahora (spec § 10). Usa `decideAutoReply`
  * y `botStateUpdate`, los mismos del worker, así la prueba no se desfasa:
  * - con el interruptor general forzado a encendido (se prueba antes de encender);
- * - cada regla, con su posición como id (una regla nueva aún no tiene uno);
+ * - cada regla con su id, o `new-<posición>` si es nueva y aún no tiene uno
+ *   (las opciones apuntan a las reglas por su id);
  * - `previousInboundAt` avanza con cada mensaje, también sin respuesta, y lo
  *   demás solo tras responder, como tras un envío aceptado;
- * - sin el freno de ráfagas (probando se escribe seguido) ni pausa (no responde nadie).
- * Cada turno dice qué partes salieron y qué se calló por repetido.
+ * - sin el freno de ráfagas (probando se escribe seguido) ni pausa (no responde nadie);
+ * - un mensaje es un texto o el toque de una opción, `{ optionId, title }`; un
+ *   toque de «persona» deja la conversación marcada y el bot callado, como de verdad.
+ * Cada turno dice qué partes salieron, qué se calló por repetido y con qué opciones.
  */
 export const simulateConversation = ({ settings, messages, now = new Date() }) => {
     const simulated = {
         ...settings,
         enabled: true,
-        keywordRules: (settings.keywordRules ?? []).map((rule, index) => ({ ...rule, _id: index })),
+        keywordRules: (settings.keywordRules ?? []).map((rule, index) => ({ ...rule, _id: rule.id ?? rule._id ?? `new-${index}` })),
     };
     let state = {};
     let welcomedAt = null;
     let previousInboundAt = null;
+    let handoffRequest = null;
 
-    return messages.map(body => {
+    return messages.map(entry => {
+        const message = typeof entry === 'string'
+            ? { type: 'text', text: entry, caption: null }
+            : { type: 'interactive', text: entry.title, caption: null, choiceId: entry.optionId };
         const result = decideAutoReply({
-            settings: simulated, state, welcomedAt, message: { type: 'text', text: body, caption: null }, previousInboundAt, lineId: null, now,
+            settings: simulated, state, welcomedAt, message, previousInboundAt, lineId: null, handoffRequest, now,
         });
         previousInboundAt = now;
+        if (result.handoffRequested) handoffRequest = { at: now };
         if (!result.skip) {
             if (result.claims.welcomed) welcomedAt = now;
             state = { ...applyBotStateUpdate(state, botStateUpdate(state, result.claims, now)), recentReplies: [] };
@@ -309,23 +402,35 @@ export const simulateConversation = ({ settings, messages, now = new Date() }) =
 
 // Las partes con su origen, en el orden del mensaje; una regla con el mismo
 // texto que otra no añade parte (sale una vez), como en `decideAutoReply`.
+// `ruleIndex` es la posición de la regla en la configuración.
 const previewTurn = (settings, result) => {
     const explain = result.explain;
+    const indexOf = new Map(settings.keywordRules.map((rule, index) => [String(rule._id), index]));
     const parts = [];
+    if (explain?.choice === 'rule') {
+        const ruleIndex = indexOf.get(String(explain.choiceRuleId));
+        parts.push({ kind: 'option', text: settings.keywordRules[ruleIndex].text, ruleIndex });
+    }
+    if (explain?.choice === 'start') parts.push({ kind: 'welcome', text: settings.welcome.text });
+    if (explain?.choice === 'person') parts.push({ kind: 'handoff', text: handoffTextOf(settings) });
     if (explain?.welcome) parts.push({ kind: 'welcome', text: settings.welcome.text });
     for (const { id, keyword } of explain?.keywords ?? []) {
-        const { text } = settings.keywordRules[Number(id)];
-        if (!parts.some(part => part.kind === 'keyword' && part.text === text)) parts.push({ kind: 'keyword', text, ruleIndex: Number(id), keyword });
+        const ruleIndex = indexOf.get(String(id));
+        const { text } = settings.keywordRules[ruleIndex];
+        if (!parts.some(part => part.kind === 'keyword' && part.text === text)) parts.push({ kind: 'keyword', text, ruleIndex, keyword });
     }
     if (explain?.outOfHours) parts.push({ kind: 'outOfHours', text: settings.outOfHours.text });
     if (explain?.fallback) parts.push({ kind: 'fallback', text: settings.fallback.text });
 
+    const options = result.options ?? [];
     return {
         reply: result.text ?? null,
         parts,
-        repeated: (explain?.repeatedKeywords ?? []).map(({ id, keyword }) => ({ ruleIndex: Number(id), keyword })),
+        repeated: (explain?.repeatedKeywords ?? []).map(({ id, keyword }) => ({ ruleIndex: indexOf.get(String(id)), keyword })),
         fallbackRepeated: explain?.fallbackRepeated ?? false,
         skip: result.skip ?? null,
+        options,
+        optionsFormat: options.length > 0 ? buildInteractivePayload({ text: result.text, options }).format : null,
     };
 };
 
