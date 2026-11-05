@@ -61,7 +61,7 @@ Las que tomó el agente al escribir el spec, **para que Jonathan las revise**:
   - títulos repetidos en una misma respuesta (decisión B);
   - una opción `person` con `handoff.text` vacío.
 - **No bloquea, avisa la pantalla:** una respuesta a la que no se llega (sin frases y sin ninguna opción que apunte a ella, o apagada con opciones que le apuntan) y un «volver al inicio» con la bienvenida apagada.
-- **Sin migración:** los campos nuevos tienen valor por defecto (`options: []`, `name: ''`, `handoff.text` el de por defecto). Lo guardado en la v1 funciona igual.
+- **Sin migración:** los campos nuevos tienen valor por defecto (`options: []`, `name: ''`, `handoff.text` el de por defecto), y la configuración guardada en la v1 **se completa al leerla**, porque los defaults del modelo no se aplican a una lectura con `.lean()` (revisión de Codex del plan). Lo guardado en la v1 funciona igual.
 
 ### 4.2 Qué se envía
 
@@ -113,15 +113,15 @@ La cola, el worker, el candado del contacto, `authorizeBotSend`, la marca «Bot�
 
 **Al tocarlo** (con el bot encendido, decisión C):
 
-1. **La marca:** `Conversation.handoffRequest = { at, messageId }` (el toque), con una escritura condicional (`handoffRequest: null`): un segundo toque no repite nada.
-2. **El aviso**, solo si la marca es nueva: un aviso `handoff` en la campanita (`NOTIFICATION_TYPES`) y un push «<contacto> pide hablar con una persona», a los mismos que reciben el push de un entrante (`pushRecipientIds`: quien la atiende si está asignada, si no todos los que ven la línea). Y `conversation_updated` con `handoffRequest` por SSE, para la bandeja.
+1. **La marca:** `Conversation.handoffRequest = { at, messageId }` (el toque), con una escritura condicional: sin marca puesta (un segundo toque no repite nada) y **sin una respuesta del equipo posterior al toque** (si alguien respondió mientras el bot decidía, ya lo atendieron: revisión de Codex del plan).
+2. **El aviso**, solo si la marca es nueva: un aviso `handoff` en la campanita (`NOTIFICATION_TYPES`) y un push «<contacto> pide hablar con una persona», a los mismos que reciben el push de un entrante (`pushRecipientIds`: quien la atiende si está asignada, si no todos los que ven la línea). Quién lo recibe se vuelve a comprobar justo antes de emitirlo: si entre medias alguien perdió la línea o la conversación se asignó a otro, su aviso se borra sin llegarle. Y `conversation_updated` con `handoffRequest` por SSE, para la bandeja.
 3. **La respuesta:** el texto de `handoff`, más el fuera de horario si está cerrado. Sin opciones. Si el bot está callado (pausa o freno), no responde, pero la marca y el aviso salen igual.
 
 **Mientras la conversación está marcada, el bot se calla** sin límite de horas: palabras clave, «no entiendo», toques y fuera de horario (`decideAutoReply` devuelve `skip: 'handoff'`).
 
 **La marca se quita:**
 - **cuando alguien del equipo responde**: en `markHumanReply`, que ya llaman todos los envíos manuales y el eco de la app de WhatsApp Business. Desde ahí rige la pausa de siempre (`handoffHours`);
-- **a mano**, con «Quitar» en el chat: `DELETE /api/chats/:id/handoff-request`. Lo puede hacer quien ve la conversación; si no la ve, 404. El bot vuelve a responder enseguida.
+- **a mano**, con «Quitar» en el chat: `DELETE /api/chats/:id/handoff-request`. Lo puede hacer quien ve la conversación; si no la ve, 404, también si la atiende un compañero (sin el 409 `assigned_to_other` de los envíos). El bot vuelve a responder enseguida.
 
 En los dos casos sale `conversation_updated` con `handoffRequest: null`. Los avisos de la campanita se quedan (caducan solos a los 30 días).
 
@@ -139,11 +139,11 @@ Sin índices nuevos: la marca se lee con la conversación y la bandeja ya la tra
 ## 6. API
 
 - `GET /api/auto-replies` devuelve los campos nuevos (los nombres que faltan, como «Respuesta N»).
-- `PUT /api/auto-replies` los acepta y valida (§ 4.1). **Decisión G:** sin `handoff` en el cuerpo y con opciones guardadas, 409 «La página de respuestas automáticas cambió: recárgala». Sin opciones guardadas, lo acepta como hoy (se guarda con los valores por defecto).
+- `PUT /api/auto-replies` los acepta y valida (§ 4.1). **Decisión G:** sin `handoff` en el cuerpo y con opciones guardadas, 409 «La página de respuestas automáticas cambió: recárgala», comprobado en la misma escritura (atómico: un menú guardado entre medias tampoco se pisa). Sin opciones guardadas, lo acepta como hoy (se guarda con los valores por defecto).
 - `POST /api/auto-replies/preview`: cada mensaje de la conversación puede ser un texto o un toque, `{ optionId }`. Cada turno trae además las `options` de la respuesta y su formato. Un toque de «persona» en la prueba responde el texto de `handoff` y la simulación sigue marcada (el bot callado), como en una conversación de verdad.
 - `GET /api/chats` y `conversation_updated`: `handoffRequest: { at } | null`.
 - `GET /api/chats/:id/messages` y `message_created`: `choiceId` en el toque y `options` + `optionsFormat` en el mensaje del bot.
-- `DELETE /api/chats/:id/handoff-request` (§ 4.5): 204; 404 si no se ve la conversación.
+- `DELETE /api/chats/:id/handoff-request` (§ 4.5): 204; 404 si no se ve la conversación (también la de un compañero).
 
 ## 7. La pantalla y el chat (los diseña Claude Design)
 
