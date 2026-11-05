@@ -6,6 +6,7 @@
 // ---------------------------------------------------------------------------
 
 import { closedPeriodKey } from './business.hours.js';
+import { DEFAULT_HANDOFF_TEXT } from './auto.reply.options.js';
 
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -14,7 +15,9 @@ const DAY_MS = 24 * HOUR_MS;
 // Cada texto cabe con holgura: bienvenida + 3 palabras clave + fuera de
 // horario, unidos, no pasan de los 4096 caracteres de WhatsApp.
 export const AUTO_REPLY_TEXT_MAX = 800;
-export const KEYWORD_RULES_MAX = 30;
+// Un menú de varios niveles necesita más respuestas que la v1 (30).
+export const KEYWORD_RULES_MAX = 50;
+export const RULE_NAME_MAX = 40;
 export const KEYWORDS_PER_RULE_MAX = 20;
 export const KEYWORD_MAX = 60;
 // Cuántas reglas de palabras clave entran en una misma respuesta.
@@ -74,7 +77,7 @@ export const defaultAutoReplySettings = () => ({
     enabled: false,
     timezone: DEFAULT_TIMEZONE,
     handoffHours: 12,
-    welcome: { enabled: false, text: '', returnAfterDays: 30 },
+    welcome: { enabled: false, text: '', returnAfterDays: 30, options: [] },
     outOfHours: {
         enabled: false,
         text: '',
@@ -85,7 +88,23 @@ export const defaultAutoReplySettings = () => ({
         },
     },
     keywordRules: [],
-    fallback: { enabled: false, text: '' },
+    fallback: { enabled: false, text: '', options: [] },
+    handoff: { text: DEFAULT_HANDOFF_TEXT },
+});
+
+/**
+ * Una configuración leída de la BD con todo lo que se añadió después de
+ * guardarla: con `.lean()` los defaults del modelo no se aplican, y una de la
+ * v1 no tiene `handoff`, `options` ni `name` (revisión de Codex del plan del
+ * bot con menús, 5), ni `fallback` si es anterior al 2026-10-15. Toda lectura
+ * pasa por aquí. No cambia el original.
+ */
+export const withAutoReplyDefaults = (stored) => ({
+    ...stored,
+    welcome: { ...stored.welcome, options: stored.welcome?.options ?? [] },
+    keywordRules: (stored.keywordRules ?? []).map(rule => ({ ...rule, name: rule.name ?? '', options: rule.options ?? [] })),
+    fallback: { enabled: false, text: '', ...stored.fallback, options: stored.fallback?.options ?? [] },
+    handoff: { text: DEFAULT_HANDOFF_TEXT, ...stored.handoff },
 });
 
 // El id de una regla: `_id` en la BD; `id` en una configuración sin guardar

@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import AutoReplySettings from "../models/auto.reply.settings.model.js";
 import Line from "../models/line.model.js";
 import { autoReplyPreviewSchema, autoReplySettingsSchema } from "../schemas/auto.reply.schema.js";
-import { defaultAutoReplySettings, simulateConversation } from "../utils/auto.reply.js";
+import { defaultAutoReplySettings, simulateConversation, withAutoReplyDefaults } from "../utils/auto.reply.js";
 import { WEEK_DAYS } from "../utils/business.hours.js";
 
 // ---------------------------------------------------------------------------
@@ -13,39 +13,61 @@ import { WEEK_DAYS } from "../utils/business.hours.js";
 
 const sendError = (res, status, message) => res.status(status).json([{ message }]);
 
+const serializeOptions = (options) => options.map(({ title, target, ruleId }) => ({
+    title, target, ruleId: ruleId ? String(ruleId) : null,
+}));
+
 // Lo que ve la página, campo a campo: ni `_id` ni `userId` ni marcas internas.
 // `configured`: si la cuenta ya guardó alguna vez (sin eso, la página abre el asistente).
-const serializeSettings = (settings, configured) => ({
-    configured,
-    enabled: settings.enabled,
-    timezone: settings.timezone,
-    handoffHours: settings.handoffHours,
-    welcome: {
-        enabled: settings.welcome.enabled,
-        text: settings.welcome.text,
-        returnAfterDays: settings.welcome.returnAfterDays ?? null,
-    },
-    outOfHours: {
-        enabled: settings.outOfHours.enabled,
-        text: settings.outOfHours.text,
-        schedule: Object.fromEntries(WEEK_DAYS.map(day => {
-            const entry = settings.outOfHours.schedule?.[day] ?? { closed: true, ranges: [] };
-            return [day, { closed: entry.closed, ranges: entry.ranges.map(({ start, end }) => ({ start, end })) }];
+// Lo guardado antes de un campo nuevo llega completado (`withAutoReplyDefaults`).
+const serializeSettings = (stored, configured) => {
+    const settings = withAutoReplyDefaults(stored);
+    return {
+        configured,
+        enabled: settings.enabled,
+        timezone: settings.timezone,
+        handoffHours: settings.handoffHours,
+        welcome: {
+            enabled: settings.welcome.enabled,
+            text: settings.welcome.text,
+            returnAfterDays: settings.welcome.returnAfterDays ?? null,
+            options: serializeOptions(settings.welcome.options),
+        },
+        outOfHours: {
+            enabled: settings.outOfHours.enabled,
+            text: settings.outOfHours.text,
+            schedule: Object.fromEntries(WEEK_DAYS.map(day => {
+                const entry = settings.outOfHours.schedule?.[day] ?? { closed: true, ranges: [] };
+                return [day, { closed: entry.closed, ranges: entry.ranges.map(({ start, end }) => ({ start, end })) }];
+            })),
+        },
+        keywordRules: settings.keywordRules.map((rule, index) => ({
+            id: String(rule._id),
+            // Sin nombre (guardada antes de los menús): su posición.
+            name: rule.name || `Respuesta ${index + 1}`,
+            enabled: rule.enabled,
+            keywords: rule.keywords,
+            text: rule.text,
+            lineIds: rule.lineIds.map(String),
+            options: serializeOptions(rule.options),
         })),
-    },
-    keywordRules: settings.keywordRules.map(rule => ({
-        id: String(rule._id),
-        enabled: rule.enabled,
-        keywords: rule.keywords,
-        text: rule.text,
-        lineIds: rule.lineIds.map(String),
-    })),
-    // Sin el campo (guardada antes de que existiera): apagado.
-    fallback: {
-        enabled: settings.fallback?.enabled ?? false,
-        text: settings.fallback?.text ?? '',
-    },
-});
+        fallback: {
+            enabled: settings.fallback.enabled,
+            text: settings.fallback.text,
+            options: serializeOptions(settings.fallback.options),
+        },
+        handoff: { text: settings.handoff.text },
+    };
+};
+
+// Lo que no tiene opciones en ninguna parte: la condición para que guarde una
+// página de antes de los menús (decisión G del spec).
+const WITHOUT_MENUS = {
+    'welcome.options.0': { $exists: false },
+    'fallback.options.0': { $exists: false },
+    'keywordRules.options.0': { $exists: false },
+};
+const OUTDATED_PAGE = { message: 'La página de respuestas automáticas cambió: recárgala', code: 'auto_replies_outdated' };
 
 const findSettings = (accountId) => AutoReplySettings.findOne({ userId: accountId }).lean();
 
@@ -81,12 +103,30 @@ export const saveAutoReplies = async (req, res) => {
             ...rule,
         }));
 
-        const saved = await AutoReplySettings.findOneAndUpdate(
-            { userId: accountId },
-            { $set: { ...data, keywordRules } },
+        // Sin `handoff`, es una pestaña con la página de antes de los menús: no
+        // puede pisar opciones guardadas. Se comprueba en la misma escritura
+        // (revisión de Codex del plan, 3): si el documento tiene opciones no
+        // casa, el `upsert` intenta crear otro y el índice único lo para. Un
+        // segundo intento cubre el otro motivo del 11000: dos primeros
+        // guardados a la vez, con la cuenta todavía sin documento (Mongo solo
+        // reintenta solo un `upsert` cuyo filtro es nada más la cuenta).
+        const outdatedPage = !Object.hasOwn(req.body ?? {}, 'handoff');
+        const { handoff, ...rest } = data;
+        const save = () => AutoReplySettings.findOneAndUpdate(
+            { userId: accountId, ...(outdatedPage && WITHOUT_MENUS) },
+            { $set: { ...rest, keywordRules, ...(handoff && { handoff }) } },
             { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true },
         ).lean();
-        return res.json(serializeSettings(saved, true));
+        for (let attempt = 1; ; attempt++) {
+            try {
+                return res.json(serializeSettings(await save(), true));
+            } catch (error) {
+                if (error.code !== 11000 || attempt === 2) {
+                    if (outdatedPage && error.code === 11000) return res.status(409).json([OUTDATED_PAGE]);
+                    throw error;
+                }
+            }
+        }
     } catch (error) {
         console.error('Error guardando las respuestas automáticas:', error.message);
         return sendError(res, 500, error.message);

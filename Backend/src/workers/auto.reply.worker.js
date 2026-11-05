@@ -6,7 +6,7 @@ import AutoReplySettings from "../models/auto.reply.settings.model.js";
 import { processMessageSending } from "../controllers/chat.controller.js";
 import { findConversationLine } from "../services/line.service.js";
 import { freeTextBlockReason } from "../utils/whatsapp.window.js";
-import { AUTO_REPLY_EXPIRY_MS, autoReplyOutcome, botStateUpdate, decideAutoReply } from "../utils/auto.reply.js";
+import { AUTO_REPLY_EXPIRY_MS, autoReplyOutcome, botStateUpdate, decideAutoReply, withAutoReplyDefaults } from "../utils/auto.reply.js";
 
 // ---------------------------------------------------------------------------
 // Worker de las respuestas automáticas. Corre dentro del proceso de la API,
@@ -165,7 +165,7 @@ export const resolveAutoReplyJob = async (job) => {
         // Todo se relee con el candado puesto: otro trabajo del contacto pudo
         // cambiarlo justo antes (la bienvenida, el freno).
         const [settings, conversation] = await Promise.all([
-            AutoReplySettings.findOne({ userId: accountId }).lean(),
+            AutoReplySettings.findOne({ userId: accountId }).lean().then(stored => stored && withAutoReplyDefaults(stored)),
             Conversation.findOne({ _id: job.conversationId, userId: accountId }),
         ]);
 

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
     simulateConversation, applyBotStateUpdate,
     autoReplyOutcome, botStateUpdate, decideAutoReply, defaultAutoReplySettings, inboundMatchText, matchesKeyword, normalizeForMatch,
+    withAutoReplyDefaults,
 } from '../src/utils/auto.reply.js';
 
 test('normalizeForMatch quita tildes, mayúsculas y puntuación', () => {
@@ -458,4 +459,29 @@ test('autoReplyOutcome: un error después de empezar a enviar es incierto', () =
 // de Meta: no es un rechazo, Meta pudo recibirlo (revisión de Codex del PR #69).
 test('autoReplyOutcome: un fallo sin código de Meta (un corte de red) es incierto', () => {
     assert.deepEqual(autoReplyOutcome({ result: { status: 'failed', errorCode: null }, error: null, sendStarted: true }), { status: 'uncertain', applyClaims: false });
+});
+
+// --- Bot con menús: la configuración de antes (spec 2026-11-05) ------------
+
+// Revisión de Codex del plan, 5: los defaults del modelo no se aplican al leer
+// con `.lean()`; una configuración de la v1 llega sin los campos nuevos.
+test('withAutoReplyDefaults completa una configuración de la v1 sin tocar lo que ya tenía', () => {
+    const v1 = {
+        enabled: true, timezone: 'America/Guayaquil', handoffHours: 4,
+        welcome: { enabled: true, text: 'Hola', returnAfterDays: 7 },
+        outOfHours: { enabled: false, text: '', schedule: {} },
+        keywordRules: [{ _id: 'r1', enabled: true, keywords: ['precio'], text: 'Cuesta $10', lineIds: [] }],
+    };
+    const settings = withAutoReplyDefaults(v1);
+
+    assert.deepEqual(settings.handoff, { text: 'Enseguida te atiende alguien del equipo' });
+    assert.deepEqual(settings.welcome, { enabled: true, text: 'Hola', returnAfterDays: 7, options: [] });
+    assert.deepEqual(settings.keywordRules, [{ _id: 'r1', enabled: true, keywords: ['precio'], text: 'Cuesta $10', lineIds: [], name: '', options: [] }]);
+    assert.deepEqual(settings.fallback, { enabled: false, text: '', options: [] });
+    assert.equal(settings.handoffHours, 4);
+    assert.equal(v1.handoff, undefined, 'no cambia el original');
+
+    const withMenus = { ...v1, handoff: { text: 'Ya va' }, welcome: { ...v1.welcome, options: [{ title: 'A', target: 'start', ruleId: null }] } };
+    assert.deepEqual(withAutoReplyDefaults(withMenus).handoff, { text: 'Ya va' });
+    assert.equal(withAutoReplyDefaults(withMenus).welcome.options.length, 1);
 });

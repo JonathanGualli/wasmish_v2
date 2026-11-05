@@ -120,7 +120,6 @@ test('lo que no es una configuración válida da 400', async () => {
         zonaInvalida: { ...base, timezone: 'Marte/Base' },
         horasRaras: { ...base, handoffHours: 5 },
         bienvenidaSinTexto: { ...base, welcome: { ...base.welcome, text: '  ' } },
-        reglaSinFrases: { ...base, keywordRules: [{ enabled: true, keywords: [], text: 'x', lineIds: [] }] },
         textoLargo: { ...base, welcome: { ...base.welcome, text: 'x'.repeat(801) } },
         // Dos reglas con el mismo id se callaban la una a la otra durante 24 h
         // (revisión de Codex del PR #68).
@@ -679,12 +678,13 @@ test('guardar y leer el no entiendo; sin él en el cuerpo, apagado', async () =>
     const a = await newAccount('FBA');
     const saved = await saveSettings(a, settingsBody({ fallback: fallbackOn }));
     assert.equal(saved.status, 200, saved.text);
-    assert.deepEqual((await getSettings(a)).body.fallback, fallbackOn);
+    assert.deepEqual((await getSettings(a)).body.fallback, { ...fallbackOn, options: [] });
 
     // Una pestaña con la página de antes no manda `fallback`.
     const legacy = await saveSettings(a, settingsBody());
     assert.equal(legacy.status, 200, legacy.text);
-    assert.deepEqual(legacy.body.fallback, { enabled: false, text: '' });
+    // Desde los menús (spec 2026-11-05), también sus opciones.
+    assert.deepEqual(legacy.body.fallback, { enabled: false, text: '', options: [] });
 
     const empty = await saveSettings(a, settingsBody({ fallback: { enabled: true, text: '  ' } }));
     assert.equal(empty.status, 400);
@@ -694,7 +694,7 @@ test('una configuración guardada antes del no entiendo se lee con él apagado',
     const a = await newAccount('FBB');
     await AutoReplySettings.collection.insertOne({ userId: a.accountId, ...settingsBody() });
 
-    assert.deepEqual((await getSettings(a)).body.fallback, { enabled: false, text: '' });
+    assert.deepEqual((await getSettings(a)).body.fallback, { enabled: false, text: '', options: [] });
 });
 
 test('el worker manda el no entiendo una sola vez', async () => {
@@ -791,4 +791,152 @@ test('más de 120 pruebas en un minuto dan 429', async () => {
     assert.match(limited.body[0].message, /Demasiadas pruebas/);
     // Por cuenta: otra cuenta sigue pudiendo.
     assert.equal((await preview(await newAccount('PCD'), body)).status, 200);
+});
+
+// --- Bot con menús: la configuración (spec 2026-11-05) ---------------------
+
+const RULE_A = '6729a1b2c3d4e5f6a7b8c9d1';
+const RULE_B = '6729a1b2c3d4e5f6a7b8c9d2';
+/** Un menú: la bienvenida con dos opciones, «Precios» con frases y «Envíos» sin ellas. */
+const menuBody = (overrides = {}) => settingsBody({
+    welcome: {
+        enabled: true, text: WELCOME, returnAfterDays: 30,
+        options: [
+            { title: 'Precios', target: 'rule', ruleId: RULE_A },
+            { title: 'Hablar con alguien', target: 'person' },
+        ],
+    },
+    keywordRules: [
+        { id: RULE_A, name: 'Precios', enabled: true, keywords: ['precio'], text: 'Cuesta $10', lineIds: [],
+            options: [{ title: 'Envíos', target: 'rule', ruleId: RULE_B }, { title: 'Volver', target: 'start' }] },
+        { id: RULE_B, enabled: true, keywords: [], text: 'Enviamos en 48 h', lineIds: [] },
+    ],
+    handoff: { text: 'Ya te atiende alguien' },
+    ...overrides,
+});
+
+test('menús: se guardan las opciones, los ids que pone la página y los nombres', async () => {
+    const a = await newAccount('MNA');
+    const saved = await saveSettings(a, menuBody());
+    assert.equal(saved.status, 200, saved.text);
+
+    const { body } = await getSettings(a);
+    assert.deepEqual(body.welcome.options, [
+        { title: 'Precios', target: 'rule', ruleId: RULE_A },
+        { title: 'Hablar con alguien', target: 'person', ruleId: null },
+    ]);
+    assert.deepEqual(body.keywordRules.map(rule => rule.id), [RULE_A, RULE_B]);
+    assert.equal(body.keywordRules[0].name, 'Precios');
+    // Sin nombre: su posición.
+    assert.equal(body.keywordRules[1].name, 'Respuesta 2');
+    // Una respuesta sin frases (solo por botón) se guarda.
+    assert.deepEqual(body.keywordRules[1].keywords, []);
+    assert.deepEqual(body.keywordRules[1].options, []);
+    assert.deepEqual(body.fallback.options, []);
+    assert.deepEqual(body.handoff, { text: 'Ya te atiende alguien' });
+});
+
+test('menús: lo que no es un menú válido da 400 y no guarda nada', async () => {
+    const a = await newAccount('MNB');
+    const b = await newAccount('MNC');
+    const foreign = '6729a1b2c3d4e5f6a7b8c9e1';
+    assert.equal((await saveSettings(b, settingsBody({
+        keywordRules: [{ id: foreign, enabled: true, keywords: ['precio'], text: 'Cuesta $10', lineIds: [] }],
+    }))).status, 200);
+    const base = menuBody();
+    const withWelcomeOptions = (options) => ({ ...base, welcome: { ...base.welcome, options } });
+    const eleven = Array.from({ length: 11 }, (_, i) => ({ title: `Opción ${i + 1}`, target: 'start' }));
+
+    for (const [name, body] of Object.entries({
+        destinoDesconocido: withWelcomeOptions([{ title: 'Otra', target: 'rule', ruleId: '6729a1b2c3d4e5f6a7b8c9ff' }]),
+        // La respuesta existe, pero en otra cuenta.
+        destinoDeOtraCuenta: withWelcomeOptions([{ title: 'Ajena', target: 'rule', ruleId: foreign }]),
+        reglaSinDestino: withWelcomeOptions([{ title: 'Sin destino', target: 'rule' }]),
+        titulosRepetidos: withWelcomeOptions([{ title: 'Precios', target: 'start' }, { title: 'precíos', target: 'person' }]),
+        personaSinTexto: { ...base, handoff: { text: '  ' } },
+        onceOpciones: withWelcomeOptions(eleven),
+        tituloLargo: withWelcomeOptions([{ title: 'x'.repeat(21), target: 'start' }]),
+        tituloVacio: withWelcomeOptions([{ title: '  ', target: 'start' }]),
+        destinoRaro: withWelcomeOptions([{ title: 'Raro', target: 'menu' }]),
+        nombreLargo: { ...base, keywordRules: [{ ...base.keywordRules[0], name: 'x'.repeat(41) }, base.keywordRules[1]] },
+        cincuentaYUna: {
+            ...base,
+            welcome: { ...base.welcome, options: [] },
+            keywordRules: Array.from({ length: 51 }, (_, i) => ({ enabled: true, keywords: [`frase ${i}`], text: 'x', lineIds: [] })),
+        },
+    })) {
+        assert.equal((await saveSettings(a, body)).status, 400, name);
+    }
+    assert.equal((await getSettings(a)).body.configured, false);
+
+    // 50 respuestas sí.
+    const fifty = await saveSettings(a, {
+        ...base,
+        welcome: { ...base.welcome, options: [] },
+        keywordRules: Array.from({ length: 50 }, (_, i) => ({ enabled: true, keywords: [`frase ${i}`], text: 'x', lineIds: [] })),
+    });
+    assert.equal(fifty.status, 200, fifty.text);
+});
+
+// Decisión G del spec: una pestaña con la página de antes no manda `handoff`
+// y guardaba la configuración entera, sin las opciones.
+test('menús: una pestaña con la página de antes no borra los menús (409)', async () => {
+    const a = await newAccount('MND');
+    assert.equal((await saveSettings(a, menuBody())).status, 200);
+
+    const old = await saveSettings(a, settingsBody());
+    assert.equal(old.status, 409);
+    assert.equal(old.body[0].code, 'auto_replies_outdated');
+    assert.equal((await getSettings(a)).body.welcome.options.length, 2);
+
+    // Sin opciones guardadas, la página de antes guarda como siempre.
+    const b = await newAccount('MNE');
+    assert.equal((await saveSettings(b, settingsBody())).status, 200, 'cuenta sin documento');
+    assert.equal((await saveSettings(b, settingsBody())).status, 200, 'cuenta sin opciones');
+    assert.deepEqual((await getSettings(b)).body.handoff, { text: 'Enseguida te atiende alguien del equipo' });
+});
+
+// Revisión de Codex del plan, 3: comprobar antes y guardar después dejaba un
+// hueco en el que la pestaña vieja borraba un menú recién guardado.
+test('menús: la pestaña vieja y un menú guardados a la vez nunca dejan la cuenta sin el menú', async () => {
+    for (let round = 0; round < 5; round++) {
+        const a = await newAccount(`MNG${round}`);
+        const [menu, old] = await Promise.all([saveSettings(a, menuBody()), saveSettings(a, settingsBody())]);
+        assert.equal(menu.status, 200, menu.text);
+        assert.ok([200, 409].includes(old.status), old.text);
+        assert.equal((await getSettings(a)).body.welcome.options.length, 2, `ronda ${round}: la pestaña vieja borró el menú`);
+    }
+});
+
+// Revisión de Codex del plan, 5: con `.lean()` los defaults del modelo no se
+// aplican, y una configuración de la v1 llegaba sin `handoff` ni `options`.
+test('menús: una configuración guardada antes de los menús se completa al leerla y el bot responde igual', async () => {
+    await clearQueue();
+    const a = await newAccount('MNF');
+    const v1 = settingsBody();
+    await AutoReplySettings.collection.insertOne({
+        userId: new (await import('mongoose')).default.Types.ObjectId(a.accountId),
+        enabled: true, timezone: v1.timezone, handoffHours: 12,
+        welcome: { enabled: true, text: WELCOME, returnAfterDays: 30 },
+        outOfHours: v1.outOfHours,
+        keywordRules: [{ _id: new (await import('mongoose')).default.Types.ObjectId(), enabled: true, keywords: ['precio'], text: 'Cuesta $10', lineIds: [] }],
+    });
+
+    const { body } = await getSettings(a);
+    assert.deepEqual(body.handoff, { text: 'Enseguida te atiende alguien del equipo' });
+    assert.deepEqual(body.welcome.options, []);
+    assert.deepEqual(body.keywordRules[0].options, []);
+    assert.equal(body.keywordRules[0].name, 'Respuesta 1');
+    assert.deepEqual(body.fallback, { enabled: false, text: '', options: [] });
+
+    metaForBot();
+    try {
+        await postWebhook(numberOf(a), textFrom('593970009001', 'hola'));
+        assert.deepEqual(await drain(), ['done']);
+    } finally {
+        onMeta(null);
+    }
+    const [inbound] = await inboundsOf(a, '593970009001');
+    const [reply] = await botMessagesOf(inbound.conversationId);
+    assert.equal(reply.text, WELCOME);
 });
