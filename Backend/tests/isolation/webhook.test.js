@@ -910,3 +910,40 @@ test('dos entrantes del mismo segundo: la vista previa queda con el último', as
     assert.equal((await postWebhook(A_NUMBER, help)).status, 200);
     assert.equal((await conversationOfPhone(phone)).lastMessage, 'necesito ayuda');
 });
+
+// --- Bot con menús (spec 2026-11-05) ----------------------------------------
+
+test('el toque de una opción se guarda con su id y citando el menú', async () => {
+    const from = '593990006611';
+    await postEcho(MW_NUMBER, [echoOf({ to: from, body: '¿Qué necesitas?' })]);
+    const menu = await Message.findOne({ text: '¿Qué necesitas?' }).lean();
+
+    const tap = (id, kind) => withContext({
+        contacts: [{ profile: { name: 'Cliente de prueba' }, wa_id: from }],
+        messages: [{
+            from, id: `wamid.toque.${Date.now()}.${++echoSeq}`, timestamp: String(nowSeconds()), type: 'interactive',
+            interactive: kind === 'list'
+                ? { type: 'list_reply', list_reply: { id, title: 'Hablar con alguien' } }
+                : { type: 'button_reply', button_reply: { id, title: 'Inicio' } },
+        }],
+    }, { from: '15550000001', id: menu.waMessageId });
+
+    assert.equal((await postWebhook(MW_NUMBER, tap('wasmish:start'))).status, 200);
+    assert.equal((await postWebhook(MW_NUMBER, tap('wasmish:person', 'list'))).status, 200);
+
+    const button = await Message.findOne({ conversationId: menu.conversationId, text: 'Inicio' }).lean();
+    assert.equal(button.type, 'interactive');
+    assert.equal(button.choiceId, 'wasmish:start');
+    assert.equal(String(button.replyTo.messageId), String(menu._id));
+    const row = await Message.findOne({ conversationId: menu.conversationId, text: 'Hablar con alguien' }).lean();
+    assert.equal(row.choiceId, 'wasmish:person');
+
+    // Un texto no guarda el campo.
+    await postWebhook(MW_NUMBER, textMessage(from, 'gracias'));
+    const text = await Message.findOne({ conversationId: menu.conversationId, text: 'gracias' }).lean();
+    assert.equal('choiceId' in text, false);
+
+    const list = await request(changes, 'GET', `/chats/${menu.conversationId}/messages`);
+    const served = list.body.items.find(item => item.id === String(button._id));
+    assert.equal(served.choiceId, 'wasmish:start');
+});

@@ -6,7 +6,7 @@ import AutoReplySettings from "../models/auto.reply.settings.model.js";
 import { processMessageSending } from "../controllers/chat.controller.js";
 import { findConversationLine } from "../services/line.service.js";
 import { freeTextBlockReason } from "../utils/whatsapp.window.js";
-import { AUTO_REPLY_EXPIRY_MS, autoReplyOutcome, botStateUpdate, decideAutoReply } from "../utils/auto.reply.js";
+import { AUTO_REPLY_EXPIRY_MS, autoReplyOutcome, botStateUpdate, decideAutoReply, withAutoReplyDefaults } from "../utils/auto.reply.js";
 
 // ---------------------------------------------------------------------------
 // Worker de las respuestas automáticas. Corre dentro del proceso de la API,
@@ -165,7 +165,7 @@ export const resolveAutoReplyJob = async (job) => {
         // Todo se relee con el candado puesto: otro trabajo del contacto pudo
         // cambiarlo justo antes (la bienvenida, el freno).
         const [settings, conversation] = await Promise.all([
-            AutoReplySettings.findOne({ userId: accountId }).lean(),
+            AutoReplySettings.findOne({ userId: accountId }).lean().then(stored => stored && withAutoReplyDefaults(stored)),
             Conversation.findOne({ _id: job.conversationId, userId: accountId }),
         ]);
 
@@ -180,7 +180,7 @@ export const resolveAutoReplyJob = async (job) => {
             settings: settings ?? { enabled: false },
             state,
             welcomedAt: contact.autoReply?.welcomedAt ?? null,
-            message: { type: job.type, text: job.text, caption: job.caption },
+            message: { type: job.type, text: job.text, caption: job.caption, choiceId: job.choiceId ?? null },
             previousInboundAt: job.bot.previousInboundAt,
             lineId: conversation.lineId ? String(conversation.lineId) : null,
             now,
@@ -202,7 +202,7 @@ export const resolveAutoReplyJob = async (job) => {
             return 'lost';
         }
         sendStarted = true;
-        const result = await processMessageSending({ line, conversation, text: decision.text, origin: 'bot' });
+        const result = await processMessageSending({ line, conversation, text: decision.text, origin: 'bot', options: decision.options });
 
         const outcome = autoReplyOutcome({ result, error: null, sendStarted });
         if (outcome.applyClaims) {

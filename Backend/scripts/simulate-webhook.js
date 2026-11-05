@@ -32,6 +32,10 @@
 //   npm run webhook:simulate -- texto --forwarded        (o --forwarded-many)
 //                                                ← un reenvío (muchas veces: una cadena)
 //   (--reply-to y --forwarded valen para cualquier tipo y para eco)
+//   npm run webhook:simulate -- opcion --option wasmish:r:<id> --title "Precios" --reply-to <wamid del menú>
+//                                                ← el contacto toca un botón de un menú del bot
+//                                                  (opcion-lista: una fila de la lista; por
+//                                                  defecto, wasmish:start e «Inicio»)
 //   npm run webhook:simulate -- history --threads 3 --messages 20 --phase 1 --progress 100
 //                                                ← un trozo del historial de la app de WhatsApp
 //                                                  Business (campo `history`); --chunk-order <n>
@@ -54,6 +58,7 @@
 //           --text <texto editado>  --emoji <emoji>  --reply-to <wamid>  --forwarded  --forwarded-many  --eco
 //           --threads <n>  --messages <n por hilo>  --phase <0|1|2>  --progress <0-100>  --chunk-order <n>  --declined
 //           --remove (agenda)
+//           --option <id de la opción>  --title <título de la opción> (opcion, opcion-lista)
 //
 // El wamid de cada mensaje sale en la lista «Guardado» del final.
 //
@@ -165,6 +170,11 @@ const PROGRESS = opcion('progress', '100');
 const CHUNK_ORDER = opcion('chunk-order', '1');
 const DECLINED = argv.includes('--declined');
 const QUITAR_DE_AGENDA = argv.includes('--remove');
+// El toque de una opción de un menú del bot (spec del bot con menús).
+const OPTION_ID = opcion('option', 'wasmish:start');
+const OPTION_TITLE = opcion('title', 'Inicio');
+MUESTRAS.opcion = { type: 'interactive', interactive: { type: 'button_reply', button_reply: { id: OPTION_ID, title: OPTION_TITLE } } };
+MUESTRAS['opcion-lista'] = { type: 'interactive', interactive: { type: 'list_reply', list_reply: { id: OPTION_ID, title: OPTION_TITLE } } };
 
 // El BSUID que Meta generaría: país + id. Se deriva del número o del usuario
 // para que el mismo contacto de prueba tenga siempre el mismo.
@@ -174,7 +184,7 @@ const PHONE = USERNAME ? null : FROM;
 // Tras el cambio de número, el BSUID es el que tendría --from <número nuevo>.
 const NEW_USER_ID = NEW_FROM && simulatedUserId(NEW_FROM);
 
-const valoresDeOpciones = [FROM, URL_BASE, phoneNumberIdArg, PROFILE_NAME, USERNAME, NEW_FROM, DISPLAY_NUMBER, REASON, ORIGINAL, EDITED_TEXT, EMOJI, REPLY_TO, THREADS, MESSAGES, PHASE, PROGRESS, CHUNK_ORDER];
+const valoresDeOpciones = [FROM, URL_BASE, phoneNumberIdArg, PROFILE_NAME, USERNAME, NEW_FROM, DISPLAY_NUMBER, REASON, ORIGINAL, EDITED_TEXT, EMOJI, REPLY_TO, THREADS, MESSAGES, PHASE, PROGRESS, CHUNK_ORDER, OPTION_ID, OPTION_TITLE];
 const nombres = argv.filter(a => !a.startsWith('--') && !valoresDeOpciones.includes(a));
 const todos = argv.includes('--all');
 const listar = argv.includes('--list');

@@ -255,6 +255,26 @@ const messageSchema = new mongoose.Schema({
         }, { _id: false }),
         default: undefined,
     },
+    // Bot con menús (spec 2026-11-05). En el toque del contacto, el id de la
+    // opción que tocó (`parseOptionId` dice adónde lleva). En el mensaje del
+    // bot, las opciones que se mandaron y cómo (botones o lista). Sin default:
+    // los demás mensajes no los guardan.
+    choiceId: {
+        type: String,
+        default: undefined,
+    },
+    options: {
+        type: [new mongoose.Schema({
+            id: { type: String, required: true },
+            title: { type: String, required: true },
+        }, { _id: false })],
+        default: undefined,
+    },
+    optionsFormat: {
+        type: String,
+        enum: ['buttons', 'list'],
+        default: undefined,
+    },
     // Un reenvío: 'many' es una cadena (`frequently_forwarded`).
     forwarded: {
         type: String,

@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { DEFAULT_HANDOFF_TEXT } from '../utils/auto.reply.options.js';
 
 // Las respuestas automáticas de una cuenta: un documento por cuenta, que la
 // página edita entero. Sin documento, la cuenta tiene las de por defecto
@@ -15,13 +16,24 @@ const daySchema = new mongoose.Schema({
     ranges: { type: [rangeSchema], default: [] },
 }, { _id: false });
 
+// Una opción de un menú (bot con menús, spec 2026-11-05): lleva a otra
+// respuesta (`ruleId`), al inicio o a «hablar con una persona».
+const optionSchema = new mongoose.Schema({
+    title: { type: String, required: true },
+    target: { type: String, enum: ['rule', 'start', 'person'], required: true },
+    ruleId: { type: mongoose.Schema.Types.ObjectId, default: null },
+}, { _id: false });
+
+// Una «respuesta» en la pantalla. Sin frases, solo se llega por una opción.
 const keywordRuleSchema = new mongoose.Schema({
+    name: { type: String, default: '' },
     enabled: { type: Boolean, default: true },
     keywords: { type: [String], default: [] },
     text: { type: String, default: '' },
     // Vacío = todas las líneas. Hoy la página no lo ofrece: está para poder
     // pasar a «cada regla elige sus líneas» sin migrar nada.
     lineIds: { type: [mongoose.Schema.Types.ObjectId], ref: 'Line', default: [] },
+    options: { type: [optionSchema], default: [] },
 });
 
 const autoReplySettingsSchema = new mongoose.Schema({
@@ -37,6 +49,7 @@ const autoReplySettingsSchema = new mongoose.Schema({
         enabled: { type: Boolean, default: false },
         text: { type: String, default: '' },
         returnAfterDays: { type: Number, default: 30 },
+        options: { type: [optionSchema], default: [] },
     },
     outOfHours: {
         enabled: { type: Boolean, default: false },
@@ -52,6 +65,12 @@ const autoReplySettingsSchema = new mongoose.Schema({
     fallback: {
         enabled: { type: Boolean, default: false },
         text: { type: String, default: '' },
+        options: { type: [optionSchema], default: [] },
+    },
+    // Lo que responde el bot cuando el contacto pide una persona. Un documento
+    // guardado antes no lo tiene: se completa al leer (`withAutoReplyDefaults`).
+    handoff: {
+        text: { type: String, default: DEFAULT_HANDOFF_TEXT },
     },
 }, {
     timestamps: true,

@@ -95,6 +95,26 @@ test('la respuesta a un menú interactivo guarda el título elegido', () => {
     assert.equal(lista.text, 'Plan mensual');
 });
 
+// Bot con menús: el id de la opción tocada dice adónde lleva (spec 2026-11-05 § 4.3).
+test('la respuesta a un menú interactivo guarda también el id de la opción', () => {
+    const botones = describeInboundMessage({
+        type: 'interactive',
+        interactive: { type: 'button_reply', button_reply: { id: 'wasmish:start', title: 'Inicio' } },
+    });
+    const lista = describeInboundMessage({
+        type: 'interactive',
+        interactive: { type: 'list_reply', list_reply: { id: 'wasmish:person', title: 'Hablar con alguien', description: 'x' } },
+    });
+
+    assert.equal(botones.type, 'interactive');
+    assert.equal(botones.text, 'Inicio');
+    assert.equal(botones.choiceId, 'wasmish:start');
+    assert.equal(lista.choiceId, 'wasmish:person');
+    assert.equal(describeInboundMessage({ type: 'text', text: { body: 'hola' } }).choiceId, null);
+    assert.equal(describeInboundMessage({ type: 'button', button: { text: 'Confirmar', payload: 'p' } }).choiceId, null);
+    assert.equal(describeInboundMessage({ type: 'interactive', interactive: {} }).choiceId, null);
+});
+
 test('la ubicación añade nombre y dirección cuando vienen', () => {
     const conDetalle = describeInboundMessage({
         type: 'location',
