@@ -3,7 +3,8 @@ import Conversation from "../models/conversation.model.js";
 import Contact from "../models/contact.model.js";
 import Message from "../models/message.model.js";
 import { decrypt }  from "../utils/crypto.js";
-import { sendMediaMessage, sendTextMessage, uploadMedia } from "../libs/whatsapp.js";
+import { sendInteractiveMessage, sendMediaMessage, sendTextMessage, uploadMedia } from "../libs/whatsapp.js";
+import { buildInteractivePayload } from "../utils/auto.reply.options.js";
 import {
     acquireConversation, unseenConversationError, answerTransfer, assignConversation, claimNewConversation, listAssignees, populateConversation,
     requestTransfer, sendConversationEvent, sendErrorBody, serializeConversation, takeConversation,
@@ -34,7 +35,9 @@ import { listPageEvents, serializeEvent } from "../services/assignment.history.s
 // A Meta: un texto o, si hay archivo, el archivo. El archivo se sube primero
 // (el id que devuelve es del número que lo subió) y se envía por ese id.
 // `context` = `{ message_id }` si responde citando.
-const sendToMeta = async ({ token, phoneNumberId, recipient, text, attachment, context }) => {
+// `interactive`, un texto con opciones (el bot con menús).
+const sendToMeta = async ({ token, phoneNumberId, recipient, text, attachment, interactive, context }) => {
+    if (interactive) return sendInteractiveMessage({ token, phoneNumberId, recipient, interactive, context });
     if (!attachment) return sendTextMessage({ token, phoneNumberId, recipient, text, context });
 
     const { kind, buffer, mimeType, filename, caption } = attachment;
@@ -86,15 +89,19 @@ export const processMessageSending = async ({
     sender = null,
     // De dónde sale: el chat o el bot de respuestas automáticas.
     origin = 'chat',
-    replyTarget = null }) => {
+    replyTarget = null,
+    // Las opciones de un mensaje del bot (`{ id, title }`): salen como botones o lista.
+    options = null }) => {
 
+    if (options?.length > 0 && attachment) throw new Error('Un mensaje con opciones no lleva archivo');
     const token = decrypt(line.tokenWhatsapp);
     const { phoneNumberId } = line;
 
     const recipient = await getSendingRecipient(conversation, destinationNumber);
 
     const context = replyTarget ? { message_id: replyTarget.waMessageId } : null;
-    const outcome = await metaSendOutcome(() => sendToMeta({ token, phoneNumberId, recipient, text, attachment, context }));
+    const menu = options?.length > 0 ? buildInteractivePayload({ text, options }) : null;
+    const outcome = await metaSendOutcome(() => sendToMeta({ token, phoneNumberId, recipient, text, attachment, interactive: menu?.interactive, context }));
 
     const { msg, serialized } = await recordOutboundMessage({
         line, conversation, recipient, contactName, source: 'manual',
@@ -108,6 +115,8 @@ export const processMessageSending = async ({
             temporalId,
             ...(attachment && attachmentFields(attachment)),
             ...(replyTarget && { replyTo: { waMessageId: replyTarget.waMessageId, messageId: replyTarget._id } }),
+            // Se guarda como texto: solo el chat pinta las opciones.
+            ...(menu && { options, optionsFormat: menu.format }),
         },
         quoted: quotedMapOf(replyTarget),
     });

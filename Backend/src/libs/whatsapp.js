@@ -56,6 +56,23 @@ export const sendTextMessage = async ({ token, phoneNumberId, recipient, text, c
     );
 }
 
+// Un texto con opciones del bot con menús: botones de respuesta o una lista.
+// `interactive` lo arma `buildInteractivePayload` (`utils/auto.reply.options.js`).
+export const sendInteractiveMessage = async ({ token, phoneNumberId, recipient, interactive, context = null }) => {
+    return whatsappApi.post(
+        `/${phoneNumberId}/messages`,
+        {
+            messaging_product: "whatsapp",
+            recipient_type: "individual",
+            ...recipientFields(recipient),
+            ...(context && { context }),
+            type: "interactive",
+            interactive,
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+    );
+};
+
 // Un archivo ya subido a Meta (`uploadMedia`). `kind` es el tipo de mensaje
 // ('image', 'video', 'audio', 'document') y `media`, su objeto: el id y, si
 // van, el texto y el nombre del documento (`buildMediaObject`). `context`,

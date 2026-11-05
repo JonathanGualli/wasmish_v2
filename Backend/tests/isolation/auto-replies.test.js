@@ -963,3 +963,89 @@ test('menús: probar con toques, sin guardar nada', async () => {
         assert.equal((await preview(a, { settings: menuBody(), messages: [bad] })).status, 400, JSON.stringify(bad).slice(0, 60));
     }
 });
+
+// --- Bot con menús: el envío (spec 2026-11-05 § 4.4) -----------------------
+
+/** Como `metaForBot`, guardando el cuerpo de cada envío. */
+const metaCapturing = () => {
+    const bodies = [];
+    onMeta(async (config) => {
+        if (config.method !== 'post' || !config.url.endsWith('/messages')) return undefined;
+        bodies.push(JSON.parse(config.data));
+        return { data: { messages: [{ id: `wamid.bot-${++wamidSeq}` }] } };
+    });
+    return bodies;
+};
+const tapFrom = (from, id, title, kind = 'button_reply') => inboundValue(from, { type: 'interactive', interactive: { type: kind, [kind]: { id, title } } });
+
+test('menús: la bienvenida con dos opciones sale como botones, y el toque responde lo elegido', async () => {
+    await clearQueue();
+    const a = await newAccount('MSA');
+    assert.equal((await saveSettings(a, menuBody())).status, 200);
+    const from = '593970009101';
+    const bodies = metaCapturing();
+    try {
+        await postWebhook(numberOf(a), textFrom(from, 'hola'));
+        assert.deepEqual(await drain(), ['done']);
+        await postWebhook(numberOf(a), tapFrom(from, `wasmish:r:${RULE_A}`, 'Precios'));
+        assert.deepEqual(await drain(), ['done']);
+    } finally {
+        onMeta(null);
+    }
+
+    assert.equal(bodies[0].type, 'interactive');
+    assert.equal(bodies[0].interactive.type, 'button');
+    assert.equal(bodies[0].interactive.body.text, WELCOME);
+    assert.deepEqual(bodies[0].interactive.action.buttons.map(button => button.reply), [
+        { id: `wasmish:r:${RULE_A}`, title: 'Precios' },
+        { id: 'wasmish:person', title: 'Hablar con alguien' },
+    ]);
+    assert.equal(bodies[1].interactive.body.text, 'Cuesta $10');
+
+    const [inbound] = await inboundsOf(a, from);
+    const replies = await botMessagesOf(inbound.conversationId);
+    assert.deepEqual(replies.map(m => m.text), [WELCOME, 'Cuesta $10']);
+    assert.equal(replies[0].type, 'text');
+    assert.equal(replies[0].optionsFormat, 'buttons');
+    assert.deepEqual(replies[0].options, [
+        { id: `wasmish:r:${RULE_A}`, title: 'Precios' },
+        { id: 'wasmish:person', title: 'Hablar con alguien' },
+    ]);
+
+    const list = await request(a, 'GET', `/chats/${inbound.conversationId}/messages`);
+    const served = list.body.items.find(item => item.id === String(replies[0]._id));
+    assert.equal(served.optionsFormat, 'buttons');
+    assert.equal(served.options.length, 2);
+});
+
+test('menús: una respuesta con cinco opciones sale como lista; sin opciones, texto como siempre', async () => {
+    await clearQueue();
+    const a = await newAccount('MSB');
+    const base = menuBody();
+    const five = ['Tarjetas', 'Volantes', 'Lonas', 'Sellos', 'Volver'].map(title => ({ title, target: 'start' }));
+    assert.equal((await saveSettings(a, {
+        ...base,
+        keywordRules: [{ ...base.keywordRules[0], options: five }, base.keywordRules[1]],
+    })).status, 200);
+    const from = '593970009102';
+    const bodies = metaCapturing();
+    try {
+        await postWebhook(numberOf(a), tapFrom(from, `wasmish:r:${RULE_A}`, 'Precios', 'list_reply'));
+        await drain();
+        await postWebhook(numberOf(a), tapFrom(from, `wasmish:r:${RULE_B}`, 'Envíos'));
+        await drain();
+    } finally {
+        onMeta(null);
+    }
+
+    assert.equal(bodies[0].interactive.type, 'list');
+    assert.equal(bodies[0].interactive.action.button, 'Ver opciones');
+    assert.deepEqual(bodies[0].interactive.action.sections[0].rows.map(row => row.title), five.map(option => option.title));
+    // «Envíos» no tiene opciones: texto, como la v1.
+    assert.equal(bodies[1].type, 'text');
+    assert.equal(bodies[1].text.body, 'Enviamos en 48 h');
+    const [inbound] = await inboundsOf(a, from);
+    const [, plain] = await botMessagesOf(inbound.conversationId);
+    assert.equal(plain.options, undefined);
+    assert.equal(plain.optionsFormat, undefined);
+});

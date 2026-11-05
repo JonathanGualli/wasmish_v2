@@ -180,7 +180,7 @@ export const resolveAutoReplyJob = async (job) => {
             settings: settings ?? { enabled: false },
             state,
             welcomedAt: contact.autoReply?.welcomedAt ?? null,
-            message: { type: job.type, text: job.text, caption: job.caption },
+            message: { type: job.type, text: job.text, caption: job.caption, choiceId: job.choiceId ?? null },
             previousInboundAt: job.bot.previousInboundAt,
             lineId: conversation.lineId ? String(conversation.lineId) : null,
             now,
@@ -202,7 +202,7 @@ export const resolveAutoReplyJob = async (job) => {
             return 'lost';
         }
         sendStarted = true;
-        const result = await processMessageSending({ line, conversation, text: decision.text, origin: 'bot' });
+        const result = await processMessageSending({ line, conversation, text: decision.text, origin: 'bot', options: decision.options });
 
         const outcome = autoReplyOutcome({ result, error: null, sendStarted });
         if (outcome.applyClaims) {
