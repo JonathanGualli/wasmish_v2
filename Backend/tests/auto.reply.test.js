@@ -583,14 +583,31 @@ test('«hablar con una persona» responde su texto, sin opciones, y pide marcar'
     assert.deepEqual(decideMenu({ settings: withoutHandoff, message: tap('wasmish:person', 'Hablar') }).parts, ['Enseguida te atiende alguien del equipo']);
 });
 
-// Decisión C del spec: la pausa o el freno callan la respuesta, no el aviso.
+// Decisión C del spec: la pausa calla la respuesta, no el aviso.
 test('«hablar con una persona» con el bot callado: no responde, pero pide marcar', () => {
     const human = decideMenu({ message: tap('wasmish:person', 'Hablar'), state: { humanRepliedAt: hoursBefore(OPEN, 1) } });
     assert.deepEqual(human, { skip: 'human', handoffRequested: true });
+});
 
+// Probando en local (2026-11-05), el cuarto toque seguido de un menú lo calló el
+// freno de ráfagas, pensado contra un bucle con otro bot. Decisión de Jonathan:
+// un toque solo lo hace una persona, así que el freno ni lo para ni lo cuenta.
+test('el freno de ráfagas no para ni cuenta los toques; a los textos, sí', () => {
     const recent = [1, 2, 3].map(minutes => minutesBefore(OPEN, minutes));
-    const burst = decideMenu({ message: tap('wasmish:person', 'Hablar'), state: { recentReplies: recent } });
-    assert.deepEqual(burst, { skip: 'burst', handoffRequested: true });
+    const toque = decideMenu({ message: tap(`wasmish:r:${ENVIOS}`, 'Envíos'), state: { recentReplies: recent } });
+    assert.deepEqual(toque.parts, ['Enviamos en 48 h']);
+    assert.equal(toque.claims.tap, true);
+    const persona = decideMenu({ message: tap('wasmish:person', 'Hablar'), state: { recentReplies: recent } });
+    assert.equal(persona.handoffRequested, true);
+    assert.deepEqual(persona.parts, ['Ya te atiende alguien']);
+    // Un toque viejo también es de una persona.
+    assert.deepEqual(decideMenu({ message: tap('b1', 'precio'), state: { recentReplies: recent } }).parts, ['Cuesta $10']);
+
+    // No cuenta: el `$set` no toca `recentReplies`.
+    assert.equal('bot.recentReplies' in botStateUpdate({ recentReplies: recent }, toque.claims, OPEN), false);
+
+    assert.deepEqual(decideMenu({ message: text('precio'), state: { recentReplies: recent } }), { skip: 'burst' });
+    assert.equal(decideMenu({ message: text('precio') }).claims.tap, undefined);
 });
 
 test('con la conversación marcada el bot se calla: textos y toques', () => {

@@ -23,7 +23,8 @@ export const KEYWORD_MAX = 60;
 // Cuántas reglas de palabras clave entran en una misma respuesta.
 export const KEYWORD_REPLIES_MAX = 3;
 // El freno anti-bucle: como mucho BURST_MAX respuestas en BURST_WINDOW_MS por
-// conversación, por si al otro lado hay otro bot.
+// conversación, por si al otro lado hay otro bot. Los toques de un menú ni se
+// frenan ni cuentan: solo los hace una persona (decisión del 2026-11-05).
 export const BURST_MAX = 3;
 export const BURST_WINDOW_MS = 10 * MINUTE_MS;
 // Un entrante más viejo que esto ya no se responde (tras una caída, o un
@@ -262,6 +263,8 @@ const replyToChoice = (settings, state, choice, now) => {
  * en un `skip: 'no_match'`. `handoffRequested: true` (solo entonces está) pide
  * marcar la conversación, también con un `skip` por la pausa o el freno: el
  * contacto pidió una persona y eso se avisa igual (decisión C del spec).
+ * Un toque (`type: 'interactive'`) no lo para el freno de ráfagas ni cuenta
+ * para él (`claims.tap`): un toque solo lo hace una persona.
  */
 export const decideAutoReply = ({ settings, state = {}, welcomedAt = null, message, previousInboundAt = null, lineId = null, handoffRequest = null, now = new Date() }) => {
     state ??= {};
@@ -273,10 +276,16 @@ export const decideAutoReply = ({ settings, state = {}, welcomedAt = null, messa
     if (state.humanRepliedAt && !olderThan(state.humanRepliedAt, settings.handoffHours * HOUR_MS, now)) {
         return { skip: 'human', ...handoff };
     }
-    if (recentRepliesOf(state, now).length >= BURST_MAX) return { skip: 'burst', ...handoff };
+    const tap = message?.type === 'interactive';
+    if (!tap && recentRepliesOf(state, now).length >= BURST_MAX) return { skip: 'burst' };
     if (IGNORED_TYPES.has(message?.type)) return { skip: 'ignored_type' };
-    if (choice) return replyToChoice(settings, state, choice, now);
+    const decision = choice ? replyToChoice(settings, state, choice, now) : decideWritten(settings, state, welcomedAt, message, previousInboundAt, lineId, now);
+    if (tap && decision.claims) decision.claims.tap = true;
+    return decision;
+};
 
+// Lo que responde un texto escrito (o un toque viejo, tratado como texto).
+const decideWritten = (settings, state, welcomedAt, message, previousInboundAt, lineId, now) => {
     // Una sola ventana para no repetirse: las horas de «Cuándo se calla».
     const windowMs = settings.handoffHours * HOUR_MS;
     const parts = [];
@@ -338,7 +347,8 @@ export const botStateUpdate = (state, claims, now) => {
     if (claims.outOfHoursKey) update['bot.outOfHoursNotified'] = claims.outOfHoursKey;
     for (const id of claims.keywordRuleIds) update[`bot.keywordRepliedAt.${id}`] = now;
     if (claims.fallback) update['bot.fallbackRepliedAt'] = now;
-    update['bot.recentReplies'] = [...recentRepliesOf(state ?? {}, now), now].slice(-BURST_MAX);
+    // La respuesta a un toque no cuenta para el freno.
+    if (!claims.tap) update['bot.recentReplies'] = [...recentRepliesOf(state ?? {}, now), now].slice(-BURST_MAX);
     return update;
 };
 
