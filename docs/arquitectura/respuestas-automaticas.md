@@ -14,6 +14,7 @@ Las respuestas que Wasmish manda solo: bienvenida, fuera de horario y palabras c
   - [La cola: el propio entrante (`Message.bot`)](#la-cola-el-propio-entrante-messagebot)
   - [El worker (`workers/auto.reply.worker.js`)](#el-worker-workersautoreplyworkerjs)
   - [La pausa por respuesta manual (`markHumanReply`)](#la-pausa-por-respuesta-manual-markhumanreply)
+  - [Hablar con una persona (`requestHandoff`, `Conversation.handoffRequest`)](#hablar-con-una-persona-requesthandoff-conversationhandoffrequest)
 - **Frontend**
   - [La página (`pages/private/AutoReplies/`)](#la-página-pagesprivateautoreplies)
   - [La marca «Bot» en el chat](#la-marca-bot-en-el-chat)
@@ -108,6 +109,18 @@ Cada trabajo terminado deja un log `Respuesta automática: { messageId, conversa
 Las campañas y la API pública **no** pausan al bot: `processTemplateSending` no se tocó.
 
 **Lo respondido desde la app de WhatsApp Business** (coexistencia, 2026-10-16) también es una respuesta manual: `procesarEco` llama a `markHumanReply` en cuanto guarda el eco y antes de bajar su archivo ([webhook-adjuntos.md](webhook-adjuntos.md#lo-que-se-responde-desde-la-app-de-whatsapp-business-procesareco)). Un envío del bot ya autorizado no se cancela, y el bot se calla desde que se procesa el eco, no desde que se escribió en la app.
+
+**Si el contacto había pedido una persona**, `markHumanReply` también le quita la marca (`handoffRequest: null`, ver abajo) y avisa a la bandeja.
+
+### Hablar con una persona (`requestHandoff`, `Conversation.handoffRequest`)
+
+Bot con menús, 2026-11-05 ([spec § 4.5](../superpowers/specs/2026-11-05-bot-menus-design.md#45-hablar-con-una-persona)). Cuando el contacto toca la opción `wasmish:person`, `decideAutoReply` devuelve `handoffRequested: true` y el worker llama a `requestHandoff` (`services/auto.reply.service.js`) **antes** de autorizar el envío: la marca y el aviso salen aunque el bot no conteste (la pausa) o Meta rechace la respuesta (decisión C).
+- **La marca**, `Conversation.handoffRequest = { at, messageId }` (el toque), con **una escritura condicional**: solo si no hay marca (un segundo toque no repite nada) y si `bot.humanRepliedAt` no es **posterior** al toque (`tapAt`, la hora de Meta). Así, si alguien del equipo respondió mientras el worker decidía, no se marca: ya lo atendieron (revisión de Codex del plan, 1). Una pausa **anterior** al toque no lo impide.
+- **El aviso en la campanita** (tipo `handoff`, sin `actorId`) a los mismos que reciben el push de un entrante: `pushRecipientIds` con **todos** los miembros de la cuenta y la `meta` de la conversación (quien la atiende si está asignada; si no, quien ve la línea), tengan o no el push activado. Quién lo recibe se calcula **dos veces**, leyendo primero a las personas y la asignación lo último (como `notifyInbound`): al crear los avisos y justo antes de emitirlos; quien ya no está (le quitaron la línea, o se asignó a otro entre medias) pierde su aviso (`deleteMany`) sin recibirlo (revisión de Codex del plan, 2). Un aviso ya entregado a quien después pierde la conversación queda como los de la asignación, con `canOpen: false`.
+- **El push** (`notifyHandoff`, sin esperar): «Marisol pide hablar con una persona.» (`buildHandoffPush`: el nombre de pila; sin nombre, el teléfono o @usuario), con el título de un entrante. El toque, como todo entrante, manda además su propio push.
+- **La bandeja**: `conversation_updated { id, handoffRequest }` (`emitHandoffRequest`), y `GET /api/chats` trae `handoffRequest` en cada conversación. `emitHandoffRequest` emite **lo que hay en la BD al enviar** (`{ at }` o `null`), leído con la línea y quién la atiende: quien pone la marca y quien la quita pueden emitir cruzados, y una copia de antes volvía a mostrar una marca ya quitada (revisión de Codex del PR #182).
+- **Mientras está, el bot se calla** sin límite de horas (`skip: 'handoff'`).
+- **Se quita** al responder alguien del equipo (`markHumanReply`: el chat y el eco de la app; desde ahí rige la pausa de `handoffHours`) o **a mano**, con `DELETE /api/chats/:id/handoff-request` (`clearHandoffRequestController`, con el alcance de quien lo pide en la misma escritura, sin leer antes): quien no ve la conversación recibe 404, **también si la atiende un compañero** (no el 409 `assigned_to_other` de los envíos, que dice quién; revisión de Codex del plan, 4). Quitarla a mano no pausa al bot. Las dos emiten `conversation_updated` con `handoffRequest: null`. Los avisos de la campanita se quedan.
 
 ---
 

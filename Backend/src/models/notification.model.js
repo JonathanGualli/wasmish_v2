@@ -5,8 +5,9 @@ import mongoose from 'mongoose';
 // Caducan a los 30 días (decisión del 2026-10-28); lo que pasó de verdad queda
 // en la historia de la conversación (`ConversationEvent`). `lost`: otra persona
 // le quitó una conversación que atendía (la tomó, se la pasó a un tercero o la
-// dejó sin asignar; decisión del 2026-10-29).
-export const NOTIFICATION_TYPES = ['assigned', 'passed', 'rejected', 'requested', 'lost'];
+// dejó sin asignar; decisión del 2026-10-29). `handoff`: el contacto pidió
+// hablar con una persona en un menú del bot (sin `actorId`; spec 2026-11-05).
+export const NOTIFICATION_TYPES = ['assigned', 'passed', 'rejected', 'requested', 'lost', 'handoff'];
 export const NOTIFICATION_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 const notificationSchema = new mongoose.Schema({

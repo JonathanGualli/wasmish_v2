@@ -5,7 +5,7 @@ import Line from '../models/line.model.js';
 import Conversation from '../models/conversation.model.js';
 import { PUSH_ENABLED, VAPID_PRIVATE_KEY, VAPID_PUBLIC_KEY, VAPID_SUBJECT } from '../config.js';
 import {
-    assignmentPushTarget, buildAssignmentPush, buildInboundPush, isGonePushError, pushLineName, pushRecipientIds,
+    assignmentPushTarget, buildAssignmentPush, buildHandoffPush, buildInboundPush, isGonePushError, pushLineName, pushRecipientIds,
 } from '../utils/push.js';
 import { sessionAuthFor } from '../utils/account.js';
 import { currentConversationMeta } from './assignment.service.js';
@@ -58,7 +58,27 @@ const sendOne = async (subscription, payload) => {
  * El webhook la llama sin esperar: nunca rechaza, y ni el texto ni el endpoint
  * van al log (son conversaciones privadas de los clientes de nuestros clientes).
  */
-export const notifyInbound = async ({ accountId, conversationId, contact, text, type, caption }) => {
+export const notifyInbound = ({ accountId, conversationId, contact, text, type, caption }) => pushToConversation({
+    accountId,
+    conversationId,
+    payload: (lineName) => buildInboundPush({ conversationId, contact, text, type, caption, lineName }),
+    what: 'un entrante',
+});
+
+/**
+ * El aviso de que el contacto pidió hablar con una persona (bot con menús): a
+ * los mismos que el de un entrante. Se llama sin esperar: nunca rechaza.
+ */
+export const notifyHandoff = ({ accountId, conversationId, contact }) => pushToConversation({
+    accountId,
+    conversationId,
+    payload: (lineName) => buildHandoffPush({ conversationId, contact, lineName }),
+    what: 'una petición de hablar con una persona',
+});
+
+// El push de una conversación a quien la vería por SSE. `payload(lineName)`
+// arma el aviso. Nunca rechaza.
+const pushToConversation = async ({ accountId, conversationId, payload: buildPayload, what }) => {
     if (!PUSH_ENABLED) return;
     try {
         const subscriptions = await PushSubscription.find({ accountId }).lean();
@@ -80,11 +100,10 @@ export const notifyInbound = async ({ accountId, conversationId, contact, text, 
         const targets = subscriptions.filter(subscription => recipients.has(String(subscription.memberId)));
         if (targets.length === 0) return;
 
-        const lineName = pushLineName(activeLines, meta.lineId);
-        const payload = JSON.stringify(buildInboundPush({ conversationId, contact, text, type, caption, lineName }));
+        const payload = JSON.stringify(buildPayload(pushLineName(activeLines, meta.lineId)));
         await Promise.allSettled(targets.map(subscription => sendOne(subscription, payload)));
     } catch (error) {
-        console.error('No se pudieron enviar los avisos push de un entrante:', { error: error.message });
+        console.error(`No se pudieron enviar los avisos push de ${what}:`, { error: error.message });
     }
 };
 

@@ -64,6 +64,24 @@ export const buildInboundPush = ({ conversationId, contact, text, type = null, c
     };
 };
 
+/**
+ * El aviso de que el contacto pidió hablar con una persona (bot con menús,
+ * spec 2026-11-05 § 4.5): título como el de un entrante; en el cuerpo, su
+ * nombre de pila o, sin nombre, como sale en la bandeja (el teléfono o @usuario).
+ */
+export const buildHandoffPush = ({ conversationId, contact, lineName = null }) => {
+    const id = String(conversationId);
+    const suffix = lineName ? ` · ${lineName}` : '';
+    const named = [contact?.name, contact?.agendaName, contact?.profileName].map(value => String(value ?? '').trim()).find(Boolean);
+    const who = named ? named.split(/\s+/)[0] : contactDisplayName(contact);
+    return {
+        title: truncate(contactDisplayName(contact), TITLE_MAX - suffix.length) + suffix,
+        body: truncate(`${who} pide hablar con una persona.`, BODY_MAX),
+        conversationId: id,
+        url: `/private/chats?c=${id}`,
+    };
+};
+
 // Quién lo hizo, por su nombre de pila; sin nombre, «Alguien».
 const actorFirstName = (name) => String(name ?? '').trim().split(/\s+/)[0] || 'Alguien';
 

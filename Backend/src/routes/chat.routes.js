@@ -4,7 +4,7 @@ import {
     listConversations, listMessages, sendMessageController, sendMediaMessageController,
     sendConversationTemplateController, startConversationTemplateController, setReactionController,
     takeConversationController, assignConversationController, listAssigneesController,
-    requestTransferController, acceptTransferController, rejectTransferController,
+    requestTransferController, acceptTransferController, rejectTransferController, clearHandoffRequestController,
 } from "../controllers/chat.controller.js";
 import { readRawFile } from "../middlewares/raw.file.middleware.js";
 import { validateSchema } from "../middlewares/validator.middleware.js";
@@ -31,5 +31,7 @@ router.get('/chats/:id/assignees', authRequired, listAssigneesController);
 router.post('/chats/:id/transfer-request', authRequired, requestTransferController);
 router.post('/chats/:id/transfer-request/accept', authRequired, validateSchema(transferAnswerSchema), acceptTransferController);
 router.post('/chats/:id/transfer-request/reject', authRequired, validateSchema(transferAnswerSchema), rejectTransferController);
+// Bot con menús: quitar la marca de «pide una persona».
+router.delete('/chats/:id/handoff-request', authRequired, clearHandoffRequestController);
 
 export default router;

@@ -88,6 +88,16 @@ const conversationSchema = new mongoose.Schema({
         }, { _id: false }),
         default: undefined,
     },
+    // El contacto tocó «hablar con una persona» en un menú del bot (spec del
+    // bot con menús, § 4.5): cuándo y con qué toque. Mientras está, el bot se
+    // calla; se quita al responder alguien del equipo (`markHumanReply`) o a mano.
+    handoffRequest: {
+        type: new mongoose.Schema({
+            at: { type: Date, required: true },
+            messageId: { type: mongoose.Schema.Types.ObjectId, ref: 'Message', required: true },
+        }, { _id: false }),
+        default: null,
+    },
     // El estado de las respuestas automáticas en esta conversación (ver
     // docs/arquitectura/respuestas-automaticas.md). Solo existe si alguna vez
     // respondió una persona o el bot.
