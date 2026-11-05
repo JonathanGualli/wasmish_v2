@@ -659,14 +659,18 @@ export const rejectTransferController = async (req, res) => {
  */
 export const clearHandoffRequestController = async (req, res) => {
     try {
-        const conversation = await findOwnConversation(req.auth, req.params.id);
-        if (!conversation) return res.status(404).json([{ message: 'Conversation not found' }]);
-        const before = await Conversation.findOneAndUpdate(
-            { _id: conversation._id, userId: req.auth.accountId },
-            { $set: { handoffRequest: null } },
-            { projection: { handoffRequest: 1 } },
-        ).lean();
-        if (before?.handoffRequest) await emitHandoffRequest(req.auth.accountId, conversation._id, null);
+        const { id } = req.params;
+        // El alcance va en la misma escritura: leer antes dejaba quitarla a quien
+        // la perdió entre medias (revisión de Codex del PR #182, 1).
+        const before = mongoose.isValidObjectId(id)
+            ? await Conversation.findOneAndUpdate(
+                { _id: id, userId: req.auth.accountId, ...conversationScope(req.auth) },
+                { $set: { handoffRequest: null } },
+                { projection: { handoffRequest: 1 } },
+            ).lean()
+            : null;
+        if (!before) return res.status(404).json([{ message: 'Conversation not found' }]);
+        if (before.handoffRequest) await emitHandoffRequest(req.auth.accountId, id);
         return res.status(204).end();
     } catch (error) {
         console.error('Error quitando la marca de «pide una persona»:', error.message);

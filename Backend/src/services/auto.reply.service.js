@@ -3,7 +3,9 @@ import AutoReplySettings from "../models/auto.reply.settings.model.js";
 import Notification from "../models/notification.model.js";
 import User from "../models/user.model.js";
 import { pushRecipientIds } from "../utils/push.js";
-import { currentConversationMeta, sendConversationEvent } from "./assignment.service.js";
+import { conversationMeta } from "../utils/permissions.js";
+import { sendToAccount } from "../controllers/stream.controller.js";
+import { currentConversationMeta } from "./assignment.service.js";
 import { createNotifications, emitNotificationsCreated } from "./assignment.history.service.js";
 import { notifyHandoff } from "./push.service.js";
 
@@ -28,26 +30,44 @@ export const markHumanReply = async (conversationId) => {
             { $set: { 'bot.humanRepliedAt': new Date(), handoffRequest: null } },
             { projection: { userId: 1, handoffRequest: 1 } },
         ).lean();
-        if (before?.handoffRequest) await emitHandoffRequest(before.userId, conversationId, null);
+        if (before?.handoffRequest) await emitHandoffRequest(before.userId, conversationId);
     } catch (error) {
         console.error('No se pudo pausar el bot en la conversación:', { conversationId: String(conversationId), error: error.message });
     }
 };
 
-/** `conversation_updated` con la marca de «pide una persona» (`{ at }` o null), a quien ve la conversación. */
-export const emitHandoffRequest = (accountId, conversationId, handoffRequest) =>
-    sendConversationEvent(accountId, conversationId, 'conversation_updated', {
-        id: String(conversationId),
-        handoffRequest: handoffRequest ? { at: handoffRequest.at.toISOString() } : null,
-    });
+/**
+ * `conversation_updated` con la marca de «pide una persona» (`{ at }` o null),
+ * a quien ve la conversación. Lo que se emite es lo que hay en la BD **ahora**,
+ * leído con su línea y quién la atiende justo antes de enviar: quien pone la
+ * marca y quien la quita pueden emitir cruzados, y una copia de antes volvía a
+ * mostrar en la bandeja una marca ya quitada (revisión de Codex del PR #182, 3).
+ * Nunca lanza.
+ */
+export const emitHandoffRequest = async (accountId, conversationId) => {
+    try {
+        const current = await Conversation.findOne({ _id: conversationId, userId: accountId })
+            .select('lineId assignedTo handoffRequest').lean();
+        if (!current) return;
+        const at = current.handoffRequest?.at;
+        sendToAccount(String(accountId), 'conversation_updated', {
+            id: String(conversationId),
+            handoffRequest: at ? { at: at.toISOString() } : null,
+        }, conversationMeta(current));
+    } catch (error) {
+        console.error('No se pudo avisar de la marca de «pide una persona»:', { error: error.message });
+    }
+};
 
 // Quiénes reciben el aviso de «pide una persona» ahora: los del push de un
 // entrante (quien la atiende si está asignada; si no, quien ve la línea),
-// tengan o no el push activado. Se lee todo en el momento.
+// tengan o no el push activado. Las personas primero y la asignación lo último,
+// como en `notifyInbound`: si cambia de manos mientras se leen las personas, no
+// le toca a quien la perdió (revisión de Codex del PR #182, 2).
 const handoffRecipients = async (accountId, conversationId) => {
+    const members = await User.find({ accountId }).select('accountId role lineIds status').lean();
     const meta = await currentConversationMeta(conversationId);
     if (!meta) return [];
-    const members = await User.find({ accountId }).select('accountId role lineIds status').lean();
     return pushRecipientIds(members, accountId, meta);
 };
 
@@ -84,7 +104,7 @@ export const requestHandoff = async ({ accountId, conversationId, messageId, tap
         await emitNotificationsCreated(accountId, docs.filter(doc => still.has(String(doc.recipientId))));
 
         notifyHandoff({ accountId, conversationId, contact });
-        await emitHandoffRequest(accountId, conversationId, handoffRequest);
+        await emitHandoffRequest(accountId, conversationId);
         return true;
     } catch (error) {
         console.error('No se pudo marcar que el contacto pide una persona:', { conversationId: String(conversationId), error: error.message });

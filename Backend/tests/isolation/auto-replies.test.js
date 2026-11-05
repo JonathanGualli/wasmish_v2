@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {
     seedAccount, seedMember, connectWhatsapp, request, onMeta, ANONYMOUS, PNG,
     postWebhook, metaCalls, ApiKey, AutoReplySettings, Campaign, Contact, Conversation, Line, Message,
-    Notification, User, pushCalls, openStream,
+    Notification, User, pushCalls, openStream, postEcho,
 } from './helpers.js';
 
 const { processNext } = await import('../../src/workers/campaign.worker.js');
@@ -13,7 +13,7 @@ const { hashApiKey } = await import('../../src/utils/crypto.js');
 const {
     processNextAutoReply, recoverAutoReplyJobs, authorizeBotSend, claimNextAutoReplyJob, resolveAutoReplyJob, markSendStarted,
 } = await import('../../src/workers/auto.reply.worker.js');
-const { markHumanReply, requestHandoff } = await import('../../src/services/auto.reply.service.js');
+const { markHumanReply, requestHandoff, emitHandoffRequest } = await import('../../src/services/auto.reply.service.js');
 
 let seq = 1;
 const newAccount = async (label) => {
@@ -1325,4 +1325,80 @@ test('quitar la marca a mano: 404 si no se ve la conversación, 204 y el bot vue
     } finally {
         onMeta(null);
     }
+});
+
+// Revisión de Codex del PR #182, 3: `requestHandoff` emitía al final la marca
+// que copió al principio; si mientras tanto alguien la quitó (y emitió `null`),
+// la bandeja volvía a mostrarla. Ahora se emite lo que hay en la BD al enviar.
+test('la marca que se emite es la de la BD en ese momento, no la de antes', async () => {
+    await clearQueue();
+    const { owner } = await handoffTeam('HPK');
+    const from = '593970009211';
+    metaForBot();
+    try {
+        await postWebhook(numberOf(owner), personTap(from));
+        await drain();
+    } finally {
+        onMeta(null);
+    }
+    const conversation = await conversationWith(owner, from);
+    const stream = await openStream(owner);
+    try {
+        await emitHandoffRequest(owner.accountId, conversation._id);
+        assert.ok(await stream.waitFor(`"handoffRequest":{"at":"${conversation.handoffRequest.at.toISOString()}"}`, 2000), 'no emitió la marca de la BD');
+        await Conversation.updateOne({ _id: conversation._id }, { $set: { handoffRequest: null } });
+        await emitHandoffRequest(owner.accountId, conversation._id);
+        assert.ok(await stream.waitFor('"handoffRequest":null', 2000), 'emitió una marca que ya no estaba');
+    } finally {
+        await stream.close();
+    }
+});
+
+test('responder desde la app de WhatsApp Business (eco) también quita la marca', async () => {
+    await clearQueue();
+    const { owner } = await handoffTeam('HPL');
+    const from = '593970009212';
+    metaForBot();
+    try {
+        await postWebhook(numberOf(owner), personTap(from));
+        await drain();
+    } finally {
+        onMeta(null);
+    }
+    const conversation = await conversationWith(owner, from);
+    assert.ok(conversation.handoffRequest);
+    const echo = { from: '15550000001', to: from, id: `wamid.eco.hpl.${Date.now()}`, timestamp: String(Math.floor(Date.now() / 1000)), type: 'text', text: { body: 'Te atiendo desde el celular' } };
+    assert.equal((await postEcho(numberOf(owner), [echo])).status, 200);
+    assert.equal((await Conversation.findById(conversation._id).lean()).handoffRequest, null);
+});
+
+// Revisión de Codex del PR #182, 1: el DELETE leía con el alcance de quien lo
+// pide y escribía sin él; una asignación entre medias le dejaba quitarla.
+test('el DELETE comprueba el alcance en la misma escritura que quita la marca', async () => {
+    await clearQueue();
+    const { owner, agent } = await handoffTeam('HPM');
+    const teammate = await seedMember(owner, { role: 'agent', lineIds: [owner.lineId], label: 'HPMT' });
+    const from = '593970009213';
+    metaForBot();
+    try {
+        await postWebhook(numberOf(owner), personTap(from));
+        await drain();
+    } finally {
+        onMeta(null);
+    }
+    const conversation = await conversationWith(owner, from);
+    await Conversation.updateOne({ _id: conversation._id }, { $set: { assignedTo: teammate.userId } });
+    // Sin lectura previa: la condición va en la escritura.
+    const queries = [];
+    const original = Conversation.findOne;
+    Conversation.findOne = function (...args) { queries.push(args[0]); return original.apply(this, args); };
+    let response;
+    try {
+        response = await request(agent, 'DELETE', `/chats/${conversation._id}/handoff-request`);
+    } finally {
+        Conversation.findOne = original;
+    }
+    assert.equal(response.status, 404);
+    assert.equal(queries.length, 0, 'leyó la conversación antes de escribir');
+    assert.ok((await Conversation.findById(conversation._id).lean()).handoffRequest);
 });
