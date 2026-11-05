@@ -30,7 +30,7 @@ Las que tomó el agente al escribir el spec, **para que Jonathan las revise**:
 
 - **A. Si el texto no cabe en botones, sale como lista** (§ 4.4). Meta limita el cuerpo de los botones a 1024 caracteres y el de la lista a 4096. En el brainstorming se habló de partirlo en dos mensajes; con la lista sale **uno solo**, que Meta cobra una vez, y no hace falta decidir qué pasa si el primero sale y el segundo no.
 - **B. Los títulos de las opciones de una respuesta no se pueden repetir** (400): Meta rechaza los botones con títulos iguales. Se comparan sin mayúsculas ni tildes.
-- **C. Un toque de «persona» marca la conversación aunque el bot no conteste** (por la pausa o por el freno): el contacto pidió una persona y eso se avisa igual.
+- **C. Un toque de «persona» marca la conversación aunque el bot no conteste** (por la pausa): el contacto pidió una persona y eso se avisa igual.
 - **D. Tocar una respuesta cuenta como que esa respuesta salió**: si después el contacto escribe su palabra clave dentro de las horas de «Cuándo se calla», no se repite (como hoy).
 - **E. «Volver al inicio» con la bienvenida apagada** se trata como un texto escrito (§ 4.3, toques viejos). La pantalla avisa al configurarlo.
 - **F. El id de una respuesta nueva lo pone la página** (un ObjectId generado en el navegador), para poder apuntarle una opción antes de guardar. El backend ya conserva los ids que le llegan.
@@ -90,7 +90,8 @@ El `id` de cada opción dice adónde lleva, así el toque se resuelve sin buscar
 - **A otra respuesta:** su texto y sus opciones. **Siempre responde**: no lo calla la ventana de no repetirse (el contacto lo pidió). Marca la respuesta como salida (decisión D).
 - **Al inicio:** el texto y las opciones de la bienvenida, **sin marcar el saludo** (`welcomedAt` no cambia).
 - **A una persona:** § 4.5.
-- **Lo que sí lo calla:** el interruptor general, la pausa por respuesta manual (`humanRepliedAt`), la marca de «pide una persona» y el freno de ráfagas, como a todo lo demás.
+- **Lo que sí lo calla:** el interruptor general, la pausa por respuesta manual (`humanRepliedAt`) y la marca de «pide una persona», como a todo lo demás.
+- **El freno de ráfagas no frena los toques ni los cuenta** (decisión de Jonathan del 2026-11-05, al probar en local: el cuarto toque seguido de un menú lo callaba). El freno es contra un bucle con otro bot, y un toque solo lo hace una persona. Vale para cualquier toque, también uno viejo. A los textos escritos los sigue frenando igual.
 - **El fuera de horario** se suma si está cerrado, una vez por tramo, como hoy.
 - **Un toque nunca saluda** ni dispara el «no entiendo».
 - **Un toque viejo** (la respuesta ya no existe, está apagada o es de otra línea; «al inicio» con la bienvenida apagada; un `id` que no es de Wasmish) **se trata como un texto escrito con su título**: busca palabras clave, y si no, el «no entiendo». Para eso, `inboundMatchText` usa el texto de un `interactive` (hoy solo el de un `text` o el `caption`).
@@ -115,7 +116,7 @@ La cola, el worker, el candado del contacto, `authorizeBotSend`, la marca «Bot�
 
 1. **La marca:** `Conversation.handoffRequest = { at, messageId }` (el toque), con una escritura condicional: sin marca puesta (un segundo toque no repite nada) y **sin una respuesta del equipo posterior al toque** (si alguien respondió mientras el bot decidía, ya lo atendieron: revisión de Codex del plan).
 2. **El aviso**, solo si la marca es nueva: un aviso `handoff` en la campanita (`NOTIFICATION_TYPES`) y un push «<contacto> pide hablar con una persona», a los mismos que reciben el push de un entrante (`pushRecipientIds`: quien la atiende si está asignada, si no todos los que ven la línea). Quién lo recibe se vuelve a comprobar justo antes de emitirlo: si entre medias alguien perdió la línea o la conversación se asignó a otro, su aviso se borra sin llegarle. Y `conversation_updated` con `handoffRequest` por SSE, para la bandeja.
-3. **La respuesta:** el texto de `handoff`, más el fuera de horario si está cerrado. Sin opciones. Si el bot está callado (pausa o freno), no responde, pero la marca y el aviso salen igual.
+3. **La respuesta:** el texto de `handoff`, más el fuera de horario si está cerrado. Sin opciones. Si el bot está callado por la pausa, no responde, pero la marca y el aviso salen igual.
 
 **Mientras la conversación está marcada, el bot se calla** sin límite de horas: palabras clave, «no entiendo», toques y fuera de horario (`decideAutoReply` devuelve `skip: 'handoff'`).
 
@@ -157,7 +158,7 @@ El brief de UI va aparte (PR 4, § 9) y dice qué tiene que poder hacer la perso
 
 - **Puras** (`Backend/tests/`):
   - los ids de las opciones (armar y leer `wasmish:…`, uno ajeno);
-  - `decideAutoReply` con toques: a una respuesta (aunque haya salido hace poco), al inicio (sin saludo), a una persona, viejos (como texto), callados por la marca, la pausa y el freno; las opciones del mensaje combinado;
+  - `decideAutoReply` con toques: a una respuesta (aunque haya salido hace poco), al inicio (sin saludo), a una persona, viejos (como texto), callados por la marca y la pausa, y sin freno; las opciones del mensaje combinado;
   - `buildInteractivePayload`: 3 y 4 opciones, cuerpo de 1024 y de 1025;
   - la validación: destino desconocido, títulos repetidos, `person` sin texto, 11 opciones, 51 respuestas;
   - `inboundMatchText` de un `interactive` y `describeInboundMessage` con su `id`;
