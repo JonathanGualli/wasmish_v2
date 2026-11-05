@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import {
     seedAccount, seedMember, connectWhatsapp, request, onMeta, ANONYMOUS, PNG,
     postWebhook, metaCalls, ApiKey, AutoReplySettings, Campaign, Contact, Conversation, Line, Message,
+    Notification, User, pushCalls, openStream,
 } from './helpers.js';
 
 const { processNext } = await import('../../src/workers/campaign.worker.js');
@@ -12,7 +13,7 @@ const { hashApiKey } = await import('../../src/utils/crypto.js');
 const {
     processNextAutoReply, recoverAutoReplyJobs, authorizeBotSend, claimNextAutoReplyJob, resolveAutoReplyJob, markSendStarted,
 } = await import('../../src/workers/auto.reply.worker.js');
-const { markHumanReply } = await import('../../src/services/auto.reply.service.js');
+const { markHumanReply, requestHandoff } = await import('../../src/services/auto.reply.service.js');
 
 let seq = 1;
 const newAccount = async (label) => {
@@ -1056,4 +1057,272 @@ test('menús: una respuesta con cinco opciones sale como lista; sin opciones, te
     const [, plain] = await botMessagesOf(inbound.conversationId);
     assert.equal(plain.options, undefined);
     assert.equal(plain.optionsFormat, undefined);
+});
+
+// --- Bot con menús: «hablar con una persona» (spec 2026-11-05 § 4.5) -------
+
+const PUSH_KEYS = { p256dh: 'BPcl4Zx-clave-publica-de-pruebas', auth: 'secreto-auth' };
+let endpointSeq = 0;
+/** Activa los avisos push de `member` en un dispositivo; devuelve su endpoint. */
+const subscribePush = async (member) => {
+    const endpoint = `https://fcm.googleapis.com/fcm/send/handoff-${Date.now()}-${endpointSeq++}`;
+    assert.equal((await request(member, 'POST', '/push/subscriptions', { endpoint, keys: PUSH_KEYS })).status, 200);
+    return endpoint;
+};
+// Solo el de «pide una persona»: el toque, como todo entrante, manda además el suyo.
+const pushesTo = (endpoint) => pushCalls.filter(call => call.endpoint === endpoint && / pide hablar con una persona\.$/.test(call.payload.body));
+/** El push sale sin esperar: hasta que se cumple `predicate`, o 2 s. */
+const eventually = async (predicate, ms = 2000) => {
+    const deadline = Date.now() + ms;
+    while (Date.now() < deadline) {
+        if (await predicate()) return true;
+        await new Promise(resolve => setTimeout(resolve, 20));
+    }
+    return Boolean(await predicate());
+};
+const handoffNotices = (conversationId) => Notification.find({ conversationId, type: 'handoff' }).lean();
+const personTap = (from) => tapFrom(from, 'wasmish:person', 'Hablar con alguien');
+
+/** Una cuenta con el menú, un agente con la línea y otro sin ella. */
+const handoffTeam = async (label) => {
+    const owner = await newAccount(label);
+    assert.equal((await saveSettings(owner, menuBody())).status, 200);
+    const agent = await seedMember(owner, { role: 'agent', lineIds: [owner.lineId], label: `${label}G` });
+    const outsider = await seedMember(owner, { role: 'agent', lineIds: [], label: `${label}X` });
+    return { owner, agent, outsider };
+};
+const conversationWith = async (account, from) => {
+    const contact = await Contact.findOne({ userId: account.accountId, phone: from }).lean();
+    return Conversation.findOne({ userId: account.accountId, contactId: contact._id }).lean();
+};
+
+test('pide una persona: responde, marca, avisa en la campanita y por push a quien ve la línea', async () => {
+    await clearQueue();
+    const { owner, agent, outsider } = await handoffTeam('HPA');
+    const [ownerPush, agentPush, outsiderPush] = await Promise.all([subscribePush(owner), subscribePush(agent), subscribePush(outsider)]);
+    const from = '593970009201';
+    const bodies = metaCapturing();
+    const stream = await openStream(owner);
+    try {
+        await postWebhook(numberOf(owner), personTap(from));
+        assert.deepEqual(await drain(), ['done']);
+        assert.ok(await stream.waitFor('"handoffRequest":{"at"', 2000), 'la bandeja no recibió la marca');
+    } finally {
+        onMeta(null);
+        await stream.close();
+    }
+    assert.equal(bodies[0].type, 'text');
+    assert.equal(bodies[0].text.body, 'Ya te atiende alguien');
+
+    const conversation = await conversationWith(owner, from);
+    assert.ok(conversation.handoffRequest.at);
+    const [tap] = await inboundsOf(owner, from);
+    assert.equal(String(conversation.handoffRequest.messageId), String(tap._id));
+
+    const notices = await handoffNotices(conversation._id);
+    assert.deepEqual(notices.map(n => String(n.recipientId)).sort(), [owner.userId, agent.userId].sort());
+    assert.ok(notices.every(n => n.actorId === null));
+    assert.ok(await eventually(() => pushesTo(ownerPush).length === 1 && pushesTo(agentPush).length === 1));
+    assert.equal(pushesTo(outsiderPush).length, 0);
+    assert.match(pushesTo(agentPush)[0].payload.body, /pide hablar con una persona\.$/);
+
+    // La bandeja y la campanita lo traen.
+    const list = await request(owner, 'GET', '/chats');
+    assert.ok(list.body.find(item => item.id === String(conversation._id)).handoffRequest.at);
+    const bell = await request(agent, 'GET', '/notifications');
+    const served = bell.body.items.find(item => item.type === 'handoff');
+    assert.equal(served.conversation.id, String(conversation._id));
+});
+
+test('pide una persona en una conversación asignada: el aviso y el push, solo a quien la atiende', async () => {
+    await clearQueue();
+    const { owner, agent } = await handoffTeam('HPB');
+    const [ownerPush, agentPush] = await Promise.all([subscribePush(owner), subscribePush(agent)]);
+    const from = '593970009202';
+    metaForBot();
+    try {
+        await postWebhook(numberOf(owner), textFrom(from, 'hola'));
+        await drain();
+        const conversation = await conversationWith(owner, from);
+        assert.equal((await request(owner, 'POST', `/chats/${conversation._id}/assign`, { userId: agent.userId })).status, 200);
+        await Conversation.updateOne({ _id: conversation._id }, { $unset: { 'bot.humanRepliedAt': '' } });
+        pushCalls.length = 0;
+        await postWebhook(numberOf(owner), personTap(from));
+        await drain();
+        const notices = await handoffNotices(conversation._id);
+        assert.deepEqual(notices.map(n => String(n.recipientId)), [agent.userId]);
+        assert.ok(await eventually(() => pushesTo(agentPush).length === 1));
+        assert.equal(pushesTo(ownerPush).length, 0);
+    } finally {
+        onMeta(null);
+    }
+});
+
+test('dos toques de «persona» seguidos: una marca, un aviso por persona y un push', async () => {
+    await clearQueue();
+    const { owner } = await handoffTeam('HPC');
+    const ownerPush = await subscribePush(owner);
+    const from = '593970009203';
+    metaForBot();
+    try {
+        await postWebhook(numberOf(owner), personTap(from));
+        await postWebhook(numberOf(owner), personTap(from));
+        assert.deepEqual((await drain()).sort(), ['done', 'skipped']);
+    } finally {
+        onMeta(null);
+    }
+    const conversation = await conversationWith(owner, from);
+    assert.equal((await handoffNotices(conversation._id)).filter(n => String(n.recipientId) === owner.userId).length, 1);
+    assert.ok(await eventually(() => pushesTo(ownerPush).length === 1));
+    await new Promise(resolve => setTimeout(resolve, 100));
+    assert.equal(pushesTo(ownerPush).length, 1);
+    const [, second] = await inboundsOf(owner, from);
+    assert.equal(second.bot.skipReason, 'handoff');
+});
+
+test('con la marca puesta el bot no responde nada, sin llamar a Meta', async () => {
+    await clearQueue();
+    const { owner } = await handoffTeam('HPD');
+    const from = '593970009204';
+    metaForBot();
+    try {
+        await postWebhook(numberOf(owner), personTap(from));
+        await drain();
+        const sends = metaSendsTo(owner);
+        await postWebhook(numberOf(owner), textFrom(from, 'precio'));
+        await postWebhook(numberOf(owner), tapFrom(from, `wasmish:r:${RULE_A}`, 'Precios'));
+        assert.deepEqual(await drain(), ['skipped', 'skipped']);
+        assert.equal(metaSendsTo(owner), sends);
+    } finally {
+        onMeta(null);
+    }
+    const inbounds = await inboundsOf(owner, from);
+    assert.deepEqual(inbounds.slice(1).map(m => m.bot.skipReason), ['handoff', 'handoff']);
+});
+
+// Decisión C del spec: la pausa calla la respuesta, no la marca ni el aviso.
+test('pide una persona con el bot en pausa: no responde, pero marca y avisa', async () => {
+    await clearQueue();
+    const { owner } = await handoffTeam('HPE');
+    const from = '593970009205';
+    metaForBot();
+    try {
+        await postWebhook(numberOf(owner), textFrom(from, 'hola'));
+        await drain();
+        const conversation = await conversationWith(owner, from);
+        await Conversation.updateOne({ _id: conversation._id }, { $set: { 'bot.humanRepliedAt': new Date(Date.now() - 60 * 60 * 1000) } });
+        const sends = metaSendsTo(owner);
+        await postWebhook(numberOf(owner), personTap(from));
+        assert.deepEqual(await drain(), ['skipped']);
+        assert.equal(metaSendsTo(owner), sends);
+        assert.ok((await Conversation.findById(conversation._id).lean()).handoffRequest);
+        assert.equal((await handoffNotices(conversation._id)).length, 2, 'el owner y el agente de la línea');
+    } finally {
+        onMeta(null);
+    }
+});
+
+// Revisión de Codex del plan, 1: si alguien del equipo responde mientras el
+// worker decide, la marca no se queda puesta para siempre.
+test('alguien responde después del toque y antes del worker: ni marca ni aviso', async () => {
+    await clearQueue();
+    const { owner } = await handoffTeam('HPF');
+    const from = '593970009206';
+    metaForBot();
+    try {
+        await postWebhook(numberOf(owner), textFrom(from, 'hola'));
+        await drain();
+        const conversation = await conversationWith(owner, from);
+        await Conversation.updateOne({ _id: conversation._id }, { $unset: { 'bot.humanRepliedAt': '' } });
+        // El toque, con la hora de Meta de hace 5 s; la respuesta, ahora.
+        const value = personTap(from);
+        value.messages[0].timestamp = String(Math.floor(Date.now() / 1000) - 5);
+        await postWebhook(numberOf(owner), value);
+        assert.equal((await request(owner, 'POST', `/chats/${conversation._id}/messages`, { text: 'Hola, te atiendo yo', temporalId: 't-hpf' })).status, 201);
+        assert.deepEqual(await drain(), ['skipped']);
+        assert.equal((await Conversation.findById(conversation._id).lean()).handoffRequest, null);
+        assert.equal((await handoffNotices(conversation._id)).length, 0);
+    } finally {
+        onMeta(null);
+    }
+
+    // Lo mismo llamándola directamente: una respuesta posterior al toque gana.
+    const conversation = await conversationWith(owner, from);
+    await Conversation.updateOne({ _id: conversation._id }, { $set: { 'bot.humanRepliedAt': new Date() } });
+    assert.equal(await requestHandoff({
+        accountId: owner.accountId, conversationId: conversation._id, messageId: conversation._id, tapAt: new Date(Date.now() - 60 * 1000),
+        contact: { phone: from },
+    }), false);
+});
+
+test('quitarle la línea a un agente antes de que el worker tome el toque: no le llega nada', async () => {
+    await clearQueue();
+    const { owner, agent } = await handoffTeam('HPG');
+    const agentPush = await subscribePush(agent);
+    const from = '593970009207';
+    metaForBot();
+    try {
+        await postWebhook(numberOf(owner), personTap(from));
+        await User.updateOne({ _id: agent.userId }, { $set: { lineIds: [] } });
+        await drain();
+    } finally {
+        onMeta(null);
+    }
+    const conversation = await conversationWith(owner, from);
+    assert.deepEqual((await handoffNotices(conversation._id)).map(n => String(n.recipientId)), [owner.userId]);
+    await new Promise(resolve => setTimeout(resolve, 100));
+    assert.equal(pushesTo(agentPush).length, 0);
+});
+
+test('responder desde el chat quita la marca y avisa a la bandeja', async () => {
+    await clearQueue();
+    const { owner } = await handoffTeam('HPH');
+    const from = '593970009208';
+    metaForBot();
+    const stream = await openStream(owner);
+    try {
+        await postWebhook(numberOf(owner), personTap(from));
+        await drain();
+        const conversation = await conversationWith(owner, from);
+        assert.equal((await request(owner, 'POST', `/chats/${conversation._id}/messages`, { text: 'Aquí estoy', temporalId: 't-hph' })).status, 201);
+        assert.ok(await stream.waitFor('"handoffRequest":null', 2000), 'la bandeja no supo que se quitó');
+        assert.equal((await Conversation.findById(conversation._id).lean()).handoffRequest, null);
+    } finally {
+        onMeta(null);
+        await stream.close();
+    }
+});
+
+test('quitar la marca a mano: 404 si no se ve la conversación, 204 y el bot vuelve a responder', async () => {
+    await clearQueue();
+    const { owner, agent, outsider } = await handoffTeam('HPI');
+    const teammate = await seedMember(owner, { role: 'agent', lineIds: [owner.lineId], label: 'HPIT' });
+    const other = await newAccount('HPJ');
+    const from = '593970009209';
+    metaForBot();
+    try {
+        await postWebhook(numberOf(owner), personTap(from));
+        await drain();
+        const conversation = await conversationWith(owner, from);
+        const clear = (who) => request(who, 'DELETE', `/chats/${conversation._id}/handoff-request`);
+
+        assert.equal((await clear(other)).status, 404);
+        assert.equal((await clear(outsider)).status, 404);
+        // De un compañero de la misma línea: 404, sin decir quién la atiende.
+        assert.equal((await request(owner, 'POST', `/chats/${conversation._id}/assign`, { userId: teammate.userId })).status, 200);
+        const foreign = await clear(agent);
+        assert.equal(foreign.status, 404);
+        assert.equal(JSON.stringify(foreign.body).includes('assigned_to_other'), false);
+        assert.ok((await Conversation.findById(conversation._id).lean()).handoffRequest, 'la marca sigue');
+
+        assert.equal((await clear(owner)).status, 204);
+        const cleared = await Conversation.findById(conversation._id).lean();
+        assert.equal(cleared.handoffRequest, null);
+        assert.equal(cleared.bot?.humanRepliedAt ?? null, null, 'quitarla no pausa al bot');
+
+        await postWebhook(numberOf(owner), textFrom(from, 'precio'));
+        assert.deepEqual(await drain(), ['done']);
+    } finally {
+        onMeta(null);
+    }
 });

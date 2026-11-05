@@ -27,7 +27,7 @@ import { recordOutboundMessage } from "../services/outbound.message.service.js";
 import { findReplyTarget, loadQuotedMessages, quotedMapOf } from "../services/message.reply.service.js";
 import { sendReaction } from "../services/reaction.service.js";
 import { applyHeldStatuses } from "../services/message.status.service.js";
-import { markHumanReply } from "../services/auto.reply.service.js";
+import { emitHandoffRequest, markHumanReply } from "../services/auto.reply.service.js";
 import Campaign from "../models/campaign.model.js";
 import { EVENTS_PER_PAGE, eventBounds, eventCutoff } from "../utils/conversation.events.js";
 import { listPageEvents, serializeEvent } from "../services/assignment.history.service.js";
@@ -647,5 +647,29 @@ export const rejectTransferController = async (req, res) => {
         return res.status(204).end();
     } catch (error) {
         return sendAssignmentError(res, error);
+    }
+};
+
+/**
+ * DELETE /chats/:id/handoff-request — quita a mano la marca de «pide una
+ * persona» (bot con menús, spec § 4.5): el bot vuelve a responder enseguida,
+ * sin la pausa de responder. Quien no ve la conversación recibe 404, también
+ * si la atiende un compañero: aquí no se dice quién (revisión de Codex del
+ * plan, 4), a diferencia del 409 de los envíos.
+ */
+export const clearHandoffRequestController = async (req, res) => {
+    try {
+        const conversation = await findOwnConversation(req.auth, req.params.id);
+        if (!conversation) return res.status(404).json([{ message: 'Conversation not found' }]);
+        const before = await Conversation.findOneAndUpdate(
+            { _id: conversation._id, userId: req.auth.accountId },
+            { $set: { handoffRequest: null } },
+            { projection: { handoffRequest: 1 } },
+        ).lean();
+        if (before?.handoffRequest) await emitHandoffRequest(req.auth.accountId, conversation._id, null);
+        return res.status(204).end();
+    } catch (error) {
+        console.error('Error quitando la marca de «pide una persona»:', error.message);
+        return res.status(500).json([{ message: error.message }]);
     }
 };

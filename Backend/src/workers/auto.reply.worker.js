@@ -5,6 +5,7 @@ import Contact from "../models/contact.model.js";
 import AutoReplySettings from "../models/auto.reply.settings.model.js";
 import { processMessageSending } from "../controllers/chat.controller.js";
 import { findConversationLine } from "../services/line.service.js";
+import { requestHandoff } from "../services/auto.reply.service.js";
 import { freeTextBlockReason } from "../utils/whatsapp.window.js";
 import { AUTO_REPLY_EXPIRY_MS, autoReplyOutcome, botStateUpdate, decideAutoReply, withAutoReplyDefaults } from "../utils/auto.reply.js";
 
@@ -183,8 +184,16 @@ export const resolveAutoReplyJob = async (job) => {
             message: { type: job.type, text: job.text, caption: job.caption, choiceId: job.choiceId ?? null },
             previousInboundAt: job.bot.previousInboundAt,
             lineId: conversation.lineId ? String(conversation.lineId) : null,
+            handoffRequest: conversation.handoffRequest ?? null,
             now,
         });
+        // Pide una persona: se marca y se avisa antes de enviar, aunque el bot
+        // no conteste (la pausa) o Meta rechace la respuesta (decisión C).
+        if (decision.handoffRequested) {
+            await requestHandoff({
+                accountId, conversationId: conversation._id, messageId: job._id, tapAt: job.timestamp ?? job.createdAt, contact, now,
+            });
+        }
         if (decision.skip) return endJob(job, 'skipped', { reason: decision.skip });
 
         let line;

@@ -79,6 +79,8 @@ export const serializeConversation = (item) => {
                 requestedAt: item.transferRequest.requestedAt.toISOString(),
             }
             : null,
+        // El contacto pidió hablar con una persona (bot con menús): la bandeja lo marca.
+        handoffRequest: item.handoffRequest?.at ? { at: item.handoffRequest.at.toISOString() } : null,
     };
 };
 

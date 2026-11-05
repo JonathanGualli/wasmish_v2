@@ -2,6 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+    buildHandoffPush,
     assignmentPushTarget, buildAssignmentPush, buildInboundPush, isAllowedPushEndpoint, isGonePushError, lostMode, pushLineName,
     pushRecipientIds,
 } from '../src/utils/push.js';
@@ -222,4 +223,16 @@ test('assignmentPushTarget: te la quitaron; la abre solo si la sigue viendo', ()
     assert.deepEqual(assignmentPushTarget('lost', authOf('sup', 'supervisor'), pushConversation('carla')), { open: true });
     assert.equal(assignmentPushTarget('lost', ana, pushConversation('ana')), null, 'se la devolvieron');
     assert.equal(assignmentPushTarget('lost', authOf('ana', 'agent', ['l2']), pushConversation(null)), null, 'sin la línea');
+});
+
+// Bot con menús (spec 2026-11-05 § 4.5): el contacto tocó «hablar con una persona».
+test('buildHandoffPush: el nombre de pila del contacto; sin nombre, cómo sale en la bandeja', () => {
+    const marisol = buildHandoffPush({ conversationId: 'c1', contact: { name: 'Marisol Pérez', phone: '593981112233' } });
+    assert.equal(marisol.title, 'Marisol Pérez');
+    assert.equal(marisol.body, 'Marisol pide hablar con una persona.');
+    assert.equal(marisol.url, '/private/chats?c=c1');
+    assert.equal(marisol.conversationId, 'c1');
+    assert.equal(buildHandoffPush({ conversationId: 'c1', contact: { name: 'Marisol Pérez' }, lineName: 'Ventas' }).title, 'Marisol Pérez · Ventas');
+    assert.equal(buildHandoffPush({ conversationId: 'c1', contact: { phone: '593981112233' } }).body, '593981112233 pide hablar con una persona.');
+    assert.equal(buildHandoffPush({ conversationId: 'c1', contact: { username: 'ana' } }).body, '@ana pide hablar con una persona.');
 });
