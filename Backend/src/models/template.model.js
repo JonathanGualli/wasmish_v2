@@ -59,6 +59,23 @@ const templateSchema = new mongoose.Schema({
         ref: 'TemplateMedia',
         default: null,
     },
+    // Lo demás que dice Meta de la plantilla (ver `toTemplateFields` en
+    // utils/template.sync.js). Sin default, como `header`: `undefined` = 
+    // sincronizada antes de guardarlos, y se rellenan en el siguiente sync.
+    footerText: { type: String },
+    // `[{ key, example }]`: '1', '2'… o el nombre de la variable.
+    bodyExamples: { type: [mongoose.Schema.Types.Mixed], default: undefined },
+    headerExample: { type: String },
+    // 'GREEN' | 'YELLOW' | 'RED' | 'UNKNOWN'
+    qualityScore: { type: String },
+    rejectedReason: { type: String },
+    previousCategory: { type: String },
+    subCategory: { type: String },
+    metaUpdatedAt: { type: Date },
+    // Cuándo dejó de llegar en un sync completo: se borró en Meta. Se queda
+    // en la lista (los mensajes y las campañas viejos la nombran), pero no se
+    // envía. Un sync en el que vuelve a llegar la desmarca.
+    deletedInMetaAt: { type: Date, default: null },
 
 }, {timestamps: true});
 

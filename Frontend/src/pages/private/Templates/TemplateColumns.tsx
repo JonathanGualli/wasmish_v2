@@ -11,6 +11,9 @@ const STATUS: Record<string, { label: string; className: string }> = {
     REJECT:   { label: "Rechazada", className: "bg-brand-danger-soft text-brand-danger" },
 };
 
+/** Ya no está en Meta: manda sobre el último estado que tenía (negativo, como rechazada). */
+const DELETED_IN_META = { label: "Borrada", className: "bg-brand-danger-soft text-brand-danger" };
+
 const LANGUAGES: Record<string, string> = {
     es: "Español",
     en: "Inglés",
@@ -75,7 +78,7 @@ export const templateColumns: ColumnDef<Template>[] = [
         header: "Estado",
         meta: { skeleton: 'pill' },
         cell: ({ row }) => {
-            const s = STATUS[row.original.status];
+            const s = row.original.deletedInMetaAt ? DELETED_IN_META : STATUS[row.original.status];
             return (
                 <span className={`inline-flex items-center rounded-full px-2.5 py-1
                     text-[11px] font-bold uppercase tracking-[0.05em] whitespace-nowrap
