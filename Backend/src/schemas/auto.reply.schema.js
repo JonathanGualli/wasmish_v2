@@ -56,6 +56,12 @@ const optionsSchema = z.array(optionSchema)
     }, 'Dos opciones de una respuesta no pueden llamarse igual')
     .default([]);
 
+// Dónde quedó una tarjeta en el lienzo de la página (plan, Tarea 9): enteros,
+// para no guardar decimales de arrastrar. `null`: la página la coloca sola.
+const POSITION_MAX = 20000;
+const coordinateSchema = z.number().int('Posición no válida').min(0, 'Posición no válida').max(POSITION_MAX, 'Posición no válida');
+const positionSchema = z.object({ x: coordinateSchema, y: coordinateSchema }).nullable().default(null);
+
 const keywordRuleSchema = z.object({
     // El de una regla ya guardada, o el que puso la página a una nueva (para
     // poder apuntarle una opción antes de guardar); sin él, la regla es nueva.
@@ -68,6 +74,7 @@ const keywordRuleSchema = z.object({
     text: replyTextSchema,
     lineIds: z.array(objectIdSchema).max(50).default([]),
     options: optionsSchema,
+    position: positionSchema,
 }).refine(hasTextIfEnabled, textWhenEnabled);
 
 // Las opciones de toda la configuración: cada `ruleId` apunta a una regla del
@@ -105,6 +112,7 @@ export const autoReplySettingsSchema = z.object({
         text: replyTextSchema,
         returnAfterDays: oneOf(RETURN_AFTER_DAYS, 'Elige 7, 30 o 90 días, o nunca'),
         options: optionsSchema,
+        position: positionSchema,
     }).refine(hasTextIfEnabled, textWhenEnabled),
     outOfHours: z.object({
         enabled: z.boolean(),
@@ -129,10 +137,11 @@ export const autoReplySettingsSchema = z.object({
         enabled: z.boolean(),
         text: replyTextSchema,
         options: optionsSchema,
-    }).refine(hasTextIfEnabled, textWhenEnabled).default({ enabled: false, text: '', options: [] }),
+        position: positionSchema,
+    }).refine(hasTextIfEnabled, textWhenEnabled).default({ enabled: false, text: '', options: [], position: null }),
     // Opcional: la página de antes de los menús no lo manda, y así se la
     // reconoce (decisión G del spec: el controlador da 409 si borraría menús).
-    handoff: z.object({ text: replyTextSchema }).optional(),
+    handoff: z.object({ text: replyTextSchema, position: positionSchema }).optional(),
 }).superRefine(checkMenus);
 
 const previewMessageSchema = z.string().trim()

@@ -474,15 +474,15 @@ test('withAutoReplyDefaults completa una configuración de la v1 sin tocar lo qu
     };
     const settings = withAutoReplyDefaults(v1);
 
-    assert.deepEqual(settings.handoff, { text: 'Enseguida te atiende alguien del equipo' });
-    assert.deepEqual(settings.welcome, { enabled: true, text: 'Hola', returnAfterDays: 7, options: [] });
-    assert.deepEqual(settings.keywordRules, [{ _id: 'r1', enabled: true, keywords: ['precio'], text: 'Cuesta $10', lineIds: [], name: '', options: [] }]);
-    assert.deepEqual(settings.fallback, { enabled: false, text: '', options: [] });
+    assert.deepEqual(settings.handoff, { text: 'Enseguida te atiende alguien del equipo', position: null });
+    assert.deepEqual(settings.welcome, { enabled: true, text: 'Hola', returnAfterDays: 7, options: [], position: null });
+    assert.deepEqual(settings.keywordRules, [{ _id: 'r1', enabled: true, keywords: ['precio'], text: 'Cuesta $10', lineIds: [], name: '', options: [], position: null }]);
+    assert.deepEqual(settings.fallback, { enabled: false, text: '', options: [], position: null });
     assert.equal(settings.handoffHours, 4);
     assert.equal(v1.handoff, undefined, 'no cambia el original');
 
     const withMenus = { ...v1, handoff: { text: 'Ya va' }, welcome: { ...v1.welcome, options: [{ title: 'A', target: 'start', ruleId: null }] } };
-    assert.deepEqual(withAutoReplyDefaults(withMenus).handoff, { text: 'Ya va' });
+    assert.deepEqual(withAutoReplyDefaults(withMenus).handoff, { text: 'Ya va', position: null });
     assert.equal(withAutoReplyDefaults(withMenus).welcome.options.length, 1);
 });
 

@@ -17,6 +17,8 @@ const serializeOptions = (options) => options.map(({ title, target, ruleId }) =>
     title, target, ruleId: ruleId ? String(ruleId) : null,
 }));
 
+const serializePosition = (position) => (position ? { x: position.x, y: position.y } : null);
+
 // Lo que ve la página, campo a campo: ni `_id` ni `userId` ni marcas internas.
 // `configured`: si la cuenta ya guardó alguna vez (sin eso, la página abre el asistente).
 // Lo guardado antes de un campo nuevo llega completado (`withAutoReplyDefaults`).
@@ -32,6 +34,7 @@ const serializeSettings = (stored, configured) => {
             text: settings.welcome.text,
             returnAfterDays: settings.welcome.returnAfterDays ?? null,
             options: serializeOptions(settings.welcome.options),
+            position: serializePosition(settings.welcome.position),
         },
         outOfHours: {
             enabled: settings.outOfHours.enabled,
@@ -50,13 +53,15 @@ const serializeSettings = (stored, configured) => {
             text: rule.text,
             lineIds: rule.lineIds.map(String),
             options: serializeOptions(rule.options),
+            position: serializePosition(rule.position),
         })),
         fallback: {
             enabled: settings.fallback.enabled,
             text: settings.fallback.text,
             options: serializeOptions(settings.fallback.options),
+            position: serializePosition(settings.fallback.position),
         },
-        handoff: { text: settings.handoff.text },
+        handoff: { text: settings.handoff.text, position: serializePosition(settings.handoff.position) },
     };
 };
 

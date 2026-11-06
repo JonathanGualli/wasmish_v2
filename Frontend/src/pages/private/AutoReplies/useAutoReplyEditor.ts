@@ -1,10 +1,31 @@
 import { useMemo, useState } from "react";
 import { useSaveAutoReplies } from "../../../hooks/useAutoReplies";
-import type { AutoRepliesResponse, DaySchedule, WeekDay } from "../../../models/autoReply.model";
+import type { AutoRepliesResponse, CardPosition, DaySchedule, KeywordRule, MenuOption, WeekDay } from "../../../models/autoReply.model";
 import {
     EDIT_STEPS, WIZARD_STEPS, draftOf, formIssues, isDirty, issueCounts, newRule, toForm, toPayload, totalIssues, wizardStart,
     type AutoReplyForm, type EditableRule, type StepKey,
 } from "../../../utils/autoReplyForm";
+import type { NodeKey } from "../../../utils/autoReplyFlow";
+
+/** Dónde viven las opciones: la bienvenida, el «si no entiende» o una respuesta (su `key`). */
+export type OptionsOwner = 'welcome' | 'fallback' | string;
+
+const withOptions = (form: AutoReplyForm, owner: OptionsOwner, change: (options: MenuOption[]) => MenuOption[]): AutoReplyForm => {
+    if (owner === 'welcome') return { ...form, welcome: { ...form.welcome, options: change(form.welcome.options) } };
+    if (owner === 'fallback') return { ...form, fallback: { ...form.fallback, options: change(form.fallback.options) } };
+    return { ...form, keywordRules: form.keywordRules.map(rule => (rule.key === owner ? { ...rule, options: change(rule.options) } : rule)) };
+};
+
+/** Sin las opciones que llevaban a la respuesta `ruleId` (al borrarla). */
+const withoutOptionsTo = (form: AutoReplyForm, ruleId: string): AutoReplyForm => {
+    const keep = (options: MenuOption[]) => options.filter(option => !(option.target === 'rule' && option.ruleId === ruleId));
+    return {
+        ...form,
+        welcome: { ...form.welcome, options: keep(form.welcome.options) },
+        fallback: { ...form.fallback, options: keep(form.fallback.options) },
+        keywordRules: form.keywordRules.map(rule => ({ ...rule, options: keep(rule.options) })),
+    };
+};
 
 export type EditorMode = 'intro' | 'wizard' | 'tabs';
 
@@ -162,14 +183,51 @@ export const useAutoReplyEditor = (
             return { ...f, outOfHours: { ...f.outOfHours, schedule } };
         }),
 
-        addRule: () => {
-            const rule = newRule();
+        addRule: (change: Partial<KeywordRule> = {}) => {
+            const rule = newRule(change);
             update(f => ({ ...f, keywordRules: [...f.keywordRules, rule] }));
             return rule;
         },
         setRule: (key: string, change: Partial<EditableRule>) =>
             update(f => ({ ...f, keywordRules: f.keywordRules.map(rule => (rule.key === key ? { ...rule, ...change } : rule)) })),
-        removeRule: (key: string) => update(f => ({ ...f, keywordRules: f.keywordRules.filter(rule => rule.key !== key) })),
+        /** Borra la respuesta y los botones que llevaban a ella: no pueden llevar a una que no existe. */
+        removeRule: (key: string) => update(f => {
+            const rule = f.keywordRules.find(candidate => candidate.key === key);
+            const rest = { ...f, keywordRules: f.keywordRules.filter(candidate => candidate.key !== key) };
+            return rule ? withoutOptionsTo(rest, rule.id) : rest;
+        }),
+
+        // Bot con menús: las opciones de cada respuesta, «Una persona» y el lienzo.
+        setOptions: (owner: OptionsOwner, options: MenuOption[]) => update(f => withOptions(f, owner, () => options)),
+        /**
+         * «+ Nueva respuesta» desde el destino de una opción: la crea con ese
+         * nombre (su id lo pone la página) y la opción ya lleva a ella.
+         */
+        createRuleFor: (owner: OptionsOwner, index: number, name: string) => {
+            const rule = newRule({ name: name.trim() });
+            update(f => withOptions({ ...f, keywordRules: [...f.keywordRules, rule] }, owner,
+                options => options.map((option, i) => (i === index ? { ...option, target: 'rule', ruleId: rule.id } : option))));
+            return rule;
+        },
+        setHandoffText: (text: string) => update(f => ({ ...f, handoff: { ...f.handoff, text } })),
+        /**
+         * Dónde quedaron las tarjetas al soltar una en el lienzo: se guarda con
+         * lo demás. Llegan todas (también las que se colocaban solas), así
+         * mover una no recoloca las otras.
+         */
+        setPositions: (positions: Map<NodeKey, CardPosition>) => update(f => {
+            const at = (node: NodeKey, current: CardPosition | null) => {
+                const position = positions.get(node);
+                return position ? { x: Math.max(0, Math.round(position.x)), y: Math.max(0, Math.round(position.y)) } : current;
+            };
+            return {
+                ...f,
+                welcome: { ...f.welcome, position: at('welcome', f.welcome.position) },
+                fallback: { ...f.fallback, position: at('fallback', f.fallback.position) },
+                handoff: { ...f.handoff, position: at('handoff', f.handoff.position) },
+                keywordRules: f.keywordRules.map(rule => ({ ...rule, position: at(`rule:${rule.key}`, rule.position) })),
+            };
+        }),
         /** Sube (-1) o baja (+1) una regla: si coinciden más de 3, salen las primeras. */
         moveRule: (key: string, delta: -1 | 1) => update(f => {
             const rules = [...f.keywordRules];
