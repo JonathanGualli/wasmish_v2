@@ -1,6 +1,6 @@
 import {
-    AUTO_REPLY_TEXT_MAX, WEEK_DAYS,
-    type AutoReplySettings, type DaySchedule, type KeywordRule, type WeekDay, type WeekSchedule,
+    AUTO_REPLY_TEXT_MAX, DEFAULT_HANDOFF_TEXT, KEYWORD_RULES_MAX, OPTION_TITLE_MAX, OPTIONS_MAX, WEEK_DAYS,
+    type AutoReplySettings, type DaySchedule, type KeywordRule, type MenuOption, type WeekDay, type WeekSchedule,
 } from "../models/autoReply.model";
 
 /*
@@ -10,8 +10,13 @@ import {
  * resúmenes de cada paso. Sin React.
  */
 
-/** Una regla en pantalla: `key` identifica la fila aunque aún no tenga `id`. */
+/**
+ * Una regla en pantalla. Desde el bot con menús siempre tiene `id`: la página
+ * se lo pone al crearla (decisión F del spec), para que una opción le pueda
+ * apuntar antes de guardar. `key` es ese mismo id.
+ */
 export interface EditableRule extends KeywordRule {
+    id: string;
     key: string;
 }
 
@@ -34,32 +39,58 @@ export const STEP_TITLES: Record<StepKey, string> = {
 export const EDIT_STEPS: StepKey[] = ['welcome', 'outOfHours', 'keywords', 'fallback', 'silence'];
 export const WIZARD_STEPS: StepKey[] = [...EDIT_STEPS, 'review'];
 
-let nextKey = 0;
-const newKey = () => `rule-${++nextKey}`;
+/**
+ * Un id como los de MongoDB (24 hex: los segundos y 8 bytes al azar), para
+ * una respuesta nueva. El backend lo conserva al guardar.
+ */
+export const newObjectId = () => {
+    const seconds = Math.floor(Date.now() / 1000).toString(16).padStart(8, '0');
+    const random = Array.from(crypto.getRandomValues(new Uint8Array(8)), byte => byte.toString(16).padStart(2, '0')).join('');
+    return seconds + random;
+};
 
-export const newRule = (): EditableRule => ({ key: newKey(), enabled: true, keywords: [], text: '', lineIds: [] });
+export const newRule = (change: Partial<KeywordRule> = {}): EditableRule => {
+    const id = newObjectId();
+    return { id, key: id, name: '', enabled: true, keywords: [], text: '', lineIds: [], options: [], position: null, ...change };
+};
+
+const cloneOptions = (options: MenuOption[] | undefined) => (options ?? []).map(option => ({ ...option }));
 
 export const toForm = (settings: AutoReplySettings): AutoReplyForm => ({
     enabled: settings.enabled,
     timezone: settings.timezone,
     handoffHours: settings.handoffHours,
-    welcome: { ...settings.welcome },
+    welcome: { ...settings.welcome, options: cloneOptions(settings.welcome.options), position: settings.welcome.position ?? null },
     outOfHours: { ...settings.outOfHours, schedule: cloneSchedule(settings.outOfHours.schedule) },
-    keywordRules: settings.keywordRules.map(rule => ({ ...rule, keywords: [...rule.keywords], lineIds: [...rule.lineIds], key: rule.id ?? newKey() })),
-    fallback: { ...(settings.fallback ?? { enabled: false, text: '' }) },
+    keywordRules: settings.keywordRules.map(rule => {
+        const id = rule.id ?? newObjectId();
+        return {
+            ...rule, id, key: id, name: rule.name ?? '', keywords: [...rule.keywords], lineIds: [...rule.lineIds],
+            options: cloneOptions(rule.options), position: rule.position ?? null,
+        };
+    }),
+    fallback: {
+        enabled: settings.fallback?.enabled ?? false, text: settings.fallback?.text ?? '',
+        options: cloneOptions(settings.fallback?.options), position: settings.fallback?.position ?? null,
+    },
+    handoff: { text: settings.handoff?.text ?? DEFAULT_HANDOFF_TEXT, position: settings.handoff?.position ?? null },
 });
 
-/** Lo que se manda al `PUT` y al «probar»: sin las claves de pantalla. */
+/**
+ * Lo que se manda al `PUT` y al «probar»: sin las claves de pantalla. Siempre
+ * con `handoff` (decisión G: así el backend sabe que es la página nueva).
+ */
 export const toPayload = (form: AutoReplyForm): AutoReplySettings => ({
     enabled: form.enabled,
     timezone: form.timezone,
     handoffHours: form.handoffHours,
-    welcome: { ...form.welcome },
+    welcome: { ...form.welcome, options: cloneOptions(form.welcome.options) },
     outOfHours: { ...form.outOfHours, schedule: cloneSchedule(form.outOfHours.schedule) },
-    keywordRules: form.keywordRules.map(({ id, enabled, keywords, text, lineIds }) => ({
-        ...(id && { id }), enabled, keywords, text, lineIds,
+    keywordRules: form.keywordRules.map(({ id, name, enabled, keywords, text, lineIds, options, position }) => ({
+        id, name, enabled, keywords, text, lineIds, options: cloneOptions(options), position,
     })),
-    fallback: { ...form.fallback },
+    fallback: { ...form.fallback, options: cloneOptions(form.fallback.options) },
+    handoff: { ...form.handoff },
 });
 
 /** Si hay algo distinto de lo guardado. */
@@ -106,14 +137,13 @@ export const wizardStart = (form: AutoReplyForm, { example }: { example: boolean
                 ? { mon: workday(), tue: workday(), wed: workday(), thu: workday(), fri: workday(), sat: closed(), sun: closed() }
                 : cloneSchedule(form.outOfHours.schedule),
         },
-        fallback: { enabled: true, text: example ? FALLBACK_EXAMPLE : '' },
+        fallback: { ...form.fallback, enabled: true, text: example ? FALLBACK_EXAMPLE : '' },
     };
 };
 
 /**
  * «Terminar luego»: lo hecho, apagado y guardable. Lo que quedó a medias se
- * apaga (una respuesta sin texto, el fuera de horario sin días abiertos) y una
- * regla sin frases se quita, porque el backend no la admite. Lo que no se puede
+ * apaga (una respuesta sin texto, el fuera de horario sin días abiertos). Lo que no se puede
  * arreglar solo (un tramo mal escrito, un texto de más de 800) sigue marcándose.
  */
 export const draftOf = (form: AutoReplyForm): AutoReplyForm => ({
@@ -125,9 +155,8 @@ export const draftOf = (form: AutoReplyForm): AutoReplyForm => ({
         enabled: form.outOfHours.enabled && form.outOfHours.text.trim().length > 0
             && WEEK_DAYS.some(day => !form.outOfHours.schedule[day].closed),
     },
-    keywordRules: form.keywordRules
-        .filter(rule => rule.keywords.length > 0)
-        .map(rule => ({ ...rule, enabled: rule.enabled && rule.text.trim().length > 0 })),
+    // Sin frases ya vale (solo se llega por una opción): se quedan todas.
+    keywordRules: form.keywordRules.map(rule => ({ ...rule, enabled: rule.enabled && rule.text.trim().length > 0 })),
     fallback: { ...form.fallback, enabled: form.fallback.enabled && form.fallback.text.trim().length > 0 },
 });
 
@@ -142,6 +171,19 @@ export interface DayIssue {
     field: 'start' | 'end';
 }
 
+/** El error de una opción: en su título o en su destino. */
+export interface OptionIssue {
+    title?: string;
+    target?: string;
+}
+
+/** Los errores de las opciones de una respuesta (bot con menús): por posición, y de la lista. */
+export interface OptionsIssues {
+    items: (OptionIssue | undefined)[];
+    /** Más de 10. */
+    list?: string;
+}
+
 export interface FormIssues {
     welcomeText?: string;
     fallbackText?: string;
@@ -150,6 +192,12 @@ export interface FormIssues {
     schedule?: string;
     days: Partial<Record<WeekDay, DayIssue>>;
     rules: Record<string, { keywords?: string; text?: string }>;
+    /** Las opciones con errores, por respuesta: `welcome`, `fallback` o la `key` de la regla. */
+    options: Record<string, OptionsIssues>;
+    /** El texto de «hablar con una persona», vacío con alguna opción que lleva ahí. */
+    handoffText?: string;
+    /** Más de 50 respuestas. */
+    rulesCount?: string;
 }
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -186,8 +234,41 @@ export const dayIssue = (day: DaySchedule): DayIssue | undefined => {
     return undefined;
 };
 
+/**
+ * Los errores de las opciones de una respuesta, los mismos que da el backend
+ * (`auto.reply.schema.js`): sin título, de más de 20, repetido (sin
+ * mayúsculas ni tildes) o sin destino; un destino que ya no está; más de 10.
+ */
+export const optionsIssues = (options: MenuOption[], ruleIds: Set<string>): OptionsIssues | undefined => {
+    const seen = new Set<string>();
+    const items = options.map((option): OptionIssue | undefined => {
+        const title = option.title.trim();
+        const normalized = normalizeForMatch(title);
+        let titleIssue: string | undefined;
+        if (!title) titleIssue = 'Ponle un título.';
+        else if (title.length > OPTION_TITLE_MAX) {
+            const extra = title.length - OPTION_TITLE_MAX;
+            titleIssue = `Hasta ${OPTION_TITLE_MAX} caracteres: sobra${extra === 1 ? '' : 'n'} ${extra}.`;
+        } else if (seen.has(normalized)) titleIssue = `Ya hay una opción «${title}» aquí.`;
+        if (normalized) seen.add(normalized);
+        const target = option.target === 'rule' && (!option.ruleId || !ruleIds.has(option.ruleId)) ? 'Elige adónde lleva.' : undefined;
+        return titleIssue || target ? { ...(titleIssue && { title: titleIssue }), ...(target && { target }) } : undefined;
+    });
+    const list = options.length > OPTIONS_MAX ? `Como mucho ${OPTIONS_MAX} opciones.` : undefined;
+    return list || items.some(Boolean) ? { items, ...(list && { list }) } : undefined;
+};
+
+/** Cuántos errores hay en las opciones de una respuesta. */
+export const optionsIssueCount = (issues: OptionsIssues | undefined) => !issues ? 0
+    : Number(Boolean(issues.list)) + issues.items.reduce((n, item) => n + Number(Boolean(item?.title)) + Number(Boolean(item?.target)), 0);
+
+/** Si alguna opción lleva a «hablar con una persona». */
+export const usesHandoff = (form: AutoReplyForm) =>
+    [form.welcome.options, form.fallback.options, ...form.keywordRules.map(rule => rule.options)]
+        .some(options => options.some(option => option.target === 'person'));
+
 export const formIssues = (form: AutoReplyForm): FormIssues => {
-    const issues: FormIssues = { days: {}, rules: {} };
+    const issues: FormIssues = { days: {}, rules: {}, options: {} };
 
     issues.welcomeText = textIssue(form.welcome.text, form.welcome.enabled, 'Escribe la bienvenida, o apágala.');
     issues.fallbackText = textIssue(form.fallback.text, form.fallback.enabled, 'Escribe el mensaje, o apágalo.');
@@ -202,19 +283,41 @@ export const formIssues = (form: AutoReplyForm): FormIssues => {
         issues.schedule = 'Abre al menos un día, o apaga «Fuera de horario».';
     }
 
+    // Sin frases ya vale (bot con menús): solo se llega por una opción.
     for (const rule of form.keywordRules) {
-        const keywords = rule.keywords.length === 0 ? 'Añade al menos una frase, o borra la regla.' : undefined;
-        const text = textIssue(rule.text, rule.enabled, 'Escribe la respuesta, o apaga la regla.');
-        if (keywords || text) issues.rules[rule.key] = { ...(keywords && { keywords }), ...(text && { text }) };
+        const text = textIssue(rule.text, rule.enabled, 'Escribe la respuesta, o apágala.');
+        if (text) issues.rules[rule.key] = { text };
     }
+
+    const ruleIds = new Set(form.keywordRules.map(rule => rule.id));
+    const groups: [string, MenuOption[]][] = [
+        ['welcome', form.welcome.options], ['fallback', form.fallback.options],
+        ...form.keywordRules.map(rule => [rule.key, rule.options] as [string, MenuOption[]]),
+    ];
+    for (const [key, options] of groups) {
+        const found = optionsIssues(options, ruleIds);
+        if (found) issues.options[key] = found;
+    }
+    if (form.handoff.text.length > AUTO_REPLY_TEXT_MAX) issues.handoffText = textIssue(form.handoff.text, true, '');
+    else if (usesHandoff(form) && !form.handoff.text.trim()) issues.handoffText = 'Escribe el texto: lo usan los botones que llevan aquí.';
+    if (form.keywordRules.length > KEYWORD_RULES_MAX) issues.rulesCount = `Como mucho ${KEYWORD_RULES_MAX} respuestas.`;
     return issues;
 };
 
 /** Cuántas cosas hay que corregir en cada paso. */
 export const issueCounts = (issues: FormIssues): Record<StepKey, number> => {
     const outOfHours = [issues.outOfHoursText, issues.schedule].filter(Boolean).length + Object.keys(issues.days).length;
-    const keywords = Object.values(issues.rules).reduce((n, rule) => n + Number(Boolean(rule.keywords)) + Number(Boolean(rule.text)), 0);
-    return { welcome: Number(Boolean(issues.welcomeText)), outOfHours, keywords, fallback: Number(Boolean(issues.fallbackText)), silence: 0, review: 0 };
+    const ruleOptions = Object.entries(issues.options)
+        .filter(([key]) => key !== 'welcome' && key !== 'fallback')
+        .reduce((n, [, found]) => n + optionsIssueCount(found), 0);
+    const keywords = Object.values(issues.rules).reduce((n, rule) => n + Number(Boolean(rule.keywords)) + Number(Boolean(rule.text)), 0)
+        + ruleOptions + Number(Boolean(issues.handoffText)) + Number(Boolean(issues.rulesCount));
+    return {
+        welcome: Number(Boolean(issues.welcomeText)) + optionsIssueCount(issues.options.welcome),
+        outOfHours, keywords,
+        fallback: Number(Boolean(issues.fallbackText)) + optionsIssueCount(issues.options.fallback),
+        silence: 0, review: 0,
+    };
 };
 
 export const totalIssues = (counts: Record<StepKey, number>) => Object.values(counts).reduce((a, b) => a + b, 0);

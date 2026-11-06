@@ -1,7 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AxiosError } from "axios";
 import { getAutoRepliesService, previewAutoReplyService, saveAutoRepliesService } from "../services/api.service";
-import type { AutoReplySettings } from "../models/autoReply.model";
+import type { AutoReplySettings, PreviewMessage } from "../models/autoReply.model";
 
 export const AUTO_REPLIES_QUERY_KEY = ['auto-replies'];
 
@@ -20,10 +20,10 @@ export const useSaveAutoReplies = () => {
 /**
  * Cómo respondería `settings` (lo que hay en pantalla, sin guardar) a la
  * conversación de prueba `messages`. Es una consulta: al cambiar la
- * configuración (tras 1 s sin cambios) o añadir un mensaje se vuelve a simular entera, y mientras
- * llega se sigue viendo lo anterior. `enabled: false` con errores en pantalla.
+ * configuración (tras 1 s sin cambios) o añadir un mensaje (un texto o el toque
+ * de una opción) se vuelve a simular entera, y mientras llega se sigue viendo lo anterior. `enabled: false` con errores en pantalla.
  */
-export const usePreviewAutoReply = (settings: AutoReplySettings, messages: string[], enabled: boolean) => useQuery({
+export const usePreviewAutoReply = (settings: AutoReplySettings, messages: PreviewMessage[], enabled: boolean) => useQuery({
     queryKey: ['auto-reply-preview', settings, messages],
     queryFn: () => previewAutoReplyService(settings, messages),
     enabled: enabled && messages.length > 0,

@@ -12,7 +12,7 @@ import type { NotificationsPage } from '../models/notification.model';
 import type { Line, LineUpdate, LinesResponse } from '../models/line.model';
 import type { InvitationInfo, InvitationInput, MemberChange, TeamInvitation, TeamMember, TeamResponse } from '../models/team.model';
 import type { User } from '../models/user.mode';
-import type { AutoRepliesResponse, AutoReplyPreviewTurn, AutoReplySettings } from '../models/autoReply.model';
+import type { AutoRepliesResponse, AutoReplyPreviewTurn, AutoReplySettings, PreviewMessage } from '../models/autoReply.model';
 
 const API_URL = '/api'; // configuracion puesta en vite.config.ts
 // const API_URL = 'https://wasmish-api.solventyc.com/api';
@@ -663,7 +663,7 @@ export const saveAutoRepliesService = async (settings: AutoReplySettings): Promi
 };
 
 /** Cómo respondería `settings` (sin guardarla) a una conversación de un contacto nuevo, mensaje a mensaje. */
-export const previewAutoReplyService = async (settings: AutoReplySettings, messages: string[]): Promise<AutoReplyPreviewTurn[]> => {
+export const previewAutoReplyService = async (settings: AutoReplySettings, messages: PreviewMessage[]): Promise<AutoReplyPreviewTurn[]> => {
     const { data } = await axios.post(`${API_URL}/auto-replies/preview`, { settings, messages }, { withCredentials: true });
     return data.turns;
 };
