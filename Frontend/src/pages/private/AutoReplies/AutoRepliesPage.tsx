@@ -9,7 +9,7 @@ import { Callout } from "../../../components/Callout/Callout";
 import { BlankState } from "../../../components/BlankState/BlankState";
 import { ConfirmDialog } from "../../../components/Dialog/ConfirmDialog";
 import { SkeletonBox } from "../../../components/Skeleton/Skeleton";
-import type { AutoRepliesResponse } from "../../../models/autoReply.model";
+import type { AutoRepliesResponse, PreviewMessage } from "../../../models/autoReply.model";
 import { KEYWORD_RULES_MAX } from "../../../models/autoReply.model";
 import { apiErrorOf } from "../../../utils/apiError";
 import { EDIT_STEPS, STEP_TITLES, WIZARD_STEPS, type StepKey } from "../../../utils/autoReplyForm";
@@ -24,12 +24,19 @@ import { SilenceStep } from "./SilenceStep";
 import { ReviewStep } from "./ReviewStep";
 import { FallbackStep } from "./FallbackStep";
 import { TestPanel } from "./TestPanel";
+import { FlowEditorView } from "./FlowEditorView";
 import { Switch } from "./Switch";
+import { MasterSwitch } from "./MasterSwitch";
 
 /*
- * «Respuestas automáticas» (diseño «Wasmish Respuestas automáticas v2», con los
- * estados de la v1). Solo owner y admin (`autoReplies.manage`, en la ruta).
- * Lo que se edita y cómo se guarda vive en `useAutoReplyEditor`.
+ * «Respuestas automáticas». Solo owner y admin (`autoReplies.manage`, en la
+ * ruta). Lo que se edita y cómo se guarda vive en `useAutoReplyEditor`.
+ *
+ * Con la cuenta configurada y desde 1024 px, el lienzo del bot con menús
+ * (`FlowEditorView`, diseño «Respuestas automáticas v4 - Lienzo»). La primera
+ * vez (la invitación y el asistente) y en pantallas más estrechas, todavía la
+ * página por pasos de antes (diseño «Respuestas automáticas v2»), que conserva
+ * los menús al guardar aunque no los enseñe (plan del bot con menús, Tareas 9 y 10).
  */
 
 const STEP_DESCRIPTIONS: Record<StepKey, string> = {
@@ -77,13 +84,21 @@ const AutoRepliesEditorView = ({ data }: { data: AutoRepliesResponse }) => {
             ? (saved.enabled ? 'Respuestas automáticas encendidas.' : 'Respuestas automáticas apagadas: no sale ninguna.')
             : (saved.enabled ? 'Respuestas guardadas. Ya están funcionando.' : 'Guardado. Las respuestas automáticas siguen apagadas.'),
     });
-    const onSaveError = (error: unknown) =>
-        notify({ kind: 'error', text: apiErrorOf(error, 'No se pudo guardar. Inténtalo de nuevo.').message });
+    // Otra pestaña con la página de antes de los menús no puede borrarlos (decisión G):
+    // el 409 no es un error que se reintenta, sino recargar (diseño, 4e).
+    const [outdated, setOutdated] = useState(false);
+    const onSaveError = (error: unknown) => {
+        const { message, code } = apiErrorOf(error, 'No se pudo guardar. Inténtalo de nuevo.');
+        if (code === 'auto_replies_outdated') setOutdated(true);
+        else notify({ kind: 'error', text: message });
+    };
 
     const editor = useAutoReplyEditor(data, onSaved, onSaveError);
     const [confirmEnable, setConfirmEnable] = useState(false);
     const [leaving, setLeaving] = useState<(() => void) | null>(null);
     const [testOpen, setTestOpen] = useState(false);
+    // La conversación de «Probar», de la página: sigue al pasar de una pestaña a otra.
+    const [testMessages, setTestMessages] = useState<PreviewMessage[]>([]);
     // En el teléfono, configurada: la lista de pasos o uno abierto.
     const [phoneStep, setPhoneStep] = useState<StepKey | null>(null);
 
@@ -116,7 +131,7 @@ const AutoRepliesEditorView = ({ data }: { data: AutoRepliesResponse }) => {
                 onCancel={() => setLeaving(null)}
             />
             {testOpen && !wide && (
-                <TestSheet onClose={() => setTestOpen(false)}><TestPanel editor={editor} /></TestSheet>
+                <TestSheet onClose={() => setTestOpen(false)}><TestPanel heading editor={editor} messages={testMessages} onMessagesChange={setTestMessages} /></TestSheet>
             )}
         </>
     );
@@ -129,6 +144,15 @@ const AutoRepliesEditorView = ({ data }: { data: AutoRepliesResponse }) => {
                 <PageTitle subtitle="Wasmish contesta solo con lo que dejes escrito. Vale para todas tus líneas." />
                 <AutoRepliesIntro onStart={startWizard} />
             </div>
+        );
+    }
+
+    if (wide && editor.mode === 'tabs') {
+        return (
+            <FlowEditorView editor={editor} onMasterSwitch={onMasterSwitch} outdated={outdated}
+                testMessages={testMessages} onTestMessagesChange={setTestMessages}>
+                {dialogs}
+            </FlowEditorView>
         );
     }
 
@@ -206,7 +230,7 @@ const AutoRepliesEditorView = ({ data }: { data: AutoRepliesResponse }) => {
                 </section>
                 {wide && (
                     <aside className="min-h-0 border border-brand-border rounded-xl p-4 overflow-hidden flex flex-col">
-                        <TestPanel editor={editor} />
+                        <TestPanel heading editor={editor} messages={testMessages} onMessagesChange={setTestMessages} />
                     </aside>
                 )}
             </div>
@@ -227,17 +251,6 @@ const PageTitle = ({ subtitle }: { subtitle: string }) => (
     </div>
 );
 
-/** El interruptor general: se guarda con un toque (al encender, pregunta antes). */
-const MasterSwitch = ({ editor, onChange }: { editor: AutoReplyEditor; onChange: (enabled: boolean) => void }) => {
-    const on = editor.form.enabled;
-    return (
-        <div className={`flex items-center gap-2.5 pl-2 pr-3.5 py-[7px] rounded-full border
-            ${on ? 'border-brand-green-200 bg-brand-green-50' : 'border-brand-border bg-brand-surface'}`}>
-            <Switch size="lg" checked={on} disabled={editor.isSaving} label="Respuestas automáticas encendidas" onChange={onChange} />
-            <span className={`text-sm font-semibold ${on ? 'text-brand-accent-strong' : 'text-brand-muted'}`}>{on ? 'Encendidas' : 'Apagadas'}</span>
-        </div>
-    );
-};
 
 const SaveBlockedNotice = ({ editor }: { editor: AutoReplyEditor }) => {
     const stepsWithIssues = EDIT_STEPS.filter(step => editor.counts[step] > 0).length;
