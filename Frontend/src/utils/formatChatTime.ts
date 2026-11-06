@@ -73,3 +73,15 @@ export const formatTimeAgo = (ms: number) => {
   const days = Math.floor(hours / 24);
   return days === 1 ? 'hace 1 día' : `hace ${days} días`;
 };
+
+/**
+ * Desde cuándo pide una persona (bot con menús, diseño c1): «desde las 10:46»
+ * si fue hoy; si no, «desde el 04/11 a las 10:46».
+ */
+export const formatSince = (iso: string) => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (d.toDateString() === new Date().toDateString()) return `desde las ${time}`;
+  return `desde el ${d.toLocaleDateString([], { day: '2-digit', month: '2-digit' })} a las ${time}`;
+};

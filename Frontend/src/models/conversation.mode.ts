@@ -59,4 +59,6 @@ export interface Conversation {
   /** Quién se la asignó la última vez. */
   assignedBy?: ConversationPerson | null;
   transferRequest?: TransferRequest | null;
+  /** El contacto pidió hablar con una persona en un menú del bot: el bot se calla hasta que se quita. */
+  handoffRequest?: { at: string } | null;
 }

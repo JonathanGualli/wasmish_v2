@@ -133,6 +133,8 @@ export const serializeNotifications = async (auth, docs) => {
                 ? { requestId: String(doc.requestId), pending, canAnswer: canOpen && pending && canReassign(auth, raw.assignedTo) }
                 : null,
             resolution: doc.resolution ? { status: doc.resolution.status, by: person(doc.resolution.by) } : null,
+            // Solo en `handoff`: si la conversación sigue marcada (bot con menús, plan, Tarea 8).
+            handoff: doc.type === 'handoff' ? { pending: Boolean(raw?.handoffRequest) } : null,
             seen: doc.seenAt != null,
             createdAt: doc.createdAt.toISOString(),
         };

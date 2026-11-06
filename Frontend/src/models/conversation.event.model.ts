@@ -5,12 +5,14 @@ import type { ConversationPerson } from "./conversation.mode";
  * asignación, spec § 5.1): no es un mensaje. Llega con cada página de
  * mensajes (`events=1`) y en vivo con `conversation_event`.
  */
-export type ConversationEventType = 'take' | 'assign' | 'release' | 'request' | 'pass' | 'reject' | 'revoked';
+export type ConversationEventType = 'take' | 'assign' | 'release' | 'request' | 'pass' | 'reject' | 'revoked'
+    /** Bot con menús: el contacto pidió una persona (sin actor) y alguien quitó la marca. */
+    | 'handoff' | 'handoff_cleared';
 
 export interface ConversationEvent {
     id: string;
     type: ConversationEventType;
-    /** Quién lo hizo; `null` en `revoked`. */
+    /** Quién lo hizo; `null` en `revoked` y en `handoff`. */
     actor: ConversationPerson | null;
     /** A quién: el asignado, el solicitante o quien perdió el acceso. */
     target: ConversationPerson | null;

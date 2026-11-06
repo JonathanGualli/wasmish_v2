@@ -187,6 +187,13 @@ export const useNotificationToasts = () => {
         const unsubAssigned = subscribe("conversation_assigned", refresh);
         const unsubRevoked = subscribe("conversation_revoked", refresh);
         const unsubReleased = subscribe("conversations_updated", refresh);
+        // Se puso o se quitó la marca de «pide una persona» (bot con menús): sus
+        // avisos dicen si sigue pendiente, como al servirlos (revisión de Codex del PR #184, 2).
+        const unsubHandoff = subscribe("conversation_updated", ({ id, handoffRequest }) => {
+            if (handoffRequest === undefined) return;
+            void applyToNotifications(queryClient, data => mapItems(data, list => list.map(item =>
+                (item.type === 'handoff' && item.conversation?.id === id ? { ...item, handoff: { pending: Boolean(handoffRequest) } } : item))));
+        });
 
         return () => {
             unsubCreated();
@@ -195,6 +202,7 @@ export const useNotificationToasts = () => {
             unsubAssigned();
             unsubRevoked();
             unsubReleased();
+            unsubHandoff();
         };
     }, [subscribe, queryClient, notify, open]);
 };

@@ -177,6 +177,11 @@ export const getAssigneesService = async (conversationId: string): Promise<Assig
 }
 
 /** Pedir que te pasen una que atiende otra persona (no hace falta verla). */
+/** Quitar la marca de «pide una persona» (bot con menús): el bot vuelve a responder. */
+export const clearHandoffRequestService = async (conversationId: string): Promise<void> => {
+    await axios.delete(`${API_URL}/chats/${conversationId}/handoff-request`, { withCredentials: true });
+}
+
 export const requestTransferService = async (conversationId: string): Promise<void> => {
     await axios.post(`${API_URL}/chats/${conversationId}/transfer-request`, {}, { withCredentials: true });
 }

@@ -1,10 +1,10 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { SearchInput } from "../SearchInput/SearchInput";
-import { Menu, Plus } from "lucide-react";
+import { Menu, Plus, UserRound } from "lucide-react";
 import { useConversations } from "../../hooks/useConversations";
 import { useTemplates } from "../../hooks/useTemplates";
 import { renderLegacyTemplateText } from "../../utils/legacyTemplate";
-import { formatChatTime } from "../../utils/formatChatTime";
+import { formatChatTime, formatSince } from "../../utils/formatChatTime";
 import { initials } from "../../utils/initials";
 import { draftTitle, type ConversationDraft } from "../../utils/conversationDraft";
 import { useLines } from "../../hooks/useLines";
@@ -62,6 +62,10 @@ const CenteredState = ({ children, tone = 'muted' }: { children: React.ReactNode
  * En el teléfono se ve como una app de mensajería (diseño «Wasmish Móvil», E1):
  * título «Chats» con el ☰ del menú, buscador y línea en una fila, filas más
  * altas con la línea junto al último mensaje y la hora en verde con no leídos.
+ *
+ * «Pide una persona» (bot con menús, diseño «Respuestas automáticas v4», c1):
+ * la fila marcada lleva borde ámbar y su etiqueta, y el filtro «Piden una
+ * persona» (en el cliente, junto a las vistas) sale mientras alguien espera.
  */
 export const ChatconversationList = ({ onSelect, selectedId, onNewConversation, draft, draftActive, onOpenDraft, banner }: Props) => {
     const { data: conversations, isLoading, isError } = useConversations();
@@ -70,6 +74,7 @@ export const ChatconversationList = ({ onSelect, selectedId, onNewConversation, 
     const openMenu = useOpenMobileMenu();
     const [query, setQuery] = useState('');
     const [lineFilter, setLineFilter] = useState(ALL_LINES);
+    const [handoffOnly, setHandoffOnly] = useState(false);
     const { user, can } = useAuthContext();
     const userId = user?.id ?? '';
     const showAssignment = hasTeam(user);
@@ -97,16 +102,18 @@ export const ChatconversationList = ({ onSelect, selectedId, onNewConversation, 
     }, [ofLine, userId]);
     const ofTab = useMemo(() => ofLine.filter(c => inAssignmentTab(c, tab, userId)), [ofLine, tab, userId]);
     const unread = unreadByTab[tab];
+    const waiting = useMemo(() => ofTab.filter(c => c.handoffRequest), [ofTab]);
+    const ofFilter = handoffOnly ? waiting : ofTab;
 
     const visible = useMemo(() => {
         const q = query.trim().toLowerCase();
-        if (!q) return ofTab;
-        return ofTab.filter(c =>
+        if (!q) return ofFilter;
+        return ofFilter.filter(c =>
             (c.title ?? '').toLowerCase().includes(q)
             || (c.phone ?? '').includes(q)
             || (c.username ?? '').toLowerCase().includes(q.replace(/^@/, ''))
         );
-    }, [ofTab, query]);
+    }, [ofFilter, query]);
 
     const renderRows = () => {
         if (isLoading) return <ConversationListSkeleton />;
@@ -115,6 +122,16 @@ export const ChatconversationList = ({ onSelect, selectedId, onNewConversation, 
             return <CenteredState>Todavía no hay conversaciones. Empieza una con el botón +.</CenteredState>;
         }
         if (visible.length === 0) {
+            if (!query.trim() && handoffOnly) {
+                return (
+                    <div className="px-7 py-12 text-center grid gap-1.5">
+                        <span className="text-sm font-semibold text-brand-strong">Nadie está esperando a una persona</span>
+                        <span className="text-[13px] leading-normal text-brand-muted">
+                            Cuando alguien pida hablar con una persona en un menú del bot, aparece aquí.
+                        </span>
+                    </div>
+                );
+            }
             if (!query.trim() && tab !== 'all') {
                 const [titleText, detail] = tab === 'mine'
                     ? ['No tienes conversaciones', 'Las que tomes o te pasen aparecen aquí.']
@@ -134,6 +151,7 @@ export const ChatconversationList = ({ onSelect, selectedId, onNewConversation, 
         return visible.map((chat) => {
             const isActive = selectedId === chat.id;
             const { title } = chat;
+            const handoff = chat.handoffRequest;
 
             return (
                 <button
@@ -144,6 +162,8 @@ export const ChatconversationList = ({ onSelect, selectedId, onNewConversation, 
                         border-l-[3px] cursor-pointer transition-colors
                         ${isActive
                             ? 'bg-brand-bg border-l-brand-deep'
+                            : handoff
+                            ? 'bg-brand-handoff-row border-l-brand-handoff hover:bg-brand-bg'
                             : 'border-l-transparent hover:bg-brand-bg'}`}
                 >
                     <div className={`w-[38px] h-[38px] max-md:w-[46px] max-md:h-[46px] rounded-[10px] max-md:rounded-xl
@@ -183,6 +203,13 @@ export const ChatconversationList = ({ onSelect, selectedId, onNewConversation, 
                             Con equipo, a su derecha va quién la atiende (Fase 4). */}
                         <div className="empty:hidden mt-1 flex items-center gap-2 min-w-0">
                             <span className="max-md:hidden flex min-w-0 empty:hidden"><LineChip lineId={chat.lineId} wide /></span>
+                            {handoff && (
+                                <span title={formatSince(handoff.at).replace(/^d/, 'D')}
+                                    className="flex-none whitespace-nowrap inline-flex items-center gap-[5px] rounded-full bg-brand-handoff-soft
+                                        pl-[7px] pr-[9px] py-0.5 text-[11.5px] max-md:text-xs font-semibold text-brand-handoff-text">
+                                    <UserRound size={11} strokeWidth={2.4} />Pide una persona
+                                </span>
+                            )}
                             {showAssignment && <AssigneeTag chat={chat} userId={userId} />}
                         </div>
                         {showAssignment && chat.transferRequest && canReassignConversation(chat, userId, canAssignAny) && (
@@ -248,6 +275,22 @@ export const ChatconversationList = ({ onSelect, selectedId, onNewConversation, 
                         <LineFilter value={filterLineId} onChange={setLineFilter} conversations={conversations ?? []} />
                     </div>
                 </div>
+
+                {(waiting.length > 0 || handoffOnly) && (
+                    <button type="button" onClick={() => setHandoffOnly(value => !value)} aria-pressed={handoffOnly}
+                        className={`mt-2.5 inline-flex items-center gap-[7px] h-[30px] max-md:h-9 pl-[9px] pr-2.5 rounded-full border
+                            text-[12.5px] max-md:text-[13.5px] font-semibold cursor-pointer transition-colors
+                            ${handoffOnly
+                                ? 'border-brand-handoff bg-brand-handoff-wash text-brand-handoff-text'
+                                : 'border-brand-border bg-brand-surface text-brand-strong hover:bg-brand-bg'}`}>
+                        <UserRound size={13} strokeWidth={2.2} />
+                        Piden una persona
+                        <span className="min-w-[18px] h-[18px] px-[5px] rounded-[9px] bg-brand-handoff text-white text-[10.5px] font-bold
+                            tabular-nums flex items-center justify-center">
+                            {waiting.length}
+                        </span>
+                    </button>
+                )}
             </div>
 
             <div className="flex-1 overflow-y-auto min-h-0 flex flex-col pb-[var(--safe-bottom)]">

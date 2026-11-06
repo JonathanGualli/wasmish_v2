@@ -4,9 +4,10 @@ import type { ConversationPerson } from "./conversation.mode";
  * Un aviso de la campanita (avisos de la asignación, spec § 5.2): algo de la
  * asignación que le pasó a quien mira. Los sirve el backend ya pensados para
  * esa persona: `canOpen` y `canAnswer` son los suyos, leídos al servirlos.
- * `lost`: otra persona le quitó una conversación que atendía.
+ * `lost`: otra persona le quitó una conversación que atendía. `handoff`: el
+ * contacto pidió hablar con una persona en un menú del bot (sin `actor`).
  */
-export type NotificationType = 'assigned' | 'passed' | 'rejected' | 'requested' | 'lost';
+export type NotificationType = 'assigned' | 'passed' | 'rejected' | 'requested' | 'lost' | 'handoff';
 
 export interface AppNotification {
     id: string;
@@ -28,6 +29,8 @@ export interface AppNotification {
     request: { requestId: string; pending: boolean; canAnswer: boolean } | null;
     /** Cómo terminó una solicitud (`requested`). */
     resolution: { status: 'passed' | 'rejected' | 'gone'; by: ConversationPerson | null } | null;
+    /** Solo en `handoff`: si la conversación sigue marcada. */
+    handoff: { pending: boolean } | null;
     seen: boolean;
     createdAt: string;
 }

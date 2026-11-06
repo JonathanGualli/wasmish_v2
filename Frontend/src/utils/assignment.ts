@@ -29,6 +29,16 @@ export const firstName = (person: ConversationPerson | null | undefined) =>
     person?.name?.trim().split(/\s+/)[0] || 'Otra persona';
 
 /**
+ * Cómo se nombra al contacto en «pide hablar con una persona» (bot con menús):
+ * su nombre de pila; un título sin letras (un teléfono, sin nombre) va entero.
+ */
+export const contactFirstName = (title: string | null | undefined) => {
+    const text = title?.trim() ?? '';
+    if (!text) return 'El contacto';
+    return /\p{L}/u.test(text) ? text.split(/\s+/)[0] : text;
+};
+
+/**
  * Si puede pasarla a otra persona: con `conversations.assign`, cualquiera; el
  * agente, solo la suya (lo mismo que `canReassign` en el backend).
  */
@@ -65,7 +75,7 @@ export const saveAssignmentTab = (userId: string, tab: AssignmentTab) => {
  * Lo que dice una línea de la historia según quién mira (diseño «Avisos de la
  * asignación», 6b): «tú» si fue quien mira, su nombre si no.
  */
-export const eventText = (event: ConversationEvent, viewerId: string): string => {
+export const eventText = (event: ConversationEvent, viewerId: string, contactTitle?: string | null): string => {
     const byMe = event.actor?.id === viewerId;
     const toMe = event.target?.id === viewerId;
     const actor = firstName(event.actor);
@@ -90,6 +100,12 @@ export const eventText = (event: ConversationEvent, viewerId: string): string =>
             return toMe
                 ? 'Esta conversación quedó sin asignar: ya no tienes acceso a la línea'
                 : `Esta conversación quedó sin asignar: ${target} ya no tiene acceso a la línea`;
+        case 'handoff':
+            return `${contactFirstName(contactTitle)} pidió hablar con una persona. El bot dejó de responder.`;
+        case 'handoff_cleared':
+            return byMe
+                ? 'Quitaste la marca «Pide una persona». El bot vuelve a responder.'
+                : `${actor} quitó la marca «Pide una persona». El bot vuelve a responder.`;
     }
 };
 
@@ -117,6 +133,8 @@ export const notificationToast = (notification: AppNotification): { kind: 'new' 
             if (mode === 'passed') return { kind: 'info', text: `${actor} le pasó a ${firstName(notification.target)} ${conversation}.` };
             return { kind: 'info', text: `${actor} dejó sin asignar ${conversation}.` };
         }
+        case 'handoff':
+            return { kind: 'new', text: `${contactFirstName(notification.conversation?.title)} pide hablar con una persona.` };
     }
 };
 
@@ -135,8 +153,11 @@ const lostMode = (notification: AppNotification): 'took' | 'passed' | 'released'
  * `notifView` del prototipo): «**who** rest» y, debajo, la nota de cómo terminó
  * o de por qué ya no se puede abrir.
  */
-export const notificationText = (notification: AppNotification, viewerId: string): { who: string; rest: string; note: string } => {
-    const who = firstName(notification.actor);
+export const notificationText = (
+    notification: AppNotification, viewerId: string, lineName?: string | null,
+): { who: string; rest: string; note: string } => {
+    // «pide hablar con una persona» no lo hizo nadie del equipo: lo dice el contacto.
+    const who = notification.type === 'handoff' ? contactFirstName(notification.conversation?.title) : firstName(notification.actor);
     const { conversation, request, resolution } = notification;
     const assignee = conversation?.assignedTo ?? null;
     let rest = '';
@@ -167,6 +188,12 @@ export const notificationText = (notification: AppNotification, viewerId: string
             else rest = 'dejó sin asignar tu conversación';
             break;
         }
+        case 'handoff':
+            // Diseño c2: sin asignar, a quién le llegó; resuelto, que ya no espera.
+            rest = 'pide hablar con una persona';
+            if (!notification.handoff?.pending) note = 'Ya no está pendiente.';
+            else if (!assignee && lineName) note = `Sin asignar: les llega a todos los de ${lineName}.`;
+            break;
     }
     if (!conversation?.canOpen) {
         const holder = assignee ? (assignee.id === viewerId ? 'tú' : firstName(assignee)) : null;

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-    BUTTON_BODY_MAX, LIST_BUTTON_TEXT, buildInteractivePayload, optionId, parseOptionId,
+    BUTTON_BODY_MAX, LIST_BUTTON_TEXT, buildInteractivePayload, isPersonChoice, optionId, parseOptionId,
 } from '../src/utils/auto.reply.options.js';
 
 const RULE_ID = '6729a1b2c3d4e5f6a7b8c9d0';
@@ -56,4 +56,12 @@ test('de 4 opciones en adelante: lista con «Ver opciones» y una sección sin t
 test('con dos opciones y el cuerpo de 1025 sale como lista', () => {
     const { format } = buildInteractivePayload({ text: 'x'.repeat(BUTTON_BODY_MAX + 1), options: options(2) });
     assert.equal(format, 'list');
+});
+
+test('isPersonChoice: solo el toque de «hablar con una persona»', () => {
+    assert.equal(isPersonChoice('wasmish:person'), true);
+    assert.equal(isPersonChoice('wasmish:start'), false);
+    assert.equal(isPersonChoice(`wasmish:r:${RULE_ID}`), false);
+    assert.equal(isPersonChoice('otra-integracion:person'), false);
+    assert.equal(isPersonChoice(null), false);
 });

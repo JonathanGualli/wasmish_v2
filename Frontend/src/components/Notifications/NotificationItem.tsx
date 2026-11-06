@@ -1,3 +1,4 @@
+import { UserRound } from "lucide-react";
 import { useAuthContext } from "../../context/auth.context";
 import { useNotice } from "../Notice/context/useNotice";
 import { assignmentError, useConversationAssignment } from "../../hooks/useConversationAssignment";
@@ -6,6 +7,8 @@ import { notificationText } from "../../utils/assignment";
 import { formatChatTime } from "../../utils/formatChatTime";
 import { initials } from "../../utils/initials";
 import { LineChip } from "../Line/LineChip";
+import { useLines } from "../../hooks/useLines";
+import { lineLabel } from "../../utils/lineDisplay";
 
 interface Props {
     notification: AppNotification;
@@ -19,13 +22,18 @@ interface Props {
  * Un aviso de la campanita (diseño «Avisos de la asignación», 5a y m2): quién y
  * qué, el contacto, su línea y la hora, y la nota de cómo terminó. Sin ver, con
  * fondo verde claro y punto; si ya no se puede abrir, en gris. Una solicitud que
- * quien mira puede responder lleva sus dos botones.
+ * quien mira puede responder lleva sus dos botones. «Pide hablar con una
+ * persona» (bot con menús, diseño «Respuestas automáticas v4», c2) lleva un
+ * icono ámbar en vez de una cara: no lo hizo nadie del equipo.
  */
 export const NotificationItem = ({ notification, onOpen, markSeen, refresh }: Props) => {
     const { user } = useAuthContext();
     const { notify } = useNotice();
-    const { who, rest, note } = notificationText(notification, user?.id ?? '');
     const { conversation, request } = notification;
+    const { showLines, lineById } = useLines();
+    const line = showLines ? lineById(conversation?.lineId) : undefined;
+    const { who, rest, note } = notificationText(notification, user?.id ?? '', line ? lineLabel(line) : null);
+    const handoff = notification.type === 'handoff';
     const canOpen = Boolean(conversation?.canOpen);
     const { answer } = useConversationAssignment(conversation?.id ?? '');
 
@@ -58,13 +66,20 @@ export const NotificationItem = ({ notification, onOpen, markSeen, refresh }: Pr
                 if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onOpen(notification); }
             }}
             className={`relative flex gap-3 px-[18px] max-md:px-4 py-3.5 max-md:py-4 border-b border-brand-bg transition-colors
-                ${notification.seen ? 'bg-brand-surface' : 'bg-brand-green-50'}
+                ${notification.seen ? 'bg-brand-surface' : handoff ? 'bg-brand-handoff-unseen' : 'bg-brand-green-50'}
                 ${canOpen ? 'cursor-pointer hover:bg-brand-bg' : 'cursor-default'}`}
         >
-            <span className={`flex-none w-8 h-8 max-md:w-[38px] max-md:h-[38px] rounded-lg max-md:rounded-[10px] bg-brand-border text-brand-strong
-                text-[11px] max-md:text-xs font-bold flex items-center justify-center ${canOpen ? '' : 'opacity-[0.62]'}`}>
-                {initials(notification.actor?.name ?? '')}
-            </span>
+            {handoff ? (
+                <span className={`flex-none w-8 h-8 max-md:w-[38px] max-md:h-[38px] rounded-lg max-md:rounded-[10px] bg-brand-handoff-soft
+                    text-brand-handoff-strong flex items-center justify-center ${canOpen ? '' : 'opacity-[0.62]'}`}>
+                    <UserRound size={16} strokeWidth={2.2} />
+                </span>
+            ) : (
+                <span className={`flex-none w-8 h-8 max-md:w-[38px] max-md:h-[38px] rounded-lg max-md:rounded-[10px] bg-brand-border text-brand-strong
+                    text-[11px] max-md:text-xs font-bold flex items-center justify-center ${canOpen ? '' : 'opacity-[0.62]'}`}>
+                    {initials(notification.actor?.name ?? '')}
+                </span>
+            )}
 
             <div className={`flex-1 min-w-0 grid gap-1 ${canOpen ? '' : 'opacity-[0.62]'}`}>
                 <div className="text-[13.5px] max-md:text-[15px] leading-[1.4] text-brand-strong pr-3.5">

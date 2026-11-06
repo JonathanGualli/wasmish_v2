@@ -3,15 +3,18 @@ import mongoose from 'mongoose';
 // La historia de una conversación (avisos de la asignación, spec § 3.1): cada
 // cambio de manos, en el hilo y por hora, sin ser un mensaje. No lo ve el
 // cliente, no cuenta como no leído ni sale en la vista previa. Los nombres no
-// se guardan: se leen con `populate` al servirlo.
-export const CONVERSATION_EVENT_TYPES = ['take', 'assign', 'release', 'request', 'pass', 'reject', 'revoked'];
+// se guardan: se leen con `populate` al servirlo. Del bot con menús (plan,
+// Tarea 8): `handoff`, el contacto pidió una persona (sin actor), y
+// `handoff_cleared`, alguien del equipo quitó la marca con «Quitar». Responder
+// también la quita, pero sin evento: ya se ve la respuesta en el hilo.
+export const CONVERSATION_EVENT_TYPES = ['take', 'assign', 'release', 'request', 'pass', 'reject', 'revoked', 'handoff', 'handoff_cleared'];
 
 const conversationEventSchema = new mongoose.Schema({
     // La cuenta, como en todos los modelos.
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'Account', required: true },
     conversationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Conversation', required: true },
     type: { type: String, enum: CONVERSATION_EVENT_TYPES, required: true },
-    // Quién lo hizo; `null` en `revoked`.
+    // Quién lo hizo; `null` en `revoked` y en `handoff`.
     actorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     // A quién: el asignado, el solicitante o quien perdió el acceso; `null` en
     // `take`, `release` y `request`.
