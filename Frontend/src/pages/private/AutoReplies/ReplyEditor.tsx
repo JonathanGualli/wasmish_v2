@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ChevronDown, ChevronUp, List, Rows3, X } from "lucide-react";
 import {
-    BUTTONS_MAX, OPTION_TITLE_MAX, OPTIONS_MAX, RETURN_AFTER_DAYS, RULE_NAME_MAX,
+    BUTTONS_MAX, KEYWORD_REPLIES_MAX, OPTION_TITLE_MAX, OPTIONS_MAX, RETURN_AFTER_DAYS, RULE_NAME_MAX,
     type MenuOption, type ReturnAfterDays,
 } from "../../../models/autoReply.model";
 import { ConfirmDialog } from "../../../components/Dialog/ConfirmDialog";
@@ -107,6 +107,7 @@ export const ReplyEditor = ({ editor, node, onSelect }: { editor: AutoReplyEdito
             {rule && (
                 <KeywordInput optional keywords={rule.keywords} onChange={(keywords) => editor.setRule(rule.key, { keywords })} />
             )}
+            {rule && rule.keywords.length > 0 && <Priority editor={editor} ruleKey={rule.key} />}
 
             <ReplyTextField label="Texto" value={text} onChange={setText} error={textError} minHeight="min-h-[96px]"
                 placeholder={node.kind === 'handoff' ? 'Enseguida te atiende alguien del equipo' : 'Lo que recibe el contacto…'} />
@@ -233,3 +234,42 @@ export const ReplyEditor = ({ editor, node, onSelect }: { editor: AutoReplyEdito
         </fieldset>
     );
 };
+
+/**
+ * El orden entre las respuestas con frases: si un mensaje coincide con más de
+ * 3, salen las 3 primeras (`KEYWORD_REPLIES_MAX`). En el lienzo no hay lista,
+ * así que se ordena aquí (revisión de Codex del PR #186, 2).
+ */
+const Priority = ({ editor, ruleKey }: { editor: AutoReplyEditor; ruleKey: string }) => {
+    const ranked = editor.form.keywordRules.filter(candidate => candidate.keywords.length > 0);
+    const index = ranked.findIndex(candidate => candidate.key === ruleKey);
+    if (ranked.length < 2 || index < 0) return null;
+    const swap = (delta: -1 | 1) => {
+        const other = ranked[index + delta];
+        if (other) editor.swapRules(ruleKey, other.key);
+    };
+    return (
+        <div className="grid gap-1.5">
+            <div className="flex items-center gap-2">
+                <span className="text-[13.5px] font-semibold text-brand-strong">Prioridad</span>
+                <span className="font-mono tabular-nums text-xs text-brand-muted">{index + 1} de {ranked.length}</span>
+                <span className="ml-auto flex gap-1">
+                    <button type="button" aria-label="Subir la prioridad" disabled={index === 0} onClick={() => swap(-1)}
+                        className="w-[30px] h-[30px] rounded-[7px] border border-brand-border flex items-center justify-center text-brand-strong
+                            hover:bg-brand-bg cursor-pointer disabled:text-brand-border-strong disabled:cursor-not-allowed disabled:hover:bg-transparent">
+                        <ChevronUp size={14} strokeWidth={2.2} />
+                    </button>
+                    <button type="button" aria-label="Bajar la prioridad" disabled={index === ranked.length - 1} onClick={() => swap(1)}
+                        className="w-[30px] h-[30px] rounded-[7px] border border-brand-border flex items-center justify-center text-brand-strong
+                            hover:bg-brand-bg cursor-pointer disabled:text-brand-border-strong disabled:cursor-not-allowed disabled:hover:bg-transparent">
+                        <ChevronDown size={14} strokeWidth={2.2} />
+                    </button>
+                </span>
+            </div>
+            <span className="text-[12.5px] leading-[1.5] text-brand-muted">
+                Si un mensaje coincide con las frases de más de {KEYWORD_REPLIES_MAX} respuestas, salen las {KEYWORD_REPLIES_MAX} primeras en este orden.
+            </span>
+        </div>
+    );
+};
+

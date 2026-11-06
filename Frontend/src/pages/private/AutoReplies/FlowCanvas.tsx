@@ -96,9 +96,12 @@ export const FlowCanvas = ({ editor, selected, trace, onSelect, onAddRule }: {
         el.scrollTo({ left: 0, top: 0 });
     };
 
+    // Mientras se guarda no se mueve nada: la respuesta reemplaza el formulario
+    // y lo movido se perdería (revisión de Codex del PR #186, 1). Tocar sí abre la tarjeta.
     const onCardPointerDown = (node: NodeKey) => (event: PointerEvent<HTMLDivElement>) => {
         if (event.button !== 0) return;
         event.stopPropagation();
+        if (editor.isSaving) return;
         event.currentTarget.setPointerCapture(event.pointerId);
         gesture.current = { kind: 'card', node, startX: event.clientX, startY: event.clientY, origin: positionOf(node), moved: false };
     };
@@ -127,7 +130,10 @@ export const FlowCanvas = ({ editor, selected, trace, onSelect, onAddRule }: {
         gesture.current = null;
         if (!current) return;
         if (current.kind === 'card') {
-            if (current.moved && dragging) editor.setPositions(new Map([...layout, [dragging.node, dragging.position]]));
+            // Un arrastre que empezó antes de guardar tampoco se aplica.
+            if (current.moved && dragging) {
+                if (!editor.isSaving) editor.setPositions(new Map([...layout, [dragging.node, dragging.position]]));
+            }
             else onSelect(current.node);
             setDragging(null);
         } else if (!current.moved) {
@@ -195,7 +201,7 @@ export const FlowCanvas = ({ editor, selected, trace, onSelect, onAddRule }: {
             </div>
 
             <div data-flow-overlay className="absolute top-3.5 left-4 z-[3] flex gap-2">
-                <button type="button" onClick={onAddRule} disabled={form.keywordRules.length >= KEYWORD_RULES_MAX}
+                <button type="button" onClick={onAddRule} disabled={editor.isSaving || form.keywordRules.length >= KEYWORD_RULES_MAX}
                     title={form.keywordRules.length >= KEYWORD_RULES_MAX ? `Hasta ${KEYWORD_RULES_MAX} respuestas` : undefined}
                     className="h-[34px] px-3 rounded-[9px] bg-brand-surface border border-brand-border flex items-center gap-[7px]
                         text-[13px] font-semibold text-brand-strong hover:bg-brand-bg cursor-pointer transition-colors

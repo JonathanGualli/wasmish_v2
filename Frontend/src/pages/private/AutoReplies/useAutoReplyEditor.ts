@@ -228,6 +228,15 @@ export const useAutoReplyEditor = (
                 keywordRules: f.keywordRules.map(rule => ({ ...rule, position: at(`rule:${rule.key}`, rule.position) })),
             };
         }),
+        /** Cambia de sitio dos reglas (la prioridad del lienzo: entre las que tienen frases). */
+        swapRules: (a: string, b: string) => update(f => {
+            const rules = [...f.keywordRules];
+            const from = rules.findIndex(rule => rule.key === a);
+            const to = rules.findIndex(rule => rule.key === b);
+            if (from < 0 || to < 0) return f;
+            [rules[from], rules[to]] = [rules[to], rules[from]];
+            return { ...f, keywordRules: rules };
+        }),
         /** Sube (-1) o baja (+1) una regla: si coinciden más de 3, salen las primeras. */
         moveRule: (key: string, delta: -1 | 1) => update(f => {
             const rules = [...f.keywordRules];
