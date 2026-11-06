@@ -19,6 +19,5 @@ export const stepSummary = (editor: AutoReplyEditor, step: StepKey) => {
         case 'keywords': return keywordsSummary(form.keywordRules);
         case 'fallback': return fallbackSummary(form.handoffHours);
         case 'silence': return silenceSummary(form.handoffHours);
-        case 'review': return 'Último paso';
     }
 };

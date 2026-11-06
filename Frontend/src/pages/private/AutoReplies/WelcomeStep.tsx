@@ -10,13 +10,12 @@ const RETURN_OPTIONS: Record<string, { title: string; hint: string }> = {
 };
 
 /** Bienvenida: el texto y cuándo volver a saludar a quien ya había escrito. */
-export const WelcomeStep = ({ editor, exampleBadge }: { editor: AutoReplyEditor; exampleBadge: boolean }) => {
+export const WelcomeStep = ({ editor }: { editor: AutoReplyEditor }) => {
     const { welcome } = editor.form;
     return (
         <div className="grid gap-7 @min-[600px]:grid-cols-[minmax(0,1fr)_300px] items-start">
             <ReplyTextField
                 label="Mensaje de bienvenida"
-                badge={exampleBadge ? 'Ejemplo · edítalo' : undefined}
                 value={welcome.text}
                 onChange={(text) => editor.setWelcome({ text })}
                 error={editor.showIssues ? editor.issues.welcomeText : undefined}

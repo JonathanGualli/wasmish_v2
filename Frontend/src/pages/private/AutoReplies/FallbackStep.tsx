@@ -7,13 +7,12 @@ import { ReplyTextField } from "./ReplyTextField";
  * en la cabecera. Cuándo sale (spec § 10): solo si no saldría nada más, con
  * algo escrito, una vez por conversación cada `handoffHours`.
  */
-export const FallbackStep = ({ editor, exampleBadge }: { editor: AutoReplyEditor; exampleBadge: boolean }) => {
+export const FallbackStep = ({ editor }: { editor: AutoReplyEditor }) => {
     const { fallback, handoffHours } = editor.form;
     return (
         <div className="grid gap-4 max-w-[720px]">
             <ReplyTextField
                 label="Mensaje cuando no entiende"
-                badge={exampleBadge ? 'Ejemplo · edítalo' : undefined}
                 value={fallback.text}
                 onChange={(text) => editor.setFallback({ text })}
                 error={editor.showIssues ? editor.issues.fallbackText : undefined}

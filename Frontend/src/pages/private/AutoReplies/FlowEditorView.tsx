@@ -12,6 +12,7 @@ import { OutOfHoursStep } from "./OutOfHoursStep";
 import { SilenceStep } from "./SilenceStep";
 import { Switch } from "./Switch";
 import { nodeIssueCount } from "./flowIssues";
+import { SetupWizard, WizardBarActions } from "./SetupWizard";
 
 type Tab = 'menu' | 'outOfHours' | 'silence';
 const TABS: { key: Tab; label: string }[] = [
@@ -27,6 +28,9 @@ const TABS: { key: Tab; label: string }[] = [
  * horario», «Cuándo se calla») y guardar. En «Menú», el lienzo y un panel con
  * «Probar» y «Editar». Lo que se edita y cómo se guarda sigue en
  * `useAutoReplyEditor`: todo junto, con «Guardar».
+ *
+ * La primera vez (`mode: 'wizard'`, 4f), el asistente va encima del lienzo y
+ * la barra dice en qué paso va; a la derecha solo queda «Probar».
  */
 export const FlowEditorView = ({ editor, onMasterSwitch, outdated, testMessages, onTestMessagesChange, children }: {
     editor: AutoReplyEditor;
@@ -40,6 +44,7 @@ export const FlowEditorView = ({ editor, onMasterSwitch, outdated, testMessages,
 }) => {
     const [tab, setTab] = useState<Tab>('menu');
     const [panel, setPanel] = useState<'test' | 'edit'>('test');
+    const wizard = editor.mode === 'wizard';
     const [selected, setSelected] = useState<NodeKey | null>(null);
     const [trace, setTrace] = useState<Set<NodeKey>>(new Set());
     const onTrace = useCallback((nodes: Set<NodeKey>) => setTrace(nodes), []);
@@ -75,34 +80,43 @@ export const FlowEditorView = ({ editor, onMasterSwitch, outdated, testMessages,
         <div className="h-full min-h-[640px] flex flex-col">
             <header className="flex-none h-[68px] box-border pl-6 pr-5 border-b border-brand-border flex items-center gap-4">
                 <h1 className="text-xl font-bold tracking-[-0.025em] text-brand-text whitespace-nowrap">Respuestas automáticas</h1>
-                <MasterSwitch compact editor={editor} onChange={onMasterSwitch} />
-                <div role="tablist" className="ml-3 flex gap-0.5 p-[3px] rounded-[10px] bg-brand-bg border border-brand-border">
-                    {TABS.map(item => {
-                        const active = tab === item.key;
-                        const issues = item.key === 'outOfHours' && editor.showIssues ? editor.counts.outOfHours : 0;
-                        return (
-                            <button key={item.key} type="button" role="tab" aria-selected={active} onClick={() => setTab(item.key)}
-                                className={`h-8 px-3.5 rounded-[7px] flex items-center gap-1.5 text-[13.5px] font-semibold whitespace-nowrap cursor-pointer transition-colors
-                                    ${active ? 'bg-brand-surface text-brand-text shadow-[0_1px_2px_rgba(14,17,22,0.12)]' : 'text-brand-gray-600 hover:text-brand-text'}`}>
-                                {item.label}
-                                {issues > 0 && <span className="w-1.5 h-1.5 rounded-full bg-brand-danger" aria-label="Con errores" />}
-                            </button>
-                        );
-                    })}
-                </div>
-                <div className="ml-auto flex items-center gap-2.5">
-                    {editor.dirty && (
-                        <>
-                            <span className="hidden xl:inline-flex items-center gap-[7px] text-[13px] text-brand-gray-600 whitespace-nowrap">
-                                <span className="w-[7px] h-[7px] rounded-full bg-brand-warning" />Sin guardar
-                            </span>
-                            <div className="h-[38px]"><CustomButton variant="outline" onClick={editor.discard}>Descartar</CustomButton></div>
-                        </>
-                    )}
-                    <div className="h-[38px]">
-                        <CustomButton onClick={save} isLoading={editor.isSaving} disabled={!editor.dirty || outdated}>Guardar</CustomButton>
-                    </div>
-                </div>
+                {wizard ? (
+                    <>
+                        <span className="min-w-0 truncate text-[13.5px] text-brand-muted">Configuración inicial · nada sale hasta encender</span>
+                        <div className="ml-auto flex items-center gap-2.5"><WizardBarActions editor={editor} /></div>
+                    </>
+                ) : (
+                    <>
+                        <MasterSwitch compact editor={editor} onChange={onMasterSwitch} />
+                        <div role="tablist" className="ml-3 flex gap-0.5 p-[3px] rounded-[10px] bg-brand-bg border border-brand-border">
+                            {TABS.map(item => {
+                                const active = tab === item.key;
+                                const issues = item.key === 'outOfHours' && editor.showIssues ? editor.counts.outOfHours : 0;
+                                return (
+                                    <button key={item.key} type="button" role="tab" aria-selected={active} onClick={() => setTab(item.key)}
+                                        className={`h-8 px-3.5 rounded-[7px] flex items-center gap-1.5 text-[13.5px] font-semibold whitespace-nowrap cursor-pointer transition-colors
+                                            ${active ? 'bg-brand-surface text-brand-text shadow-[0_1px_2px_rgba(14,17,22,0.12)]' : 'text-brand-gray-600 hover:text-brand-text'}`}>
+                                        {item.label}
+                                        {issues > 0 && <span className="w-1.5 h-1.5 rounded-full bg-brand-danger" aria-label="Con errores" />}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        <div className="ml-auto flex items-center gap-2.5">
+                            {editor.dirty && (
+                                <>
+                                    <span className="hidden xl:inline-flex items-center gap-[7px] text-[13px] text-brand-gray-600 whitespace-nowrap">
+                                        <span className="w-[7px] h-[7px] rounded-full bg-brand-warning" />Sin guardar
+                                    </span>
+                                    <div className="h-[38px]"><CustomButton variant="outline" onClick={editor.discard}>Descartar</CustomButton></div>
+                                </>
+                            )}
+                            <div className="h-[38px]">
+                                <CustomButton onClick={save} isLoading={editor.isSaving} disabled={!editor.dirty || outdated}>Guardar</CustomButton>
+                            </div>
+                        </div>
+                    </>
+                )}
             </header>
 
             {outdated ? (
@@ -115,15 +129,22 @@ export const FlowEditorView = ({ editor, onMasterSwitch, outdated, testMessages,
                 <Banner tone="danger" title="No se guardó.">{blockedDetail(editor, nodes)}</Banner>
             )}
 
-            {tab === 'menu' ? (
+            {wizard || tab === 'menu' ? (
                 <div className="flex-1 min-h-0 grid grid-cols-[minmax(0,1fr)_380px]">
-                    <FlowCanvas editor={editor} selected={node?.key ?? null} trace={trace} onSelect={select} onAddRule={addRule} />
+                    <FlowCanvas editor={editor} selected={node?.key ?? null} trace={trace} onSelect={select} onAddRule={addRule}
+                        cover={wizard && (
+                            <div className="absolute inset-0 z-[8] bg-brand-bg/80 flex items-center justify-center p-6">
+                                <SetupWizard editor={editor} contained />
+                            </div>
+                        )} />
                     <aside className="min-h-0 border-l border-brand-border bg-brand-surface flex flex-col">
                         <div role="tablist" className="flex-none flex gap-1 px-4 pt-3 border-b border-brand-border">
                             <PanelTab active={panel === 'test'} onClick={() => setPanel('test')}>Probar</PanelTab>
-                            <PanelTab active={panel === 'edit'} onClick={() => setPanel('edit')}>{node ? `Editar «${node.name}»` : 'Editar'}</PanelTab>
+                            {!wizard && (
+                                <PanelTab active={panel === 'edit'} onClick={() => setPanel('edit')}>{node ? `Editar «${node.name}»` : 'Editar'}</PanelTab>
+                            )}
                         </div>
-                        {panel === 'test' ? (
+                        {wizard || panel === 'test' ? (
                             <div className="flex-1 min-h-0 px-4 pt-3 pb-4">
                                 <TestPanel editor={editor} messages={testMessages} onMessagesChange={onTestMessagesChange} onTrace={onTrace} />
                             </div>

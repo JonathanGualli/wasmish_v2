@@ -1,5 +1,4 @@
-import { Check } from "lucide-react";
-import { STEP_TITLES, type StepKey } from "../../../utils/autoReplyForm";
+import { EDIT_STEPS, STEP_TITLES, type StepKey } from "../../../utils/autoReplyForm";
 import { stepIsOn, stepSummary } from "./stepState";
 import type { AutoReplyEditor } from "./useAutoReplyEditor";
 
@@ -32,24 +31,17 @@ export const StepStatus = ({ editor, step, compact = false }: { editor: AutoRepl
 };
 
 /**
- * Los pasos en una barra horizontal. Configurada, son pestañas: cada uno dice si
- * está encendido y qué tiene. En el asistente, van en orden: los ya hechos
- * llevan ✓ y se puede volver a ellos; los siguientes, «Pendiente».
+ * Los pasos en una barra horizontal, como pestañas: cada uno dice si está
+ * encendido y qué tiene.
  */
 export const StepBar = ({ editor }: { editor: AutoReplyEditor }) => {
-    const wizard = editor.mode === 'wizard';
-    const current = editor.steps.indexOf(editor.step);
+    const current = EDIT_STEPS.indexOf(editor.step);
 
     return (
-        <div className="grid gap-2.5" style={{ gridTemplateColumns: `repeat(${editor.steps.length}, minmax(0, 1fr))` }} role="tablist">
-            {editor.steps.map((step, index) => {
+        <div className="grid gap-2.5" style={{ gridTemplateColumns: `repeat(${EDIT_STEPS.length}, minmax(0, 1fr))` }} role="tablist">
+            {EDIT_STEPS.map((step, index) => {
                 const active = index === current;
-                const done = wizard && index < current;
-                const reachable = !wizard || index <= editor.reached;
                 const errors = editor.showIssues ? editor.counts[step] : 0;
-                const summary = wizard && index > current && index > editor.reached
-                    ? (step === 'review' ? 'Último paso' : 'Pendiente')
-                    : stepSummary(editor, step);
 
                 return (
                     <button
@@ -57,7 +49,6 @@ export const StepBar = ({ editor }: { editor: AutoReplyEditor }) => {
                         type="button"
                         role="tab"
                         aria-selected={active}
-                        disabled={!reachable}
                         onClick={() => editor.goTo(step)}
                         className={`grid grid-cols-[26px_minmax(0,1fr)_auto] gap-x-2.5 gap-y-0.5 items-center text-left px-3.5 py-[11px] rounded-[10px]
                             transition-colors cursor-pointer disabled:cursor-default
@@ -68,16 +59,13 @@ export const StepBar = ({ editor }: { editor: AutoReplyEditor }) => {
                                     : 'border border-brand-border bg-brand-surface enabled:hover:bg-brand-bg'}`}
                     >
                         <span className={`w-6 h-6 rounded-full flex items-center justify-center font-mono text-xs font-semibold
-                            ${done ? 'bg-brand-accent-strong text-white'
-                                : active ? 'bg-brand-deep text-white'
-                                    : 'border border-brand-border-strong bg-brand-surface text-brand-gray-600'}`}>
-                            {done ? <Check size={12} strokeWidth={3.4} /> : index + 1}
+                            ${active ? 'bg-brand-deep text-white' : 'border border-brand-border-strong bg-brand-surface text-brand-gray-600'}`}>
+                            {index + 1}
                         </span>
                         <span className={`text-[14.5px] text-brand-text truncate ${active ? 'font-bold' : 'font-semibold'}`}>{STEP_TITLES[step]}</span>
-                        {/* Junto al título solo cabe el punto; los errores se ven siempre con su texto.
-                            En el asistente, lo hecho ya lo dice el ✓. */}
-                        <span>{!wizard && <StepStatus editor={editor} step={step} compact />}</span>
-                        <span className="col-start-2 col-span-2 text-[12.5px] text-brand-muted truncate">{summary}</span>
+                        {/* Junto al título solo cabe el punto; los errores se ven siempre con su texto. */}
+                        <span><StepStatus editor={editor} step={step} compact /></span>
+                        <span className="col-start-2 col-span-2 text-[12.5px] text-brand-muted truncate">{stepSummary(editor, step)}</span>
                     </button>
                 );
             })}

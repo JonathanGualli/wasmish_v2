@@ -11,10 +11,8 @@ export const FieldError = ({ children }: { children: ReactNode }) => (
 );
 
 /** Un texto de respuesta: crece con lo escrito y cuenta los caracteres (hasta 800). */
-export const ReplyTextField = ({ label, badge, value, onChange, error, help, placeholder, minHeight = 'min-h-[150px]' }: {
+export const ReplyTextField = ({ label, value, onChange, error, help, placeholder, minHeight = 'min-h-[150px]' }: {
     label: string;
-    /** Junto al label, p. ej. «Ejemplo · edítalo». */
-    badge?: string;
     value: string;
     onChange: (value: string) => void;
     error?: string;
@@ -29,13 +27,7 @@ export const ReplyTextField = ({ label, badge, value, onChange, error, help, pla
 
     return (
         <div className="grid gap-2 min-w-0">
-            <div className="flex items-center gap-2">
-                <label htmlFor={id} className="text-[13.5px] font-semibold text-brand-strong">{label}</label>
-                {badge && (
-                    <span className="rounded-full bg-brand-accent-soft text-brand-accent-strong px-2 py-[3px]
-                        text-[11px] font-bold uppercase tracking-[0.05em]">{badge}</span>
-                )}
-            </div>
+            <label htmlFor={id} className="text-[13.5px] font-semibold text-brand-strong">{label}</label>
             <div className={`relative rounded-[10px] border bg-brand-surface transition-colors
                 focus-within:ring-[3px]
                 ${error

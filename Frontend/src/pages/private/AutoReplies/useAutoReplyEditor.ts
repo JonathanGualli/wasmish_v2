@@ -2,8 +2,8 @@ import { useMemo, useState } from "react";
 import { useSaveAutoReplies } from "../../../hooks/useAutoReplies";
 import type { AutoRepliesResponse, CardPosition, DaySchedule, KeywordRule, MenuOption, WeekDay } from "../../../models/autoReply.model";
 import {
-    EDIT_STEPS, WIZARD_STEPS, draftOf, formIssues, isDirty, issueCounts, newRule, toForm, toPayload, totalIssues, wizardStart,
-    type AutoReplyForm, type EditableRule, type StepKey,
+    EDIT_STEPS, WIZARD_STEPS, draftOf, exampleMenu, formIssues, isDirty, issueCounts, newRule, toForm, toPayload, totalIssues,
+    withExampleHours, withGreeting, wizardStart, type AutoReplyForm, type EditableRule, type StepKey, type WizardStep,
 } from "../../../utils/autoReplyForm";
 import type { NodeKey } from "../../../utils/autoReplyFlow";
 
@@ -27,16 +27,16 @@ const withoutOptionsTo = (form: AutoReplyForm, ruleId: string): AutoReplyForm =>
     };
 };
 
-export type EditorMode = 'intro' | 'wizard' | 'tabs';
+export type EditorMode = 'wizard' | 'tabs';
 
 /**
  * Lo que se edita en «Respuestas automáticas» y cómo se guarda. Todo se guarda
  * junto (`PUT`), y nada sale hasta guardar con el interruptor general encendido.
  *
- * - `intro`: la cuenta nunca guardó; la invitación a empezar.
- * - `wizard`: el asistente, paso a paso, hasta «Revisar y encender». «Terminar
- *   luego» guarda lo hecho apagado y la próxima vez abre en pestañas.
- * - `tabs`: los mismos pasos como pestañas.
+ * - `wizard`: la cuenta nunca guardó. El asistente (diseño 4f), en cuatro
+ *   pasos hasta «Encender». «Terminar luego» guarda lo hecho apagado y la
+ *   próxima vez abre la página normal.
+ * - `tabs`: la página normal (el lienzo, o los pasos en pantallas estrechas).
  */
 /**
  * Lo guardado, con las claves de pantalla de lo enviado (misma posición): así
@@ -58,11 +58,15 @@ export const useAutoReplyEditor = (
 ) => {
     const saved = useMemo(() => toForm(data), [data]);
     const [baseline, setBaseline] = useState(saved);
-    const [form, setForm] = useState(saved);
-    const [mode, setMode] = useState<EditorMode>(data.configured ? 'tabs' : 'intro');
+    // El menú de ejemplo y donde empieza el asistente, una sola vez: elegir con
+    // o sin menú no cambia los ids, y salir sin haber tocado nada no pregunta.
+    const [menu] = useState(exampleMenu);
+    const [wizardBase] = useState(() => (data.configured ? null : wizardStart(saved, menu)));
+    const [form, setForm] = useState(() => wizardBase ?? saved);
+    const [mode, setMode] = useState<EditorMode>(wizardBase ? 'wizard' : 'tabs');
     const [step, setStep] = useState<StepKey>('welcome');
-    // En el asistente, hasta qué paso se llegó: se puede volver a cualquiera de esos.
-    const [reached, setReached] = useState(0);
+    const [wizardStep, setWizardStep] = useState<WizardStep>('greeting');
+    const [withMenu, setWithMenu] = useState(true);
     const [showIssues, setShowIssues] = useState(false);
     const [saveBlocked, setSaveBlocked] = useState(false);
     const mutation = useSaveAutoReplies();
@@ -73,18 +77,14 @@ export const useAutoReplyEditor = (
         if (!isDirty(form, baseline)) setForm(saved);
     }
 
-    const dirty = mode !== 'intro' && (mode === 'wizard' || isDirty(form, saved));
+    const dirty = isDirty(form, mode === 'wizard' && wizardBase ? wizardBase : saved);
     const issues = useMemo(() => formIssues(form), [form]);
     const counts = useMemo(() => issueCounts(issues), [issues]);
     const issueTotal = totalIssues(counts);
-    const steps = mode === 'wizard' ? WIZARD_STEPS : EDIT_STEPS;
 
-    const update = (change: (form: AutoReplyForm) => AutoReplyForm) => setForm(current => change(current));
-
-    const goTo = (next: StepKey) => {
-        setStep(next);
-        if (mode === 'wizard') setReached(index => Math.max(index, WIZARD_STEPS.indexOf(next)));
-    };
+    // En el asistente, «Horarios» sigue al horario del paso 2.
+    const update = (change: (form: AutoReplyForm) => AutoReplyForm) =>
+        setForm(current => (mode === 'wizard' ? withExampleHours(change(current), menu) : change(current)));
 
     /** Guarda `next`; con errores no guarda y abre el primer paso que tiene uno. */
     const save = (next: AutoReplyForm, afterSave?: (saved: AutoRepliesResponse) => void) => {
@@ -93,6 +93,8 @@ export const useAutoReplyEditor = (
             setShowIssues(true);
             setSaveBlocked(true);
             setStep(EDIT_STEPS.find(key => nextCounts[key] > 0) ?? 'welcome');
+            // En el asistente, lo único que puede quedar mal es el horario.
+            if (mode === 'wizard' && nextCounts.outOfHours > 0) setWizardStep('outOfHours');
             return;
         }
         mutation.mutate(toPayload(next), {
@@ -113,29 +115,29 @@ export const useAutoReplyEditor = (
     };
 
     return {
-        form, mode, step, steps, reached, dirty, issues, counts, issueTotal, isSaving: mutation.isPending,
+        form, mode, step, dirty, issues, counts, issueTotal, isSaving: mutation.isPending,
         showIssues,
         /** El aviso de arriba: se intentó guardar con errores y aún quedan. */
         saveBlocked: saveBlocked && issueTotal > 0,
-        goTo,
+        goTo: setStep,
 
-        startWizard: (options: { example: boolean }) => {
-            setForm(current => wizardStart(current, options));
-            setMode('wizard');
-            setStep('welcome');
-            setReached(0);
-            setShowIssues(false);
+        // El asistente de la primera vez.
+        wizardStep, withMenu,
+        /** Paso 1: con el menú de ejemplo o solo el saludo; se ve al momento en «Probar». */
+        chooseGreeting: (next: boolean) => {
+            setWithMenu(next);
+            update(f => withGreeting(f, menu, next));
         },
-        /** «Siguiente»: con errores en este paso, los marca y no avanza. */
+        /** «Siguiente»: con errores en el horario, los marca y no avanza. */
         next: () => {
-            if (counts[step] > 0) {
+            if (wizardStep === 'outOfHours' && counts.outOfHours > 0) {
                 setShowIssues(true);
                 return;
             }
-            const index = WIZARD_STEPS.indexOf(step);
-            goTo(WIZARD_STEPS[Math.min(index + 1, WIZARD_STEPS.length - 1)]);
+            setWizardStep(WIZARD_STEPS[Math.min(WIZARD_STEPS.indexOf(wizardStep) + 1, WIZARD_STEPS.length - 1)]);
         },
-        previous: () => setStep(WIZARD_STEPS[Math.max(WIZARD_STEPS.indexOf(step) - 1, 0)]),
+        previous: () => setWizardStep(WIZARD_STEPS[Math.max(WIZARD_STEPS.indexOf(wizardStep) - 1, 0)]),
+        goToWizardStep: setWizardStep,
         /** «Terminar luego»: lo hecho, guardado y apagado. */
         finishLater: () => save(draftOf(form), toTabs),
         /** El último paso del asistente. */
@@ -143,13 +145,6 @@ export const useAutoReplyEditor = (
         saveAll: () => save(form),
         discard: () => {
             setForm(saved);
-            setShowIssues(false);
-            setSaveBlocked(false);
-        },
-        /** Salir del asistente sin guardar: vuelve la invitación. */
-        leaveWizard: () => {
-            setForm(saved);
-            setMode(data.configured ? 'tabs' : 'intro');
             setShowIssues(false);
             setSaveBlocked(false);
         },
