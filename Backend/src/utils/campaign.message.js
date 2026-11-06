@@ -56,7 +56,11 @@ export const validateCampaignMessage = (template, config = {}) => {
     const errors = [];
 
     if (!template) return [{ field: 'templateId', message: 'La plantilla no existe en tu cuenta. Sincroniza las plantillas.' }];
-    if (template.status && template.status !== 'APPROVED') {
+    // Borrada en Meta: el worker la enviaría con la copia de la campaña, sin
+    // pasar por el bloqueo de `processTemplateSending` (revisión de Codex del PR #192).
+    if (template.deletedInMetaAt) {
+        errors.push({ field: 'templateId', message: 'La plantilla se borró en WhatsApp. Sincroniza las plantillas y elige otra.' });
+    } else if (template.status && template.status !== 'APPROVED') {
         errors.push({ field: 'templateId', message: 'La plantilla todavía no está aprobada por WhatsApp.' });
     }
     if (!BULK_CATEGORIES.includes(template.category)) {

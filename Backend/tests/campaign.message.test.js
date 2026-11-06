@@ -77,6 +77,17 @@ test('una plantilla no aprobada no se puede enviar', () => {
     const errors = validateCampaignMessage({ ...PROMO, status: 'PENDING' }, CONFIG);
     assert.ok(errors.some(e => e.field === 'templateId'));
 });
+// Revisión de Codex del PR #192: el asistente abierto en una pestaña confirma
+// una campaña con una plantilla que otra sesión ya marcó como borrada en Meta.
+// Sin esto se creaba, y el worker la enviaba con su copia, sin pasar por el
+// bloqueo de `processTemplateSending`.
+test('validateCampaignMessage: una plantilla borrada en Meta no vale', () => {
+    const errors = validateCampaignMessage({ ...PROMO, deletedInMetaAt: new Date() }, CONFIG);
+    assert.deepEqual(errors.map(e => e.field), ['templateId']);
+    assert.match(errors[0].message, /borr/i);
+    assert.deepEqual(validateCampaignMessage({ ...PROMO, deletedInMetaAt: null }, CONFIG), []);
+});
+
 
 test('falta una variable, un texto fijo vacío o un botón sin valor', () => {
     const errors = validateCampaignMessage(PROMO, {
