@@ -24,7 +24,7 @@ export interface AutoReplyForm extends Omit<AutoReplySettings, 'keywordRules'> {
     keywordRules: EditableRule[];
 }
 
-export type StepKey = 'welcome' | 'outOfHours' | 'keywords' | 'fallback' | 'silence' | 'review';
+export type StepKey = 'welcome' | 'outOfHours' | 'keywords' | 'fallback' | 'silence';
 
 export const STEP_TITLES: Record<StepKey, string> = {
     welcome: 'Bienvenida',
@@ -32,12 +32,24 @@ export const STEP_TITLES: Record<StepKey, string> = {
     keywords: 'Palabras clave',
     fallback: 'Si no entiende',
     silence: 'Cuándo se calla',
-    review: 'Revisar y encender',
 };
 
-/** Los pasos de la página; el asistente añade «Revisar y encender». */
+/** Los pasos de la página por pasos (pantallas de menos de 1024 px, hasta el teléfono nuevo). */
 export const EDIT_STEPS: StepKey[] = ['welcome', 'outOfHours', 'keywords', 'fallback', 'silence'];
-export const WIZARD_STEPS: StepKey[] = [...EDIT_STEPS, 'review'];
+
+/**
+ * El asistente de la primera vez (diseño 4f): el saludo (con menú o sin él),
+ * el horario, cuándo se calla y encender. Las respuestas y el «si no entiende»
+ * se editan después, en el lienzo.
+ */
+export type WizardStep = 'greeting' | 'outOfHours' | 'silence' | 'turnOn';
+export const WIZARD_STEPS: WizardStep[] = ['greeting', 'outOfHours', 'silence', 'turnOn'];
+export const WIZARD_STEP_TITLES: Record<WizardStep, string> = {
+    greeting: 'Bienvenida y menú',
+    outOfHours: 'Fuera de horario',
+    silence: 'Cuándo se calla',
+    turnOn: 'Encender',
+};
 
 /**
  * Un id como los de MongoDB (24 hex: los segundos y 8 bytes al azar), para
@@ -111,34 +123,85 @@ const range = (start: string, end: string) => ({ start, end });
 const open = (...ranges: { start: string; end: string }[]): DaySchedule => ({ closed: false, ranges });
 const closed = (): DaySchedule => ({ closed: true, ranges: [] });
 
+const backToStart = (): MenuOption => ({ title: 'Volver al inicio', target: 'start', ruleId: null });
+
 /**
- * «Empezar con un ejemplo»: una bienvenida (sin nombre) y un horario de lunes a viernes ya
- * escritos, todo apagado hasta el último paso. «Desde cero» deja los textos
- * vacíos, pero las respuestas encendidas: el asistente pide escribirlas o apagarlas.
+ * El menú de ejemplo del asistente: «Precios» y «Horarios», con sus frases y
+ * textos de ejemplo, y los tres botones de la bienvenida. Se crea una vez al
+ * abrir el asistente, para que elegir con o sin menú, y volver a elegir, no
+ * cambie los ids.
  */
-/** El ejemplo de «Si no entiende» (spec § 10): sirve también para quien solo saluda. */
+export interface ExampleMenu {
+    rules: EditableRule[];
+    options: MenuOption[];
+}
+
+export const exampleMenu = (): ExampleMenu => {
+    // Textos que sirven aunque nadie los edite: sin precios inventados, y el
+    // horario es el mismo del ejemplo del fuera de horario.
+    const prices = newRule({
+        name: 'Precios', keywords: ['precio', 'precios', 'cuánto cuesta'], options: [backToStart()],
+        text: 'Los precios dependen de lo que necesites. Cuéntanos qué buscas y te pasamos una cotización.',
+    });
+    const hours = newRule({
+        name: 'Horarios', keywords: ['horario', 'atienden', 'abren'], options: [backToStart()],
+        text: 'Atendemos de lunes a viernes de 8:00 a 13:00 y de 14:30 a 18:00.',
+    });
+    return {
+        rules: [prices, hours],
+        options: [
+            { title: 'Precios', target: 'rule', ruleId: prices.id },
+            { title: 'Horarios', target: 'rule', ruleId: hours.id },
+            { title: 'Hablar con alguien', target: 'person', ruleId: null },
+        ],
+    };
+};
+
+/** El ejemplo de «Si no entiende» sin menú (spec § 10). */
 export const FALLBACK_EXAMPLE = 'Perdona, no te entendí. Puedo ayudarte con precios, ubicación y envíos: pregúntame por eso. Si es otra cosa, en un momento te responde alguien del equipo.';
 
-export const wizardStart = (form: AutoReplyForm, { example }: { example: boolean }): AutoReplyForm => {
-    // Sin nombre: la cuenta nace con el de su dueño, no con el del negocio, y
-    // un ejemplo que nadie edita tiene que seguir sirviendo.
-    const welcomeText = 'Hola, gracias por escribirnos. En un momento te atiende alguien del equipo.';
-    const workday = () => open(range('08:00', '13:00'), range('14:30', '18:00'));
+const GREETING_TEXT = {
+    menu: 'Hola, gracias por escribirnos. ¿En qué te ayudamos?',
+    plain: 'Hola, gracias por escribirnos. En un momento te atiende alguien del equipo.',
+};
+const FALLBACK_MENU_TEXT = 'Perdona, no te entendí. Toca una de estas opciones o escríbelo de otra forma.';
+
+/**
+ * El paso 1 del asistente, «¿Cómo quieres saludar?». Con menú, la bienvenida
+ * y el «si no entiende» llevan los botones del ejemplo, y «Precios» y
+ * «Horarios» quedan creadas; sin menú, solo los textos. Toca solo lo del
+ * ejemplo, así volver al paso 1 y cambiar de idea no borra el horario.
+ */
+export const withGreeting = (form: AutoReplyForm, menu: ExampleMenu, useMenu: boolean): AutoReplyForm => {
+    const exampleIds = new Set(menu.rules.map(rule => rule.id));
+    const others = form.keywordRules.filter(rule => !exampleIds.has(rule.id));
     return {
         ...form,
+        welcome: { ...form.welcome, text: useMenu ? GREETING_TEXT.menu : GREETING_TEXT.plain, options: useMenu ? cloneOptions(menu.options) : [] },
+        fallback: { ...form.fallback, text: useMenu ? FALLBACK_MENU_TEXT : FALLBACK_EXAMPLE, options: useMenu ? cloneOptions(menu.options) : [] },
+        keywordRules: useMenu ? [...menu.rules.map(rule => ({ ...rule, options: cloneOptions(rule.options) })), ...others] : others,
+    };
+};
+
+/**
+ * Donde empieza el asistente: el saludo con el menú de ejemplo (la opción
+ * recomendada) y un horario de lunes a viernes, todo apagado hasta el último
+ * paso. Sin el nombre del negocio: la cuenta nace con el de su dueño, y un
+ * ejemplo que nadie edita tiene que seguir sirviendo.
+ */
+export const wizardStart = (form: AutoReplyForm, menu: ExampleMenu): AutoReplyForm => {
+    const workday = () => open(range('08:00', '13:00'), range('14:30', '18:00'));
+    return withGreeting({
+        ...form,
         enabled: false,
-        welcome: { ...form.welcome, enabled: true, text: example ? welcomeText : '' },
+        welcome: { ...form.welcome, enabled: true },
         outOfHours: {
             enabled: true,
-            text: example
-                ? 'Ahora estamos cerrados. Atendemos de lunes a viernes de 8:00 a 13:00 y de 14:30 a 18:00. Apenas abramos, te respondemos.'
-                : '',
-            schedule: example
-                ? { mon: workday(), tue: workday(), wed: workday(), thu: workday(), fri: workday(), sat: closed(), sun: closed() }
-                : cloneSchedule(form.outOfHours.schedule),
+            text: 'Ahora estamos cerrados. Atendemos de lunes a viernes de 8:00 a 13:00 y de 14:30 a 18:00. Apenas abramos, te respondemos.',
+            schedule: { mon: workday(), tue: workday(), wed: workday(), thu: workday(), fri: workday(), sat: closed(), sun: closed() },
         },
-        fallback: { ...form.fallback, enabled: true, text: example ? FALLBACK_EXAMPLE : '' },
-    };
+        fallback: { ...form.fallback, enabled: true },
+    }, menu, true);
 };
 
 /**
@@ -316,7 +379,7 @@ export const issueCounts = (issues: FormIssues): Record<StepKey, number> => {
         welcome: Number(Boolean(issues.welcomeText)) + optionsIssueCount(issues.options.welcome),
         outOfHours, keywords,
         fallback: Number(Boolean(issues.fallbackText)) + optionsIssueCount(issues.options.fallback),
-        silence: 0, review: 0,
+        silence: 0,
     };
 };
 

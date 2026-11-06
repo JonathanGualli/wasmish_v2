@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type PointerEvent } from "react";
+import { useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { AlertTriangle, ChevronDown, ChevronUp, Maximize, Minus, Plus } from "lucide-react";
 import { KEYWORD_RULES_MAX, type CardPosition } from "../../../models/autoReply.model";
 import {
@@ -37,13 +37,15 @@ type Gesture =
  * columna. Se desplaza arrastrando el fondo o con la rueda, y el zoom va de
  * 50 % a 150 %. Tocar una tarjeta la abre en «Editar»; el fondo, la suelta.
  */
-export const FlowCanvas = ({ editor, selected, trace, onSelect, onAddRule }: {
+export const FlowCanvas = ({ editor, selected, trace, onSelect, onAddRule, cover }: {
     editor: AutoReplyEditor;
     selected: NodeKey | null;
     /** Las tarjetas por las que pasó «Probar». */
     trace: Set<NodeKey>;
     onSelect: (node: NodeKey | null) => void;
     onAddRule: () => void;
+    /** Lo que va encima de todo el lienzo: el asistente de la primera vez (diseño 4f). */
+    cover?: ReactNode;
 }) => {
     const { form } = editor;
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -240,11 +242,12 @@ export const FlowCanvas = ({ editor, selected, trace, onSelect, onAddRule }: {
                 <ZoomButton label="Alejar" onClick={() => setZoom(value => clamp(value - 0.1, ZOOM_MIN, ZOOM_MAX))}><Minus size={14} strokeWidth={2.4} /></ZoomButton>
                 <ZoomButton label="Ver todo" onClick={fit} last><Maximize size={14} strokeWidth={2.2} /></ZoomButton>
             </div>
+            {cover}
         </div>
     );
 };
 
-const ZoomButton = ({ label, onClick, last = false, children }: { label: string; onClick: () => void; last?: boolean; children: React.ReactNode }) => (
+const ZoomButton = ({ label, onClick, last = false, children }: { label: string; onClick: () => void; last?: boolean; children: ReactNode }) => (
     <button type="button" onClick={onClick} title={label} aria-label={label}
         className={`w-[34px] h-8 flex items-center justify-center text-brand-strong hover:bg-brand-bg cursor-pointer ${last ? '' : 'border-b border-brand-raised'}`}>
         {children}

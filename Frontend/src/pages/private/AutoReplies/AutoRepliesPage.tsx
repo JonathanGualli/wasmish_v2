@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { AlertCircle, ArrowLeft, ArrowRight, ChevronRight, Reply, Send, X } from "lucide-react";
+import { AlertCircle, ArrowLeft, ChevronRight, Reply, Send, X } from "lucide-react";
 import { useAutoReplies } from "../../../hooks/useAutoReplies";
 import { PHONE_QUERY, useMediaQuery } from "../../../hooks/useMediaQuery";
 import { useLeaveGuard } from "../../../components/Layout/NavigationGuardContext";
@@ -12,31 +12,30 @@ import { SkeletonBox } from "../../../components/Skeleton/Skeleton";
 import type { AutoRepliesResponse, PreviewMessage } from "../../../models/autoReply.model";
 import { KEYWORD_RULES_MAX } from "../../../models/autoReply.model";
 import { apiErrorOf } from "../../../utils/apiError";
-import { EDIT_STEPS, STEP_TITLES, WIZARD_STEPS, type StepKey } from "../../../utils/autoReplyForm";
+import { EDIT_STEPS, STEP_TITLES, type StepKey } from "../../../utils/autoReplyForm";
 import { useAutoReplyEditor, type AutoReplyEditor, type SaveKind } from "./useAutoReplyEditor";
-import { AutoRepliesIntro } from "./AutoRepliesIntro";
 import { StepBar, StepStatus } from "./StepBar";
 import { stepSummary } from "./stepState";
 import { WelcomeStep } from "./WelcomeStep";
 import { OutOfHoursStep } from "./OutOfHoursStep";
 import { KeywordsStep } from "./KeywordsStep";
 import { SilenceStep } from "./SilenceStep";
-import { ReviewStep } from "./ReviewStep";
 import { FallbackStep } from "./FallbackStep";
 import { TestPanel } from "./TestPanel";
 import { FlowEditorView } from "./FlowEditorView";
 import { Switch } from "./Switch";
 import { MasterSwitch } from "./MasterSwitch";
+import { SetupWizard, WizardBarActions } from "./SetupWizard";
 
 /*
  * «Respuestas automáticas». Solo owner y admin (`autoReplies.manage`, en la
  * ruta). Lo que se edita y cómo se guarda vive en `useAutoReplyEditor`.
  *
- * Con la cuenta configurada y desde 1024 px, el lienzo del bot con menús
- * (`FlowEditorView`, diseño «Respuestas automáticas v4 - Lienzo»). La primera
- * vez (la invitación y el asistente) y en pantallas más estrechas, todavía la
+ * Desde 1024 px, el lienzo del bot con menús (`FlowEditorView`, diseño
+ * «Respuestas automáticas v4 - Lienzo»), con el asistente encima la primera
+ * vez (4f). En pantallas más estrechas, el asistente solo y después todavía la
  * página por pasos de antes (diseño «Respuestas automáticas v2»), que conserva
- * los menús al guardar aunque no los enseñe (plan del bot con menús, Tareas 9 y 10).
+ * los menús al guardar aunque no los enseñe (plan del bot con menús, Tarea 10).
  */
 
 const STEP_DESCRIPTIONS: Record<StepKey, string> = {
@@ -45,7 +44,6 @@ const STEP_DESCRIPTIONS: Record<StepKey, string> = {
     keywords: `Si el mensaje dice una de las frases, responde ese texto. Hasta ${KEYWORD_RULES_MAX} reglas.`,
     fallback: 'Cuando el bot no sabría qué decir: a «me gusta el café con pan», por ejemplo.',
     silence: 'Para que no conteste encima de una persona ni repita lo mismo.',
-    review: 'Así queda. Puedes cambiar cualquier cosa después, desde esta misma página.',
 };
 
 const COST_LINE = 'Cada respuesta automática es un mensaje que Meta cobra; cada número tiene unos 1.000 gratis al mes.';
@@ -136,23 +134,29 @@ const AutoRepliesEditorView = ({ data }: { data: AutoRepliesResponse }) => {
         </>
     );
 
-    const startWizard = (example: boolean) => editor.startWizard({ example });
-
-    if (editor.mode === 'intro') {
-        return (
-            <div className="mx-auto max-w-6xl px-5 sm:px-8 py-6 sm:py-8 grid gap-6">
-                <PageTitle subtitle="Wasmish contesta solo con lo que dejes escrito. Vale para todas tus líneas." />
-                <AutoRepliesIntro onStart={startWizard} />
-            </div>
-        );
-    }
-
-    if (wide && editor.mode === 'tabs') {
+    if (wide) {
         return (
             <FlowEditorView editor={editor} onMasterSwitch={onMasterSwitch} outdated={outdated}
                 testMessages={testMessages} onTestMessagesChange={setTestMessages}>
                 {dialogs}
             </FlowEditorView>
+        );
+    }
+
+    if (editor.mode === 'wizard') {
+        return (
+            <div className="min-h-full flex flex-col gap-4 bg-brand-bg px-3.5 sm:px-5 pt-4 sm:pt-[22px] pb-6">
+                <header className="flex flex-wrap items-center gap-x-3.5 gap-y-3">
+                    <PageTitle subtitle="Configuración inicial · nada sale hasta encender" />
+                    <div className="ml-auto flex items-center gap-2.5">
+                        <div className="h-[38px]"><CustomButton variant="outline" onClick={() => setTestOpen(true)}><Send size={15} /> Probar</CustomButton></div>
+                        <WizardBarActions editor={editor} />
+                    </div>
+                </header>
+                {editor.saveBlocked && <SaveBlockedNotice editor={editor} />}
+                <div className="flex justify-center"><SetupWizard editor={editor} contained={false} /></div>
+                {dialogs}
+            </div>
         );
     }
 
@@ -166,41 +170,26 @@ const AutoRepliesEditorView = ({ data }: { data: AutoRepliesResponse }) => {
         );
     }
 
-    const wizard = editor.mode === 'wizard';
-    const stepIndex = editor.steps.indexOf(editor.step);
-    const nextStep = WIZARD_STEPS[stepIndex + 1];
-
     return (
         <div className="h-full min-h-[680px] flex flex-col gap-4 px-5 lg:px-7 pt-[22px] pb-6">
             <header className="flex-none flex flex-wrap lg:flex-nowrap items-center gap-x-3.5 gap-y-3">
-                <PageTitle subtitle={wizard
-                    ? 'Configuración inicial. Nada sale hasta el último paso.'
-                    : 'Wasmish contesta solo con lo que dejes escrito. Vale para todas tus líneas.'} />
-                {!wizard && <MasterSwitch editor={editor} onChange={onMasterSwitch} />}
+                <PageTitle subtitle="Wasmish contesta solo con lo que dejes escrito. Vale para todas tus líneas." />
+                <MasterSwitch editor={editor} onChange={onMasterSwitch} />
                 <div className="ml-auto flex items-center gap-2.5">
                     {!wide && (
                         <div className="h-[38px]"><CustomButton variant="outline" onClick={() => setTestOpen(true)}><Send size={15} /> Probar</CustomButton></div>
                     )}
-                    {wizard ? (
+                    {editor.dirty && (
                         <>
-                            <span className="font-mono tabular-nums text-[12.5px] text-brand-muted whitespace-nowrap">Paso {stepIndex + 1} de {editor.steps.length}</span>
-                            <div className="h-[38px]"><CustomButton variant="outline" onClick={editor.finishLater} isLoading={editor.isSaving}>Terminar luego</CustomButton></div>
-                        </>
-                    ) : (
-                        <>
-                            {editor.dirty && (
-                                <>
-                                    <span className="hidden xl:inline-flex items-center gap-[7px] text-[13px] text-brand-gray-600 whitespace-nowrap">
-                                        <span className="w-[7px] h-[7px] rounded-full bg-brand-warning" />Cambios sin guardar
-                                    </span>
-                                    <div className="h-[38px]"><CustomButton variant="outline" onClick={editor.discard}>Descartar</CustomButton></div>
-                                </>
-                            )}
-                            <div className="h-[38px]">
-                                <CustomButton onClick={editor.saveAll} isLoading={editor.isSaving} disabled={!editor.dirty}>Guardar</CustomButton>
-                            </div>
+                            <span className="hidden xl:inline-flex items-center gap-[7px] text-[13px] text-brand-gray-600 whitespace-nowrap">
+                                <span className="w-[7px] h-[7px] rounded-full bg-brand-warning" />Cambios sin guardar
+                            </span>
+                            <div className="h-[38px]"><CustomButton variant="outline" onClick={editor.discard}>Descartar</CustomButton></div>
                         </>
                     )}
+                    <div className="h-[38px]">
+                        <CustomButton onClick={editor.saveAll} isLoading={editor.isSaving} disabled={!editor.dirty}>Guardar</CustomButton>
+                    </div>
                 </div>
             </header>
 
@@ -214,19 +203,6 @@ const AutoRepliesEditorView = ({ data }: { data: AutoRepliesResponse }) => {
                     <div className="@container flex-1 min-h-0 overflow-y-auto px-[22px] py-5">
                         <StepContent editor={editor} phone={false} />
                     </div>
-                    {wizard && (
-                        <div className="flex-none flex items-center gap-2.5 px-[22px] py-3.5 border-t border-brand-raised">
-                            {stepIndex > 0 && (
-                                <div className="h-[38px]"><CustomButton variant="outline" onClick={editor.previous}><ArrowLeft size={15} /> Anterior</CustomButton></div>
-                            )}
-                            {nextStep && (
-                                <>
-                                    <span className="ml-auto text-[13px] text-brand-muted">Luego: {STEP_TITLES[nextStep].toLowerCase()}</span>
-                                    <div className="h-[38px]"><CustomButton onClick={editor.next}>Siguiente <ArrowRight size={15} /></CustomButton></div>
-                                </>
-                            )}
-                        </div>
-                    )}
                 </section>
                 {wide && (
                     <aside className="min-h-0 border border-brand-border rounded-xl p-4 overflow-hidden flex flex-col">
@@ -309,12 +285,11 @@ const StepContent = ({ editor, phone }: { editor: AutoReplyEditor; phone: boolea
 
 const StepFields = ({ editor, phone }: { editor: AutoReplyEditor; phone: boolean }) => {
     switch (editor.step) {
-        case 'welcome': return <WelcomeStep editor={editor} exampleBadge={editor.mode === 'wizard' && editor.form.welcome.text.length > 0} />;
+        case 'welcome': return <WelcomeStep editor={editor} />;
         case 'outOfHours': return <OutOfHoursStep editor={editor} />;
         case 'keywords': return <KeywordsStep editor={editor} phone={phone} />;
-        case 'fallback': return <FallbackStep editor={editor} exampleBadge={editor.mode === 'wizard' && editor.form.fallback.text.length > 0} />;
+        case 'fallback': return <FallbackStep editor={editor} />;
         case 'silence': return <SilenceStep editor={editor} />;
-        case 'review': return <ReviewStep editor={editor} />;
     }
 };
 
@@ -329,10 +304,7 @@ const PhoneLayout = ({ editor, phoneStep, setPhoneStep, onMasterSwitch, onTest }
     onMasterSwitch: (enabled: boolean) => void;
     onTest: () => void;
 }) => {
-    const wizard = editor.mode === 'wizard';
-    const open = wizard ? editor.step : phoneStep;
-    const index = editor.steps.indexOf(editor.step);
-    const nextStep = WIZARD_STEPS[index + 1];
+    const open = phoneStep;
 
     const openStep = (step: StepKey) => {
         editor.goTo(step);
@@ -386,19 +358,14 @@ const PhoneLayout = ({ editor, phoneStep, setPhoneStep, onMasterSwitch, onTest }
                 ) : (
                     <>
                         <div className="flex items-center gap-2">
-                            {wizard ? (
-                                <button type="button" onClick={editor.finishLater} aria-label="Terminar luego" title="Terminar luego"
-                                    className="-ml-2 w-11 h-11 flex items-center justify-center text-brand-strong cursor-pointer"><X size={20} /></button>
-                            ) : (
-                                <button type="button" onClick={() => setPhoneStep(null)} aria-label="Volver a los pasos"
-                                    className="-ml-2 w-11 h-11 flex items-center justify-center text-brand-strong cursor-pointer"><ArrowLeft size={20} /></button>
-                            )}
-                            <span className="flex-1 text-[15px] font-semibold text-brand-text">{wizard ? 'Configurar respuestas' : 'Respuestas automáticas'}</span>
-                            <span className="font-mono tabular-nums text-xs text-brand-muted">{editor.steps.indexOf(open) + 1} de {editor.steps.length}</span>
+                            <button type="button" onClick={() => setPhoneStep(null)} aria-label="Volver a los pasos"
+                                className="-ml-2 w-11 h-11 flex items-center justify-center text-brand-strong cursor-pointer"><ArrowLeft size={20} /></button>
+                            <span className="flex-1 text-[15px] font-semibold text-brand-text">Respuestas automáticas</span>
+                            <span className="font-mono tabular-nums text-xs text-brand-muted">{EDIT_STEPS.indexOf(open) + 1} de {EDIT_STEPS.length}</span>
                         </div>
                         <div className="flex gap-1">
-                            {editor.steps.map((step, i) => (
-                                <span key={step} className={`flex-1 h-1 rounded-sm ${i <= editor.steps.indexOf(open) ? 'bg-brand-accent-strong' : 'bg-brand-border-strong'}`} />
+                            {EDIT_STEPS.map((step, i) => (
+                                <span key={step} className={`flex-1 h-1 rounded-sm ${i <= EDIT_STEPS.indexOf(open) ? 'bg-brand-accent-strong' : 'bg-brand-border-strong'}`} />
                             ))}
                         </div>
                         <div className="flex items-start gap-3 mt-1">
@@ -416,19 +383,8 @@ const PhoneLayout = ({ editor, phoneStep, setPhoneStep, onMasterSwitch, onTest }
             </div>
 
             <div className="sticky bottom-0 flex-none flex gap-2 px-3.5 pt-2.5 pb-[calc(14px+var(--safe-bottom))] bg-brand-surface border-t border-brand-border">
-                {wizard ? (
-                    <>
-                        {index > 0 && <div className="flex-1 h-12"><CustomButton variant="outline" onClick={editor.previous}>Anterior</CustomButton></div>}
-                        {nextStep && (
-                            <div className="flex-[2] h-12"><CustomButton onClick={editor.next}>Siguiente: {STEP_TITLES[nextStep].toLowerCase()}</CustomButton></div>
-                        )}
-                    </>
-                ) : (
-                    <>
-                        <div className="flex-1 h-12"><CustomButton variant="outline" onClick={onTest}><Send size={16} /> Probar</CustomButton></div>
-                        <div className="flex-1 h-12"><CustomButton onClick={save} isLoading={editor.isSaving} disabled={!editor.dirty}>Guardar</CustomButton></div>
-                    </>
-                )}
+                <div className="flex-1 h-12"><CustomButton variant="outline" onClick={onTest}><Send size={16} /> Probar</CustomButton></div>
+                <div className="flex-1 h-12"><CustomButton onClick={save} isLoading={editor.isSaving} disabled={!editor.dirty}>Guardar</CustomButton></div>
             </div>
         </div>
     );
