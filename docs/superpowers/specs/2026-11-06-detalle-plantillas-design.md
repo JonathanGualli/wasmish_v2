@@ -72,7 +72,7 @@ Se agregan por `status` y una función pura, `summarizeTemplateUsage`, devuelve 
 ### 4.4 Los envíos
 
 - **`processTemplateSending` guarda `templateId`** en el mensaje (los tres caminos pasan por ahí: chat, API pública y campañas).
-- **Una plantilla con `deletedInMetaAt` no se envía**: `processTemplateSending` la trata como no encontrada (el sync de último momento la puede desmarcar si volvió). En el frontend, los selectores (`useTemplateForm`, `useCampaignWizard`) ya filtran por `APPROVED` y además dejan fuera las borradas.
+- **Una plantilla con `deletedInMetaAt` no se envía**: `processTemplateSending` fuerza el sync de último momento (la puede desmarcar si volvió) y, si sigue marcada **o el sync falla**, responde como con una que no existe. Una plantilla **desconocida** con el sync fallido se sigue dejando a Meta, como hoy; una marcada no, porque de ella sí se sabe que Meta la borró (revisión de Codex del plan). En el frontend, los selectores (`useTemplateForm`, `useCampaignWizard`) ya filtran por `APPROVED` y además dejan fuera las borradas.
 
 ## 5. Datos
 

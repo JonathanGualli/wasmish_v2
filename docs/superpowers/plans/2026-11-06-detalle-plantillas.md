@@ -93,7 +93,7 @@
   - `Waba.templatesSyncedAt` (`Date`, `default: null`).
   - `findAccountWabas` y `templateWabasFor` devuelven también `templatesSyncedAt`.
 
-- [ ] **Step 1: Comprobar los campos con Meta de verdad.** Pedir a Jonathan un token nuevo de «API Setup» de WasmishTest (dura 24 h; los locales caducaron el 2026-11-06), y, con él en una variable del shell (nunca en el repo ni en el log), pedir `GET https://graph.facebook.com/$META_GRAPH_VERSION/1609793874261843/message_templates?fields=<TEMPLATE_FIELDS>&limit=2` y la página siguiente con su `after` (solo lectura). Anotar en el spec § 4.1 qué campos vienen y la forma de `quality_score`. Si un campo da error, quitarlo de `TEMPLATE_FIELDS`.
+- [ ] **Step 1: Comprobar los campos con Meta de verdad.** Pedir a Jonathan un token nuevo de «API Setup» de WasmishTest (dura 24 h; los locales caducaron el 2026-11-06), y, con él y el WABA de prueba en variables del shell (`$TEST_WABA_ID`; los dos valores, nunca en el repo ni en el log), pedir `GET https://graph.facebook.com/$META_GRAPH_VERSION/$TEST_WABA_ID/message_templates?fields=<TEMPLATE_FIELDS>&limit=2` y la página siguiente con su `after` (solo lectura). Anotar en el spec § 4.1 qué campos vienen y la forma de `quality_score`. Si un campo da error, quitarlo de `TEMPLATE_FIELDS`.
 
 - [ ] **Step 2: Tests de aislamiento** en `templates.test.js` (Meta falso con `onMeta`, respondiendo según `config.params.after`):
   - `'el sync recorre las páginas'`: dos páginas (la 1 con `paging: { next: 'x', cursors: { after: 'p2' } }`) → las plantillas de las dos en la BD, `getTemplates` llamado con `fields` y `limit: 100`.
@@ -129,12 +129,14 @@
   - Frontend: `Template` con los campos nuevos de la Tarea 2 (fechas como `string | null`); `isSendableTemplate(t: Template) → boolean` = `status === 'APPROVED' && !t.deletedInMetaAt`.
 
 - [ ] **Step 1: Tests de aislamiento:**
-  - `'una plantilla borrada en Meta no se envía'`: `deletedInMetaAt` puesto y el Meta falso del sync de último momento sin ella → `POST /chats/template` responde el error de «no existe», y ningún `POST /messages` a Meta.
+  - `'una plantilla borrada en Meta no se envía'`: `deletedInMetaAt` puesto y el Meta falso del sync de último momento sin ella → `POST /chats/template` responde 404 («no existe»), y ningún `POST /messages` a Meta.
+  - `'una borrada no se envía aunque el sync falle'` (revisión de Codex del plan, 1): `deletedInMetaAt` puesto y el sync de último momento con `status: 500` → 404 por `POST /chats/template` **y** por `POST /v1/templates/send`, y ningún `POST /messages` a Meta. Regresión que vigila: con solo `deletedInMetaAt: null` en `findTemplate`, la marcada no se encuentra, el sync falla, `syncOk = false` y se envía igual.
+  - `'una borrada que volvió a Meta se envía'`: marcada, y el sync de último momento la trae → sale.
   - `'el envío guarda el templateId'`: enviar desde el chat → `Message.templateId === templateId`.
 
 - [ ] **Step 2: Correr y ver que fallan.**
 
-- [ ] **Step 3: Implementar.** `findTemplate` añade `deletedInMetaAt: null`. En `recordOutboundMessage`, `fields.templateId: template?.templateId ?? undefined` (con la plantilla copiada de una campaña también existe `templateId`). En el frontend, `useTemplateForm` y `useCampaignWizard` filtran con `isSendableTemplate` en vez de `status === 'APPROVED'`.
+- [ ] **Step 3: Implementar.** `findTemplate` sigue encontrando también las marcadas (así se distingue una **borrada** de una **desconocida**). Si la encontrada tiene `deletedInMetaAt`, se fuerza el sync de último momento y se vuelve a buscar: si sigue marcada, **o si el sync falla**, 404 como una que no existe (de una marcada sí se sabe que Meta la borró; el «dejar que Meta decida» de hoy solo vale para una desconocida). En `recordOutboundMessage`, `fields.templateId: template?.templateId ?? undefined` (con la plantilla copiada de una campaña también existe `templateId`). En el frontend, `useTemplateForm` y `useCampaignWizard` filtran con `isSendableTemplate` en vez de `status === 'APPROVED'`.
 
 - [ ] **Step 4: Correr** backend (`npm test && npm run test:isolation`) y frontend (`npm run lint && npm run build`) → PASS.
 
