@@ -2,12 +2,12 @@ import { useMemo, useRef, useState, type PointerEvent, type ReactNode } from "re
 import { AlertTriangle, ChevronDown, ChevronUp, Maximize, Minus, Plus } from "lucide-react";
 import { KEYWORD_RULES_MAX, type CardPosition } from "../../../models/autoReply.model";
 import {
-    CARD_WIDTH, cardHeight, flowColumns, flowLayout, flowNodes, flowWarnings, formatTag, incomingTo, inPort, isForward,
+    CARD_WIDTH, cardHeight, flowColumns, flowLayout, flowNodes, flowWarnings, incomingTo, inPort, isForward,
     optionNode, optionPort, ruleName, unreachableReason, type FlowNode, type NodeKey,
 } from "../../../utils/autoReplyFlow";
 import type { AutoReplyEditor } from "./useAutoReplyEditor";
 import { FlowCard, type CardOption, type CardState } from "./FlowCard";
-import { nodeIssueCount } from "./flowIssues";
+import { nodeIssueCount, nodeTag } from "./flowIssues";
 
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 1.5;
@@ -175,11 +175,7 @@ export const FlowCanvas = ({ editor, selected, trace, onSelect, onAddRule, cover
                                 : issues > 0 && editor.showIssues ? 'error'
                                 : trace.has(node.key) ? 'trace' : 'idle';
                             const incoming = incomingTo(form, node.key);
-                            const tag = issues > 0 && editor.showIssues ? (issues === 1 ? '1 error' : `${issues} errores`)
-                                : node.kind === 'handoff' ? 'Toda la cuenta'
-                                : node.rule && foot ? 'No se llega'
-                                : !node.enabled ? 'Apagada'
-                                : formatTag(node.options.length);
+                            const { tag, tone } = nodeTag(editor, node);
                             return (
                                 <FlowCard
                                     key={node.key}
@@ -187,7 +183,7 @@ export const FlowCanvas = ({ editor, selected, trace, onSelect, onAddRule, cover
                                     position={positionOf(node.key)}
                                     options={cardOptions(node)}
                                     tag={tag}
-                                    tagTone={issues > 0 && editor.showIssues ? 'danger' : node.kind === 'handoff' ? 'handoff' : node.rule && foot ? 'warning' : 'muted'}
+                                    tagTone={tone}
                                     foot={foot}
                                     state={state}
                                     faded={welcomeOff || (node.kind !== 'handoff' && !node.enabled && !foot)}
