@@ -96,7 +96,7 @@ Se agregan por `status` y una función pura, `summarizeTemplateUsage`, devuelve 
 ## 6. API
 
 - `GET /api/templates?fresh=1` (§ 4.2). Cada plantilla lleva también los campos nuevos.
-- `GET /api/templates/:templateId` con `authRequired`: `{ template, lines, usage, campaigns? }`. Busca con `{ templateId, userId: accountId }` y, si no es de la cuenta o su WABA no está al alcance de la persona, **404**. `lines` son las líneas activas de su WABA a su alcance (lo que hoy calcula `TemplateLinesCell` en el navegador).
+- `GET /api/templates/:templateId[?fresh=1]` con `authRequired`: `{ template, usage, campaigns? }`. Busca con `{ templateId, userId: accountId }` y, si no es de la cuenta o su WABA no está al alcance de la persona, **404**. Con `fresh=1` sincroniza antes su WABA si toca (§ 4.2). Las líneas desde las que se envía no van en la respuesta: el navegador ya las sabe (`TemplateLinesCell`, con `useLines`).
 - Caso en `tests/isolation/`: plantilla de otra cuenta 404; un agente no cuenta los envíos de una línea fuera de su alcance ni de una conversación asignada a otro; sin `campaigns.manage` no llega `campaigns`.
 
 ## 7. La pantalla (la diseña Claude Design)
