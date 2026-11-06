@@ -6,7 +6,8 @@ import { getTemplates, sendTemplateMessage } from "../libs/whatsapp.js";
 import { getSendingRecipient } from "./contact.controller.js";
 import { MARKETING_OPT_OUT_ERROR } from "../utils/marketing.preference.js";
 import TemplateMedia from "../models/template.media.model.js";
-import { buildHeaderComponent, extractTemplateHeader, headerMediaFileIssue, headerMediaRule, templateHeaderIssue } from "../utils/template.header.js";
+import { buildHeaderComponent, headerMediaFileIssue, headerMediaRule, templateHeaderIssue } from "../utils/template.header.js";
+import { isTemplateSyncStale, nextTemplatesCursor, templatesMissingFromSync, toTemplateFields } from "../utils/template.sync.js";
 import {
     cleanFilename, ensureMetaMediaId, headerMediaFileExists, saveHeaderMedia, serializeHeaderMedia,
 } from "../services/template.media.service.js";
@@ -26,10 +27,35 @@ import { metaSendOutcome } from "../utils/outbound.send.js";
 // Helpers
 // ---------------------------------------------------------------------------
 
-// Trae las plantillas de un WABA y las upsertea en la BD, en su cuenta.
-// La usan el sync manual (endpoint) y el sync just-in-time del envío.
-// Devuelve cuántas plantillas se procesaron. Recibe un SendingLine
-// (`findSendingLine`): de él salen la cuenta, el WABA y su token.
+// Guarda una página de plantillas de Meta en la cuenta. Llegar en un sync es
+// estar en Meta: se desmarca `deletedInMetaAt` si la tenía.
+const saveTemplatesPage = async (accountId, waBusinessId, templates) => {
+    if (templates.length === 0) return;
+    await Template.bulkWrite(templates.map(tpl => ({
+        updateOne: {
+            filter: { templateId: tpl.id },
+            update: {
+                $set: {
+                    userId: accountId,
+                    // El WABA de la plantilla: desde la Fase 2b se busca por él.
+                    waBusinessId,
+                    ...toTemplateFields(tpl),
+                    deletedInMetaAt: null,
+                },
+            },
+            upsert: true,
+        },
+    })));
+};
+
+// Trae TODAS las plantillas de un WABA, página a página, y las upsertea en la
+// BD, en su cuenta. Solo si llegaron todas sin error, marca las que ya no
+// están en Meta y apunta `templatesSyncedAt`: un sync que falla a mitad no da
+// nada por borrado. Si una página lanza, lo de las anteriores queda guardado
+// y el error sube al llamador, como antes.
+// La usan el sync manual (endpoint), el de la página Plantillas (`fresh`) y el
+// just-in-time del envío. Devuelve cuántas plantillas se procesaron. Recibe un
+// SendingLine (`findSendingLine`): de él salen la cuenta, el WABA y su token.
 export const syncTemplatesForWaba = async ({ accountId, waBusinessId, tokenWhatsapp }) => {
     // Se comprueba ANTES de descifrar: decrypt(null) revienta y daba un 500.
     if (!tokenWhatsapp || !waBusinessId) {
@@ -39,50 +65,47 @@ export const syncTemplatesForWaba = async ({ accountId, waBusinessId, tokenWhats
     }
 
     const token = decrypt(tokenWhatsapp);
+    const fetchedIds = [];
+    let after = null;
+    let pagesRead = 0;
+    let complete = false;
 
-    const dataMeta = await getTemplates({ token, waBusinessId });
-    const templates = dataMeta?.data?.data;
+    for (;;) {
+        const dataMeta = await getTemplates({ token, waBusinessId, after });
+        const templates = dataMeta?.data?.data;
+        if (!templates) {
+            const error = new Error("Templates could not be obtained");
+            error.statusCode = 400;
+            throw error;
+        }
+        await saveTemplatesPage(accountId, waBusinessId, templates);
+        fetchedIds.push(...templates.map(tpl => tpl.id));
+        pagesRead += 1;
 
-    if (!templates) {
-        const error = new Error("Templates could not be obtained");
-        error.statusCode = 400;
-        throw error;
+        const next = nextTemplatesCursor(dataMeta.data, pagesRead);
+        if (next.done) {
+            complete = next.complete;
+            break;
+        }
+        after = next.after;
     }
 
-    const bulkOperations = templates.map(tpl => {
-        // El BODY es lo que se renderiza en el chat; de la cabecera se guarda
-        // el formato, para saber si al enviar hay que mandar un archivo.
-        const bodyComponent = tpl.components?.find(c => c.type === 'BODY');
-        const buttonsComponent = tpl.components?.find(c => c.type === 'BUTTONS');
+    if (!complete) {
+        console.warn(`Sync de plantillas incompleto (tope de páginas o sin cursor) en el WABA ${waBusinessId}: no se marca ninguna como borrada.`);
+        return fetchedIds.length;
+    }
 
-        const text = bodyComponent ? bodyComponent.text : '';
+    const storedIds = await Template.distinct('templateId', { userId: accountId, waBusinessId, deletedInMetaAt: null });
+    const missing = templatesMissingFromSync(storedIds, fetchedIds);
+    if (missing.length > 0) {
+        await Template.updateMany(
+            { userId: accountId, waBusinessId, templateId: { $in: missing }, deletedInMetaAt: null },
+            { $set: { deletedInMetaAt: new Date() } },
+        );
+    }
+    await Waba.updateOne({ accountId, waBusinessId }, { $set: { templatesSyncedAt: new Date() } });
 
-        return {
-            updateOne: {
-                filter: { templateId: tpl.id },
-                update: {
-                    $set: {
-                        userId: accountId,
-                        // El WABA de la plantilla: desde la Fase 2b se busca por él.
-                        waBusinessId,
-                        name: tpl.name,
-                        category: tpl.category,
-                        status: tpl.status,
-                        language: tpl.language,
-                        bodyText: text,
-                        buttons: buttonsComponent?.buttons ?? [],
-                        parameterFormat: tpl.parameter_format,
-                        header: extractTemplateHeader(tpl.components),
-                    }
-                },
-                upsert: true,
-            }
-        };
-    });
-
-    if (bulkOperations.length > 0) await Template.bulkWrite(bulkOperations);
-
-    return bulkOperations.length;
+    return fetchedIds.length;
 }
 
 // Reconstruye el body de la plantilla con los parámetros sustituidos, para guardar
@@ -279,7 +302,9 @@ const templateWabasFor = async (auth, lineId) => {
     }
     // Una línea sin WABA (la de un número anterior a las líneas) no tiene plantillas.
     const waba = line.wabaId ? await Waba.findOne({ _id: line.wabaId, accountId }).lean() : null;
-    return waba ? [{ accountId, waBusinessId: waba.waBusinessId, tokenWhatsapp: waba.tokenWhatsapp }] : [];
+    return waba
+        ? [{ accountId, waBusinessId: waba.waBusinessId, tokenWhatsapp: waba.tokenWhatsapp, templatesSyncedAt: waba.templatesSyncedAt ?? null }]
+        : [];
 };
 
 // GET /templates[?lineId=] — las del WABA de esa línea o, sin ella, las de
@@ -299,12 +324,19 @@ export const getTemplatesController = async (req, res) => {
         const syncable = (wabas ?? []).filter(waba => waba.tokenWhatsapp && waba.waBusinessId);
         const outdated = templates.some(t => t.header === undefined)
             || Boolean(syncable.length > 0 && await Template.exists({ userId, waBusinessId: null }));
-        if (outdated && syncable.length > 0) {
+        // `fresh=1` (la página Plantillas y el detalle): además, los WABA cuyo
+        // último sync completo tiene más de 10 minutos. Los selectores del chat
+        // y las campañas no lo piden: leen de la BD sin esperar a Meta.
+        const now = new Date();
+        const toSync = outdated
+            ? syncable
+            : req.query.fresh === '1' ? syncable.filter(waba => isTemplateSyncStale(waba.templatesSyncedAt, now)) : [];
+        if (toSync.length > 0) {
             try {
-                for (const waba of syncable) await syncTemplatesForWaba(waba);
+                for (const waba of toSync) await syncTemplatesForWaba(waba);
                 templates = await findUserTemplates(userId, wabas);
             } catch (syncError) {
-                console.error('Sync de plantillas (cabeceras) falló:', syncError.message);
+                console.error('Sync de plantillas al listar falló:', syncError.message);
             }
         }
 

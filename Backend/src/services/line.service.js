@@ -479,5 +479,7 @@ export const findAccountWabas = async (accountId, { lineIds = null } = {}) => {
         ...(lineIds && { _id: { $in: lineIds } }),
     });
     const wabas = await Waba.find({ _id: { $in: wabaIds }, accountId }).lean();
-    return wabas.map(waba => ({ accountId, waBusinessId: waba.waBusinessId, tokenWhatsapp: waba.tokenWhatsapp }));
+    return wabas.map(waba => ({
+        accountId, waBusinessId: waba.waBusinessId, tokenWhatsapp: waba.tokenWhatsapp, templatesSyncedAt: waba.templatesSyncedAt ?? null,
+    }));
 };

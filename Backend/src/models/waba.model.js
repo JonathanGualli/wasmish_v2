@@ -33,6 +33,10 @@ const wabaSchema = new mongoose.Schema({
     // Meta de que retiró el acceso (`PARTNER_REMOVED`) anterior a esta fecha
     // es viejo y no desconecta nada.
     authorizedAt: { type: Date, default: null },
+    // El último sync COMPLETO de sus plantillas (todas las páginas, sin error).
+    // No es de la conexión: lo escribe `syncTemplatesForWaba`, no line.service.js.
+    // Con él, la página Plantillas sabe si toca volver a sincronizar (`fresh`).
+    templatesSyncedAt: { type: Date, default: null },
 }, {
     timestamps: true,
 });

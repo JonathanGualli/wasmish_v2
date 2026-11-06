@@ -1,6 +1,7 @@
 import axios from "axios";
 import {META_APP_ID, META_APP_SECRET, META_GRAPH_VERSION } from "../config.js";
 import { whatsappRecipient } from "../utils/contact.identity.js";
+import { TEMPLATE_FIELDS, TEMPLATES_PAGE_LIMIT } from "../utils/template.sync.js";
 
 const BASE_URL = `https://graph.facebook.com/${META_GRAPH_VERSION}`; 
 
@@ -133,10 +134,13 @@ export const sendTemplateMessage = async ({ token, phoneNumberId, recipient, tem
     );
 }
 
-export const getTemplates = async ({token, waBusinessId}) => {
+// Una página de las plantillas de un WABA (`after` = cursor de la siguiente,
+// ver `nextTemplatesCursor`), con los campos que guarda Wasmish.
+export const getTemplates = async ({ token, waBusinessId, after = null }) => {
     return whatsappApi.get(
         `/${waBusinessId}/message_templates`,
         {
+            params: { fields: TEMPLATE_FIELDS, limit: TEMPLATES_PAGE_LIMIT, ...(after && { after }) },
             headers: {
                 Authorization: `Bearer ${token}`
             }
