@@ -1502,3 +1502,49 @@ test('pedir una persona manda un solo push; con el bot apagado, el del entrante'
         onMeta(null);
     }
 });
+
+// Revisión de Codex del PR #184, 1: el webhook callaba el push de entrante de
+// todo toque de «persona» con trabajo del bot, aunque el worker no fuera a
+// marcar nada; un botón viejo se quedaba sin ningún push.
+test('un toque de «persona» que no marca nada manda el push de entrante', async () => {
+    await clearQueue();
+    const owner = await newAccount('HEE');
+    // Sin opciones a una persona y sin su texto: el toque viejo es un texto escrito.
+    const body = menuBody({ handoff: { text: '' } });
+    body.welcome.options = body.welcome.options.filter(option => option.target !== 'person');
+    assert.equal((await saveSettings(owner, body)).status, 200);
+    const ownerPush = await subscribePush(owner);
+    const from = '593970009305';
+    const allTo = () => pushCalls.filter(call => call.endpoint === ownerPush);
+    metaForBot();
+    try {
+        await postWebhook(numberOf(owner), personTap(from));
+        await drain();
+        assert.ok(await eventually(() => allTo().length === 1), 'no salió ningún push');
+        assert.equal(allTo()[0].payload.body, 'Hablar con alguien');
+        assert.equal(pushesTo(ownerPush).length, 0);
+    } finally {
+        onMeta(null);
+    }
+});
+
+test('con la marca ya puesta, otro toque de «persona» manda el push de entrante', async () => {
+    await clearQueue();
+    const { owner } = await handoffTeam('HEF');
+    const ownerPush = await subscribePush(owner);
+    const from = '593970009306';
+    const allTo = () => pushCalls.filter(call => call.endpoint === ownerPush);
+    metaForBot();
+    try {
+        await postWebhook(numberOf(owner), personTap(from));
+        await drain();
+        assert.ok(await eventually(() => allTo().length === 1));
+        await postWebhook(numberOf(owner), personTap(from));
+        await drain();
+        assert.ok(await eventually(() => allTo().length === 2), 'el segundo toque no avisó');
+        assert.equal(pushesTo(ownerPush).length, 1, 'un solo «pide una persona»');
+        assert.equal(allTo()[1].payload.body, 'Hablar con alguien');
+    } finally {
+        onMeta(null);
+    }
+});

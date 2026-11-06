@@ -38,6 +38,9 @@ export const parseOptionId = (id) => {
     return null;
 };
 
+/** Si el toque es el de «hablar con una persona» de un menú de Wasmish. */
+export const isPersonChoice = (id) => parseOptionId(id)?.target === 'person';
+
 /**
  * El `interactive` de Meta para un texto con opciones (`{ id, title }`, ya con
  * su id). Hasta 3 opciones y el cuerpo en 1024: botones de respuesta. Si no,

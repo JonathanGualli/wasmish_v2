@@ -6,6 +6,8 @@ import AutoReplySettings from "../models/auto.reply.settings.model.js";
 import { processMessageSending } from "../controllers/chat.controller.js";
 import { findConversationLine } from "../services/line.service.js";
 import { requestHandoff } from "../services/auto.reply.service.js";
+import { notifyInbound } from "../services/push.service.js";
+import { isPersonChoice } from "../utils/auto.reply.options.js";
 import { freeTextBlockReason } from "../utils/whatsapp.window.js";
 import { AUTO_REPLY_EXPIRY_MS, autoReplyOutcome, botStateUpdate, decideAutoReply, withAutoReplyDefaults } from "../utils/auto.reply.js";
 
@@ -143,8 +145,35 @@ const unlockContact = (contactId, token) => Contact.updateOne(
  * Resuelve un trabajo ya tomado. Devuelve cómo terminó, 'busy' (el contacto
  * estaba ocupado: vuelve a la cola) o 'lost' (ya no era suyo). Exportada para
  * los tests.
+ *
+ * Un toque de «hablar con una persona» llega sin el push de entrante (el
+ * webhook lo deja para aquí): si al terminar no marcó la conversación (un botón
+ * viejo, la marca ya puesta, alguien respondió antes…), lo manda ahora. Así
+ * cada toque avisa una vez (revisión de Codex del PR #184, 1).
  */
 export const resolveAutoReplyJob = async (job) => {
+    const tap = { handedOff: false };
+    const outcome = await resolveJob(job, tap);
+    if (outcome !== 'busy' && outcome !== 'lost' && isPersonChoice(job.choiceId) && !tap.handedOff) await notifyTapInbound(job);
+    return outcome;
+};
+
+// El push de entrante de un toque de «persona» que no marcó nada. Nunca lanza.
+const notifyTapInbound = async (job) => {
+    try {
+        const conversation = await Conversation.findById(job.conversationId).select('userId contactId').lean();
+        if (!conversation?.contactId) return;
+        const contact = await Contact.findOne({ _id: conversation.contactId, userId: conversation.userId }).lean();
+        if (!contact) return;
+        void notifyInbound({
+            accountId: conversation.userId, conversationId: conversation._id, contact, text: job.text, type: job.type, caption: job.caption,
+        });
+    } catch (error) {
+        console.error('No se pudo avisar del toque:', { messageId: String(job._id), error: error.message });
+    }
+};
+
+const resolveJob = async (job, tap) => {
     const now = new Date();
     if (now.getTime() - new Date(job.timestamp).getTime() > AUTO_REPLY_EXPIRY_MS) return endJob(job, 'expired');
 
@@ -190,7 +219,7 @@ export const resolveAutoReplyJob = async (job) => {
         // Pide una persona: se marca y se avisa antes de enviar, aunque el bot
         // no conteste (la pausa) o Meta rechace la respuesta (decisión C).
         if (decision.handoffRequested) {
-            await requestHandoff({
+            tap.handedOff = await requestHandoff({
                 accountId, conversationId: conversation._id, messageId: job._id, tapAt: job.timestamp ?? job.createdAt, contact, now,
             });
         }
