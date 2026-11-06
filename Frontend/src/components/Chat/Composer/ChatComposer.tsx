@@ -217,6 +217,13 @@ export const ChatComposer = ({
                         <UserRound size={13} className="flex-none text-brand-muted" />{hint}
                     </p>
                 )}
+                {/* Bot con menús (diseño c1): responder quita la marca, sin más. */}
+                {conversation?.handoffRequest && !lineBlock && (
+                    <p className="flex items-center gap-[7px] text-[12.5px] text-brand-gray-600 -mb-1">
+                        <UserRound size={13} strokeWidth={2.2} className="flex-none text-brand-handoff-icon" />
+                        Al responder se quita la marca «Pide una persona».
+                    </p>
+                )}
                 {lineBlock ? (
                     <LineClosedNotice reason={lineBlock} sendFrom={defaultLine}
                         onWrite={conversation?.phone

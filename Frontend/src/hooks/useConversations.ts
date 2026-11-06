@@ -58,6 +58,18 @@ export const useConversations = () => {
       });
     });
 
+    // La asignación (Fase 4) y la marca de «pide una persona». Una lectura de
+    // la bandeja que ya iba en camino traería la lista de antes del evento y lo
+    // desharía (una conversación
+    // perdida volvía a aparecer; revisión de Codex del PR #145): se cancela, se
+    // aplica el evento y, si se canceló algo, se vuelve a pedir, ya con él.
+    const applyToList = async (update: (old: Conversation[]) => Conversation[]) => {
+      const wasFetching = queryClient.isFetching({ queryKey: ["conversations"] }) > 0;
+      await queryClient.cancelQueries({ queryKey: ["conversations"] });
+      queryClient.setQueryData<Conversation[]>(["conversations"], (old = []) => update(old));
+      if (wasFetching) refreshList();
+    };
+
     // Solo los campos que vienen: los no leídos (al abrir la conversación, o un
     // eco de la app) o la vista previa (un borrado o una edición del último
     // mensaje). Sin `unreadCount` no se toca el contador.
@@ -74,6 +86,11 @@ export const useConversations = () => {
       // Dos avisos de la vista previa cruzados pueden llegar en otro orden; la
       // BD sí queda en el estado final (revisión de Codex del PR #109).
       if (payload.lastMessage !== undefined) refreshList();
+      // «Pide una persona» (bot con menús): el backend manda lo que hay en la BD.
+      const { handoffRequest } = payload;
+      if (handoffRequest !== undefined) {
+        void applyToList((old) => old.map((c) => (c.id === payload.id ? { ...c, handoffRequest } : c)));
+      }
     });
 
     // Un contacto cambió de nombre o de número (o de preferencia de
@@ -82,16 +99,6 @@ export const useConversations = () => {
     const unsubContact = subscribe("contact_updated", refreshList);
     const unsubContacts = subscribe("contacts_updated", refreshList);
 
-    // La asignación (Fase 4). Una lectura de la bandeja que ya iba en camino
-    // traería la lista de antes del evento y lo desharía (una conversación
-    // perdida volvía a aparecer; revisión de Codex del PR #145): se cancela, se
-    // aplica el evento y, si se canceló algo, se vuelve a pedir, ya con él.
-    const applyToList = async (update: (old: Conversation[]) => Conversation[]) => {
-      const wasFetching = queryClient.isFetching({ queryKey: ["conversations"] }) > 0;
-      await queryClient.cancelQueries({ queryKey: ["conversations"] });
-      queryClient.setQueryData<Conversation[]>(["conversations"], (old = []) => update(old));
-      if (wasFetching) refreshList();
-    };
     // Cambió de manos y la sigue viendo: la conversación entera, en su sitio (o
     // se pide la lista si no la tenía: la acaba de ganar).
     const unsubAssigned = subscribe("conversation_assigned", (payload) => {

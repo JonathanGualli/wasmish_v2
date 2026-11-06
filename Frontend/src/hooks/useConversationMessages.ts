@@ -133,8 +133,9 @@ type MessagesPage = { items: Message[], nextCursor: string | undefined, events?:
 
 /**
  * Los mensajes de una conversación, por páginas, al día con el SSE. Con
- * `withEvents` (con equipo), también su historia (avisos de la asignación): una
- * página que los eventos acortan puede venir sin mensajes.
+ * `withEvents`, también su historia (avisos de la asignación y «pide una
+ * persona» del bot con menús; el chat la pide siempre): una página que los
+ * eventos acortan puede venir sin mensajes.
  */
 export const useConversationMessages = (conversationId: string, { withEvents = false }: { withEvents?: boolean } = {}) => {
   const queryClient = useQueryClient();

@@ -17,7 +17,7 @@ export interface SSEEventMap {
         & Pick<Message, "caption" | "deletedAt" | "editedAt" | "previousVersions" | "reactions" | "canReact" | "canReply">
         & { changeVersion: number };
     // Solo los campos que cambiaron: no leídos, o la vista previa tras un borrado o una edición
-    conversation_updated: { id: string; unreadCount?: number; lastMessage?: string };
+    conversation_updated: { id: string; unreadCount?: number; lastMessage?: string; handoffRequest?: { at: string } | null };
     // Sin los campos de publicidad cuando es un cambio de número
     contact_updated: { id: string; marketingOptOut?: boolean; marketingOptOutAt?: string | null };
     // Muchos contactos a la vez (etiquetar en bloque, importar): sin ids, se refresca todo

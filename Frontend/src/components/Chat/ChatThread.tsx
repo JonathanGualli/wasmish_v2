@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useInView } from "react-intersection-observer";
 import { Transition } from "@headlessui/react";
-import { Ban, Bot, CircleAlert, Code2, File as FileIcon, LoaderCircle, Send, Smartphone } from "lucide-react";
+import { Ban, Bot, CircleAlert, Code2, File as FileIcon, LoaderCircle, Pointer, Send, Smartphone } from "lucide-react";
 import { useConversationMessages } from "../../hooks/useConversationMessages";
 import { useConversations } from "../../hooks/useConversations.ts";
 import { useTemplates } from "../../hooks/useTemplates.ts";
@@ -43,6 +43,8 @@ import { assignmentError, useConversationAssignment } from "../../hooks/useConve
 import { canReassignConversation, firstName, replyHint } from "../../utils/assignment";
 import { AssigneeControl } from "./Assignment/AssigneeControl";
 import { ConversationEventLine } from "./Assignment/ConversationEventLine";
+import { BotOptions } from "./Message/BotOptions";
+import { HandoffBanner } from "./HandoffBanner";
 import { TransferRequestBar } from "./Assignment/TransferRequestBar";
 import { LostConversation, type LostState } from "./Assignment/LostConversation";
 
@@ -193,11 +195,13 @@ export const ChatThread = ({
     const [lost, setLost] = useState<LostState | null>(null);
     const lostHere = lost !== null && lost.conversationId === conversationId;
     // Con una sola persona en la cuenta, la línea de la hora queda como siempre;
-    // tampoco se ve nada de la asignación (Fase 4) ni su historia.
+    // tampoco se ve nada de la asignación (Fase 4). La historia sí se pide
+    // siempre: «pidió hablar con una persona» (bot con menús) también va en una
+    // cuenta sin equipo.
     const { user, can } = useAuthContext();
     const showAuthor = hasTeam(user);
     const { data: messages, events, isLoading, isError, error, fetchNextPage, hasNextPage } =
-        useConversationMessages(lostHere ? "" : conversationId || "", { withEvents: showAuthor });
+        useConversationMessages(lostHere ? "" : conversationId || "", { withEvents: true });
     const { notify } = useNotice();
 
     // La conversación dejó de existir para esta sesión: le quitaron su línea con
@@ -469,7 +473,8 @@ export const ChatThread = ({
                 );
             };
             if (item.kind === 'event') {
-                nodes.push(<ConversationEventLine key={`event-${item.event.id}`} event={item.event} viewerId={userId} time={formatTime(item.timestamp)} />);
+                nodes.push(<ConversationEventLine key={`event-${item.event.id}`} event={item.event} viewerId={userId} time={formatTime(item.timestamp)}
+                    contactTitle={title} />);
                 daySeparator();
                 return;
             }
@@ -491,6 +496,9 @@ export const ChatThread = ({
             const quote = quoteOf(msg);
             // Mismo tratamiento en los dos lados: borde punteado, sin el verde de la propia.
             const placeholder = isHistoryPlaceholder(msg) && !deleted;
+            // Bot con menús (diseño c1): las opciones que mandó el bot, debajo. Con
+            // ellas el mensaje ocupa el ancho entero y la burbuja se queda a la derecha.
+            const botOptions = !deleted && msg.options?.length ? msg.options : null;
 
             nodes.push(
                 <div
@@ -499,14 +507,14 @@ export const ChatThread = ({
                     key={msg.temporalId ?? msg.id ?? `message-${i}`}
                     data-message-id={msg.id}
                     className={`relative group/msg max-w-[85%] md:max-w-[62%] ${mine ? "self-end" : "self-start"}
-                        ${menuOpen ? "z-30" : ""}`}
+                        ${botOptions ? "w-[85%] md:w-[62%] flex flex-col gap-1.5" : ""} ${menuOpen ? "z-30" : ""}`}
                 >
                     {msg.templateName && (
                         <div className={`font-mono text-[11px] text-brand-subtle mb-1 ${mine ? "text-right" : ""}`}>
                             Plantilla · {msg.templateName}
                         </div>
                     )}
-                    <div className="relative" {...pressHandlers(msg)}>
+                    <div className={`relative ${botOptions ? "self-end max-w-full" : ""}`} {...pressHandlers(msg)}>
                     <div
                         // Con reacciones, la burbuja crece lo justo para sostenerlas
                         // (diseño, «Dónde cuelgan»). El halo menta: el original al que se fue desde una cita.
@@ -548,17 +556,28 @@ export const ChatThread = ({
                     )}
                     </div>
                     {!deleted && <TemplateButtons buttons={plantilla?.buttons} />}
+                    {botOptions && (
+                        <div className={hasReactions ? "mt-[11px]" : ""}>
+                            <BotOptions options={botOptions} format={msg.optionsFormat ?? 'buttons'} />
+                        </div>
+                    )}
 
                     {/* Cada pieza baja entera si no cabe: en el teléfono, «Desde la app
                         de WhatsApp», «Editado», la hora y el ojo partían la hora en dos. */}
                     <div className={`flex flex-wrap items-center gap-x-[5px] gap-y-0.5 whitespace-nowrap text-[11px] text-brand-subtle
-                        ${hasReactions ? "mt-[17px]" : "mt-1"} ${mine ? "justify-end" : ""}`}>
+                        ${hasReactions && !botOptions ? "mt-[17px]" : botOptions ? "" : "mt-1"} ${mine ? "justify-end" : ""}`}>
                         {/* «Bot» y «Desde la app de WhatsApp» siempre: sin equipo también hay que saber
                             qué contestó la máquina y qué se respondió desde el celular. */}
                         {mine && (showAuthor || msg.origin?.kind === 'bot' || msg.origin?.kind === 'businessApp') && <MessageAuthor msg={msg} />}
                         {/* Eliminado manda: un eliminado y editado no dice «Editado». */}
                         {msg.editedAt && !deleted && <><span>Editado</span><span>·</span></>}
                         <span className="font-mono">{formatTime(msg.timestamp)}</span>
+                        {/* El contacto tocó una opción de un menú del bot: no lo escribió (diseño c1). */}
+                        {!mine && msg.choiceId && (
+                            <><span>·</span><span className="inline-flex items-center gap-1 text-brand-muted">
+                                <Pointer size={12} strokeWidth={2.2} />Tocó una opción
+                            </span></>
+                        )}
                         {mine && (
                             showsUploadStatus(msg)
                                 ? <MessageUploadStatus msg={msg} />
@@ -638,6 +657,9 @@ export const ChatThread = ({
                     <div className="md:hidden flex-none bg-brand-surface border-b border-brand-border px-3 py-2 flex items-center">
                         {assignmentControl}
                     </div>
+                )}
+                {conversation?.handoffRequest && (
+                    <HandoffBanner conversationId={conversation.id} title={title} since={conversation.handoffRequest.at} />
                 )}
                 {request && (
                     <TransferRequestBar request={request} isMine={conversation?.assignedTo?.id === userId}

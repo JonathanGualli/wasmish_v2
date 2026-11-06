@@ -126,4 +126,15 @@ export interface Message {
   /** Qué acciones enseña la UI: lo decide el backend, con las mismas reglas que al enviar. */
   canReact?: boolean;
   canReply?: boolean;
+  /** Bot con menús: la opción que tocó el contacto (`wasmish:r:<id>`, `wasmish:start`, `wasmish:person`…). */
+  choiceId?: string | null;
+  /** Bot con menús: las opciones que mandó el bot con este mensaje; solo las puede tocar el contacto. */
+  options?: BotOption[];
+  /** Hasta 3 opciones (y el texto corto), botones; si no, una lista con «Ver opciones». */
+  optionsFormat?: 'buttons' | 'list';
+}
+
+export interface BotOption {
+  id: string;
+  title: string;
 }

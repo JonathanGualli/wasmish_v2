@@ -80,6 +80,14 @@ Tailwind genéricos (`gray-800`, `blue-500`, `green-500`…).
 --color-brand-info-soft:     #edf3fa   /* Fondo de lo que está en curso (enviando, entregado) */
 ```
 
+**Ámbar de «pide una persona»** (`brand-handoff`, `-icon`, `-text`, `-strong`,
+`-soft`, `-wash`, `-row`, `-unseen`, `-border`, `-button`): del diseño
+«Respuestas automáticas v4 - Lienzo» (c1, c2). **Solo** para la marca de una
+conversación cuyo contacto pidió hablar con una persona (la fila, la franja del
+chat, el evento del hilo y el aviso de la campanita): es ámbar para no
+confundirla con un no leído. No es un color de estado general: lo pendiente
+sigue siendo `brand-warning`.
+
 **Nunca uses opacidades para tintar** (`bg-brand-accent/10`, `bg-brand-danger/10`).
 Existen tokens sólidos para eso: `brand-accent-soft`, `brand-warning-soft`,
 `brand-danger-soft`. Las opacidades cambian con el fondo y ensucian la paleta.

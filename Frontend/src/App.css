@@ -97,6 +97,21 @@
   --color-brand-notice-error-x:    #f6d3cc;
   --color-brand-notice-info-x:     #a9cdbd;
 
+  /* ── «Pide una persona» ───────────────────────────────────────────────
+     Del diseño «Respuestas automáticas v4 - Lienzo» (Claude Design, c1 y c2):
+     la marca de la conversación cuyo contacto pidió una persona es ámbar, a
+     propósito, para no confundirla con un no leído (menta). Solo para eso. */
+  --color-brand-handoff:        #d99a1e;  /* Borde de la fila, contador, icono */
+  --color-brand-handoff-icon:   #b07a12;  /* Icono sobre blanco */
+  --color-brand-handoff-text:   #5c3b04;  /* Texto sobre los tintes */
+  --color-brand-handoff-strong: #8a5a07;  /* Icono sobre el tinte */
+  --color-brand-handoff-soft:   #fbe9c6;  /* Etiqueta y sello del icono */
+  --color-brand-handoff-wash:   #fdf4e3;  /* Franja de la cabecera, filtro activo */
+  --color-brand-handoff-row:    #fffdf8;  /* Fondo de la fila marcada */
+  --color-brand-handoff-unseen: #fffbf2;  /* Aviso sin ver, hover de «Quitar» */
+  --color-brand-handoff-border: #f0d9a8;  /* Borde de la franja */
+  --color-brand-handoff-button: #d9b25e;  /* Borde de «Quitar» */
+
   --animate-notice-in: notice-in 0.3s ease-out;
   --animate-notice-out: notice-out 0.3s ease-in forwards;
 
