@@ -11,6 +11,7 @@ import type { Template } from "../../../../models/template.model";
 import type { CampaignDraft } from "../../../../utils/campaignDraft";
 import { buttonsNeedingValue, orderedPlaceholders } from "../../../../utils/templatePlaceholders";
 import { headerMediaRule, templateHeaderIssue, type HeaderSource } from "../../../../utils/templateHeader";
+import { isSendableTemplate } from "../../../../utils/templateStatus";
 
 const EMPTY_FILL: CampaignFill = { source: 'fixed', value: '', fallback: '' };
 
@@ -68,7 +69,7 @@ export const useCampaignWizard = () => {
     const draftLineId = draft?.lineId ?? null;
     const line = activeLines.find(l => l.id === draftLineId) ?? defaultLine ?? undefined;
 
-    const allApproved = useMemo(() => (templates as Template[]).filter(t => t.status === 'APPROVED'), [templates]);
+    const allApproved = useMemo(() => (templates as Template[]).filter(isSendableTemplate), [templates]);
     const approved = useMemo(
         () => (line ? allApproved.filter(t => t.waBusinessId === line.waBusinessId) : allApproved),
         [allApproved, line],

@@ -493,7 +493,10 @@ export const processTemplateSending = async ({
     //    y para saber en qué idioma está registrada.
     //    En el WABA de la línea: una sin WABA (sincronizada antes de la Fase
     //    2a) no se encuentra, y la sincronización de abajo se lo pone.
-    const findTemplate = () => Template.findOne({ userId: accountId, waBusinessId, name: templateName });
+    //    Encuentra también las marcadas como borradas en Meta, para distinguir
+    //    una borrada de una desconocida; con el mismo nombre, la que no lo
+    //    está va primero (`null` ordena antes que una fecha).
+    const findTemplate = () => Template.findOne({ userId: accountId, waBusinessId, name: templateName }).sort({ deletedInMetaAt: 1 });
     let template = resolvedTemplate ?? await findTemplate();
     let syncOk = true;
 
@@ -501,7 +504,8 @@ export const processTemplateSending = async ({
     // la definición de los botones o la cabecera: `parameterFormat` y `header`
     // solo existen desde entonces, así que su ausencia distingue «plantilla
     // vieja» de «plantilla sincronizada que legítimamente no tiene botones».
-    if (!resolvedTemplate && (!template || template.parameterFormat === undefined || template.header === undefined)) {
+    // Una marcada como borrada también: el sync la desmarca si volvió a Meta.
+    if (!resolvedTemplate && (!template || template.deletedInMetaAt || template.parameterFormat === undefined || template.header === undefined)) {
         try {
             await syncTemplatesForWaba(line);
             template = await findTemplate();
@@ -513,7 +517,12 @@ export const processTemplateSending = async ({
         }
     }
 
-    if (!template && syncOk) {
+    // Una marcada que sigue marcada, o con el sync fallido, no se envía: de
+    // ella sí se sabe que Meta la borró (revisión de Codex del plan del
+    // detalle de plantillas). Con una desconocida y el sync fallido se sigue
+    // dejando que Meta decida, como antes.
+    const deletedInMeta = !resolvedTemplate && Boolean(template?.deletedInMetaAt);
+    if ((!template && syncOk) || deletedInMeta) {
         const error = new Error(`La plantilla "${templateName}" no existe en tu cuenta de WhatsApp o todavía no está aprobada.`);
         error.statusCode = 404;
         throw error;
@@ -598,6 +607,9 @@ export const processTemplateSending = async ({
             sentByName: sender?.name ?? null,
             origin: origin ?? (campaignId ? 'campaign' : null),
             templateName,
+            // El id de Meta de la plantilla: con él se cuenta su uso. Los
+            // mensajes anteriores solo tienen el nombre.
+            templateId: template?.templateId ?? undefined,
             templateParams: parameters.length > 0 ? parameters : undefined,
             campaignId: campaignId ?? undefined,
             // El archivo de la cabecera, para que el chat lo enseñe como lo vio

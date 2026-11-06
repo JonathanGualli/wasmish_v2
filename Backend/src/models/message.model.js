@@ -183,6 +183,13 @@ const messageSchema = new mongoose.Schema({
         type: [mongoose.Schema.Types.Mixed],
         default: undefined,
     },
+    // El id de Meta de la plantilla con que se envió (desde el detalle de
+    // plantillas, 2026-11-06): con él se cuenta su uso sin confundirla con
+    // otra del mismo nombre. Sin default: los anteriores no lo tienen.
+    templateId: {
+        type: String,
+        default: undefined,
+    },
     temporalId: {
         type: String,
         default: null,

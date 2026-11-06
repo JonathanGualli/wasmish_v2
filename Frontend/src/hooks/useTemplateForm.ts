@@ -4,6 +4,7 @@ import { useTemplates } from "./useTemplates";
 import { extractPlaceholders, isPositional, buttonsNeedingValue } from "../utils/templatePlaceholders";
 import type { Template, TemplateButtonParam } from "../models/template.model";
 import { templateHeaderIssue } from "../utils/templateHeader";
+import { isSendableTemplate } from "../utils/templateStatus";
 import { whatsappErrorLabel } from "../utils/whatsappErrors";
 
 interface ErrorItem { message: string; errorCode?: string | null; errorDetail?: string | null }
@@ -31,9 +32,9 @@ export const useTemplateForm = (initial?: InitialValues, waBusinessId?: string |
     const [values, setValues] = useState<Record<string, string>>(initial?.values ?? {});
     const [buttonValues, setButtonValues] = useState<Record<number, string>>(initial?.buttonValues ?? {});
 
-    // Solo las aprobadas se pueden enviar; el resto Meta las rechaza.
+    // Solo las aprobadas y no borradas en Meta se pueden enviar; el resto Meta las rechaza.
     const allApproved = useMemo(
-        () => (templates as Template[]).filter(t => t.status === 'APPROVED'),
+        () => (templates as Template[]).filter(isSendableTemplate),
         [templates],
     );
     const approved = useMemo(

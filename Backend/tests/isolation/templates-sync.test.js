@@ -4,7 +4,9 @@
 // `GET /templates?fresh=1` sincroniza si pasaron más de 10 minutos.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { seedAccount, request, connectWhatsapp, onMeta, metaCalls, Template, Waba } from './helpers.js';
+import { seedAccount, request, connectWhatsapp, onMeta, metaCalls, ANONYMOUS, ApiKey, Message, Template, Waba } from './helpers.js';
+
+const { hashApiKey } = await import('../../src/utils/crypto.js');
 
 const templatesUrl = (account) => `/waba-${account.label}/message_templates`;
 const metaTemplate = (id, extra = {}) => ({
@@ -27,6 +29,10 @@ await connectWhatsapp(r);
 const x = await seedAccount('X', { seq: 25, maxLines: 2 });
 await connectWhatsapp(x, { phoneNumberId: '7625' });
 await connectWhatsapp(x, { phoneNumberId: '7626', waBusinessId: 'waba-X2' });
+// Una plantilla borrada en Meta, para enviar desde el chat y desde la API pública.
+const d = await seedAccount('D', { seq: 26 });
+await connectWhatsapp(d);
+await ApiKey.create({ userId: d.accountId, keyHash: hashApiKey('wm_prueba_d'), keyPreview: 'wm_prueba', name: 'v1' });
 await Template.create({
     userId: x.accountId, waBusinessId: 'waba-X2', templateId: 'tpl-x2', name: 'del_segundo_waba',
     language: 'es', category: 'MARKETING', status: 'APPROVED', bodyText: 'x2', header: null, buttons: [],
@@ -151,4 +157,57 @@ test('GET /templates?fresh=1 sincroniza solo si pasaron más de 10 minutos', asy
     const plain = await withMeta(responder, () => request(r, 'GET', '/templates'));
     assert.equal(plain.status, 200, plain.text);
     assert.equal(syncCallsTo(templatesUrl(r), from), 0, 'sin fresh sincronizó');
+});
+
+// Spec § 4.4: una plantilla marcada como borrada en Meta no se envía.
+const sendsTo = (account, from) => metaCalls.slice(from).filter(call => call.method === 'post' && call.url === `/99${account.seq}/messages`).length;
+const markDeleted = (templateId) => Template.updateOne({ templateId }, { $set: { deletedInMetaAt: new Date() } });
+
+test('una plantilla borrada en Meta no se envía', async () => {
+    await markDeleted(d.templateId);
+    const from = metaCalls.length;
+    const res = await withMeta(async (config) => {
+        // El sync de último momento: Meta ya no la tiene.
+        if (config.method === 'get' && config.url === templatesUrl(d)) return { data: { data: [metaTemplate(d.imageTemplateId)] } };
+        if (config.method === 'post' && config.url === `/99${d.seq}/messages`) return { data: { messages: [{ id: 'wamid.no' }] } };
+        return undefined;
+    }, () => request(d, 'POST', '/chats/template', { templateName: d.templateName, destinationNumber: '593990002601' }));
+    assert.equal(res.status, 404, res.text);
+    assert.equal(sendsTo(d, from), 0);
+});
+
+// Revisión de Codex del plan, 1. Regresión que vigila: con solo
+// `deletedInMetaAt: null` en `findTemplate`, la marcada no se encuentra, el
+// sync de último momento falla, `syncOk = false` y el envío sigue hasta Meta.
+test('una borrada no se envía aunque falle el sync, ni por el chat ni por la API', async () => {
+    await markDeleted(d.templateId);
+    const responder = async (config) => {
+        if (config.method === 'get' && config.url === templatesUrl(d)) throw new Error('Meta caída');
+        if (config.method === 'post' && config.url === `/99${d.seq}/messages`) return { data: { messages: [{ id: 'wamid.no' }] } };
+        return undefined;
+    };
+    const from = metaCalls.length;
+    const viaChat = await withMeta(responder, () =>
+        request(d, 'POST', '/chats/template', { templateName: d.templateName, destinationNumber: '593990002602' }));
+    assert.equal(viaChat.status, 404, viaChat.text);
+    const viaApi = await withMeta(responder, () => request(ANONYMOUS, 'POST', '/v1/templates/send',
+        { destinationNumber: '593990002603', templateName: d.templateName }, { Authorization: 'Bearer wm_prueba_d' }));
+    assert.equal(viaApi.status, 404, viaApi.text);
+    assert.equal(sendsTo(d, from), 0);
+});
+
+test('una borrada que volvió a Meta se envía, y el mensaje guarda su templateId', async () => {
+    await markDeleted(d.templateId);
+    const res = await withMeta(async (config) => {
+        if (config.method === 'get' && config.url === templatesUrl(d)) {
+            return { data: { data: [metaTemplate(d.templateId, { name: d.templateName }), metaTemplate(d.imageTemplateId)] } };
+        }
+        if (config.method === 'post' && config.url === `/99${d.seq}/messages`) return { data: { messages: [{ id: 'wamid.volvio' }] } };
+        return undefined;
+    }, () => request(d, 'POST', '/chats/template', { templateName: d.templateName, destinationNumber: '593990002604' }));
+    assert.equal(res.status, 200, res.text);
+    assert.equal((await Template.findOne({ templateId: d.templateId }).lean()).deletedInMetaAt, null);
+    const sent = await Message.findOne({ waMessageId: 'wamid.volvio' }).lean();
+    assert.equal(sent.templateId, d.templateId);
+    assert.equal(sent.templateName, d.templateName);
 });

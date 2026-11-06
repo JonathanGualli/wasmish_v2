@@ -29,6 +29,12 @@ export interface TemplateHeaderMedia {
     size: number;
 }
 
+/** Un ejemplo de variable, tal como se mandó a Meta para aprobar la plantilla. */
+export interface TemplateExample {
+    key: string;
+    example: string;
+}
+
 export interface Template {
     templateId: string,
     name: string,
@@ -44,4 +50,20 @@ export interface Template {
     waBusinessId: string | null,
     /** Última vez que la tocó una sincronización con Meta. */
     updatedAt?: string,
+    /** El pie, en gris bajo el cuerpo. `null` = sin pie; `undefined` = sincronizada antes de guardarlo. */
+    footerText?: string | null,
+    /** Los ejemplos de las variables que se mandaron a Meta: `key` es '1', '2'… o el nombre. */
+    bodyExamples?: TemplateExample[],
+    /** El ejemplo de la variable de la cabecera de texto. */
+    headerExample?: string | null,
+    /** 'GREEN' | 'YELLOW' | 'RED' | 'UNKNOWN' */
+    qualityScore?: string | null,
+    /** El motivo de Meta si la rechazó (por ejemplo 'INVALID_FORMAT'). */
+    rejectedReason?: string | null,
+    previousCategory?: string | null,
+    subCategory?: string | null,
+    /** Última modificación en Meta. */
+    metaUpdatedAt?: string | null,
+    /** Cuándo dejó de llegar al sincronizar: se borró en Meta y ya no se envía. */
+    deletedInMetaAt?: string | null,
 }
