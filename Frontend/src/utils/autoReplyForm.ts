@@ -134,11 +134,13 @@ const backToStart = (): MenuOption => ({ title: 'Volver al inicio', target: 'sta
 export interface ExampleMenu {
     rules: EditableRule[];
     options: MenuOption[];
+    /** «Horarios»: su texto sale del horario del paso 2 (`withExampleHours`). */
+    hoursRuleId: string;
 }
 
 export const exampleMenu = (): ExampleMenu => {
     // Textos que sirven aunque nadie los edite: sin precios inventados, y el
-    // horario es el mismo del ejemplo del fuera de horario.
+    // horario sale del que se deja en el paso 2.
     const prices = newRule({
         name: 'Precios', keywords: ['precio', 'precios', 'cuánto cuesta'], options: [backToStart()],
         text: 'Los precios dependen de lo que necesites. Cuéntanos qué buscas y te pasamos una cotización.',
@@ -149,6 +151,7 @@ export const exampleMenu = (): ExampleMenu => {
     });
     return {
         rules: [prices, hours],
+        hoursRuleId: hours.id,
         options: [
             { title: 'Precios', target: 'rule', ruleId: prices.id },
             { title: 'Horarios', target: 'rule', ruleId: hours.id },
@@ -157,8 +160,12 @@ export const exampleMenu = (): ExampleMenu => {
     };
 };
 
-/** El ejemplo de «Si no entiende» sin menú (spec § 10). */
-export const FALLBACK_EXAMPLE = 'Perdona, no te entendí. Puedo ayudarte con precios, ubicación y envíos: pregúntame por eso. Si es otra cosa, en un momento te responde alguien del equipo.';
+/*
+ * «Si no entiende» de ejemplo. Sin menú no nombra temas: el bot no sabría
+ * responder a ninguno, y un «puedo ayudarte con precios» sin respuesta a
+ * «precios» promete lo que no hay (revisión de Codex del PR #188).
+ */
+const FALLBACK_PLAIN_TEXT = 'Perdona, no te entendí. En un momento te responde alguien del equipo.';
 
 const GREETING_TEXT = {
     menu: 'Hola, gracias por escribirnos. ¿En qué te ayudamos?',
@@ -178,8 +185,44 @@ export const withGreeting = (form: AutoReplyForm, menu: ExampleMenu, useMenu: bo
     return {
         ...form,
         welcome: { ...form.welcome, text: useMenu ? GREETING_TEXT.menu : GREETING_TEXT.plain, options: useMenu ? cloneOptions(menu.options) : [] },
-        fallback: { ...form.fallback, text: useMenu ? FALLBACK_MENU_TEXT : FALLBACK_EXAMPLE, options: useMenu ? cloneOptions(menu.options) : [] },
+        fallback: { ...form.fallback, text: useMenu ? FALLBACK_MENU_TEXT : FALLBACK_PLAIN_TEXT, options: useMenu ? cloneOptions(menu.options) : [] },
         keywordRules: useMenu ? [...menu.rules.map(rule => ({ ...rule, options: cloneOptions(rule.options) })), ...others] : others,
+    };
+};
+
+const DAY_LONG: Record<WeekDay, string> = {
+    mon: 'lunes', tue: 'martes', wed: 'miércoles', thu: 'jueves', fri: 'viernes', sat: 'sábado', sun: 'domingo',
+};
+
+const listJoin = (parts: string[], last: string) =>
+    parts.length > 1 ? `${parts.slice(0, -1).join(', ')}${last}${parts[parts.length - 1]}` : parts[0] ?? '';
+
+/**
+ * El horario como lo leería un cliente: «Atendemos de lunes a viernes de 8:00
+ * a 13:00 y de 14:30 a 18:00, y el sábado de 10:00 a 12:00.». `null` si todo
+ * está cerrado.
+ */
+export const hoursSentence = (schedule: WeekSchedule): string | null => {
+    const parts = dayGroups(schedule)
+        .filter(group => !group.day.closed && group.day.ranges.length > 0)
+        .map(({ days, day }) => {
+            const when = days.length === 1 ? `el ${DAY_LONG[days[0]]}` : `de ${DAY_LONG[days[0]]} a ${DAY_LONG[days[days.length - 1]]}`;
+            return `${when} ${day.ranges.map(r => `de ${longTime(r.start)} a ${longTime(r.end)}`).join(' y ')}`;
+        });
+    return parts.length ? `Atendemos ${listJoin(parts, ', y ')}.` : null;
+};
+
+/**
+ * En el asistente, «Horarios» dice el horario que se deja en el paso 2, no
+ * el del ejemplo (revisión de Codex del PR #188). Mientras dura el asistente
+ * ese texto no se edita, así que se puede rehacer en cada cambio.
+ */
+export const withExampleHours = (form: AutoReplyForm, menu: ExampleMenu): AutoReplyForm => {
+    const text = hoursSentence(form.outOfHours.schedule);
+    if (!text) return form;
+    return {
+        ...form,
+        keywordRules: form.keywordRules.map(rule => (rule.id === menu.hoursRuleId && rule.text !== text ? { ...rule, text } : rule)),
     };
 };
 

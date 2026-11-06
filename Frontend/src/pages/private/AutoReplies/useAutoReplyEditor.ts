@@ -3,7 +3,7 @@ import { useSaveAutoReplies } from "../../../hooks/useAutoReplies";
 import type { AutoRepliesResponse, CardPosition, DaySchedule, KeywordRule, MenuOption, WeekDay } from "../../../models/autoReply.model";
 import {
     EDIT_STEPS, WIZARD_STEPS, draftOf, exampleMenu, formIssues, isDirty, issueCounts, newRule, toForm, toPayload, totalIssues,
-    withGreeting, wizardStart, type AutoReplyForm, type EditableRule, type StepKey, type WizardStep,
+    withExampleHours, withGreeting, wizardStart, type AutoReplyForm, type EditableRule, type StepKey, type WizardStep,
 } from "../../../utils/autoReplyForm";
 import type { NodeKey } from "../../../utils/autoReplyFlow";
 
@@ -82,7 +82,9 @@ export const useAutoReplyEditor = (
     const counts = useMemo(() => issueCounts(issues), [issues]);
     const issueTotal = totalIssues(counts);
 
-    const update = (change: (form: AutoReplyForm) => AutoReplyForm) => setForm(current => change(current));
+    // En el asistente, «Horarios» sigue al horario del paso 2.
+    const update = (change: (form: AutoReplyForm) => AutoReplyForm) =>
+        setForm(current => (mode === 'wizard' ? withExampleHours(change(current), menu) : change(current)));
 
     /** Guarda `next`; con errores no guarda y abre el primer paso que tiene uno. */
     const save = (next: AutoReplyForm, afterSave?: (saved: AutoRepliesResponse) => void) => {
