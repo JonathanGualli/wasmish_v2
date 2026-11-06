@@ -6,7 +6,7 @@ import { WIZARD_STEPS, WIZARD_STEP_TITLES, scheduleDescription, type WizardStep 
 import type { AutoReplyEditor } from "./useAutoReplyEditor";
 import { OutOfHoursStep } from "./OutOfHoursStep";
 import { SilenceStep } from "./SilenceStep";
-import { StatusDot } from "./StepBar";
+import { StatusDot } from "./StatusDot";
 import { Switch } from "./Switch";
 
 /*

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, ChevronUp, List, Rows3, X } from "lucide-react";
+import { ArrowRight, ChevronDown, ChevronRight, ChevronUp, List, RotateCcw, Rows3, UserRound, X } from "lucide-react";
 import {
     BUTTONS_MAX, KEYWORD_REPLIES_MAX, OPTION_TITLE_MAX, OPTIONS_MAX, RETURN_AFTER_DAYS, RULE_NAME_MAX,
     type MenuOption, type ReturnAfterDays,
@@ -8,7 +8,7 @@ import { ConfirmDialog } from "../../../components/Dialog/ConfirmDialog";
 import { incomingTo, ruleKeyOf, ruleName, type FlowNode, type NodeKey } from "../../../utils/autoReplyFlow";
 import type { AutoReplyEditor, OptionsOwner } from "./useAutoReplyEditor";
 import { FieldError, ReplyTextField } from "./ReplyTextField";
-import { KeywordInput } from "./KeywordsStep";
+import { KeywordInput } from "./KeywordInput";
 import { DestinationPicker } from "./DestinationPicker";
 import { Switch } from "./Switch";
 
@@ -26,8 +26,16 @@ const formatLine = (count: number) => {
  * 4d): el nombre y el interruptor, desde dónde se llega, las frases, el texto
  * y las opciones con su destino. Cada error, debajo de su campo. La
  * bienvenida suma cuándo vuelve a saludar; «Una persona» es solo su texto.
+ *
+ * Con `onOpenOption` (el teléfono, diseño p2), cada opción es una fila con su
+ * título y su destino, y tocarla abre su pantalla; «+ Añadir opción» también.
  */
-export const ReplyEditor = ({ editor, node, onSelect }: { editor: AutoReplyEditor; node: FlowNode; onSelect: (node: NodeKey | null) => void }) => {
+export const ReplyEditor = ({ editor, node, onSelect, onOpenOption }: {
+    editor: AutoReplyEditor;
+    node: FlowNode;
+    onSelect: (node: NodeKey | null) => void;
+    onOpenOption?: (index: number) => void;
+}) => {
     const { form } = editor;
     const show = editor.showIssues;
     const [openPicker, setOpenPicker] = useState<number | null>(null);
@@ -143,7 +151,17 @@ export const ReplyEditor = ({ editor, node, onSelect }: { editor: AutoReplyEdito
                             : <Rows3 size={14} strokeWidth={2.2} className="flex-none text-brand-accent-strong" />}
                         <span>{formatLine(options.length)}</span>
                     </div>
-                    {options.map((option, index) => {
+                    {onOpenOption && options.length > 0 && (
+                        <div className="border border-brand-border rounded-xl overflow-hidden divide-y divide-brand-raised">
+                            {options.map((option, index) => (
+                                <OptionRow key={index} option={option} destination={destinationLabel(option)}
+                                    issue={show ? optionIssues?.items[index] : undefined}
+                                    first={index === 0} last={index === options.length - 1}
+                                    onMove={(delta) => move(index, delta)} onOpen={() => onOpenOption(index)} />
+                            ))}
+                        </div>
+                    )}
+                    {!onOpenOption && options.map((option, index) => {
                         const issue = show ? optionIssues?.items[index] : undefined;
                         const open = openPicker === index;
                         const over = option.title.length > OPTION_TITLE_MAX;
@@ -201,7 +219,11 @@ export const ReplyEditor = ({ editor, node, onSelect }: { editor: AutoReplyEdito
                     })}
                     {show && optionIssues?.list && <FieldError>{optionIssues.list}</FieldError>}
                     <button type="button" disabled={options.length >= OPTIONS_MAX}
-                        onClick={() => { setOptions([...options, { title: '', target: 'rule', ruleId: null }]); setOpenPicker(options.length); }}
+                        onClick={() => {
+                            setOptions([...options, { title: '', target: 'rule', ruleId: null }]);
+                            if (onOpenOption) onOpenOption(options.length);
+                            else setOpenPicker(options.length);
+                        }}
                         className="h-[38px] rounded-[9px] border border-dashed border-brand-border-strong flex items-center justify-center
                             text-[13.5px] font-semibold text-brand-strong hover:bg-brand-bg cursor-pointer transition-colors
                             disabled:cursor-not-allowed disabled:text-brand-subtle disabled:hover:bg-transparent">
@@ -232,6 +254,50 @@ export const ReplyEditor = ({ editor, node, onSelect }: { editor: AutoReplyEdito
                 />
             )}
         </fieldset>
+    );
+};
+
+/** Una opción en el teléfono (diseño p2): su título y, debajo, adónde lleva. Se ordena con flechas (decisión del 2026-10-15). */
+const OptionRow = ({ option, destination, issue, first, last, onMove, onOpen }: {
+    option: MenuOption;
+    destination: string;
+    issue?: { title?: string; target?: string };
+    first: boolean;
+    last: boolean;
+    onMove: (delta: -1 | 1) => void;
+    onOpen: () => void;
+}) => {
+    const Icon = option.target === 'person' ? UserRound : option.target === 'start' ? RotateCcw : ArrowRight;
+    const missing = option.target === 'rule' && destination === 'Elegir destino';
+    const error = issue?.title ?? issue?.target;
+    return (
+        <div className={`flex items-stretch min-h-14 ${error ? 'bg-brand-danger-soft' : 'bg-brand-surface'}`}>
+            <span className="flex-none w-9 grid">
+                <button type="button" aria-label="Subir" disabled={first} onClick={() => onMove(-1)}
+                    className="flex items-end justify-center pb-0.5 text-brand-subtle cursor-pointer disabled:invisible">
+                    <ChevronUp size={15} strokeWidth={2.4} />
+                </button>
+                <button type="button" aria-label="Bajar" disabled={last} onClick={() => onMove(1)}
+                    className="flex items-start justify-center pt-0.5 text-brand-subtle cursor-pointer disabled:invisible">
+                    <ChevronDown size={15} strokeWidth={2.4} />
+                </button>
+            </span>
+            <button type="button" onClick={onOpen} className="flex-1 min-w-0 flex items-center gap-2 pr-3.5 py-2 text-left cursor-pointer active:bg-brand-bg">
+                <span className="flex-1 min-w-0">
+                    <span className="block truncate text-base font-semibold text-brand-text">
+                        {option.title.trim() || <span className="font-medium text-brand-subtle">Sin título</span>}
+                    </span>
+                    <span className={`mt-0.5 flex items-center gap-1 text-[13px] font-medium
+                        ${missing ? 'text-brand-subtle' : option.target === 'person' ? 'text-brand-handoff-text'
+                            : option.target === 'start' ? 'text-brand-strong' : 'text-brand-accent-strong'}`}>
+                        <Icon size={12} strokeWidth={2.4} className="flex-none" />
+                        <span className="truncate">{option.target === 'person' ? 'Persona' : option.target === 'start' ? 'Inicio' : destination}</span>
+                    </span>
+                    {error && <span className="block mt-0.5 text-xs text-brand-danger">{error}</span>}
+                </span>
+                <ChevronRight size={16} className="flex-none text-brand-subtle" />
+            </button>
+        </div>
     );
 };
 

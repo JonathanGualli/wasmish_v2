@@ -24,18 +24,8 @@ export interface AutoReplyForm extends Omit<AutoReplySettings, 'keywordRules'> {
     keywordRules: EditableRule[];
 }
 
-export type StepKey = 'welcome' | 'outOfHours' | 'keywords' | 'fallback' | 'silence';
-
-export const STEP_TITLES: Record<StepKey, string> = {
-    welcome: 'Bienvenida',
-    outOfHours: 'Fuera de horario',
-    keywords: 'Palabras clave',
-    fallback: 'Si no entiende',
-    silence: 'Cuándo se calla',
-};
-
-/** Los pasos de la página por pasos (pantallas de menos de 1024 px, hasta el teléfono nuevo). */
-export const EDIT_STEPS: StepKey[] = ['welcome', 'outOfHours', 'keywords', 'fallback', 'silence'];
+/** Dónde se cuentan los errores: la bienvenida, el horario, las respuestas y «Una persona», y el «si no entiende». */
+export type IssueArea = 'welcome' | 'outOfHours' | 'keywords' | 'fallback' | 'silence';
 
 /**
  * El asistente de la primera vez (diseño 4f): el saludo (con menú o sin él),
@@ -411,7 +401,7 @@ export const formIssues = (form: AutoReplyForm): FormIssues => {
 };
 
 /** Cuántas cosas hay que corregir en cada paso. */
-export const issueCounts = (issues: FormIssues): Record<StepKey, number> => {
+export const issueCounts = (issues: FormIssues): Record<IssueArea, number> => {
     const outOfHours = [issues.outOfHoursText, issues.schedule].filter(Boolean).length + Object.keys(issues.days).length;
     const ruleOptions = Object.entries(issues.options)
         .filter(([key]) => key !== 'welcome' && key !== 'fallback')
@@ -426,7 +416,7 @@ export const issueCounts = (issues: FormIssues): Record<StepKey, number> => {
     };
 };
 
-export const totalIssues = (counts: Record<StepKey, number>) => Object.values(counts).reduce((a, b) => a + b, 0);
+export const totalIssues = (counts: Record<IssueArea, number>) => Object.values(counts).reduce((a, b) => a + b, 0);
 
 // ---------------------------------------------------------------------------
 // Palabras clave (las mismas reglas que `normalizeForMatch` del backend)
@@ -439,13 +429,6 @@ export const normalizeForMatch = (text: string) => text
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim();
-
-/** La fila de la lista: las tres primeras frases y cuántas más hay. */
-export const ruleTitle = (rule: KeywordRule) => {
-    if (rule.keywords.length === 0) return 'Sin frases';
-    const shown = rule.keywords.slice(0, 3).join(', ');
-    return rule.keywords.length > 3 ? `${shown} +${rule.keywords.length - 3}` : shown;
-};
 
 // ---------------------------------------------------------------------------
 // Resúmenes de cada paso
@@ -496,18 +479,7 @@ export const scheduleDescription = (schedule: WeekSchedule) => capitalize(dayGro
         : day.ranges.map(r => `${longTime(r.start)}–${longTime(r.end)}`).join(' y ')}`)
     .join(' · ')) + '.';
 
-export const welcomeSummary = (returnAfterDays: number | null) =>
-    returnAfterDays === null ? 'Saluda solo la primera vez' : `Vuelve a saludar tras ${returnAfterDays} días`;
-
-export const keywordsSummary = (rules: KeywordRule[]) => {
-    if (rules.length === 0) return 'Sin reglas';
-    const on = rules.filter(rule => rule.enabled).length;
-    return `${rules.length} ${rules.length === 1 ? 'regla' : 'reglas'} · ${on} ${on === 1 ? 'encendida' : 'encendidas'}`;
-};
-
 export const silenceSummary = (hours: number) => `${hours} h tras una respuesta manual`;
-
-export const fallbackSummary = (hours: number) => `Una vez cada ${hours} h por conversación`;
 
 // ---------------------------------------------------------------------------
 // Zona horaria y hora
