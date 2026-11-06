@@ -2,8 +2,8 @@ import { useMemo, useState } from "react";
 import { useSaveAutoReplies } from "../../../hooks/useAutoReplies";
 import type { AutoRepliesResponse, CardPosition, DaySchedule, KeywordRule, MenuOption, WeekDay } from "../../../models/autoReply.model";
 import {
-    EDIT_STEPS, WIZARD_STEPS, draftOf, exampleMenu, formIssues, isDirty, issueCounts, newRule, toForm, toPayload, totalIssues,
-    withExampleHours, withGreeting, wizardStart, type AutoReplyForm, type EditableRule, type StepKey, type WizardStep,
+    WIZARD_STEPS, draftOf, exampleMenu, formIssues, isDirty, issueCounts, newRule, toForm, toPayload, totalIssues,
+    withExampleHours, withGreeting, wizardStart, type AutoReplyForm, type EditableRule, type WizardStep,
 } from "../../../utils/autoReplyForm";
 import type { NodeKey } from "../../../utils/autoReplyFlow";
 
@@ -64,7 +64,6 @@ export const useAutoReplyEditor = (
     const [wizardBase] = useState(() => (data.configured ? null : wizardStart(saved, menu)));
     const [form, setForm] = useState(() => wizardBase ?? saved);
     const [mode, setMode] = useState<EditorMode>(wizardBase ? 'wizard' : 'tabs');
-    const [step, setStep] = useState<StepKey>('welcome');
     const [wizardStep, setWizardStep] = useState<WizardStep>('greeting');
     const [withMenu, setWithMenu] = useState(true);
     const [showIssues, setShowIssues] = useState(false);
@@ -92,7 +91,6 @@ export const useAutoReplyEditor = (
         if (totalIssues(nextCounts) > 0) {
             setShowIssues(true);
             setSaveBlocked(true);
-            setStep(EDIT_STEPS.find(key => nextCounts[key] > 0) ?? 'welcome');
             // En el asistente, lo único que puede quedar mal es el horario.
             if (mode === 'wizard' && nextCounts.outOfHours > 0) setWizardStep('outOfHours');
             return;
@@ -109,17 +107,13 @@ export const useAutoReplyEditor = (
         });
     };
 
-    const toTabs = () => {
-        setMode('tabs');
-        setStep('welcome');
-    };
+    const toTabs = () => setMode('tabs');
 
     return {
-        form, mode, step, dirty, issues, counts, issueTotal, isSaving: mutation.isPending,
+        form, mode, dirty, issues, counts, issueTotal, isSaving: mutation.isPending,
         showIssues,
         /** El aviso de arriba: se intentó guardar con errores y aún quedan. */
         saveBlocked: saveBlocked && issueTotal > 0,
-        goTo: setStep,
 
         // El asistente de la primera vez.
         wizardStep, withMenu,
