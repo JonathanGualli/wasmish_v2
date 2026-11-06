@@ -30,7 +30,7 @@ import { applyHeldStatuses } from "../services/message.status.service.js";
 import { emitHandoffRequest, markHumanReply } from "../services/auto.reply.service.js";
 import Campaign from "../models/campaign.model.js";
 import { EVENTS_PER_PAGE, eventBounds, eventCutoff } from "../utils/conversation.events.js";
-import { listPageEvents, serializeEvent } from "../services/assignment.history.service.js";
+import { listPageEvents, recordEvent, serializeEvent } from "../services/assignment.history.service.js";
 
 // A Meta: un texto o, si hay archivo, el archivo. El archivo se sube primero
 // (el id que devuelve es del número que lo subió) y se envía por ese id.
@@ -670,7 +670,10 @@ export const clearHandoffRequestController = async (req, res) => {
             ).lean()
             : null;
         if (!before) return res.status(404).json([{ message: 'Conversation not found' }]);
-        if (before.handoffRequest) await emitHandoffRequest(req.auth.accountId, id);
+        if (before.handoffRequest) {
+            await recordEvent({ accountId: req.auth.accountId, conversationId: id, type: 'handoff_cleared', actorId: req.auth.userId, at: new Date() });
+            await emitHandoffRequest(req.auth.accountId, id);
+        }
         return res.status(204).end();
     } catch (error) {
         console.error('Error quitando la marca de «pide una persona»:', error.message);

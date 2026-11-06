@@ -6,7 +6,7 @@ import { pushRecipientIds } from "../utils/push.js";
 import { conversationMeta } from "../utils/permissions.js";
 import { sendToAccount } from "../controllers/stream.controller.js";
 import { currentConversationMeta } from "./assignment.service.js";
-import { createNotifications, emitNotificationsCreated } from "./assignment.history.service.js";
+import { createNotifications, emitNotificationsCreated, recordEvent } from "./assignment.history.service.js";
 import { notifyHandoff } from "./push.service.js";
 
 // ---------------------------------------------------------------------------
@@ -91,6 +91,7 @@ export const requestHandoff = async ({ accountId, conversationId, messageId, tap
             { $set: { handoffRequest } },
         );
         if (marked.modifiedCount === 0) return false;
+        await recordEvent({ accountId, conversationId, type: 'handoff', at: now });
 
         // Quién lo recibe se vuelve a mirar justo antes de emitir: si entre
         // medias alguien perdió la línea o la conversación se asignó a otro, su

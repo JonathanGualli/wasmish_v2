@@ -14,6 +14,7 @@ import { disconnectRemovedWaba, findInboundLine, rememberDisplayPhoneNumber } fr
 import { notifyInbound } from '../services/push.service.js';
 import { sendConversationEvent } from '../services/assignment.service.js';
 import { buildAutoReplyJob } from '../services/auto.reply.service.js';
+import { parseOptionId } from '../utils/auto.reply.options.js';
 import { wakeAutoReplyWorker } from '../workers/auto.reply.worker.js';
 import { markHumanReply } from '../services/auto.reply.service.js';
 import { describeEcho, describeEchoRecipient, parsePartnerRemoved } from '../utils/business.app.js';
@@ -229,8 +230,11 @@ const procesarEntrante = async (inbound, messageData, contacts) => {
 
     // El aviso push a los dispositivos de quien ve esa línea (app móvil). Sin
     // esperar: un servicio de push lento o caído no puede frenar ni tumbar el
-    // webhook. Una reacción suelta no avisa.
-    if (!isLooseReaction) void notifyInbound({
+    // webhook. Una reacción suelta no avisa, y un toque de «hablar con una
+    // persona» que va al bot tampoco: ya avisa el push de «pide una persona»
+    // (decisión de Jonathan del 2026-11-05). Con el bot apagado sale este.
+    const handoffTap = Boolean(botJob) && parseOptionId(entrante.choiceId)?.target === 'person';
+    if (!isLooseReaction && !handoffTap) void notifyInbound({
         accountId: inbound.accountId,
         conversationId: conversation._id,
         contact,

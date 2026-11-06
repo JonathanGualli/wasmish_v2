@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {
     seedAccount, seedMember, connectWhatsapp, request, onMeta, ANONYMOUS, PNG,
     postWebhook, metaCalls, ApiKey, AutoReplySettings, Campaign, Contact, Conversation, Line, Message,
-    Notification, User, pushCalls, openStream, postEcho,
+    Notification, User, pushCalls, openStream, postEcho, ConversationEvent,
 } from './helpers.js';
 
 const { processNext } = await import('../../src/workers/campaign.worker.js');
@@ -1069,7 +1069,7 @@ const subscribePush = async (member) => {
     assert.equal((await request(member, 'POST', '/push/subscriptions', { endpoint, keys: PUSH_KEYS })).status, 200);
     return endpoint;
 };
-// Solo el de «pide una persona»: el toque, como todo entrante, manda además el suyo.
+// Solo el de «pide una persona» (con el bot apagado, el toque manda el de entrante).
 const pushesTo = (endpoint) => pushCalls.filter(call => call.endpoint === endpoint && / pide hablar con una persona\.$/.test(call.payload.body));
 /** El push sale sin esperar: hasta que se cumple `predicate`, o 2 s. */
 const eventually = async (predicate, ms = 2000) => {
@@ -1401,4 +1401,104 @@ test('el DELETE comprueba el alcance en la misma escritura que quita la marca', 
     assert.equal(response.status, 404);
     assert.equal(queries.length, 0, 'leyó la conversación antes de escribir');
     assert.ok((await Conversation.findById(conversation._id).lean()).handoffRequest);
+});
+
+// --- Bot con menús: lo que pide el diseño de la UI (plan, Tarea 8) ---------
+
+const handoffEventsOf = async (conversationId) => (await ConversationEvent.find({ conversationId, type: { $in: ['handoff', 'handoff_cleared'] } })
+    .sort({ at: 1, _id: 1 }).lean()).map(event => ({ type: event.type, actorId: event.actorId ? String(event.actorId) : null }));
+
+test('pedir una persona deja un evento en el hilo, una sola vez; responder la quita sin evento', async () => {
+    await clearQueue();
+    const { owner } = await handoffTeam('HEA');
+    const from = '593970009301';
+    metaForBot();
+    const stream = await openStream(owner);
+    try {
+        await postWebhook(numberOf(owner), personTap(from));
+        await postWebhook(numberOf(owner), personTap(from));
+        await drain();
+        assert.ok(await stream.waitFor('"type":"handoff"', 2000), 'el hilo no recibió el evento');
+        const conversation = await conversationWith(owner, from);
+        assert.deepEqual(await handoffEventsOf(conversation._id), [{ type: 'handoff', actorId: null }]);
+
+        assert.equal((await request(owner, 'POST', `/chats/${conversation._id}/messages`, { text: 'Te atiendo yo', temporalId: 't-hea' })).status, 201);
+        assert.equal((await Conversation.findById(conversation._id).lean()).handoffRequest, null);
+        assert.deepEqual(await handoffEventsOf(conversation._id), [{ type: 'handoff', actorId: null }], 'responder no deja evento');
+    } finally {
+        onMeta(null);
+        await stream.close();
+    }
+});
+
+test('quitar la marca a mano deja un evento con quien la quitó; sin marca, ninguno', async () => {
+    await clearQueue();
+    const { owner, agent } = await handoffTeam('HEB');
+    const from = '593970009302';
+    metaForBot();
+    try {
+        await postWebhook(numberOf(owner), personTap(from));
+        await drain();
+    } finally {
+        onMeta(null);
+    }
+    const conversation = await conversationWith(owner, from);
+    const clear = () => request(agent, 'DELETE', `/chats/${conversation._id}/handoff-request`);
+    assert.equal((await clear()).status, 204);
+    assert.equal((await clear()).status, 204);
+    assert.deepEqual(await handoffEventsOf(conversation._id), [
+        { type: 'handoff', actorId: null },
+        { type: 'handoff_cleared', actorId: agent.userId },
+    ]);
+    // El hilo los sirve con los de la asignación.
+    const page = await request(owner, 'GET', `/chats/${conversation._id}/messages?events=1`);
+    const served = page.body.events.filter(event => event.type.startsWith('handoff'));
+    assert.deepEqual(served.map(event => event.type).sort(), ['handoff', 'handoff_cleared']);
+});
+
+test('el aviso de «pide una persona» dice si sigue pendiente', async () => {
+    await clearQueue();
+    const { owner } = await handoffTeam('HEC');
+    const from = '593970009303';
+    metaForBot();
+    try {
+        await postWebhook(numberOf(owner), personTap(from));
+        await drain();
+    } finally {
+        onMeta(null);
+    }
+    const handoffOf = async () => (await request(owner, 'GET', '/notifications')).body.items.find(item => item.type === 'handoff');
+    assert.deepEqual((await handoffOf()).handoff, { pending: true });
+    const conversation = await conversationWith(owner, from);
+    assert.equal((await request(owner, 'DELETE', `/chats/${conversation._id}/handoff-request`)).status, 204);
+    assert.deepEqual((await handoffOf()).handoff, { pending: false });
+});
+
+// Decisión de Jonathan del 2026-11-05: el toque de «persona» mandaba dos push,
+// el del entrante y el de «pide una persona».
+test('pedir una persona manda un solo push; con el bot apagado, el del entrante', async () => {
+    await clearQueue();
+    const { owner } = await handoffTeam('HED');
+    const ownerPush = await subscribePush(owner);
+    const from = '593970009304';
+    const allTo = () => pushCalls.filter(call => call.endpoint === ownerPush);
+    metaForBot();
+    try {
+        await postWebhook(numberOf(owner), personTap(from));
+        await drain();
+        assert.ok(await eventually(() => pushesTo(ownerPush).length === 1));
+        await new Promise(resolve => setTimeout(resolve, 100));
+        assert.equal(allTo().length, 1, 'solo el de «pide una persona»');
+
+        // Con el bot apagado no hay marca ni su push: sale el del entrante.
+        await AutoReplySettings.updateOne({ userId: owner.accountId }, { $set: { enabled: false } });
+        const conversation = await conversationWith(owner, from);
+        await Conversation.updateOne({ _id: conversation._id }, { $set: { handoffRequest: null } });
+        await postWebhook(numberOf(owner), personTap(from));
+        assert.ok(await eventually(() => allTo().length === 2));
+        assert.equal(pushesTo(ownerPush).length, 1);
+        assert.equal(allTo()[1].payload.body, 'Hablar con alguien');
+    } finally {
+        onMeta(null);
+    }
 });
