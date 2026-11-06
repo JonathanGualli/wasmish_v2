@@ -24,6 +24,7 @@ import { nodeIssueCount, nodeTag, type NodeTagTone } from "./flowIssues";
  * de Jonathan), una respuesta con sus opciones (p1), editarla (p2) y una
  * opción con su destino en una hoja (p3). Se edita y se guarda igual que en
  * el lienzo (`useAutoReplyEditor`); las posiciones del lienzo no se tocan.
+ * Mientras se guarda, nada que cambie el formulario está activo (se navega).
  */
 
 type Screen =
@@ -250,7 +251,7 @@ const MenuScreen = ({ editor, nodes, onMasterSwitch, notices, onOpen }: {
                     );
                 })}
             </div>
-            <DashedButton disabled={full} onClick={addRule}>{full ? `Hasta ${KEYWORD_RULES_MAX} respuestas` : '+ Nueva respuesta'}</DashedButton>
+            <DashedButton disabled={full || editor.isSaving} onClick={addRule}>{full ? `Hasta ${KEYWORD_RULES_MAX} respuestas` : '+ Nueva respuesta'}</DashedButton>
 
             <SectionLabel>Ajustes</SectionLabel>
             <div className="bg-brand-surface border border-brand-border rounded-[14px] overflow-hidden divide-y divide-brand-raised">
@@ -349,7 +350,7 @@ const ReplyScreen = ({ editor, node, notices, crumbs, onEnter, onHome, onOpenOpt
                 )}
             </div>
             {owner && (
-                <DashedButton disabled={node.options.length >= OPTIONS_MAX} onClick={add}>
+                <DashedButton disabled={node.options.length >= OPTIONS_MAX || editor.isSaving} onClick={add}>
                     {node.options.length >= OPTIONS_MAX ? `Hasta ${OPTIONS_MAX} opciones por respuesta` : '+ Añadir opción'}
                 </DashedButton>
             )}
@@ -400,8 +401,10 @@ const OptionScreen = ({ editor, node, index, onBack, onCreated }: {
     const destination = option.target === 'person' ? 'Hablar con una persona' : option.target === 'start' ? 'Volver al inicio'
         : target ? ruleName(form, target) : 'Elegir destino';
 
+    // Mientras se guarda no se edita: la respuesta del servidor reemplaza el
+    // formulario y se llevaría lo de aquí (revisión de Codex del PR #189).
     return (
-        <>
+        <fieldset disabled={editor.isSaving} className="contents">
             <ScreenHeader title={`Opción ${index + 1} de «${node.name}»`} onBack={onBack} />
             <div className="bg-brand-surface border border-brand-border rounded-[14px] p-4 grid gap-4">
                 <label className="grid gap-[7px]">
@@ -453,6 +456,6 @@ const OptionScreen = ({ editor, node, index, onBack, onCreated }: {
                     </div>
                 </div>
             )}
-        </>
+        </fieldset>
     );
 };
