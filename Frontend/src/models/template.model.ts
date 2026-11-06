@@ -67,3 +67,27 @@ export interface Template {
     /** Cuándo dejó de llegar al sincronizar: se borró en Meta y ya no se envía. */
     deletedInMetaAt?: string | null,
 }
+
+/** El uso de una plantilla en lo que la persona puede ver. `delivered` incluye los leídos. */
+export interface TemplateUsage {
+    sent: number;
+    delivered: number;
+    read: number;
+    failed: number;
+    lastSentAt: string | null;
+}
+
+/** Una campaña que usó la plantilla. */
+export interface TemplateCampaign {
+    id: string;
+    name: string;
+    status: string;
+    createdAt: string;
+}
+
+/** `GET /templates/:templateId`. Sin `campaigns` si la persona no gestiona campañas. */
+export interface TemplateDetail {
+    template: Template;
+    usage: TemplateUsage;
+    campaigns?: TemplateCampaign[];
+}

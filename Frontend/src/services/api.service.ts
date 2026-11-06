@@ -1,6 +1,6 @@
 import type { QueryFunctionContext } from '@tanstack/react-query';
 import axios from 'axios';
-import type { Template, TemplateButtonParam, TemplateHeaderMedia } from '../models/template.model';
+import type { Template, TemplateButtonParam, TemplateDetail, TemplateHeaderMedia } from '../models/template.model';
 import type { ContactFilter, ContactInput, ContactNote } from '../models/contact.model';
 import type { ImportBatchResult, ImportInput, ImportPreview } from '../models/contactImport.model';
 import type { BulkTagResult, Tag, TagSelectionSummary } from '../models/tag.model';
@@ -301,6 +301,16 @@ export const syncTemplatesService = async () => {
 // Servicio para obtener las plantillas
 export const getTemplatesService = async (): Promise<Template[]> => {
     const { data } = await axios.get(`${API_URL}/templates`, { withCredentials: true });
+    return data;
+}
+
+// Una plantilla con su uso y, con permiso, sus campañas. `fresh` sincroniza
+// antes su WABA si el último sync tiene más de 10 minutos.
+export const getTemplateDetailService = async (templateId: string, { fresh = false }: { fresh?: boolean } = {}): Promise<TemplateDetail> => {
+    const { data } = await axios.get(`${API_URL}/templates/${encodeURIComponent(templateId)}`, {
+        params: fresh ? { fresh: 1 } : undefined,
+        withCredentials: true,
+    });
     return data;
 }
 
