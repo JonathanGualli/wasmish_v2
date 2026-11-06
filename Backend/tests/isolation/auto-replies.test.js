@@ -679,13 +679,13 @@ test('guardar y leer el no entiendo; sin él en el cuerpo, apagado', async () =>
     const a = await newAccount('FBA');
     const saved = await saveSettings(a, settingsBody({ fallback: fallbackOn }));
     assert.equal(saved.status, 200, saved.text);
-    assert.deepEqual((await getSettings(a)).body.fallback, { ...fallbackOn, options: [] });
+    assert.deepEqual((await getSettings(a)).body.fallback, { ...fallbackOn, options: [], position: null });
 
     // Una pestaña con la página de antes no manda `fallback`.
     const legacy = await saveSettings(a, settingsBody());
     assert.equal(legacy.status, 200, legacy.text);
     // Desde los menús (spec 2026-11-05), también sus opciones.
-    assert.deepEqual(legacy.body.fallback, { enabled: false, text: '', options: [] });
+    assert.deepEqual(legacy.body.fallback, { enabled: false, text: '', options: [], position: null });
 
     const empty = await saveSettings(a, settingsBody({ fallback: { enabled: true, text: '  ' } }));
     assert.equal(empty.status, 400);
@@ -695,7 +695,7 @@ test('una configuración guardada antes del no entiendo se lee con él apagado',
     const a = await newAccount('FBB');
     await AutoReplySettings.collection.insertOne({ userId: a.accountId, ...settingsBody() });
 
-    assert.deepEqual((await getSettings(a)).body.fallback, { enabled: false, text: '', options: [] });
+    assert.deepEqual((await getSettings(a)).body.fallback, { enabled: false, text: '', options: [], position: null });
 });
 
 test('el worker manda el no entiendo una sola vez', async () => {
@@ -834,7 +834,7 @@ test('menús: se guardan las opciones, los ids que pone la página y los nombres
     assert.deepEqual(body.keywordRules[1].keywords, []);
     assert.deepEqual(body.keywordRules[1].options, []);
     assert.deepEqual(body.fallback.options, []);
-    assert.deepEqual(body.handoff, { text: 'Ya te atiende alguien' });
+    assert.deepEqual(body.handoff, { text: 'Ya te atiende alguien', position: null });
 });
 
 test('menús: lo que no es un menú válido da 400 y no guarda nada', async () => {
@@ -902,7 +902,7 @@ test('menús: una pestaña con la página de antes no borra los menús (409)', a
     const b = await newAccount('MNE');
     assert.equal((await saveSettings(b, settingsBody())).status, 200, 'cuenta sin documento');
     assert.equal((await saveSettings(b, settingsBody())).status, 200, 'cuenta sin opciones');
-    assert.deepEqual((await getSettings(b)).body.handoff, { text: 'Enseguida te atiende alguien del equipo' });
+    assert.deepEqual((await getSettings(b)).body.handoff, { text: 'Enseguida te atiende alguien del equipo', position: null });
 });
 
 // Revisión de Codex del plan, 3: comprobar antes y guardar después dejaba un
@@ -932,11 +932,11 @@ test('menús: una configuración guardada antes de los menús se completa al lee
     });
 
     const { body } = await getSettings(a);
-    assert.deepEqual(body.handoff, { text: 'Enseguida te atiende alguien del equipo' });
+    assert.deepEqual(body.handoff, { text: 'Enseguida te atiende alguien del equipo', position: null });
     assert.deepEqual(body.welcome.options, []);
     assert.deepEqual(body.keywordRules[0].options, []);
     assert.equal(body.keywordRules[0].name, 'Respuesta 1');
-    assert.deepEqual(body.fallback, { enabled: false, text: '', options: [] });
+    assert.deepEqual(body.fallback, { enabled: false, text: '', options: [], position: null });
 
     metaForBot();
     try {
@@ -1546,5 +1546,47 @@ test('con la marca ya puesta, otro toque de «persona» manda el push de entrant
         assert.equal(allTo()[1].payload.body, 'Hablar con alguien');
     } finally {
         onMeta(null);
+    }
+});
+
+// --- Bot con menús: dónde quedó cada tarjeta del lienzo (plan, Tarea 9) -----
+
+test('las posiciones de las tarjetas se guardan y se leen; sin guardar, null', async () => {
+    const owner = await newAccount('POA');
+    // Una configuración de antes de las posiciones: todas a null.
+    assert.equal((await saveSettings(owner, menuBody())).status, 200);
+    const before = (await getSettings(owner)).body;
+    assert.equal(before.welcome.position, null);
+    assert.equal(before.fallback.position, null);
+    assert.equal(before.handoff.position, null);
+    assert.ok(before.keywordRules.every(rule => rule.position === null));
+
+    const body = menuBody({ handoff: { text: 'Ya te atiende alguien', position: { x: 400, y: 900 } } });
+    body.welcome.position = { x: 36, y: 68 };
+    body.keywordRules[0].position = { x: 366, y: 68 };
+    body.fallback = { enabled: true, text: 'No te entendí', options: [], position: { x: 0, y: 20000 } };
+    const saved = await saveSettings(owner, body);
+    assert.equal(saved.status, 200);
+    const read = (await getSettings(owner)).body;
+    assert.deepEqual(read.welcome.position, { x: 36, y: 68 });
+    assert.deepEqual(read.keywordRules[0].position, { x: 366, y: 68 });
+    assert.equal(read.keywordRules[1].position, null);
+    assert.deepEqual(read.fallback.position, { x: 0, y: 20000 });
+    assert.deepEqual(read.handoff.position, { x: 400, y: 900 });
+
+    // Una guardada sin el campo (la v1, en la BD): se lee con null.
+    await AutoReplySettings.updateOne({ userId: owner.accountId }, { $unset: { 'welcome.position': '', 'handoff.position': '', 'keywordRules.0.position': '' } });
+    const legacy = (await getSettings(owner)).body;
+    assert.equal(legacy.welcome.position, null);
+    assert.equal(legacy.handoff.position, null);
+    assert.equal(legacy.keywordRules[0].position, null);
+});
+
+test('una posición fuera de rango o con decimales: 400', async () => {
+    const owner = await newAccount('POB');
+    for (const position of [{ x: -1, y: 0 }, { x: 0, y: 20001 }, { x: 1.5, y: 3 }, { x: 10 }]) {
+        const body = menuBody();
+        body.keywordRules[0].position = position;
+        assert.equal((await saveSettings(owner, body)).status, 400, JSON.stringify(position));
     }
 });

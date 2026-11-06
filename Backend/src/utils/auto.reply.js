@@ -78,7 +78,7 @@ export const defaultAutoReplySettings = () => ({
     enabled: false,
     timezone: DEFAULT_TIMEZONE,
     handoffHours: 12,
-    welcome: { enabled: false, text: '', returnAfterDays: 30, options: [] },
+    welcome: { enabled: false, text: '', returnAfterDays: 30, options: [], position: null },
     outOfHours: {
         enabled: false,
         text: '',
@@ -89,23 +89,27 @@ export const defaultAutoReplySettings = () => ({
         },
     },
     keywordRules: [],
-    fallback: { enabled: false, text: '', options: [] },
-    handoff: { text: DEFAULT_HANDOFF_TEXT },
+    fallback: { enabled: false, text: '', options: [], position: null },
+    handoff: { text: DEFAULT_HANDOFF_TEXT, position: null },
 });
 
 /**
  * Una configuración leída de la BD con todo lo que se añadió después de
  * guardarla: con `.lean()` los defaults del modelo no se aplican, y una de la
  * v1 no tiene `handoff`, `options` ni `name` (revisión de Codex del plan del
- * bot con menús, 5), ni `fallback` si es anterior al 2026-10-15. Toda lectura
+ * bot con menús, 5), ni `position` (la tarjeta del lienzo, de la página nueva), ni `fallback` si es anterior al 2026-10-15. Toda lectura
  * pasa por aquí. No cambia el original.
  */
 export const withAutoReplyDefaults = (stored) => ({
     ...stored,
-    welcome: { ...stored.welcome, options: stored.welcome?.options ?? [] },
-    keywordRules: (stored.keywordRules ?? []).map(rule => ({ ...rule, name: rule.name ?? '', options: rule.options ?? [] })),
-    fallback: { enabled: false, text: '', ...stored.fallback, options: stored.fallback?.options ?? [] },
-    handoff: { text: DEFAULT_HANDOFF_TEXT, ...stored.handoff },
+    welcome: { ...stored.welcome, options: stored.welcome?.options ?? [], position: stored.welcome?.position ?? null },
+    keywordRules: (stored.keywordRules ?? []).map(rule => ({
+        ...rule, name: rule.name ?? '', options: rule.options ?? [], position: rule.position ?? null,
+    })),
+    fallback: {
+        enabled: false, text: '', ...stored.fallback, options: stored.fallback?.options ?? [], position: stored.fallback?.position ?? null,
+    },
+    handoff: { text: DEFAULT_HANDOFF_TEXT, ...stored.handoff, position: stored.handoff?.position ?? null },
 });
 
 // El id de una regla: `_id` en la BD; `id` en una configuración sin guardar

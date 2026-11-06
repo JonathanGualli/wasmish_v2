@@ -24,6 +24,13 @@ const optionSchema = new mongoose.Schema({
     ruleId: { type: mongoose.Schema.Types.ObjectId, default: null },
 }, { _id: false });
 
+// Dónde dejó la persona su tarjeta en el lienzo de la página (bot con menús,
+// plan, Tarea 9). `null`: la página la coloca sola.
+const positionSchema = new mongoose.Schema({
+    x: { type: Number, required: true },
+    y: { type: Number, required: true },
+}, { _id: false });
+
 // Una «respuesta» en la pantalla. Sin frases, solo se llega por una opción.
 const keywordRuleSchema = new mongoose.Schema({
     name: { type: String, default: '' },
@@ -34,6 +41,7 @@ const keywordRuleSchema = new mongoose.Schema({
     // pasar a «cada regla elige sus líneas» sin migrar nada.
     lineIds: { type: [mongoose.Schema.Types.ObjectId], ref: 'Line', default: [] },
     options: { type: [optionSchema], default: [] },
+    position: { type: positionSchema, default: null },
 });
 
 const autoReplySettingsSchema = new mongoose.Schema({
@@ -50,6 +58,7 @@ const autoReplySettingsSchema = new mongoose.Schema({
         text: { type: String, default: '' },
         returnAfterDays: { type: Number, default: 30 },
         options: { type: [optionSchema], default: [] },
+        position: { type: positionSchema, default: null },
     },
     outOfHours: {
         enabled: { type: Boolean, default: false },
@@ -66,11 +75,14 @@ const autoReplySettingsSchema = new mongoose.Schema({
         enabled: { type: Boolean, default: false },
         text: { type: String, default: '' },
         options: { type: [optionSchema], default: [] },
+        position: { type: positionSchema, default: null },
     },
     // Lo que responde el bot cuando el contacto pide una persona. Un documento
     // guardado antes no lo tiene: se completa al leer (`withAutoReplyDefaults`).
     handoff: {
         text: { type: String, default: DEFAULT_HANDOFF_TEXT },
+        // La tarjeta «Una persona» del lienzo.
+        position: { type: positionSchema, default: null },
     },
 }, {
     timestamps: true,
