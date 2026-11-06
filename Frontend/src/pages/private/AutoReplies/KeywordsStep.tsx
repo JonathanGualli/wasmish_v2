@@ -174,7 +174,13 @@ const MoveButton = ({ label, disabled, onClick, children }: { label: string; dis
 );
 
 /** Las frases como fichas: Enter o coma para añadir; borrar con la ✕ o con Retroceso en vacío. */
-const KeywordInput = ({ keywords, onChange, error }: { keywords: string[]; onChange: (keywords: string[]) => void; error?: string }) => {
+export const KeywordInput = ({ keywords, onChange, error, optional = false }: {
+    keywords: string[];
+    onChange: (keywords: string[]) => void;
+    error?: string;
+    /** En el lienzo: sin frases, solo se llega por una opción. */
+    optional?: boolean;
+}) => {
     const id = useId();
     const [draft, setDraft] = useState('');
     const [hint, setHint] = useState<string | null>(null);
@@ -210,7 +216,9 @@ const KeywordInput = ({ keywords, onChange, error }: { keywords: string[]; onCha
     return (
         <div className="grid gap-[7px]">
             <div className="flex items-baseline">
-                <label htmlFor={id} className="text-[13.5px] font-semibold text-brand-strong">Si el mensaje dice</label>
+                <label htmlFor={id} className="text-[13.5px] font-semibold text-brand-strong">
+                    Si el mensaje dice{optional && <span className="font-normal text-brand-muted"> · opcional</span>}
+                </label>
                 <span className="ml-auto font-mono tabular-nums text-[11.5px] text-brand-muted">{keywords.length} de {KEYWORDS_PER_RULE_MAX}</span>
             </div>
             <div className={`flex flex-wrap items-center gap-1.5 min-h-[46px] px-2.5 py-2 rounded-[10px] border bg-brand-surface
