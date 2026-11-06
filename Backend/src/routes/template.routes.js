@@ -5,7 +5,7 @@ import { validateApiKey } from "../middlewares/validate.api.key.middleware.js";
 import { validateSchema } from "../middlewares/validator.middleware.js";
 import { sendTemplateSchema } from "../schemas/template.schema.js";
 import {
-    getTemplatesController, syncTemplatesController, sendTemplateController,
+    getTemplatesController, getTemplateDetailController, syncTemplatesController, sendTemplateController,
     uploadHeaderMediaController, uploadHeaderMediaFileController, removeHeaderMediaController, getHeaderMediaFileController,
 } from "../controllers/template.controller.js";
 import { publicApiIpLimiter, publicApiUserLimiter } from "../middlewares/rate.limit.middleware.js";
@@ -15,6 +15,8 @@ const router = Router();
 
 router.get('/templates/sync', authRequired, requirePermission('templates.manage'), syncTemplatesController);
 router.get('/templates', authRequired, getTemplatesController);
+// Después de `/templates/sync`: si no, «sync» se tomaría por un `:templateId`.
+router.get('/templates/:templateId', authRequired, getTemplateDetailController);
 
 router.put('/templates/:templateId/header-media', authRequired, requirePermission('templates.manage'), readRawFile, uploadHeaderMediaController);
 router.post('/templates/:templateId/header-media/files', authRequired, requirePermission('templates.manage'), readRawFile, uploadHeaderMediaFileController);

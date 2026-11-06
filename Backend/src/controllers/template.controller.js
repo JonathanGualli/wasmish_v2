@@ -17,9 +17,12 @@ import { findAccountWabas, findSendingLine, templateScopeFor } from "../services
 import { recordOutboundMessage } from "../services/outbound.message.service.js";
 import Line from "../models/line.model.js";
 import Waba from "../models/waba.model.js";
+import Message from "../models/message.model.js";
+import Campaign from "../models/campaign.model.js";
 import { LINE_NOT_FOUND_MESSAGE } from "../utils/whatsapp.line.js";
 import { resolveApiLine } from "../utils/line.js";
-import { inLineScope, lineScope } from "../utils/permissions.js";
+import { can, conversationScope, inLineScope, lineScope } from "../utils/permissions.js";
+import { summarizeTemplateUsage } from "../utils/template.usage.js";
 import { metaSendOutcome } from "../utils/outbound.send.js";
 
 
@@ -346,6 +349,94 @@ export const getTemplatesController = async (req, res) => {
         return res.status(status).json([{ message: error.message }]);
     }
 }
+
+const TEMPLATE_NOT_FOUND_MESSAGE = 'La plantilla no existe en tu cuenta.';
+
+// Los envíos de la plantilla que la persona puede ver, por estado: los
+// salientes con su `templateId` o, los de antes del campo, con su nombre;
+// en una conversación de la cuenta, de una línea de su WABA (de cualquier
+// estado: los de una línea ya desconectada cuentan) y a su alcance
+// (`conversationScope`, el filtro de la bandeja). Los dos `$match` repiten el
+// `$type` de los índices parciales `message_template_id` y
+// `message_template_name`: sin él Mongo no los usa.
+const templateUsageFor = async (auth, template) => {
+    const { accountId } = auth;
+    const waba = await Waba.findOne({ accountId, waBusinessId: template.waBusinessId }, { _id: 1 }).lean();
+    const wabaLineIds = waba ? await Line.distinct('_id', { accountId, wabaId: waba._id }) : [];
+    if (wabaLineIds.length === 0) return summarizeTemplateUsage([]);
+
+    const groups = await Message.aggregate([
+        { $match: {
+            direction: 'outbound',
+            $or: [
+                { templateId: { $eq: template.templateId, $type: 'string' } },
+                { templateName: { $eq: template.name, $type: 'string' }, templateId: { $exists: false } },
+            ],
+        } },
+        { $lookup: {
+            from: 'conversations',
+            let: { conversationId: '$conversationId' },
+            pipeline: [
+                { $match: { $expr: { $eq: ['$_id', '$$conversationId'] } } },
+                // Las dos condiciones ponen `lineId`: con `$and` no se pisan.
+                { $match: {
+                    userId: new mongoose.Types.ObjectId(accountId),
+                    $and: [{ lineId: { $in: wabaLineIds } }, conversationScope(auth)],
+                } },
+                { $project: { _id: 1 } },
+            ],
+            as: 'conversation',
+        } },
+        { $match: { 'conversation.0': { $exists: true } } },
+        { $group: { _id: '$status', count: { $sum: 1 }, lastAt: { $max: '$timestamp' } } },
+    ]);
+    return summarizeTemplateUsage(groups.map(group => ({ status: group._id, count: group.count, lastAt: group.lastAt })));
+};
+
+// Las campañas de la cuenta que la usaron, las más recientes primero.
+const templateCampaignsFor = async (accountId, templateId) => {
+    const campaigns = await Campaign.find({ userId: accountId, 'template.templateId': templateId }, { name: 1, status: 1, createdAt: 1 })
+        .sort({ createdAt: -1 }).lean();
+    return campaigns.map(campaign => ({ id: String(campaign._id), name: campaign.name, status: campaign.status, createdAt: campaign.createdAt }));
+};
+
+// GET /templates/:templateId[?fresh=1] — la plantilla completa, su uso en lo
+// que la persona puede ver y, con `campaigns.manage`, las campañas que la
+// usaron. 404 si no es de la cuenta o su WABA no está al alcance de la
+// persona. Con `fresh=1` sincroniza antes su WABA si toca (como la lista).
+export const getTemplateDetailController = async (req, res) => {
+    try {
+        const { accountId } = req.auth;
+        const { templateId } = req.params;
+        const findTemplate = () => Template.findOne({ templateId, userId: accountId })
+            .populate('headerMedia', 'mimeType filename size').lean();
+        let template = await findTemplate();
+
+        const wabas = await templateWabasFor(req.auth, undefined);
+        const waba = wabas?.find(candidate => candidate.waBusinessId === template?.waBusinessId);
+        if (!template || (wabas !== null && !waba)) {
+            return res.status(404).json([{ message: TEMPLATE_NOT_FOUND_MESSAGE }]);
+        }
+
+        if (req.query.fresh === '1' && waba?.tokenWhatsapp && isTemplateSyncStale(waba.templatesSyncedAt, new Date())) {
+            try {
+                await syncTemplatesForWaba(waba);
+                template = (await findTemplate()) ?? template;
+            } catch (syncError) {
+                console.error('Sync de plantillas del detalle falló:', syncError.message);
+            }
+        }
+
+        const [usage, campaigns] = await Promise.all([
+            templateUsageFor(req.auth, template),
+            can(req.auth, 'campaigns.manage') ? templateCampaignsFor(accountId, templateId) : null,
+        ]);
+        return res.json({ template: serializeTemplate(template), usage, ...(campaigns && { campaigns }) });
+    } catch (error) {
+        const status = error.statusCode || 500;
+        return res.status(status).json([{ message: error.message }]);
+    }
+};
 
 /**
  * Valida y guarda el archivo de cabecera que llega en el cuerpo: el archivo tal

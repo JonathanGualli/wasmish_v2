@@ -312,6 +312,11 @@ messageSchema.index(
 // no usa un parcial para `{ campaignId: id }` (ver waMessageId abajo), y un
 // sparse compuesto indexa igual todo documento que tenga `status`, o sea todos.
 messageSchema.index({ campaignId: 1, status: 1 }, { name: 'campaignId_status' });
+// El uso de una plantilla (`getTemplateDetailController`): sus mensajes por el
+// id de Meta y, los anteriores al campo, por el nombre. Parciales: los que no
+// son de plantilla (casi todos) no ocupan nada. La consulta repite el `$type`.
+messageSchema.index({ templateId: 1 }, { name: 'message_template_id', partialFilterExpression: { templateId: { $type: 'string' } } });
+messageSchema.index({ templateName: 1 }, { name: 'message_template_name', partialFilterExpression: { templateName: { $type: 'string' } } });
 
 // waMessageId lleva DOS índices, y hacen falta los dos. Suena redundante, pero
 // cada uno resuelve un problema que el otro no puede.
