@@ -4,7 +4,7 @@
 // `campaigns.manage`.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { seedAccount, seedMember, request, connectWhatsapp, Contact, Conversation, Message, Template } from './helpers.js';
+import { seedAccount, seedMember, request, connectWhatsapp, Campaign, Contact, Conversation, Message, Template } from './helpers.js';
 
 let phoneSeq = 0;
 // Una conversación de `account` por `lineId`, con un contacto propio.
@@ -30,6 +30,14 @@ const g = await seedAccount('G', { seq: 33, maxLines: 2 });
 const { lineId: g1 } = await connectWhatsapp(g, { phoneNumberId: '7731' });
 const { lineId: g2 } = await connectWhatsapp(g, { phoneNumberId: '7732' });
 const agent = await seedMember(g, { role: 'agent', lineIds: [g1], label: 'GAGENTE' });
+const supervisor = await seedMember(g, { role: 'supervisor', lineIds: [g1], label: 'GSUPER' });
+// Una campaña de la plantilla en cada línea (la sembrada no tiene línea).
+const campaignOn = async (lineId, name) => String((await Campaign.create({
+    userId: g.accountId, name, lineId, totalRecipients: 1, dryRun: true,
+    template: { templateId: g.templateId, name: g.templateName, language: 'es', category: 'MARKETING', bodyText: 'x' },
+}))._id);
+const campaignG1 = await campaignOn(g1, 'de la línea 1');
+const campaignG2 = await campaignOn(g2, 'de la línea 2');
 const free = await conversationOn(g, g1);
 const mine = await conversationOn(g, g1, { assignedTo: agent.userId });
 const others = await conversationOn(g, g1, { assignedTo: g.userId });
@@ -104,13 +112,24 @@ test('una plantilla de un WABA fuera de su alcance da 404', async () => {
 
 test('las campañas solo le llegan a quien tiene campaigns.manage', async () => {
     const owner = await detail(g, g.templateId);
-    assert.deepEqual(owner.body.campaigns.map(c => c.id), [g.campaignId]);
-    assert.equal(owner.body.campaigns[0].name, `${g.marker} campaña`);
-    assert.ok(owner.body.campaigns[0].status);
-    assert.ok(owner.body.campaigns[0].createdAt);
+    assert.deepEqual(owner.body.campaigns.map(c => c.id).sort(), [g.campaignId, campaignG1, campaignG2].sort());
+    const seeded = owner.body.campaigns.find(c => c.id === g.campaignId);
+    assert.equal(seeded.name, `${g.marker} campaña`);
+    assert.ok(seeded.status);
+    assert.ok(seeded.createdAt);
 
     const asAgent = await detail(agent, g.templateId);
     assert.equal('campaigns' in asAgent.body, false, asAgent.text);
+});
+
+// Revisión de Codex del PR #193. Regresión que vigila: las campañas se
+// buscaban solo por cuenta y plantilla, y un supervisor con una línea veía las
+// de la otra línea del mismo WABA, que los endpoints de campañas le esconden
+// (`campaignScope`).
+test('el supervisor solo ve las campañas de sus líneas', async () => {
+    const res = await detail(supervisor, g.templateId);
+    assert.equal(res.status, 200, res.text);
+    assert.deepEqual(res.body.campaigns.map(c => c.id), [campaignG1]);
 });
 
 test('una plantilla sin envíos: el uso en cero', async () => {

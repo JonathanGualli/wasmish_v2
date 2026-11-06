@@ -21,7 +21,7 @@ import Message from "../models/message.model.js";
 import Campaign from "../models/campaign.model.js";
 import { LINE_NOT_FOUND_MESSAGE } from "../utils/whatsapp.line.js";
 import { resolveApiLine } from "../utils/line.js";
-import { can, conversationScope, inLineScope, lineScope } from "../utils/permissions.js";
+import { can, conversationLineScope, conversationScope, inLineScope, lineScope } from "../utils/permissions.js";
 import { summarizeTemplateUsage } from "../utils/template.usage.js";
 import { metaSendOutcome } from "../utils/outbound.send.js";
 
@@ -393,9 +393,12 @@ const templateUsageFor = async (auth, template) => {
     return summarizeTemplateUsage(groups.map(group => ({ status: group._id, count: group.count, lastAt: group.lastAt })));
 };
 
-// Las campañas de la cuenta que la usaron, las más recientes primero.
-const templateCampaignsFor = async (accountId, templateId) => {
-    const campaigns = await Campaign.find({ userId: accountId, 'template.templateId': templateId }, { name: 1, status: 1, createdAt: 1 })
+// Las campañas de la cuenta que la usaron y que la persona puede ver, las más
+// recientes primero. Un supervisor, solo las de sus líneas: el mismo filtro
+// que `campaignScope` en los endpoints de campañas (revisión de Codex del PR #193).
+const templateCampaignsFor = async (auth, templateId) => {
+    const filter = { userId: auth.accountId, 'template.templateId': templateId, ...conversationLineScope(auth) };
+    const campaigns = await Campaign.find(filter, { name: 1, status: 1, createdAt: 1 })
         .sort({ createdAt: -1 }).lean();
     return campaigns.map(campaign => ({ id: String(campaign._id), name: campaign.name, status: campaign.status, createdAt: campaign.createdAt }));
 };
@@ -429,7 +432,7 @@ export const getTemplateDetailController = async (req, res) => {
 
         const [usage, campaigns] = await Promise.all([
             templateUsageFor(req.auth, template),
-            can(req.auth, 'campaigns.manage') ? templateCampaignsFor(accountId, templateId) : null,
+            can(req.auth, 'campaigns.manage') ? templateCampaignsFor(req.auth, templateId) : null,
         ]);
         return res.json({ template: serializeTemplate(template), usage, ...(campaigns && { campaigns }) });
     } catch (error) {
