@@ -1,5 +1,5 @@
 import { Link, useLocation, useParams } from "react-router-dom";
-import { AlertCircle, AlertTriangle, ChevronLeft, Copy, ExternalLink, Info, Loader2, RefreshCw } from "lucide-react";
+import { AlertCircle, AlertTriangle, Check, ChevronLeft, Copy, ExternalLink, Info, Loader2, RefreshCw } from "lucide-react";
 import { PageShell } from "../../../../components/Page/PageShell";
 import { Callout } from "../../../../components/Callout/Callout";
 import { BlankState } from "../../../../components/BlankState/BlankState";
@@ -9,6 +9,7 @@ import { SkeletonLine, SkeletonBox } from "../../../../components/Skeleton/Skele
 import { SkeletonStatus } from "../../../../components/Skeleton/SkeletonFrame";
 import { useNotice } from "../../../../components/Notice/context/useNotice";
 import { useAuthContext } from "../../../../context/auth.context";
+import { useCopyToClipboard } from "../../../../hooks/useCopyToClipboard";
 import { useLines } from "../../../../hooks/useLines";
 import { useTemplateDetail } from "../../../../hooks/useTemplateDetail";
 import { parseError, useTemplates } from "../../../../hooks/useTemplates";
@@ -37,18 +38,16 @@ const BackLink = ({ to, label }: { to: string; label: string }) => (
     </Link>
 );
 
-const CopyButton = ({ value, label, done, size }: { value: string; label: string; done: string; size: 'lg' | 'sm' }) => {
-    const { notify } = useNotice();
-    const copy = () => navigator.clipboard.writeText(value).then(
-        () => notify({ kind: 'success', text: done }),
-        () => notify({ kind: 'error', text: 'No se pudo copiar.' }),
-    );
+/** Copiar el nombre o el ID: el icono pasa a ✓ un momento. */
+const CopyButton = ({ value, label, size }: { value: string; label: string; size: 'lg' | 'sm' }) => {
+    const { copied, copy } = useCopyToClipboard();
+    const iconSize = size === 'lg' ? 15 : 13;
     return (
-        <button type="button" onClick={copy} title={label} aria-label={label}
+        <button type="button" onClick={() => copy(value)} title={copied ? 'Copiado' : label} aria-label={copied ? 'Copiado' : label}
             className={size === 'lg'
                 ? 'w-11 h-11 sm:w-[30px] sm:h-[30px] flex-none rounded-[8px] text-brand-muted hover:bg-brand-raised hover:text-brand-text flex items-center justify-center cursor-pointer transition-colors'
                 : 'flex text-brand-subtle hover:text-brand-text cursor-pointer transition-colors'}>
-            <Copy size={size === 'lg' ? 15 : 13} />
+            {copied ? <Check size={iconSize} className="text-brand-success" /> : <Copy size={iconSize} />}
         </button>
     );
 };
@@ -195,12 +194,12 @@ export const TemplateDetailPage = () => {
                         <h1 className="font-mono text-[20px] sm:text-[26px] font-semibold tracking-[-0.02em] leading-[1.2] text-brand-text [overflow-wrap:anywhere]">
                             {template.name}
                         </h1>
-                        <CopyButton value={template.name} label="Copiar el nombre" done="Nombre copiado." size="lg" />
+                        <CopyButton value={template.name} label="Copiar el nombre" size="lg" />
                     </div>
                     <div className="flex flex-wrap items-center gap-2 text-[12.5px] sm:text-[13px] text-brand-muted">
                         <span>ID</span>
                         <span className="font-mono text-brand-strong">{template.templateId}</span>
-                        <CopyButton value={template.templateId} label="Copiar el ID" done="ID copiado." size="sm" />
+                        <CopyButton value={template.templateId} label="Copiar el ID" size="sm" />
                         <TemplateLines template={template} />
                     </div>
                 </div>
