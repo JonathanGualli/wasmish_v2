@@ -37,7 +37,11 @@ const MediaThumb = ({ template }: { template: Template }) => {
  * Meta aprueba que lleve una imagen, no cuál: la imagen va en cada envío, así
  * que aquí se sube la que se usará (y se cambia cuando se quiera).
  */
-export const TemplateHeaderCell = ({ template }: { template: Template }) => {
+export const TemplateHeaderCell = ({ template, roomy = false }: {
+    template: Template;
+    /** Fuera de la tabla (la tarjeta del detalle): el nombre del archivo no se acorta a 150 px. */
+    roomy?: boolean;
+}) => {
     const inputRef = useRef<HTMLInputElement>(null);
     const { uploadHeaderMedia, removeHeaderMedia } = useTemplates();
     // Sin `templates.manage` (el agente), la cabecera se ve pero no se cambia (Fase 3).
@@ -101,15 +105,18 @@ export const TemplateHeaderCell = ({ template }: { template: Template }) => {
         <div className="flex items-center gap-2.5 min-w-[190px]">
             <MediaThumb template={template} />
             <div className="min-w-0 grid gap-0.5">
-                <span className="text-[12.5px] text-brand-strong truncate max-w-[150px]" title={media.filename ?? undefined}>
+                <span className={`text-[12.5px] text-brand-strong truncate ${roomy ? '' : 'max-w-[150px]'}`} title={media.filename ?? undefined}>
                     {media.filename ?? rule.noun}
                     <span className="font-mono text-[11px] text-brand-subtle"> · {formatFileSize(media.size)}</span>
                 </span>
                 {canManage && <span className="flex gap-3">
-                    <button type="button" onClick={() => inputRef.current?.click()} disabled={busy}
-                        className={`${linkButton} text-brand-accent-strong`}>
-                        {uploadHeaderMedia.isPending ? 'Subiendo…' : 'Cambiar'}
-                    </button>
+                    {/* Una borrada en Meta ya no se envía: su archivo se quita, no se cambia. */}
+                    {!template.deletedInMetaAt && (
+                        <button type="button" onClick={() => inputRef.current?.click()} disabled={busy}
+                            className={`${linkButton} text-brand-accent-strong`}>
+                            {uploadHeaderMedia.isPending ? 'Subiendo…' : 'Cambiar'}
+                        </button>
+                    )}
                     <button type="button" onClick={remove} disabled={busy} className={`${linkButton} text-brand-gray-600`}>
                         Quitar
                     </button>
