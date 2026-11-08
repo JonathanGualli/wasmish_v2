@@ -191,16 +191,39 @@
 - [ ] **Step 1: Escribir el brief** con el § 7 del spec, como los briefs que ya hay (qué hace y ve el usuario, no cómo se ve): la tabla (abrir, categoría, filtro de borradas escondidas por defecto), el detalle (todo lo del § 7), los avisos (borrada, rechazada con el motivo en palabras, en pausa, calidad baja), los estados (cargando, 404 también desde una campaña, sin envíos), el agente (sin campañas, uso de lo suyo), el pie en las vistas previas, y teléfono y escritorio. Con los motivos de rechazo y las calidades de Meta que haya que poner en palabras (la lista sale de la Tarea 2, Step 1).
 - [ ] **Step 2: PR solo de documentación** (sin revisión cruzada). Jonathan se lo pasa a Claude Design.
 
-### Task 6: La pantalla (PR 5, rama `plantillas-ui`)
+### Task 6: La pantalla (PRs 5 y 6)
 
-Se detalla en este plan **cuando llegue el diseño** (como las Tareas 8 a 10 del bot con menús): primer commit de la rama = el diseño en `Design/` y los pasos de esta tarea. Lo que ya se sabe:
+**Diseño:** `Design/Wasmish Plantillas - Detalle.html` (Claude Design, 2026-11-08), con 13 pantallas: 1a y 1b la tabla, 2a aprobada, 3a rechazada, 3b borrada, 3c los avisos y las palabras de cada estado, 4a agente, 4b sin envíos, 5a teléfono, 6a y 6b desde una campaña, 7a cargando y 7b error. Es un paquete de Claude Design: las medidas exactas y los textos están en su plantilla y en su `renderVals()`.
 
-- La ruta `templates/:templateId` en `PrivateRouter.tsx` y `routes.models.ts`; «Ver plantilla» en `CampaignDetailPage.tsx` con `campaign.template.templateId`.
-- Un hook `useTemplateDetail(templateId)` con React Query (`['template', templateId]`), que pide `fresh: true`.
-- La página Plantillas, al montarse, pide la lista con `fresh=1` una vez (`queryClient.fetchQuery` con la clave `['templates']`), sin que los selectores del chat y las campañas lo hagan.
-- `TemplateBubble` aprende el pie (`template.footerText`), en todas las vistas previas.
-- Reutilizar `TemplateBubble`, `TemplateButtons`, `TemplateHeaderCell`, `TemplateLinesCell`, `CategoryPill`, `PageShell`/`PageHeader`, `Callout` y `DataTable`.
-- Navegador a 1440, 800 y 390 px, con una plantilla de cada formato de cabecera, una rechazada, una borrada y una sin envíos; como owner y como agente.
+**Decisiones de Jonathan (2026-11-08):** el backend devuelve `syncedAt` en cada plantilla, para «Sincronizado hace…»; la UI va en **dos PRs**, primero el detalle y después la tabla; «Abrir en Meta» enlaza al listado de plantillas del WABA en el Administrador de WhatsApp (`https://business.facebook.com/wa/manage/message-templates/?waba_id=<id>`), y Jonathan comprueba en producción que lleva bien.
+
+#### PR 5: el detalle (rama `plantillas-detalle-ui`)
+
+**Files:**
+- Modify: `Backend/src/controllers/template.controller.js` (`syncedAt`), `Backend/tests/isolation/templates-detail.test.js`
+- Create: `Frontend/src/utils/templateDisplay.ts` (las palabras), `Frontend/src/hooks/useTemplateDetail.ts`, `Frontend/src/pages/private/Templates/Detail/` (la página y sus tarjetas)
+- Modify: `Frontend/src/models/template.model.ts`, `Frontend/src/hooks/useTemplates.ts`, `Frontend/src/components/Chat/TemplatePreview.tsx`, `Frontend/src/pages/private/PrivateRouter.tsx`, `Frontend/src/models/routes.models.ts`, `Frontend/src/pages/private/Campaigns/Detail/CampaignDetailPage.tsx`
+
+- [ ] **Step 1: `syncedAt` en cada plantilla** (`GET /templates` y el detalle): el `templatesSyncedAt` de su WABA, o `null` (sin WABA, o sin ningún sync completo). Test de aislamiento: después de un sync completo trae la fecha; una de un WABA que nunca se sincronizó entero, `null`.
+- [ ] **Step 2: Las palabras, en puro** (`templateDisplay.ts`): el estado (los de 3c, con «Borrada en Meta» por encima de todos), la calidad, el motivo del rechazo con qué hacer (o «WhatsApp la rechazó» con el código), los avisos del detalle en el orden de 3c, cada botón con su destino (el ejemplo de la parte variable sale del `example` crudo de Meta), las variables con su ejemplo y dónde están, y el reparto del uso para la barra (leídos, entregados sin leer, sin confirmar, fallidos).
+- [ ] **Step 3: El pie y los ejemplos en la burbuja**: `TemplateBubble` enseña `template.footerText` en todas las vistas previas, y un resaltado nuevo, `example`, para los ejemplos que se mandaron a Meta.
+- [ ] **Step 4: La página** `templates/:templateId`:
+  - `useTemplateDetail(templateId)` (`['template', templateId]`, `fresh: true`). Mientras llega, lo que ya está en la caché de `['templates']` sale al momento y solo el uso espera (7a); «Comprobando cambios en Meta…» si su `syncedAt` tiene más de 10 minutos.
+  - Arriba: el nombre (copiable) y el ID, las líneas y «Sincronizar» (`templates.manage`); la franja de cinco datos; los avisos.
+  - A la izquierda: la burbuja y el archivo de la cabecera (`TemplateHeaderCell`; subir o quitar actualiza también el detalle en la caché).
+  - A la derecha: el uso («Tu uso» para el agente y el supervisor), las campañas (con «Va a fallar» en las activas si está borrada), los botones y las variables.
+  - 404 → «Esta plantilla ya no está en tu cuenta» (6b), con vuelta a la campaña si se llegó desde una; otro error → «No se pudo cargar la plantilla» con «Reintentar» (7b).
+  - En el teléfono, todo en una columna (5a).
+- [ ] **Step 5: «Ver plantilla»** en el detalle de campaña, tras la categoría (6a), con `state` para volver a la campaña.
+- [ ] **Step 6: Comprobar**: Backend `npm test && npm run test:isolation`; Frontend `npm run lint && npm run build`; navegador a 1440, 800 y 390 px contra un backend aparte con una aprobada con imagen, una rechazada, una borrada y una sin envíos, como owner y como agente.
+- [ ] **Step 7: Documentar** en `docs/arquitectura/whatsapp-envio.md` (`syncedAt` y la página) y en `docs/estado.md`. **Abrir el PR 5** con revisión de Codex.
+
+#### PR 6: la tabla (rama `plantillas-tabla`, desde `master` con el PR 5 unido)
+
+- [ ] **Step 1: La tabla de 1a/1b**: el ID bajo el nombre, la categoría, el cuerpo en dos líneas, las líneas (con varias), la flecha y la fila que abre el detalle; en el teléfono, cada fila como tarjeta.
+- [ ] **Step 2: Los filtros**: buscar por nombre o texto, las píldoras por estado con su número, la categoría y «Mostrar las borradas en Meta» (apagado: el pie dice cuántas hay escondidas y «Mostrarla»).
+- [ ] **Step 3: Al montarse, la lista con `fresh=1` una vez** (`queryClient.fetchQuery` con `['templates']`) y «Sincronizado hace…».
+- [ ] **Step 4: Comprobar y documentar**, como en el PR 5. **Abrir el PR 6** con revisión de Codex.
 
 ## Al terminar
 
