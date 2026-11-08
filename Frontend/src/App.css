@@ -112,6 +112,10 @@
   --color-brand-handoff-border: #f0d9a8;  /* Borde de la franja */
   --color-brand-handoff-button: #d9b25e;  /* Borde de «Quitar» */
 
+  /* La calidad media de una plantilla (diseño «Plantillas - Detalle», 3c): el
+     punto amarillo entre el verde (alta) y el rojo (baja). Solo para ese punto. */
+  --color-brand-quality-medium: #d09a1f;
+
   --animate-notice-in: notice-in 0.3s ease-out;
   --animate-notice-out: notice-out 0.3s ease-in forwards;
 

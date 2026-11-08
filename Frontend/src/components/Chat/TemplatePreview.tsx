@@ -33,12 +33,17 @@ export const TemplateButtons = ({ buttons }: { buttons?: TemplateButton[] }) => 
   );
 };
 
-/** Cómo se marca un valor dentro de la burbuja (la vista previa de una campaña). */
-export type ValueHighlight = 'value' | 'fallback';
+/**
+ * Cómo se marca un valor dentro de la burbuja: en una campaña, un dato del
+ * contacto o su valor de reserva; en el detalle de la plantilla, el ejemplo
+ * que se mandó a Meta.
+ */
+export type ValueHighlight = 'value' | 'fallback' | 'example';
 
 const HIGHLIGHT_CLASS: Record<ValueHighlight, string> = {
   value: 'bg-brand-deep-active rounded px-1',
   fallback: 'underline decoration-dashed decoration-brand-accent underline-offset-[3px]',
+  example: 'bg-brand-deep-active rounded px-0.5 shadow-[inset_0_-1.5px_0_var(--color-brand-accent)]',
 };
 
 /**
@@ -51,7 +56,7 @@ export const TemplateBubble = ({ bodyText, values, highlights, template }: {
   bodyText: string;
   values: Record<string, string>;
   highlights?: Record<string, ValueHighlight>;
-  /** Para enseñar su cabecera encima del cuerpo. */
+  /** Para enseñar su cabecera encima del cuerpo y su pie debajo. */
   template?: Template;
 }) => (
   <div className="text-sm leading-[1.6] whitespace-pre-line [overflow-wrap:anywhere] text-white
@@ -72,6 +77,10 @@ export const TemplateBubble = ({ bodyText, values, highlights, template }: {
       const highlight = highlights?.[key];
       return highlight ? <span key={i} className={HIGHLIGHT_CLASS[highlight]}>{value}</span> : value;
     })}
+    {/* El pie: gris bajo el cuerpo, como lo ve el contacto. */}
+    {template?.footerText && (
+      <div className="mt-1.5 text-[12.5px] leading-[1.45] text-brand-on-deep-muted">{template.footerText}</div>
+    )}
   </div>
 );
 
@@ -118,6 +127,22 @@ const TemplateHeaderPreview = ({ template }: { template: Template }) => {
     </div>
   );
 };
+
+/** La leyenda del resaltado `example`, debajo de la burbuja del detalle. */
+export const ExampleHighlightLegend = ({ missingKey }: { missingKey: string | null }) => (
+  <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-brand-strong">
+    <span className="flex items-center gap-1.5">
+      <span className="w-3.5 h-2.5 rounded-[3px] bg-brand-deep-active shadow-[inset_0_-1.5px_0_var(--color-brand-accent)]" />
+      Ejemplo que se mandó a Meta
+    </span>
+    {missingKey && (
+      <span className="flex items-center gap-1.5">
+        <span className="font-mono text-[11px] text-brand-accent-strong underline decoration-dotted">{missingKey}</span>
+        Variable sin ejemplo
+      </span>
+    )}
+  </div>
+);
 
 /** La leyenda de `highlights`, debajo de la vista previa. */
 export const ValueHighlightLegend = () => (
