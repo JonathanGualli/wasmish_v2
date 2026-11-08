@@ -204,19 +204,19 @@
 - Create: `Frontend/src/utils/templateDisplay.ts` (las palabras), `Frontend/src/hooks/useTemplateDetail.ts`, `Frontend/src/pages/private/Templates/Detail/` (la página y sus tarjetas)
 - Modify: `Frontend/src/models/template.model.ts`, `Frontend/src/hooks/useTemplates.ts`, `Frontend/src/components/Chat/TemplatePreview.tsx`, `Frontend/src/pages/private/PrivateRouter.tsx`, `Frontend/src/models/routes.models.ts`, `Frontend/src/pages/private/Campaigns/Detail/CampaignDetailPage.tsx`
 
-- [ ] **Step 1: `syncedAt` en cada plantilla** (`GET /templates` y el detalle): el `templatesSyncedAt` de su WABA, o `null` (sin WABA, o sin ningún sync completo). Test de aislamiento: después de un sync completo trae la fecha; una de un WABA que nunca se sincronizó entero, `null`.
-- [ ] **Step 2: Las palabras, en puro** (`templateDisplay.ts`): el estado (los de 3c, con «Borrada en Meta» por encima de todos), la calidad, el motivo del rechazo con qué hacer (o «WhatsApp la rechazó» con el código), los avisos del detalle en el orden de 3c, cada botón con su destino (el ejemplo de la parte variable sale del `example` crudo de Meta), las variables con su ejemplo y dónde están, y el reparto del uso para la barra (leídos, entregados sin leer, sin confirmar, fallidos).
-- [ ] **Step 3: El pie y los ejemplos en la burbuja**: `TemplateBubble` enseña `template.footerText` en todas las vistas previas, y un resaltado nuevo, `example`, para los ejemplos que se mandaron a Meta.
-- [ ] **Step 4: La página** `templates/:templateId`:
+- [x] **Step 1: `syncedAt` en cada plantilla** (`GET /templates` y el detalle): el `templatesSyncedAt` de su WABA, o `null` (sin WABA, o sin ningún sync completo). Test de aislamiento: después de un sync completo trae la fecha; una de un WABA que nunca se sincronizó entero, `null`.
+- [x] **Step 2: Las palabras, en puro** (`templateDisplay.ts`): el estado (los de 3c, con «Borrada en Meta» por encima de todos), la calidad, el motivo del rechazo con qué hacer (o «WhatsApp la rechazó» con el código), los avisos del detalle en el orden de 3c, cada botón con su destino (el ejemplo de la parte variable sale del `example` crudo de Meta), las variables con su ejemplo y dónde están, y el reparto del uso para la barra (leídos, entregados sin leer, sin confirmar, fallidos).
+- [x] **Step 3: El pie y los ejemplos en la burbuja**: `TemplateBubble` enseña `template.footerText` en todas las vistas previas, y un resaltado nuevo, `example`, para los ejemplos que se mandaron a Meta.
+- [x] **Step 4: La página** `templates/:templateId`:
   - `useTemplateDetail(templateId)` (`['template', templateId]`, `fresh: true`). Mientras llega, lo que ya está en la caché de `['templates']` sale al momento y solo el uso espera (7a); «Comprobando cambios en Meta…» si su `syncedAt` tiene más de 10 minutos.
   - Arriba: el nombre (copiable) y el ID, las líneas y «Sincronizar» (`templates.manage`); la franja de cinco datos; los avisos.
   - A la izquierda: la burbuja y el archivo de la cabecera (`TemplateHeaderCell`; subir o quitar actualiza también el detalle en la caché).
   - A la derecha: el uso («Tu uso» para el agente y el supervisor), las campañas (con «Va a fallar» en las activas si está borrada), los botones y las variables.
   - 404 → «Esta plantilla ya no está en tu cuenta» (6b), con vuelta a la campaña si se llegó desde una; otro error → «No se pudo cargar la plantilla» con «Reintentar» (7b).
   - En el teléfono, todo en una columna (5a).
-- [ ] **Step 5: «Ver plantilla»** en el detalle de campaña, tras la categoría (6a), con `state` para volver a la campaña.
-- [ ] **Step 6: Comprobar**: Backend `npm test && npm run test:isolation`; Frontend `npm run lint && npm run build`; navegador a 1440, 800 y 390 px contra un backend aparte con una aprobada con imagen, una rechazada, una borrada y una sin envíos, como owner y como agente.
-- [ ] **Step 7: Documentar** en `docs/arquitectura/whatsapp-envio.md` (`syncedAt` y la página) y en `docs/estado.md`. **Abrir el PR 5** con revisión de Codex.
+- [x] **Step 5: «Ver plantilla»** en el detalle de campaña, tras la categoría (6a), con `state` para volver a la campaña.
+- [x] **Step 6: Comprobar**: Backend `npm test && npm run test:isolation`; Frontend `npm run lint && npm run build`; navegador a 1440, 800 y 390 px contra un backend aparte con una aprobada con imagen, una rechazada, una borrada y una sin envíos, como owner y como agente.
+- [x] **Step 7: Documentar** en `docs/arquitectura/whatsapp-envio.md` (`syncedAt` y la página) y en `docs/estado.md`. **Abrir el PR 5** con revisión de Codex.
 
 #### PR 6: la tabla (rama `plantillas-tabla`, desde `master` con el PR 5 unido)
 
