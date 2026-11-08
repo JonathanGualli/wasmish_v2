@@ -4,7 +4,7 @@
 // `campaigns.manage`.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { seedAccount, seedMember, request, connectWhatsapp, Campaign, Contact, Conversation, Message, Template } from './helpers.js';
+import { seedAccount, seedMember, request, connectWhatsapp, Campaign, Contact, Conversation, Message, Template, Waba } from './helpers.js';
 
 let phoneSeq = 0;
 // Una conversación de `account` por `lineId`, con un contacto propio.
@@ -137,4 +137,25 @@ test('una plantilla sin envíos: el uso en cero', async () => {
     assert.equal(res.status, 200, res.text);
     assert.deepEqual(res.body.usage, { sent: 0, delivered: 0, read: 0, failed: 0, lastSentAt: null });
     assert.deepEqual(res.body.campaigns, []);
+});
+
+// «Sincronizado hace…» (Tarea 6 del plan): cada plantilla trae el último sync
+// completo de SU WABA, y null si el suyo nunca terminó uno. Vigila que con dos
+// WABA no se pinte la fecha de uno en las plantillas del otro.
+test('syncedAt: el último sync completo del WABA de cada plantilla', async () => {
+    const syncedAt = new Date('2026-11-08T12:00:00Z');
+    await Waba.updateOne({ accountId: x.accountId, waBusinessId: 'waba-X' }, { $set: { templatesSyncedAt: syncedAt } });
+
+    const synced = await detail(x, x.templateId);
+    assert.equal(synced.status, 200, synced.text);
+    assert.equal(synced.body.template.syncedAt, syncedAt.toISOString());
+    const neverSynced = await detail(x, 'tpl-x2-mismo-nombre');
+    assert.equal(neverSynced.status, 200, neverSynced.text);
+    assert.equal(neverSynced.body.template.syncedAt, null);
+
+    const list = await request(x, 'GET', '/templates');
+    assert.equal(list.status, 200, list.text);
+    const byId = new Map(list.body.map(t => [t.templateId, t.syncedAt]));
+    assert.equal(byId.get(x.templateId), syncedAt.toISOString());
+    assert.equal(byId.get('tpl-x2-mismo-nombre'), null);
 });

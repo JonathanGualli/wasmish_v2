@@ -272,10 +272,23 @@ export const syncTemplatesController = async (req, res) => {
 }
 
 /** La plantilla para el frontend: el archivo de la cabecera, resumido. */
-const serializeTemplate = (template) => ({
-    ...template,
-    headerMedia: serializeHeaderMedia(template.headerMedia),
-});
+// Las plantillas como las ve el navegador. `syncedAt`: el último sync completo
+// de su WABA (para «Sincronizado hace…»), o null si nunca terminó uno o no
+// tiene WABA. Se lee al responder, después de un posible sync, para que salga
+// el de ahora.
+const serializeTemplates = async (accountId, templates) => {
+    const waBusinessIds = [...new Set(templates.map(t => t.waBusinessId).filter(Boolean))];
+    const wabas = waBusinessIds.length === 0 ? []
+        : await Waba.find({ accountId, waBusinessId: { $in: waBusinessIds } }, 'waBusinessId templatesSyncedAt').lean();
+    const syncedAt = new Map(wabas.map(waba => [waba.waBusinessId, waba.templatesSyncedAt ?? null]));
+    return templates.map(template => ({
+        ...template,
+        headerMedia: serializeHeaderMedia(template.headerMedia),
+        syncedAt: syncedAt.get(template.waBusinessId) ?? null,
+    }));
+};
+
+const serializeTemplate = async (accountId, template) => (await serializeTemplates(accountId, [template]))[0];
 
 // Las de la cuenta en estos WABA. Sin ninguno (sin WhatsApp conectado), todas
 // las de la cuenta, como antes.
@@ -343,7 +356,7 @@ export const getTemplatesController = async (req, res) => {
             }
         }
 
-        return res.json(templates.map(serializeTemplate));
+        return res.json(await serializeTemplates(userId, templates));
     } catch (error) {
         const status = error.statusCode || 500;
         return res.status(status).json([{ message: error.message }]);
@@ -434,7 +447,7 @@ export const getTemplateDetailController = async (req, res) => {
             templateUsageFor(req.auth, template),
             can(req.auth, 'campaigns.manage') ? templateCampaignsFor(req.auth, templateId) : null,
         ]);
-        return res.json({ template: serializeTemplate(template), usage, ...(campaigns && { campaigns }) });
+        return res.json({ template: await serializeTemplate(accountId, template), usage, ...(campaigns && { campaigns }) });
     } catch (error) {
         const status = error.statusCode || 500;
         return res.status(status).json([{ message: error.message }]);
@@ -471,7 +484,7 @@ export const uploadHeaderMediaController = async (req, res) => {
         template.headerMedia = media._id;
         await template.save();
 
-        return res.json(serializeTemplate({ ...template.toObject(), headerMedia: media }));
+        return res.json(await serializeTemplate(req.auth.accountId, { ...template.toObject(), headerMedia: media }));
     } catch (error) {
         console.error('Subida del archivo de cabecera falló:', error.message);
         return res.status(500).json([{ message: error.message }]);
@@ -511,7 +524,7 @@ export const removeHeaderMediaController = async (req, res) => {
             { new: true },
         ).lean();
         if (!template) return res.status(404).json([{ message: 'La plantilla no existe en tu cuenta.' }]);
-        return res.json(serializeTemplate(template));
+        return res.json(await serializeTemplate(req.auth.accountId, template));
     } catch (error) {
         return res.status(500).json([{ message: error.message }]);
     }
