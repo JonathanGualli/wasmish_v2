@@ -59,8 +59,9 @@ const headerFile = (template: Template) => {
     return template.headerMedia ? template.headerMedia.filename ?? 'Guardado' : 'Falta';
 };
 
+// Con dónde está cada una: el {{1}} de un botón no es el {{1}} del cuerpo.
 const variablesText = (template: Template) =>
-    templateVariables(template).map(({ key, example }) => `${key} = ${example ?? 'sin ejemplo'}`).join('\n');
+    templateVariables(template).map(({ key, example, where }) => `${where}: ${key} = ${example ?? 'sin ejemplo'}`).join('\n');
 
 const buttonsText = (template: Template) =>
     templateButtonDetails(template.buttons)
