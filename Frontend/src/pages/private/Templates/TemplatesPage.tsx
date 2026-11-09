@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import type { OnChangeFn, PaginationState } from "@tanstack/react-table";
 import { AlertCircle, AlertTriangle, ChevronDown, ImageUp, LayoutTemplate, RefreshCw } from "lucide-react";
 import { useFreshTemplatesOnMount, useTemplates } from "../../../hooks/useTemplates";
 import { DataTable } from "../../../components/DataTable/DataTable";
@@ -101,7 +102,16 @@ export const TemplatesPage = () => {
     const missingMedia = templates.filter(t => !t.deletedInMetaAt && headerMediaRule(t) && !t.headerMedia).length;
     const syncedAt = oldestTemplateSync(templates);
     const checking = freshPending && templates.length > 0 && isTemplateSyncStale(syncedAt);
-    const page = visible.slice(pagination.pageIndex * pagination.pageSize, (pagination.pageIndex + 1) * pagination.pageSize);
+    // Si quedan menos (tras sincronizar o un filtro que vale como «Todas»), la
+    // página elegida puede no existir: la última que sí (revisión de Codex del PR #196).
+    const lastPage = Math.max(0, Math.ceil(visible.length / pagination.pageSize) - 1);
+    const shownPagination = { ...pagination, pageIndex: Math.min(pagination.pageIndex, lastPage) };
+    // «Siguiente» y «Anterior» parten de la página que se ve, no de la guardada.
+    const changePage: OnChangeFn<PaginationState> = updater => setPagination(current => {
+        const shown = { ...current, pageIndex: Math.min(current.pageIndex, lastPage) };
+        return typeof updater === 'function' ? updater(shown) : updater;
+    });
+    const page = visible.slice(shownPagination.pageIndex * pagination.pageSize, (shownPagination.pageIndex + 1) * pagination.pageSize);
 
     // Las borradas que saldrían con los demás filtros (un estado las deja fuera: ya no tienen el de Meta).
     const hiddenDeleted = filters.showDeleted || filters.status !== ALL_TEMPLATES ? 0
@@ -188,8 +198,8 @@ export const TemplatesPage = () => {
                     data={page}
                     columns={columns}
                     totalCount={visible.length}
-                    pagination={pagination}
-                    setPagination={setPagination}
+                    pagination={shownPagination}
+                    setPagination={changePage}
                     isLoading={isLoading || isSyncing}
                     loadingLabel="Cargando plantillas"
                     resultLabel={total => (total === 1 ? '1 plantilla' : `${total} plantillas`)}

@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { Pill } from "../../../components/Pill/Pill";
 import { CategoryPill } from "../../../components/Chat/TemplateFields";
 import type { Template } from "../../../models/template.model";
+import { templateDetailPath } from "../../../models/routes.models";
 import { languageName, templateStatusWords } from "../../../utils/templateDisplay";
 import { TemplateLinesCell } from "./TemplateLinesCell";
 
@@ -20,13 +22,24 @@ export const StopRowClick = ({ children }: { children: ReactNode }) => (
     <div onClick={event => event.stopPropagation()}>{children}</div>
 );
 
+/**
+ * El nombre, como enlace al detalle: la fila entera se abre con el ratón, pero
+ * con el teclado solo se llega a un enlace (revisión de Codex del PR #196). El
+ * clic no sube a la fila, que navegaría otra vez.
+ */
+const TemplateNameLink = ({ template, className }: { template: Template; className: string }) => (
+    <Link to={templateDetailPath(template.templateId)} onClick={event => event.stopPropagation()} title={template.name}
+        className={`block truncate font-mono font-medium rounded-[3px] hover:underline
+            focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand-accent-soft
+            ${template.deletedInMetaAt ? 'text-brand-muted' : 'text-brand-text'} ${className}`}>
+        {template.name}
+    </Link>
+);
+
 /** El nombre (lo que se copia a la API) con su ID debajo, los dos en mono. */
 export const TemplateNameCell = ({ template }: { template: Template }) => (
     <div className="min-w-[150px] max-w-[170px]">
-        <div title={template.name}
-            className={`truncate font-mono text-[13px] font-medium ${template.deletedInMetaAt ? 'text-brand-muted' : 'text-brand-text'}`}>
-            {template.name}
-        </div>
+        <TemplateNameLink template={template} className="text-[13px]" />
         <div className="font-mono text-[11.5px] text-brand-subtle tabular-nums mt-0.5">{template.templateId}</div>
     </div>
 );
@@ -36,9 +49,7 @@ export const TemplateMobileRow = ({ template, showLines }: { template: Template;
     <div className="grid gap-2 px-4 py-3.5">
         <div className="flex items-start gap-2.5">
             <div className="min-w-0 flex-1">
-                <div className={`truncate font-mono text-[13.5px] font-medium ${template.deletedInMetaAt ? 'text-brand-muted' : 'text-brand-text'}`}>
-                    {template.name}
-                </div>
+                <TemplateNameLink template={template} className="text-[13.5px]" />
                 <div className="font-mono text-[11.5px] text-brand-subtle tabular-nums mt-0.5">{template.templateId}</div>
             </div>
             <TemplateStatusPill template={template} />
