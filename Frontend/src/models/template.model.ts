@@ -85,6 +85,12 @@ export interface TemplateUsage {
     lastSentAt: string | null;
 }
 
+/** El uso de todas las plantillas de la lista (`GET /templates/usage`), para exportarlas. `campaigns`, solo con `campaigns.manage`. */
+export interface TemplatesUsage {
+    usage: Record<string, TemplateUsage>;
+    campaigns?: Record<string, number>;
+}
+
 /** Una campaña que usó la plantilla. */
 export interface TemplateCampaign {
     id: string;

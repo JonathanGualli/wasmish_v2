@@ -146,6 +146,16 @@ const REJECTION: Record<string, { reason: string; text: string }> = {
     },
 };
 
+/**
+ * Por qué la rechazó WhatsApp, en palabras («Formato no válido»): el código de
+ * Meta tal cual si no lo conocemos, `null` sin rechazo o sin motivo.
+ */
+export const rejectionReasonWords = (template: Template): string | null => {
+    if (!isRejected(template) || !template.rejectedReason) return null;
+    const reason = REJECTION[template.rejectedReason]?.reason;
+    return reason ? reason.charAt(0).toUpperCase() + reason.slice(1) : template.rejectedReason;
+};
+
 const rejectionNotice = (template: Template): TemplateNotice => {
     const code = template.rejectedReason ?? null;
     const known = code ? REJECTION[code] : undefined;
