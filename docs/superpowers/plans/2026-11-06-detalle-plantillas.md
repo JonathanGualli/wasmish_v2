@@ -220,10 +220,10 @@
 
 #### PR 6: la tabla (rama `plantillas-tabla`, desde `master` con el PR 5 unido)
 
-- [ ] **Step 1: La tabla de 1a/1b**: el ID bajo el nombre, la categoría, el cuerpo en dos líneas, las líneas (con varias), la flecha y la fila que abre el detalle; en el teléfono, cada fila como tarjeta.
-- [ ] **Step 2: Los filtros**: buscar por nombre o texto, las píldoras por estado con su número, la categoría y «Mostrar las borradas en Meta» (apagado: el pie dice cuántas hay escondidas y «Mostrarla»).
-- [ ] **Step 3: Al montarse, la lista con `fresh=1` una vez** (`queryClient.fetchQuery` con `['templates']`) y «Sincronizado hace…».
-- [ ] **Step 4: Comprobar y documentar**, como en el PR 5. **Abrir el PR 6** con revisión de Codex.
+- [x] **Step 1: La tabla de 1a/1b**: el ID bajo el nombre, la categoría, el cuerpo en dos líneas, las líneas (con varias), la flecha y la fila que abre el detalle; en el teléfono, cada fila como tarjeta.
+- [x] **Step 2: Los filtros**: buscar por nombre o texto, las píldoras por estado con su número, la categoría y «Mostrar las borradas en Meta» (apagado: el pie dice cuántas hay escondidas y «Mostrarla»).
+- [x] **Step 3: Al montarse, la lista con `fresh=1` una vez** (`queryClient.fetchQuery` con `['templates']`) y «Sincronizado hace…».
+- [x] **Step 4: Comprobar y documentar**, como en el PR 5. **Abrir el PR 6** con revisión de Codex.
 
 ## Al terminar
 

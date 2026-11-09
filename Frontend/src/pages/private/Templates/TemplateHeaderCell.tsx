@@ -39,7 +39,7 @@ const MediaThumb = ({ template }: { template: Template }) => {
  */
 export const TemplateHeaderCell = ({ template, roomy = false }: {
     template: Template;
-    /** Fuera de la tabla (la tarjeta del detalle): el nombre del archivo no se acorta a 150 px. */
+    /** Fuera de la tabla (la tarjeta del detalle): el nombre del archivo no se acorta. */
     roomy?: boolean;
 }) => {
     const inputRef = useRef<HTMLInputElement>(null);
@@ -85,9 +85,12 @@ export const TemplateHeaderCell = ({ template, roomy = false }: {
             aria-label={`Archivo de la cabecera de ${template.name}`} />
     );
 
+    // Una borrada en Meta ya no se envía: sin archivo, no le falta nada.
+    if (!template.headerMedia && template.deletedInMetaAt) return <span className="text-brand-subtle">—</span>;
+
     if (!template.headerMedia) {
         return (
-            <div className="flex flex-col items-start gap-1.5 min-w-[150px]">
+            <div className="flex flex-col items-start gap-1.5">
                 <Pill tone="warning">Falta {rule.noun}</Pill>
                 {canManage && (
                     <button type="button" onClick={() => inputRef.current?.click()} disabled={busy}
@@ -102,10 +105,10 @@ export const TemplateHeaderCell = ({ template, roomy = false }: {
 
     const media = template.headerMedia;
     return (
-        <div className="flex items-center gap-2.5 min-w-[190px]">
+        <div className={`flex items-center gap-2.5 ${roomy ? 'min-w-[190px]' : ''}`}>
             <MediaThumb template={template} />
             <div className="min-w-0 grid gap-0.5">
-                <span className={`text-[12.5px] text-brand-strong truncate ${roomy ? '' : 'max-w-[150px]'}`} title={media.filename ?? undefined}>
+                <span className={`text-[12.5px] text-brand-strong truncate ${roomy ? '' : 'max-w-[100px]'}`} title={media.filename ?? undefined}>
                     {media.filename ?? rule.noun}
                     <span className="font-mono text-[11px] text-brand-subtle"> · {formatFileSize(media.size)}</span>
                 </span>

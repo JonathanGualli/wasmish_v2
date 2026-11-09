@@ -1,58 +1,33 @@
 import { type ColumnDef } from "@tanstack/react-table";
+import { ChevronRight } from "lucide-react";
+import { CategoryPill } from "../../../components/Chat/TemplateFields";
 import type { Template } from "../../../models/template.model";
+import { languageName } from "../../../utils/templateDisplay";
+import { StopRowClick, TemplateNameCell, TemplateStatusPill } from "./TemplateCells";
 import { TemplateHeaderCell } from "./TemplateHeaderCell";
 import { TemplateLinesCell } from "./TemplateLinesCell";
-
-/** Píldora de estado. Tintes sólidos del manual, no opacidades. */
-const STATUS: Record<string, { label: string; className: string }> = {
-    APPROVED: { label: "Aprobada",  className: "bg-brand-accent-soft text-brand-accent-strong" },
-    PENDING:  { label: "Pendiente", className: "bg-brand-warning-soft text-brand-warning" },
-    REJECTED: { label: "Rechazada", className: "bg-brand-danger-soft text-brand-danger" },
-    REJECT:   { label: "Rechazada", className: "bg-brand-danger-soft text-brand-danger" },
-};
-
-/** Ya no está en Meta: manda sobre el último estado que tenía (negativo, como rechazada). */
-const DELETED_IN_META = { label: "Borrada", className: "bg-brand-danger-soft text-brand-danger" };
-
-const LANGUAGES: Record<string, string> = {
-    es: "Español",
-    en: "Inglés",
-    en_US: "Inglés",
-    pt_BR: "Portugués",
-};
 
 export const templateColumns: ColumnDef<Template>[] = [
     {
         accessorKey: "name",
         header: "Nombre",
         meta: { skeleton: 'title' },
-        // El nombre es el identificador que el usuario copia a su llamada a la
-        // API: va en mono, como manda la regla de datos del manual.
-        cell: ({ row }) => (
-            <div
-                className="max-w-[220px] truncate font-mono text-[13px] font-medium text-brand-text"
-                title={row.original.name}
-            >
-                {row.original.name}
-            </div>
-        ),
+        cell: ({ row }) => <TemplateNameCell template={row.original} />,
     },
     {
-        accessorKey: "templateId",
-        header: "ID",
-        meta: { skeleton: 'line' },
-        cell: ({ row }) => (
-            <span className="font-mono text-[12px] text-brand-subtle tabular-nums">
-                {row.original.templateId}
-            </span>
-        ),
+        accessorKey: "category",
+        header: "Categoría",
+        meta: { skeleton: 'pill' },
+        cell: ({ row }) => <CategoryPill category={row.original.category} />,
     },
     {
         accessorKey: "bodyText",
-        header: "Cuerpo del mensaje",
+        // El título puede partirse: si no, es él quien fija el ancho de la columna.
+        header: () => <span className="whitespace-normal">Cuerpo del mensaje</span>,
         meta: { skeleton: 'title' },
+        // Dos líneas: lo bastante para reconocerla, y la fila no crece.
         cell: ({ row }) => (
-            <div className="max-w-[260px] truncate text-brand-muted" title={row.original.bodyText}>
+            <div className="min-w-[130px] max-w-[420px] text-[13.5px] leading-[1.45] text-brand-muted line-clamp-2 [overflow-wrap:anywhere]" title={row.original.bodyText}>
                 {row.original.bodyText}
             </div>
         ),
@@ -61,36 +36,29 @@ export const templateColumns: ColumnDef<Template>[] = [
         id: "header",
         header: "Cabecera",
         meta: { skeleton: 'line' },
-        cell: ({ row }) => <TemplateHeaderCell template={row.original} />,
+        cell: ({ row }) => <StopRowClick><TemplateHeaderCell template={row.original} /></StopRowClick>,
     },
     {
         accessorKey: "language",
         header: "Idioma",
         meta: { skeleton: 'line' },
-        cell: ({ row }) => (
-            <span className="text-brand-muted whitespace-nowrap">
-                {LANGUAGES[row.original.language] || row.original.language}
-            </span>
-        ),
+        cell: ({ row }) => <span className="text-[13.5px] text-brand-muted whitespace-nowrap">{languageName(row.original.language)}</span>,
     },
     {
         accessorKey: "status",
         header: "Estado",
         meta: { skeleton: 'pill' },
-        cell: ({ row }) => {
-            const s = row.original.deletedInMetaAt ? DELETED_IN_META : STATUS[row.original.status];
-            return (
-                <span className={`inline-flex items-center rounded-full px-2.5 py-1
-                    text-[11px] font-bold uppercase tracking-[0.05em] whitespace-nowrap
-                    ${s?.className ?? "bg-brand-raised text-brand-muted"}`}>
-                    {s?.label ?? row.original.status}
-                </span>
-            );
-        },
+        // La flecha va con el estado: una columna propia se comía 32 px de relleno.
+        cell: ({ row }) => (
+            <div className="flex items-center justify-between gap-3">
+                <TemplateStatusPill template={row.original} />
+                <ChevronRight size={14} className="flex-none text-brand-subtle" />
+            </div>
+        ),
     },
 ];
 
-/** La columna de las líneas: solo con más de una conectada (`hasManyLines`). */
+/** La columna de las líneas, tras el nombre: solo con más de una conectada (`hasManyLines`). */
 export const templateLinesColumn: ColumnDef<Template> = {
     id: "lines",
     header: "Se envía desde",

@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
     getTemplatesService, removeTemplateHeaderMediaService, syncTemplatesService, uploadTemplateHeaderMediaService,
@@ -22,7 +23,7 @@ export const useTemplates = () => {
     // Consultar para obtener las plantillas de la BD
     const query = useQuery({
         queryKey: ['templates'],
-        queryFn: getTemplatesService,
+        queryFn: () => getTemplatesService(),
         staleTime: Infinity,
         refetchOnWindowFocus: false,
     });
@@ -63,6 +64,9 @@ export const useTemplates = () => {
         uploadHeaderMedia,
         removeHeaderMedia,
         isLoading: query.isLoading,
+        /** No llegó la lista (y no hay ninguna en la caché que enseñar). */
+        isError: query.isError && !query.data,
+        refetch: query.refetch,
         isSyncing: syncMutation.isPending,
         sync: syncMutation.mutate,
         syncError: syncMutation.error
@@ -71,3 +75,30 @@ export const useTemplates = () => {
     }
 
 }
+/**
+ * La página Plantillas, al abrirse, pide la lista con `fresh=1` una vez: el
+ * backend sincroniza antes los WABA que llevan más de 10 minutos sin hacerlo.
+ * Si ya se estaba pidiendo la normal (la primera vez), se cancela para que esta
+ * no se quede en la cola. Un fallo no se cuenta: lo de la caché sigue valiendo,
+ * y sin caché lo enseña la consulta normal.
+ * Devuelve `true` mientras esa petición está en curso.
+ */
+export const useFreshTemplatesOnMount = () => {
+    const queryClient = useQueryClient();
+    const [pending, setPending] = useState(true);
+    // En desarrollo, StrictMode monta dos veces: que pida una sola.
+    const started = useRef(false);
+    useEffect(() => {
+        if (started.current) return;
+        started.current = true;
+        void queryClient.cancelQueries({ queryKey: ['templates'] })
+            .then(() => queryClient.fetchQuery({
+                queryKey: ['templates'],
+                queryFn: () => getTemplatesService({ fresh: true }),
+                staleTime: 0,
+            }))
+            .catch(() => undefined)
+            .finally(() => setPending(false));
+    }, [queryClient]);
+    return pending;
+};

@@ -298,9 +298,13 @@ export const syncTemplatesService = async () => {
     return data;
 }
 
-// Servicio para obtener las plantillas
-export const getTemplatesService = async (): Promise<Template[]> => {
-    const { data } = await axios.get(`${API_URL}/templates`, { withCredentials: true });
+// Las plantillas de la cuenta. `fresh` sincroniza antes los WABA cuyo último
+// sync tiene más de 10 minutos (la página Plantillas, al abrirla).
+export const getTemplatesService = async ({ fresh = false }: { fresh?: boolean } = {}): Promise<Template[]> => {
+    const { data } = await axios.get(`${API_URL}/templates`, {
+        params: fresh ? { fresh: 1 } : undefined,
+        withCredentials: true,
+    });
     return data;
 }
 

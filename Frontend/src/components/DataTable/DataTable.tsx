@@ -47,6 +47,8 @@ interface Props<T> {
     resultLabel?: (total: number) => string;
     /** La fila de carga del móvil (con `renderMobileRow`): avatar, píldoras… */
     mobileSkeleton?: Omit<SkeletonListRowProps, 'index'>;
+    /** En el pie, tras el total: «Una borrada en Meta, escondida. Mostrarla». */
+    footerNote?: ReactNode;
 }
 
 /**
@@ -82,6 +84,7 @@ export function DataTable<T>({
     loadingLabel,
     resultLabel,
     mobileSkeleton,
+    footerNote,
 }: Props<T>) {
 
     const pageCount = Math.ceil(totalCount / pagination.pageSize);
@@ -254,6 +257,7 @@ return (
               : <span className="font-mono tabular-nums text-brand-text">{totalCount}</span>}
           </span>
           {reloading && <span className="text-xs font-semibold text-brand-accent-strong">Cargando…</span>}
+          {footerNote && !showSkeleton && <span className="text-[13px] text-brand-muted">{footerNote}</span>}
         </div>
 
         <div className="flex gap-2 items-center">
