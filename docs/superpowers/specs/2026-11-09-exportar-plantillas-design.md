@@ -65,7 +65,7 @@ Devuelve el uso de cada plantilla (`templateId → { sent, delivered, read, fail
 }
 ```
 
-`campaigns` no llega sin `campaigns.manage`. **La ruta va antes que `/templates/:templateId`** en el router: si no, Express toma `usage` como un id.
+`campaigns` no llega sin `campaigns.manage`. Sin líneas, el uso va en ceros pero las campañas se cuentan igual, como en el detalle. **La ruta va antes que `/templates/:templateId`** en el router: si no, Express toma `usage` como un id.
 
 ### 4.2 El archivo (navegador)
 
@@ -113,7 +113,7 @@ Las cifras van como números y las fechas como fechas de Excel (con hora), para 
 
 ## 6. La pantalla
 
-- **«Descargar Excel»** (`CustomButton` `outline`, icono `FileSpreadsheet` de lucide) en las `actions` de `PageHeader`, a la izquierda de «Sincronizar». Lo ve todo el que ve la tabla (también sin `templates.manage`). En el teléfono, solo el icono, con `aria-label="Descargar Excel"`.
+- **«Descargar Excel»** (`CustomButton` `outline`, icono `FileSpreadsheet` de lucide) en las `actions` de `PageHeader`, a la izquierda de «Sincronizar». Lo ve todo el que ve la tabla (también sin `templates.manage`). En el teléfono, solo el icono, con «Descargar Excel» como texto para los lectores de pantalla (`sr-only`).
 - **Deshabilitado** mientras carga la lista, con la lista en error o si con los filtros no queda ninguna.
 - **Mientras prepara el archivo**, `isLoading` en el botón.
 - **Si falla** (la ruta o la librería): el aviso de arriba, `notify({ kind: 'error', text: 'No se pudo preparar el Excel. Inténtalo de nuevo.' })`.
