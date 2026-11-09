@@ -52,7 +52,7 @@ Las mismas reglas que el uso del detalle (spec del detalle § 4.3), para que la 
 - con `templateId`: a esa plantilla, si su línea es de su WABA;
 - sin `templateId`: a **cada** plantilla con ese nombre en el WABA de la línea (dos idiomas con el mismo nombre suman juntos sus envíos viejos, como en el detalle).
 
-Devuelve `templateId → grupos`, y cada uno pasa por **`summarizeTemplateUsage`**, la del detalle. Una plantilla sin envíos sale con ceros y `lastSentAt: null`.
+Devuelve el uso de cada plantilla (`templateId → { sent, delivered, read, failed, lastSentAt }`): sus grupos pasan por **`summarizeTemplateUsage`**, la del detalle. Una plantilla sin envíos sale con ceros y `lastSentAt: null`.
 
 **Las campañas** (solo con `campaigns.manage`): un `$group` sobre `Campaign` por `template.templateId`, con la cuenta y `conversationLineScope(auth)` (el filtro de `templateCampaignsFor`), y con `template.templateId` en los de la lista.
 
@@ -71,7 +71,7 @@ Devuelve `templateId → grupos`, y cada uno pasa por **`summarizeTemplateUsage`
 
 Al pulsar «Descargar Excel»:
 
-1. Pide `GET /templates/usage` (sin caché de React Query: un `fetchQuery` con `staleTime: 0`, o la llamada directa del servicio).
+1. Pide `GET /templates/usage` con la llamada directa del servicio, sin React Query: el uso no se guarda en caché.
 2. Carga `write-excel-file` con `import()` dinámico (como `read-excel-file` en Importar): no entra en el paquete de la página.
 3. Arma las filas con una función pura nueva, **`templateExportRows(templates, usage, campaigns, lines)`** en `utils/templateExport.ts`, con las plantillas que se ven (`filterTemplates` con los filtros puestos), en el orden de la tabla.
 4. Lo descarga con `downloadFile` (el `Blob`) y el nombre `plantillas-wasmish-AAAA-MM-DD.xlsx` (la fecha local).
