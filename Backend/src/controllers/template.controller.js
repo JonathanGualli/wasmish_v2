@@ -22,7 +22,7 @@ import Campaign from "../models/campaign.model.js";
 import { LINE_NOT_FOUND_MESSAGE } from "../utils/whatsapp.line.js";
 import { resolveApiLine } from "../utils/line.js";
 import { can, conversationLineScope, conversationScope, inLineScope, lineScope } from "../utils/permissions.js";
-import { summarizeTemplateUsage } from "../utils/template.usage.js";
+import { attributeTemplateUsage, summarizeTemplateUsage } from "../utils/template.usage.js";
 import { metaSendOutcome } from "../utils/outbound.send.js";
 
 
@@ -451,6 +451,94 @@ export const getTemplateDetailController = async (req, res) => {
     } catch (error) {
         const status = error.statusCode || 500;
         return res.status(status).json([{ message: error.message }]);
+    }
+};
+
+// Los salientes de las plantillas de la lista en las conversaciones a su
+// alcance, agrupados por plantilla, nombre, línea y estado: los mismos
+// `$match` y `$lookup` que `templateUsageFor`, para todas a la vez. A quién se
+// suma cada grupo lo decide `attributeTemplateUsage`.
+const templatesUsageGroups = async (auth, templates, lineIds) => {
+    const templateIds = templates.map(template => template.templateId);
+    const names = [...new Set(templates.map(template => template.name))];
+    const groups = await Message.aggregate([
+        { $match: {
+            direction: 'outbound',
+            $or: [
+                { templateId: { $in: templateIds, $type: 'string' } },
+                { templateName: { $in: names, $type: 'string' }, templateId: { $exists: false } },
+            ],
+        } },
+        { $lookup: {
+            from: 'conversations',
+            let: { conversationId: '$conversationId' },
+            pipeline: [
+                { $match: { $expr: { $eq: ['$_id', '$$conversationId'] } } },
+                { $match: {
+                    userId: new mongoose.Types.ObjectId(auth.accountId),
+                    $and: [{ lineId: { $in: lineIds } }, conversationScope(auth)],
+                } },
+                { $project: { lineId: 1 } },
+            ],
+            as: 'conversation',
+        } },
+        { $unwind: '$conversation' },
+        { $group: {
+            _id: { templateId: '$templateId', templateName: '$templateName', lineId: '$conversation.lineId', status: '$status' },
+            count: { $sum: 1 },
+            lastAt: { $max: '$timestamp' },
+        } },
+    ]);
+    return groups.map(({ _id, count, lastAt }) => ({
+        templateId: _id.templateId ?? null, templateName: _id.templateName ?? null,
+        lineId: String(_id.lineId), status: _id.status, count, lastAt,
+    }));
+};
+
+// Cuántas campañas a su alcance usaron cada plantilla (el filtro de
+// `templateCampaignsFor`); 0 las que ninguna.
+const templatesCampaignCounts = async (auth, templateIds) => {
+    const counts = Object.fromEntries(templateIds.map(templateId => [templateId, 0]));
+    const groups = await Campaign.aggregate([
+        { $match: {
+            userId: new mongoose.Types.ObjectId(auth.accountId),
+            'template.templateId': { $in: templateIds },
+            ...conversationLineScope(auth),
+        } },
+        { $group: { _id: '$template.templateId', count: { $sum: 1 } } },
+    ]);
+    for (const { _id, count } of groups) counts[_id] = count;
+    return counts;
+};
+
+// GET /templates/usage — el uso de todas las plantillas de la lista (las de
+// `GET /templates` sin `lineId`), para exportarlas a Excel. Las mismas cifras
+// que el detalle de cada una. No sincroniza: la página ya lo hizo al abrirse.
+// Sin líneas, el uso va en cero, pero las campañas se cuentan igual, como en
+// el detalle (revisión de Codex del PR #197).
+export const getTemplatesUsageController = async (req, res) => {
+    try {
+        const { accountId } = req.auth;
+        const templates = await findUserTemplates(accountId, await templateWabasFor(req.auth, undefined));
+        const templateIds = templates.map(template => template.templateId);
+        const withCampaigns = can(req.auth, 'campaigns.manage');
+        if (templates.length === 0) return res.json({ usage: {}, ...(withCampaigns && { campaigns: {} }) });
+
+        const waBusinessIds = [...new Set(templates.map(template => template.waBusinessId).filter(Boolean))];
+        const wabas = await Waba.find({ accountId, waBusinessId: { $in: waBusinessIds } }, { waBusinessId: 1 }).lean();
+        const wabaById = new Map(wabas.map(waba => [String(waba._id), waba.waBusinessId]));
+        const lines = await Line.find({ accountId, wabaId: { $in: wabas.map(waba => waba._id) } }, { wabaId: 1 }).lean();
+        const lineWabas = new Map(lines.map(line => [String(line._id), wabaById.get(String(line.wabaId))]));
+
+        const [groups, campaigns] = await Promise.all([
+            lines.length > 0 ? templatesUsageGroups(req.auth, templates, lines.map(line => line._id)) : [],
+            withCampaigns ? templatesCampaignCounts(req.auth, templateIds) : null,
+        ]);
+        return res.json({ usage: attributeTemplateUsage(groups, templates, lineWabas), ...(campaigns && { campaigns }) });
+    } catch (error) {
+        console.error('Error al calcular el uso de las plantillas:', error);
+        const status = error.statusCode || 500;
+        return res.status(status).json([{ message: status === 500 ? 'Error al calcular el uso de las plantillas.' : error.message }]);
     }
 };
 
