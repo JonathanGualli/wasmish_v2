@@ -1,5 +1,5 @@
 import { Link, useLocation, useParams } from "react-router-dom";
-import { AlertCircle, AlertTriangle, Check, ChevronLeft, Copy, ExternalLink, Info, Loader2, RefreshCw } from "lucide-react";
+import { AlertCircle, AlertTriangle, Check, ChevronLeft, Copy, ExternalLink, Info, RefreshCw } from "lucide-react";
 import { PageShell } from "../../../../components/Page/PageShell";
 import { Callout } from "../../../../components/Callout/Callout";
 import { BlankState } from "../../../../components/BlankState/BlankState";
@@ -15,12 +15,12 @@ import { useTemplateDetail } from "../../../../hooks/useTemplateDetail";
 import { parseError, useTemplates } from "../../../../hooks/useTemplates";
 import { TemplatesPath } from "../../../../models/routes.models";
 import type { Template } from "../../../../models/template.model";
-import { formatTimeAgo } from "../../../../utils/formatChatTime";
 import { isTemplateSyncStale, metaTemplatesUrl, templateNotices, type TemplateNotice } from "../../../../utils/templateDisplay";
 import {
     TemplateButtonsCard, TemplateFactStrip, TemplateHeaderFileCard, TemplatePreviewCard, TemplateVariablesCard,
 } from "./TemplateDetailCards";
 import { TemplateCampaignsCard, TemplateUsageCard } from "./TemplateUsageCards";
+import { TemplateSyncState } from "../TemplateSyncState";
 
 /** De dónde se llegó, para volver: `state.from` (el detalle de una campaña) o Plantillas. */
 export interface TemplateDetailNavigationState {
@@ -88,23 +88,6 @@ const TemplateLines = ({ template }: { template: Template }) => {
         <span>·</span><span>Se envía desde</span>
         {lines.map(line => <LineChip key={line.id} lineId={line.id} wide />)}
     </>;
-};
-
-/** El estado del sync, junto a «Sincronizar»: comprobando Meta, o cuándo fue. */
-const SyncState = ({ template, checking }: { template: Template; checking: boolean }) => {
-    if (checking) {
-        return (
-            <span className="flex items-center gap-[7px] text-[12.5px] text-brand-info">
-                <Loader2 size={14} className="motion-safe:animate-spin" />Comprobando cambios en Meta…
-            </span>
-        );
-    }
-    if (!template.syncedAt) return null;
-    return (
-        <span className="text-[12.5px] text-brand-muted">
-            Sincronizado <span className="font-mono">{formatTimeAgo(Date.now() - new Date(template.syncedAt).getTime())}</span>
-        </span>
-    );
 };
 
 /** Antes de saber nada de ella (sin la lista en caché): la forma de la cabecera y de la franja. */
@@ -204,7 +187,7 @@ export const TemplateDetailPage = () => {
                     </div>
                 </div>
                 <div className="flex-none flex items-center justify-between md:justify-end gap-3">
-                    <SyncState template={template} checking={checking} />
+                    <TemplateSyncState syncedAt={template.syncedAt} checking={checking} />
                     {canManage && (
                         <div className="h-11 sm:h-[38px]">
                             <CustomButton variant="outline" onClick={syncNow} isLoading={isSyncing}>
