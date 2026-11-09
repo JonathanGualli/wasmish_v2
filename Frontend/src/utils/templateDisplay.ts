@@ -346,3 +346,87 @@ export const usageSegments = (usage: TemplateUsage): UsageSegment[] => {
  */
 export const isTemplateSyncStale = (syncedAt: string | null | undefined, now = Date.now()) =>
     !syncedAt || now - new Date(syncedAt).getTime() > 10 * 60 * 1000;
+
+// ---------------------------------------------------------------------------
+// La tabla: buscar, filtrar por estado y categoría, y las borradas en Meta
+// (diseño «Plantillas - Detalle», 1a y 1b).
+// ---------------------------------------------------------------------------
+
+/** El estado para filtrar: «REJECT» (de antes del sync nuevo) cuenta como rechazada. */
+const statusKey = (template: Template) => (template.status === 'REJECT' ? 'REJECTED' : template.status);
+
+/** El orden de las píldoras: las de 1a primero; cualquier otro estado, detrás. */
+const STATUS_ORDER = ['APPROVED', 'PENDING', 'REJECTED', 'PAUSED'];
+const STATUS_PLURAL: Record<string, string> = {
+    APPROVED: 'Aprobadas',
+    PENDING: 'Pendientes',
+    REJECTED: 'Rechazadas',
+    PAUSED: 'En pausa',
+    DISABLED: 'Desactivadas',
+    IN_APPEAL: 'En apelación',
+    LIMIT_EXCEEDED: 'Con el límite alcanzado',
+    ARCHIVED: 'Archivadas',
+    PENDING_DELETION: 'Borrándose',
+};
+
+export const ALL_TEMPLATES = 'all';
+
+export interface TemplateFilters {
+    query: string;
+    /** `ALL_TEMPLATES` o un estado de Meta. */
+    status: string;
+    /** `ALL_TEMPLATES` o una categoría. */
+    category: string;
+    showDeleted: boolean;
+}
+
+export interface TemplateStatusChip {
+    value: string;
+    label: string;
+    count: number;
+}
+
+const fold = (text: string) => text.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+
+/**
+ * Las píldoras de estado con su número: «Todas» y los estados que hay. Las
+ * borradas en Meta solo cuentan en «Todas» (y si se muestran): su estado ya
+ * no es el de Meta, es «Borrada».
+ */
+export const templateStatusChips = (templates: Template[], showDeleted: boolean): TemplateStatusChip[] => {
+    const counts = new Map<string, number>();
+    for (const t of templates) {
+        if (!t.deletedInMetaAt) counts.set(statusKey(t), (counts.get(statusKey(t)) ?? 0) + 1);
+    }
+    const rank = (status: string) => (STATUS_ORDER.includes(status) ? STATUS_ORDER.indexOf(status) : STATUS_ORDER.length);
+    const statuses = [...counts.keys()].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+    const total = templates.filter(t => showDeleted || !t.deletedInMetaAt).length;
+    return [
+        { value: ALL_TEMPLATES, label: 'Todas', count: total },
+        ...statuses.map(status => ({ value: status, label: STATUS_PLURAL[status] ?? status, count: counts.get(status) ?? 0 })),
+    ];
+};
+
+/** Las categorías que hay, para el desplegable. */
+export const templateCategories = (templates: Template[]) =>
+    [...new Set(templates.map(t => t.category).filter((c): c is string => Boolean(c)))]
+        .sort((a, b) => categoryLabel(a).localeCompare(categoryLabel(b)));
+
+/** Lo que se ve con los filtros: por nombre o por texto (sin tildes ni mayúsculas), estado, categoría y las borradas. */
+export const filterTemplates = (templates: Template[], filters: TemplateFilters) => {
+    const query = fold(filters.query.trim());
+    return templates.filter(t => {
+        if (t.deletedInMetaAt && !filters.showDeleted) return false;
+        if (filters.status !== ALL_TEMPLATES && (t.deletedInMetaAt || statusKey(t) !== filters.status)) return false;
+        if (filters.category !== ALL_TEMPLATES && t.category !== filters.category) return false;
+        return !query || fold(t.name).includes(query) || fold(t.bodyText ?? '').includes(query);
+    });
+};
+
+/**
+ * El sync más viejo de los WABA de las plantillas, para «Sincronizado hace…»
+ * de la lista: con dos cuentas de WhatsApp Business, no presume de la que
+ * sincronizó hace un momento si la otra lleva horas.
+ */
+export const oldestTemplateSync = (templates: Template[]) =>
+    templates.reduce<string | null>((oldest, t) => (t.syncedAt && (!oldest || t.syncedAt < oldest) ? t.syncedAt : oldest), null);
