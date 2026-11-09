@@ -44,4 +44,6 @@ export const ContactImportPath = privatePath(`${AppRoutes.private.contacts}/impo
 export const ChatsPath = privatePath(AppRoutes.private.chats);
 export const SettingsPath = privatePath(AppRoutes.private.settings);
 export const TemplatesPath = privatePath(AppRoutes.private.templates);
+/** El detalle de una plantilla, por su ID de Meta. */
+export const templateDetailPath = (templateId: string) => `${TemplatesPath}/${encodeURIComponent(templateId)}`;
 export const AutoRepliesPath = privatePath(AppRoutes.private.autoReplies);

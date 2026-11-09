@@ -3,7 +3,7 @@ import {
     getTemplatesService, removeTemplateHeaderMediaService, syncTemplatesService, uploadTemplateHeaderMediaService,
 } from "../services/api.service";
 import type { AxiosError } from "axios";
-import type { Template } from "../models/template.model";
+import type { Template, TemplateDetail } from "../models/template.model";
 
 interface ErrorItem { message: string }
 
@@ -31,14 +31,20 @@ export const useTemplates = () => {
         mutationFn: () => syncTemplatesService(),
         // Devolver la promesa: la sincronización sigue «en curso» hasta que
         // llega la lista nueva, y la tabla no deja de estar atenuada antes.
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['templates'] }),
+        // El detalle abierto (`['template', id]`) también se vuelve a pedir.
+        onSuccess: () => Promise.all([
+            queryClient.invalidateQueries({ queryKey: ['templates'] }),
+            queryClient.invalidateQueries({ queryKey: ['template'] }),
+        ]),
     });
 
     // La respuesta es la plantilla ya actualizada: se cambia en la caché sin
-    // volver a pedir la lista.
+    // volver a pedir la lista, y en su detalle si está abierto.
     const replaceTemplate = (updated: Template) => {
         queryClient.setQueryData<Template[]>(['templates'], (old) =>
             old?.map(t => (t.templateId === updated.templateId ? updated : t)));
+        queryClient.setQueryData<TemplateDetail>(['template', updated.templateId], (old) =>
+            old && { ...old, template: updated });
     };
 
     const uploadHeaderMedia = useMutation({

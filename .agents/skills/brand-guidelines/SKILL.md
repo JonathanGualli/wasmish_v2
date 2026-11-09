@@ -88,6 +88,10 @@ chat, el evento del hilo y el aviso de la campanita): es ámbar para no
 confundirla con un no leído. No es un color de estado general: lo pendiente
 sigue siendo `brand-warning`.
 
+**Calidad media** (`brand-quality-medium` `#d09a1f`): del diseño «Plantillas -
+Detalle» (3c). **Solo** para el punto amarillo de la calidad de una plantilla,
+entre el verde (alta, `brand-success`) y el rojo (baja, `brand-danger`).
+
 **Nunca uses opacidades para tintar** (`bg-brand-accent/10`, `bg-brand-danger/10`).
 Existen tokens sólidos para eso: `brand-accent-soft`, `brand-warning-soft`,
 `brand-danger-soft`. Las opacidades cambian con el fondo y ensucian la paleta.

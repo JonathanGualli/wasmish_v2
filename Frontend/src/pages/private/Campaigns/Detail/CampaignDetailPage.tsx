@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { AlertCircle, AlertTriangle, ChevronLeft, FlaskConical, Info, Pause, Play, XCircle } from "lucide-react";
+import { AlertCircle, AlertTriangle, ChevronLeft, ChevronRight, FlaskConical, Info, Pause, Play, XCircle } from "lucide-react";
 import { PageShell } from "../../../../components/Page/PageShell";
 import { BlankState } from "../../../../components/BlankState/BlankState";
 import { Callout } from "../../../../components/Callout/Callout";
@@ -12,7 +12,8 @@ import { useNotice } from "../../../../components/Notice/context/useNotice";
 import {
     campaignErrors, useCampaign, useCampaignFailures, useCampaignMutations, useCampaignRecipients,
 } from "../../../../hooks/useCampaigns";
-import { CampaignPaths, ChatsPath, SettingsPath, TemplatesPath } from "../../../../models/routes.models";
+import { CampaignPaths, ChatsPath, SettingsPath, TemplatesPath, templateDetailPath } from "../../../../models/routes.models";
+import type { TemplateDetailNavigationState } from "../../Templates/Detail/TemplateDetailPage";
 import type { Campaign, CampaignRecipient, RecipientState } from "../../../../models/campaign.model";
 import { LineSwatch } from "../../../../components/Line/LineSwatch";
 import { useLines } from "../../../../hooks/useLines";
@@ -176,6 +177,14 @@ export const CampaignDetailPage = () => {
                     <div className="flex flex-wrap items-center gap-2 text-[13px] text-brand-muted">
                         <span className="font-mono text-brand-strong">{campaign.template.name}</span>
                         <CategoryPill category={campaign.template.category} />
+                        {/* Su detalle, con la vuelta a esta campaña (diseño 6a). */}
+                        {campaign.template.templateId && (
+                            <Link to={templateDetailPath(campaign.template.templateId)}
+                                state={{ from: { label: campaign.name, to: CampaignPaths.detail(id) } } satisfies TemplateDetailNavigationState}
+                                className="inline-flex items-center gap-[3px] font-semibold text-brand-accent-strong hover:underline">
+                                Ver plantilla<ChevronRight size={14} />
+                            </Link>
+                        )}
                         <CampaignLine campaign={campaign} />
                         <span>·</span>
                         <span className="font-mono text-brand-strong">{formatDateTime(campaign.createdAt)}</span>

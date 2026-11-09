@@ -22,6 +22,7 @@ const CampaignsPage = lazyPage(() => import("./Campaigns/CampaignsPage"), "Campa
 const NewCampaignPage = lazyPage(() => import("./Campaigns/NewCampaign/NewCampaignPage"), "NewCampaignPage");
 const CampaignDetailPage = lazyPage(() => import("./Campaigns/Detail/CampaignDetailPage"), "CampaignDetailPage");
 const TemplatesPage = lazyPage(() => import("./Templates/TemplatesPage"), "TemplatesPage");
+const TemplateDetailPage = lazyPage(() => import("./Templates/Detail/TemplateDetailPage"), "TemplateDetailPage");
 const DocsPage = lazyPage(() => import("./Docs/DocsPage"), "DocsPage");
 const AdminPage = lazyPage(() => import("./Admin/AdminPage"), "AdminPage");
 const AutoRepliesPage = lazyPage(() => import("./AutoReplies/AutoRepliesPage"), "AutoRepliesPage");
@@ -59,6 +60,7 @@ export const PrivateRouter = () => {
                     <Route path={`${AppRoutes.private.campaigns}/new`} element={<RequirePermission action="campaigns.manage"><NewCampaignPage /></RequirePermission>} />
                     <Route path={`${AppRoutes.private.campaigns}/:id`} element={<RequirePermission action="campaigns.manage"><CampaignDetailPage /></RequirePermission>} />
                     <Route path={AppRoutes.private.templates} element={<TemplatesPage />} />
+                    <Route path={`${AppRoutes.private.templates}/:templateId`} element={<TemplateDetailPage />} />
                     <Route path={AppRoutes.private.autoReplies} element={<RequirePermission action="autoReplies.manage"><AutoRepliesPage /></RequirePermission>} />
                     <Route path={AppRoutes.private.docs} element={<DocsPage />} />
                 </RoutesWithNotFound>

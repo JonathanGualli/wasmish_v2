@@ -1,3 +1,5 @@
+import type { CampaignStatus } from "./campaign.model";
+
 /** Definición cruda del botón, tal como Meta la devuelve y el backend la guarda. */
 export interface TemplateButton {
     /** 'URL' | 'QUICK_REPLY' | 'COPY_CODE' | 'OTP' | 'PHONE_NUMBER' */
@@ -5,6 +7,10 @@ export interface TemplateButton {
     text?: string;
     /** Solo en los de tipo URL. Si trae {{1}} es dinámica y pide un valor. */
     url?: string;
+    /** Solo en los de tipo PHONE_NUMBER: el número al que llama. */
+    phone_number?: string;
+    /** El ejemplo que se mandó a Meta: la URL entera (con la parte variable) o el código a copiar. */
+    example?: string | string[];
 }
 
 /** Lo que se manda al enviar: el valor de un botón, en su índice de la plantilla. */
@@ -66,6 +72,8 @@ export interface Template {
     metaUpdatedAt?: string | null,
     /** Cuándo dejó de llegar al sincronizar: se borró en Meta y ya no se envía. */
     deletedInMetaAt?: string | null,
+    /** El último sync completo de su WABA, o `null` si nunca terminó uno. */
+    syncedAt?: string | null,
 }
 
 /** El uso de una plantilla en lo que la persona puede ver. `delivered` incluye los leídos. */
@@ -81,7 +89,7 @@ export interface TemplateUsage {
 export interface TemplateCampaign {
     id: string;
     name: string;
-    status: string;
+    status: CampaignStatus;
     createdAt: string;
 }
 
