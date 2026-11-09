@@ -19,3 +19,39 @@ export const summarizeTemplateUsage = (groups) => {
     }
     return usage;
 };
+
+/**
+ * El uso de todas las plantillas de una lista (exportar a Excel), con las
+ * mismas reglas que el detalle, para que den las mismas cifras:
+ * - un grupo con `templateId` es de esa plantilla, si su línea es del WABA de
+ *   la plantilla;
+ * - uno sin `templateId` (de antes del campo) es de **cada** plantilla con ese
+ *   nombre en el WABA de su línea: dos idiomas con el mismo nombre suman
+ *   juntos sus envíos viejos, como en el detalle.
+ * Una línea que no está en `lineWabas` no cuenta.
+ *
+ * `groups` = `[{ templateId, templateName, lineId, status, count, lastAt }]`;
+ * `templates` = `[{ templateId, name, waBusinessId }]`; `lineWabas` =
+ * `Map<lineId, waBusinessId>`. Devuelve `{ [templateId]: uso }`, con todas las
+ * plantillas de la lista (las sin envíos, en cero).
+ */
+export const attributeTemplateUsage = (groups, templates, lineWabas) => {
+    const byTemplate = new Map(templates.map(template => [template.templateId, []]));
+    const wabaOf = new Map(templates.map(template => [template.templateId, template.waBusinessId]));
+    const byName = new Map();
+    for (const { templateId, name, waBusinessId } of templates) {
+        const key = `${waBusinessId}|${name}`;
+        byName.set(key, [...(byName.get(key) ?? []), templateId]);
+    }
+
+    for (const group of groups) {
+        const waBusinessId = lineWabas.get(String(group.lineId));
+        if (!waBusinessId) continue;
+        const owners = group.templateId
+            ? (wabaOf.get(group.templateId) === waBusinessId ? [group.templateId] : [])
+            : byName.get(`${waBusinessId}|${group.templateName}`) ?? [];
+        for (const templateId of owners) byTemplate.get(templateId).push(group);
+    }
+
+    return Object.fromEntries([...byTemplate].map(([templateId, own]) => [templateId, summarizeTemplateUsage(own)]));
+};
