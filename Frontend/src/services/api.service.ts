@@ -1,6 +1,6 @@
 import type { QueryFunctionContext } from '@tanstack/react-query';
 import axios from 'axios';
-import type { Template, TemplateButtonParam, TemplateDetail, TemplateHeaderMedia } from '../models/template.model';
+import type { Template, TemplateButtonParam, TemplateDetail, TemplateHeaderMedia, TemplatesUsage } from '../models/template.model';
 import type { ContactFilter, ContactInput, ContactNote } from '../models/contact.model';
 import type { ImportBatchResult, ImportInput, ImportPreview } from '../models/contactImport.model';
 import type { BulkTagResult, Tag, TagSelectionSummary } from '../models/tag.model';
@@ -315,6 +315,13 @@ export const getTemplateDetailService = async (templateId: string, { fresh = fal
         params: fresh ? { fresh: 1 } : undefined,
         withCredentials: true,
     });
+    return data;
+}
+
+// El uso de todas las plantillas de la lista, para exportarlas a Excel. Sin
+// React Query a propósito: se pide al pulsar y no se guarda.
+export const getTemplatesUsageService = async (): Promise<TemplatesUsage> => {
+    const { data } = await axios.get(`${API_URL}/templates/usage`, { withCredentials: true });
     return data;
 }
 

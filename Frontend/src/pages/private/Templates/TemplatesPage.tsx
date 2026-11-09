@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { OnChangeFn, PaginationState } from "@tanstack/react-table";
-import { AlertCircle, AlertTriangle, ChevronDown, ImageUp, LayoutTemplate, RefreshCw } from "lucide-react";
+import { AlertCircle, AlertTriangle, ChevronDown, FileSpreadsheet, ImageUp, LayoutTemplate, RefreshCw } from "lucide-react";
 import { useFreshTemplatesOnMount, useTemplates } from "../../../hooks/useTemplates";
+import { useTemplatesExport } from "../../../hooks/useTemplatesExport";
 import { DataTable } from "../../../components/DataTable/DataTable";
 import { CustomButton } from "../../../components/Button/Button";
 import { PageShell, PageHeader } from "../../../components/Page/PageShell";
@@ -71,6 +72,7 @@ export const TemplatesPage = () => {
     const [chosen, setChosen] = useState(NO_FILTERS);
     const { templates, isLoading, isError, refetch, isSyncing, sync, syncError } = useTemplates();
     const freshPending = useFreshTemplatesOnMount();
+    const { exportTemplates, isExporting } = useTemplatesExport();
     // Con varias líneas, de qué líneas es cada plantilla, junto a su nombre.
     const { hasManyLines } = useLines();
     // Sincronizar y subir la cabecera es gestionarlas: el agente solo las ve (Fase 3).
@@ -132,9 +134,19 @@ export const TemplatesPage = () => {
                 icon={<LayoutTemplate size={20} />}
                 title="Plantillas"
                 description="Los mensajes que WhatsApp aprobó para escribir a quien no te ha escrito en 24 horas. Se crean en Meta; aquí se traen al sincronizar."
-                actions={(canManage || checking || syncedAt) && (
+                actions={
                     <div className="flex items-center justify-between sm:justify-end gap-3.5">
                         <TemplateSyncState syncedAt={syncedAt} checking={checking} />
+                        {/* Las que se ven, con los filtros puestos. En el teléfono, solo el
+                            icono: el texto queda para los lectores de pantalla
+                            (`CustomButton` no pasa `aria-label`). */}
+                        <div className="h-10 flex-none ml-auto sm:ml-0">
+                            <CustomButton variant="outline" isLoading={isExporting}
+                                disabled={isLoading || isError || visible.length === 0}
+                                onClick={() => exportTemplates(visible)}>
+                                <FileSpreadsheet size={16} /> <span className="max-sm:sr-only">Descargar Excel</span>
+                            </CustomButton>
+                        </div>
                         {canManage && (
                             <div className="h-10 flex-none">
                                 <CustomButton isLoading={isSyncing} onClick={() => sync()} type="button">
@@ -143,7 +155,7 @@ export const TemplatesPage = () => {
                             </div>
                         )}
                     </div>
-                )}
+                }
             />
             {syncError && (
                 <div className="mb-6">
